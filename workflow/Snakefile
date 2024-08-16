@@ -1,261 +1,388 @@
-configfile: "config/config.yaml"
+import re
+import os
 import pandas as pd
+import subprocess as sp
 
-df = pd.read_table('config/samples.csv', sep=',').set_index('sample_name', drop=False)
-print(df)
+configfile: "config/config.yaml"
 
+# Load sample data 
+df = pd.read_table('config/sample_sheet.csv', sep=',').set_index('sample_name', drop=False)
+#print(df)
 
-
-rule all:
-    input:
-#        expand("samples/{bioproject}/{accession}/{accession}.sra", zip, bioproject=df.bioproject, accession=df.run),
-#        expand("samples/{bioproject}/{accession}/{accession}_{read}.fastq", zip, bioproject=df.bioproject, accession=df.run, read=[1, 2]),
+#rule all:
+#    input:
 #        expand("samples/{bioproject}/{accession}_{read}.fastq.gz", zip, bioproject=df.bioproject, accession=df.run, read=[1, 2]),
-        expand("results/qc/fastqc_pre/{bioproject}/{sample}_1_fastqc.zip", zip, bioproject=df.bioproject, sample=df.sample_name),
-        expand("results/qc/fastqc_pre/{bioproject}/{sample}_2_fastqc.zip", zip, bioproject=df.bioproject, sample=df.sample_name),
+#        expand("results/qc/fastqc_pre/{bioproject}/{sample}_1_fastqc.zip", zip, bioproject=df.bioproject, sample=df.sample_name),
+#        expand("results/qc/fastqc_pre/{bioproject}/{sample}_2_fastqc.zip", zip, bioproject=df.bioproject, sample=df.sample_name),
 #        expand("results/trimmed/{bioproject}/{sample}_{read}.fastq.gz", zip, bioproject=df.bioproject, sample=df.sample_name, read=[1, 2]),
-        expand("results/qc/fastqc_aft/{bioproject}/{sample}_1_fastqc.zip", zip, bioproject=df.bioproject, sample=df.sample_name),
-        expand("results/qc/fastqc_aft/{bioproject}/{sample}_2_fastqc.zip", zip, bioproject=df.bioproject, sample=df.sample_name),
+#        expand("results/qc/fastqc_aft/{bioproject}/{sample}_1_fastqc.zip", zip, bioproject=df.bioproject, sample=df.sample_name),
+#        expand("results/qc/fastqc_aft/{bioproject}/{sample}_2_fastqc.zip", zip, bioproject=df.bioproject, sample=df.sample_name),
 #        expand("results/sorted/{bioproject}/{sample}.bam", zip, bioproject=df.bioproject, sample=df.sample_name),
 #        expand("results/assembly/{bioproject}/sample_lst.txt", bioproject=df.bioproject),
 #        expand("results/deg/{bioproject}/phenodata.csv", bioproject=df.bioproject),
 #        expand("results/deg/{bioproject}/gene_count_matrix.csv", bioproject=df.bioproject),
-        expand("results/deg/{bioproject}/parameters.txt", bioproject=df.bioproject)
+#        expand("results/deg/{bioproject}/parameters.txt", bioproject=df.bioproject)
+
+#wildcard_constraints:
+#    sample="|".join(df.index)
+
+# Function to check if a sample is coming from SRA
+def check_sample(accession, bioproject):
+    pattern = r"^(SRR|ERR|DRR)[0-9]+$"
+    if re.match(pattern, accession):
+        return f"samples/{bioproject}/{accession}/{accession}.sra"
+
+# List of SRA sample paths
+sra_samples = [
+    check_sample(row['run'], row['bioproject'])
+    for _, row in df.iterrows()
+    if check_sample(row['run'], row['bioproject']) is not None
+]
+    
+#Global lists for output files
+all_output_pe = []
+all_output_se = []
+
+for sra_file in sra_samples:
+
+    # Function to generate expected output files based on paired-end status
+    def get_output_files(wildcards):
+#        if check_sample(row['run'], row['bioproject']) is not None:
+        sra_file = f"samples/{wildcards['bioproject']}/{wildcards['accession']}/{wildcards['accession']}.sra"
+        print("INSIDE THE OUTDEF", sra_file)
+        if isPairedSRA(sra_file):
+            return [
+                f"samples/{wildcards['bioproject']}/{wildcards['accession']}/{wildcards['accession']}_1.fastq",
+                f"samples/{wildcards['bioproject']}/{wildcards['accession']}/{wildcards['accession']}_2.fastq"
+            ]
+        else:
+            return [
+                f"samples/{wildcards['bioproject']}/{wildcards['accession']}/{wildcards['accession']}.fastq"
+            ]
+        
+    # Function to check if a sample is paired-end
+    def isPairedSRA(sra_file):
+        sra_file = os.path.abspath(sra_file)
+        if not os.path.exists(sra_file):
+            print(f"File {sra_file} does not exist. Skipping paired-end check.")
+            return None  # Return None or handle as needed
+        try:
+            contents = sp.check_output(["fastq-dump", "-X", "1", "-Z", "--split-spot", sra_file], text=True)
+        except sp.CalledProcessError as e:
+            raise Exception(f"Error running fastq-dump on {sra_file}: {e}")
+    
+        if contents.count("\n") == 4:
+            return False
+        elif contents.count("\n") == 8:
+            return True
+        else:
+            print(f"Unexpected output from fastq-dump on {sra_file}")
+            return None  # Handle unexpected output
 
 
-wildcard_constraints:
-    sample="|".join(df.index)
+# Populate the output lists based on paired-end status
+for sra_file in sra_samples:
+    # Extract bioproject and accession from the file path
+    parts = sra_file.split('/')
+    wildcards = {'bioproject': parts[1], 'accession': parts[2]}
+    output_files = get_output_files(wildcards)
+    if isPairedSRA(sra_file):
+        all_output_pe.extend(output_files)
+    else:
+        all_output_se.extend(output_files)
 
-rule prefetch:
+print("Paired-end outputs:", all_output_pe)
+print("Single-end outputs:", all_output_se)
+
+rule all:
     input:
-        "config/samples.csv"
+        sra_samples,
+        all_output_pe,
+        all_output_se,
+
+
+rule prefetch_sra_sample:
     output:
         "samples/{bioproject}/{accession}/{accession}.sra"
     threads: 1
     resources:
-        partition="g100_all_serial",
+##        partition="g100_all_serial",
         mem_mb=7800,
+
         time="04:00:00"
     shell:
         """
-        module load autoload profile/bioinf
-        module load autoload sra
         prefetch -X 40G -p -o {output} {wildcards.accession}
-        module purge
+        echo "Downloaded data for sample {wildcards.accession} from SRA."
         """
+##        """
+##        module load autoload profile/bioinf
+##        module load autoload sra
+##        prefetch -X 40G -p -o {output} {wildcards.accession}
+##        module purge
+##        """
 
-rule fasterq_dump:
+
+rule fasterq_dump_pe:
     input:
         "samples/{bioproject}/{accession}/{accession}.sra"
     output:
-        "samples/{bioproject}/{accession}/{accession}_1.fastq",
-        "samples/{bioproject}/{accession}/{accession}_2.fastq"
-    threads: config['THREADS']['zhex']
-    resources:
-        mem_mb=config['RESOURCEMOD']['boost'],
+            "samples/{bioproject}/{accession}/{accession}_1.fastq",
+            "samples/{bioproject}/{accession}/{accession}_2.fastq"
+##    threads: config['THREADS']['zhex']
+##    resources:
+##        mem_mb=config['RESOURCEMOD']['boost'],
     shell:
         """
-        module load autoload profile/bioinf
-        module load autoload sra
+        fasterq-dump --split-files samples/{wildcards.bioproject}/{wildcards.accession} \
+        -O samples/{wildcards.bioproject}/{wildcards.accession}/
+        """
+##        """
+##        module load autoload profile/bioinf
+##        module load autoload sra
+##        fasterq-dump --split-files samples/{wildcards.bioproject}/{wildcards.accession} \
+##        -O samples/{wildcards.bioproject}/{wildcards.accession}/
+##        """
+
+rule fasterq_dump_se:
+    input:
+        "samples/{bioproject}/{accession}/{accession}.sra"
+    output:
+            "samples/{bioproject}/{accession}/{accession}.fastq"
+##    threads: config['THREADS']['zhex']
+##    resources:
+##        mem_mb=config['RESOURCEMOD']['boost'],
+    shell:
+        """
         fasterq-dump samples/{wildcards.bioproject}/{wildcards.accession} \
         -O samples/{wildcards.bioproject}/{wildcards.accession}/
         """
+##        """
+##        module load autoload profile/bioinf
+##        module load autoload sra
+##        fasterq-dump samples/{wildcards.bioproject}/{wildcards.accession} \
+##        -O samples/{wildcards.bioproject}/{wildcards.accession}/
+##        """
 
-rule fqzip:
-    input:
-        i1 = "samples/{bioproject}/{accession}/{accession}_1.fastq",
-        i2 = "samples/{bioproject}/{accession}/{accession}_2.fastq"
-    output:
-        o1 = "samples/{bioproject}/{accession}_1.fastq.gz",
-        o2 = "samples/{bioproject}/{accession}_2.fastq.gz"
-    threads: config['THREADS']['fqzip']
-    resources:
-        mem_mb=config['RESOURCEMOD']['boost'],
-    shell:
-        """
-        gzip -c {input.i1} > {output.o1}
-        gzip -c {input.i2} > {output.o2}
-        """
+#rule fqzip:
+#    input:
+#        i1 = "samples/{bioproject}/{accession}/{accession}_1.fastq",
+#        i2 = "samples/{bioproject}/{accession}/{accession}_2.fastq"
+#    output:
+#        o1 = "samples/{bioproject}/{accession}_1.fastq.gz",
+#        o2 = "samples/{bioproject}/{accession}_2.fastq.gz"
+##    threads: config['THREADS']['fqzip']
+##    resources:
+##        mem_mb=config['RESOURCEMOD']['boost'],
+#    shell:
+#        """
+#        gzip -c {input.i1} > {output.o1}
+#        gzip -c {input.i2} > {output.o2}
+#        """
 
+# Rule to gzip paired-end FASTQ files
+#rule fqzip_pe:
+#    input:
+#        i1 = "samples/{bioproject}/{accession}/{accession}_1.fastq",
+#        i2 = "samples/{bioproject}/{accession}/{accession}_2.fastq"
+#    output:
+#        o1 = "samples/{bioproject}/{accession}_1.fastq.gz",
+#        o2 = "samples/{bioproject}/{accession}_2.fastq.gz"
+#    shell:
+#        """
+#        gzip -c {input.i1} > {output.o1}
+#        gzip -c {input.i2} > {output.o2}
+#        """
 
-rule fastqc_pre:
-    input:
-        "samples/{bioproject}/{sample}_{read}.fastq.gz"
-    output:
-        html="results/qc/fastqc_pre/{bioproject}/{sample}_{read}.html",
-        zip="results/qc/fastqc_pre/{bioproject}/{sample}_{read}_fastqc.zip" # the suffix _fastqc.zip is necessary for multiqc to find the file. If not using multiqc, you are free to choose an arbitrary filename
-    params: "--quiet"
-    threads: 1
-    resources:
-        mem_mb=10000,
-    wrapper:
-        "file://workflow/wrappers/fastqc"
+# Rule to gzip single-end FASTQ files
+#rule fqzip_se:
+#    input:
+#        "samples/{bioproject}/{accession}/{accession}.fastq"
+#    output:
+#        "samples/{bioproject}/{accession}.fastq.gz"
+#    shell:
+#        """
+#        gzip -c {input} > {output}
+#        """
 
-
-rule trimmomatic_pe:
-    input:
-        r1="samples/{bioproject}/{sample}_1.fastq.gz",
-        r2="samples/{bioproject}/{sample}_2.fastq.gz"
-    output:
-        r1="results/trimmed/{bioproject}/{sample}_1.fastq.gz",
-        r2="results/trimmed/{bioproject}/{sample}_2.fastq.gz",
-        # reads where trimming entirely removed the mate
-        r1_unpaired="results/trimmed/{bioproject}/{sample}_1.unpaired.fastq.gz",
-        r2_unpaired="results/trimmed/{bioproject}/{sample}_2.unpaired.fastq.gz"
-    params:
-        **config["params"]["trimmomatic"]["pe"],
-    threads: config['THREADS']['trimmo']
-    wrapper:
-        "file://workflow/wrappers/trimmomatic/pe"
-
-
-rule fastqc_aft:
-    input:
-        "results/trimmed/{bioproject}/{sample}_{read}.fastq.gz"
-    output:
-        html="results/qc/fastqc_aft/{bioproject}/{sample}_{read}.html",
-        zip="results/qc/fastqc_aft/{bioproject}/{sample}_{read}_fastqc.zip" # the suffix _fastqc.zip is necess$    params: "--quiet"
-    threads: 1
-    resources:
-        mem_mb=10000,
-    wrapper:
-        "file://workflow/wrappers/fastqc"
-
-
-rule hisat2_index:
-    input:
-        fasta = "{genome}.fasta"
-    output:
-        directory("index_{genome}")
-    params:
-        prefix = "index_{genome}/"
-    threads: config['THREADS']['fqzip']
-    resources:
-        mem_mb=config['RESOURCEMOD']['high'],
-    wrapper:
-        "file://workflow/wrappers/hisat2/index"
+#rule fastqc_pre:
+#    input:
+#        "samples/{bioproject}/{sample}_{read}.fastq.gz"
+#    output:
+#        html="results/qc/fastqc_pre/{bioproject}/{sample}_{read}.html",
+#        zip="results/qc/fastqc_pre/{bioproject}/{sample}_{read}_fastqc.zip" # the suffix _fastqc.zip is necessary for multiqc to find the file. If not using multiqc, you are free to choose an arbitrary filename
+#    params: "--quiet"
+#    threads: 1
+#    resources:
+#        mem_mb=10000,
+#    wrapper:
+#        "file://workflow/wrappers/fastqc"
 
 
-rule hisat2_align:
-    input:
-        reads=["results/trimmed/{bioproject}/{sample}_1.fastq.gz", "results/trimmed/{bioproject}/{sample}_2.fastq.gz"]
-    output:
-        "results/mapped/{bioproject}/{sample}.bam"
-    params:
-        extra="",
-        idx="hg38_UCSC/genome",
-    threads: config['THREADS']['hisat']
-    resources:
-        mem_mb=config['RESOURCEMOD']['high'],
-        time=config['RESOURCEMOD']['moretime'],
-    wrapper:
-      "file://workflow/wrappers/hisat2/align"
+#rule trimmomatic_pe:
+#    input:
+#        r1="samples/{bioproject}/{sample}_1.fastq.gz",
+#        r2="samples/{bioproject}/{sample}_2.fastq.gz"
+#    output:
+#        r1="results/trimmed/{bioproject}/{sample}_1.fastq.gz",
+#        r2="results/trimmed/{bioproject}/{sample}_2.fastq.gz",
+#        # reads where trimming entirely removed the mate
+#        r1_unpaired="results/trimmed/{bioproject}/{sample}_1.unpaired.fastq.gz",
+#        r2_unpaired="results/trimmed/{bioproject}/{sample}_2.unpaired.fastq.gz"
+#    params:
+#        **config["params"]["trimmomatic"]["pe"],
+#    threads: config['THREADS']['trimmo']
+#    wrapper:
+#        "file://workflow/wrappers/trimmomatic/pe"
 
 
-rule samtools_sort:
-    input:
-        "results/mapped/{bioproject}/{sample}.bam"
-    output:
-        "results/sorted/{bioproject}/{sample}.bam"
-    threads: config['THREADS']['samsort']
-    resources:
-        mem_mb=config['RESOURCEMOD']['high'],
-    wrapper:
-        "file://workflow/wrappers/samtools/sort"
+#rule fastqc_aft:
+#    input:
+#        "results/trimmed/{bioproject}/{sample}_{read}.fastq.gz"
+#    output:
+#        html="results/qc/fastqc_aft/{bioproject}/{sample}_{read}.html",
+#        zip="results/qc/fastqc_aft/{bioproject}/{sample}_{read}_fastqc.zip" # the suffix _fastqc.zip is necess$    params: "--quiet"
+#    threads: 1
+#    resources:
+#        mem_mb=10000,
+#    wrapper:
+#        "file://workflow/wrappers/fastqc"
 
 
-rule stringtie:
-    input:
-        "results/sorted/{bioproject}/{sample}.bam"
-    output:
-        "results/assembly/{bioproject}/{sample}.gtf"
-    threads: 4
-    shell:
-        """
-        module load autoload profile/bioinf && \
-        module load stringtie && \
-        module load illumina_genome_Homo_sapiens/hg38 && \
-        stringtie {input} \
-        -G $ANNOTATION/Genes/genes.gtf \
-        -o {output} \
-        -e
-        """
+#rule hisat2_index:
+#    input:
+#        fasta = "{genome}.fasta"
+#    output:
+#        directory("index_{genome}")
+#    params:
+#        prefix = "index_{genome}/"
+#    threads: config['THREADS']['fqzip']
+#    resources:
+#        mem_mb=config['RESOURCEMOD']['high'],
+#    wrapper:
+#        "file://workflow/wrappers/hisat2/index"
 
 
-rule merge:
-    input:
-        expand("results/assembly/{bioproject}/{sample}.gtf", zip, bioproject=df.bioproject, sample=df.sample_name)
-    output:
-        "results/assembly/{bioproject}/stringtie_merged.gtf"
-    threads: 4
-    shell:
-        """
-        module load autoload profile/bioinf && \
-        module load stringtie && \
-        module load illumina_genome_Homo_sapiens/hg38 && \
-        stringtie --merge \
-        -G $ANNOTATION/Genes/genes.gtf \
-        -o {output} \
-        {input}
-        """
+#rule hisat2_align:
+#    input:
+#        reads=["results/trimmed/{bioproject}/{sample}_1.fastq.gz", "results/trimmed/{bioproject}/{sample}_2.fastq.gz"]
+#    output:
+#        "results/mapped/{bioproject}/{sample}.bam"
+#    params:
+#        extra="",
+#        idx="hg38_UCSC/genome",
+#    threads: config['THREADS']['hisat']
+#    resources:
+#        mem_mb=config['RESOURCEMOD']['high'],
+#        time=config['RESOURCEMOD']['moretime'],
+#    wrapper:
+#      "file://workflow/wrappers/hisat2/align"
 
 
-rule preprep:
-    input:
-        "config/samples.csv",
-        "results/assembly/{bioproject}/stringtie_merged.gtf"
-    output:
-        "results/assembly/{bioproject}/sample_lst.txt",
-        "results/deg/{bioproject}/phenodata.csv"
-    run:
-        with open(output[0], 'w') as out0, open(output[1], 'w') as out1:
-            hdr = 'sample\tcondition\n'
-            out1.write(hdr)
-            hnd = open(input[0], 'r')
-            bioproject = wildcards.bioproject
-            for line in hnd.readlines()[1:]:
-                smp = line.split(',')[1]
-                prj = line.split(',')[2]
-                cnd = line.split(',')[3].rstrip()
-                if prj==bioproject:
-                    oln0 = smp + '\t' + 'results/assembly/' + prj + '/' + smp + '.gtf' + '\n'
-                    out0.write(oln0)
-                    oln1 = smp + '\t' + cnd + '\n'
-                    out1.write(oln1)
-            hnd.close()
-        out0.close()
-        out1.close()
+#rule samtools_sort:
+#    input:
+#        "results/mapped/{bioproject}/{sample}.bam"
+#    output:
+#        "results/sorted/{bioproject}/{sample}.bam"
+#    threads: config['THREADS']['samsort']
+#    resources:
+#        mem_mb=config['RESOURCEMOD']['high'],
+#    wrapper:
+#        "file://workflow/wrappers/samtools/sort"
 
-rule prepDE:
-    input:
-        i1 = "results/assembly/{bioproject}/sample_lst.txt"
-    output:
-        o1 = "results/deg/{bioproject}/gene_count_matrix.csv",
-        o2 = "results/deg/{bioproject}/transcript_count_matrix.csv"
-    threads: 1
-    shell:
-        """
-        python3 workflow/scripts/prepDE.py \
-        -i {input.i1} -g {output.o1} -t {output.o2}
-        """
 
-rule DESeq2:
-    input:
-        i1 = "results/deg/{bioproject}/phenodata.csv",
-        i2 = "results/deg/{bioproject}/gene_count_matrix.csv",
-    output:
-        "results/deg/{bioproject}/parameters.txt"
-    threads: 8
-    shell:
-        """
-        module load autoload profile/bioinf &&
-        module load autoload r/4.1.0--gcc--10.2.0-python--3.8.6 &&
-        Rscript workflow/scripts/produce_DEG.R \
-        -p {input.i1} \
-        -o results/deg/{wildcards.bioproject}/ \
-        -i {input.i2} \
-        -v condition \
-        -n control \
-        -m Homo_sapiens \
-        -d org.Hs.eg.db
-        """
+#rule stringtie:
+#    input:
+#        "results/sorted/{bioproject}/{sample}.bam"
+#    output:
+#        "results/assembly/{bioproject}/{sample}.gtf"
+#    threads: 4
+#    shell:
+#        """
+#        module load autoload profile/bioinf && \
+#        module load stringtie && \
+#        module load illumina_genome_Homo_sapiens/hg38 && \
+#        stringtie {input} \
+#        -G $ANNOTATION/Genes/genes.gtf \
+#        -o {output} \
+#        -e
+#        """
+
+
+#rule merge:
+#    input:
+#        expand("results/assembly/{bioproject}/{sample}.gtf", zip, bioproject=df.bioproject, sample=df.sample_name)
+#    output:
+#        "results/assembly/{bioproject}/stringtie_merged.gtf"
+#    threads: 4
+#    shell:
+#        """
+#        module load autoload profile/bioinf && \
+#        module load stringtie && \
+#        module load illumina_genome_Homo_sapiens/hg38 && \
+#        stringtie --merge \
+#        -G $ANNOTATION/Genes/genes.gtf \
+#        -o {output} \
+#        {input}
+#        """
+
+
+#rule preprep:
+#    input:
+#        "config/samples.csv",
+#        "results/assembly/{bioproject}/stringtie_merged.gtf"
+#    output:
+#        "results/assembly/{bioproject}/sample_lst.txt",
+#        "results/deg/{bioproject}/phenodata.csv"
+#    run:
+#        with open(output[0], 'w') as out0, open(output[1], 'w') as out1:
+#            hdr = 'sample\tcondition\n'
+#            out1.write(hdr)
+#            hnd = open(input[0], 'r')
+#            bioproject = wildcards.bioproject
+#            for line in hnd.readlines()[1:]:
+#                smp = line.split(',')[1]
+#                prj = line.split(',')[2]
+#                cnd = line.split(',')[3].rstrip()
+#                if prj==bioproject:
+#                    oln0 = smp + '\t' + 'results/assembly/' + prj + '/' + smp + '.gtf' + '\n'
+#                    out0.write(oln0)
+#                    oln1 = smp + '\t' + cnd + '\n'
+#                    out1.write(oln1)
+#            hnd.close()
+#        out0.close()
+#        out1.close()
+
+#rule prepDE:
+#    input:
+#        i1 = "results/assembly/{bioproject}/sample_lst.txt"
+#    output:
+#        o1 = "results/deg/{bioproject}/gene_count_matrix.csv",
+#        o2 = "results/deg/{bioproject}/transcript_count_matrix.csv"
+#    threads: 1
+#    shell:
+#        """
+#        python3 workflow/scripts/prepDE.py \
+#        -i {input.i1} -g {output.o1} -t {output.o2}
+#        """
+
+#rule DESeq2:
+#    input:
+#        i1 = "results/deg/{bioproject}/phenodata.csv",
+#        i2 = "results/deg/{bioproject}/gene_count_matrix.csv",
+#    output:
+#        "results/deg/{bioproject}/parameters.txt"
+#    threads: 8
+#    shell:
+#        """
+#        module load autoload profile/bioinf &&
+#        module load autoload r/4.1.0--gcc--10.2.0-python--3.8.6 &&
+#        Rscript workflow/scripts/produce_DEG.R \
+#        -p {input.i1} \
+#        -o results/deg/{wildcards.bioproject}/ \
+#        -i {input.i2} \
+#        -v condition \
+#        -n control \
+#        -m Homo_sapiens \
+#        -d org.Hs.eg.db
+#        """
