@@ -1,5 +1,5 @@
 # path or URL to sample sheet (TSV format, columns: sample, condition, ...)
-samples: config/samples.csv
+samples: config/sample_sheet.csv
 # path or URL to sequencing unit sheet (TSV format, columns: sample, unit, fq1, fq2)
 # Units are technical replicates (e.g. lanes, or resequencing of the same biological
 # sample).
@@ -16,44 +16,45 @@ RESOURCEMOD:
   high: 150000
   moretime: "3:00:00"
 
-ref:
+#ref:
   # Ensembl species name
-  species: homo_sapiens
+#  species: homo_sapiens
   # Ensembl release (make sure to take one where snpeff data is available, check 'snpEff databases' output)
-  release: 100
+#  release: 100
   # Genome build
-  build: GRCh38
+#  build: GRCh38
 
-trimming:
-  activate: True
+#trimming:
+#  activate: True
 
-pca:
-  activate: True
-  labels:
+#pca:
+#  activate: True
+#  labels:
     # columns of sample sheet to use for PCA
-    - condition
+#    - condition
 
-diffexp:
+#diffexp:
   # contrasts for the deseq2 results method
-  contrasts:
-    A-vs-B:
-      - A
-      - B
-  model: ~condition
+#  contrasts:
+#    A-vs-B:
+#      - A
+#      - B
+#  model: ~condition
 
-params:
-  trimmomatic:
-    pe:
-      trimmer:
+#params:
+#  trimmomatic:
+#    pe:
+#      trimmer:
         # See trimmomatic manual for adding additional options, e.g. for adapter trimming.
-        - "LEADING:3"
-        - "TRAILING:3"
-        - "SLIDINGWINDOW:4:15"
-        - "MINLEN:36"
-    se:
-      trimmer:
+#        - "LEADING:3"
+#        - "TRAILING:3"
+#        - "SLIDINGWINDOW:4:15"
+#        - "MINLEN:36"
+#    se:
+#      trimmer:
         # See trimmomatic manual for adding additional options, e.g. for adapter trimming.
-        - "LEADING:3"
-        - "TRAILING:3"
-        - "SLIDINGWINDOW:4:15"
-        - "MINLEN:36"
+#        - "LEADING:3"
+#        - "TRAILING:3"
+#        - "SLIDINGWINDOW:4:15"
+#        - "MINLEN:36"
+#
