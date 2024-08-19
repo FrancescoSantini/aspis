@@ -47,17 +47,15 @@ for sra_file in sra_samples:
 
     # Function to generate expected output files based on paired-end status
     def get_output_files(wildcards):
-#        if check_sample(row['run'], row['bioproject']) is not None:
         sra_file = f"samples/{wildcards['bioproject']}/{wildcards['accession']}/{wildcards['accession']}.sra"
-        print("INSIDE THE OUTDEF", sra_file)
         if isPairedSRA(sra_file):
             return [
-                f"samples/{wildcards['bioproject']}/{wildcards['accession']}/{wildcards['accession']}_1.fastq",
-                f"samples/{wildcards['bioproject']}/{wildcards['accession']}/{wildcards['accession']}_2.fastq"
+                f"samples/{wildcards['bioproject']}/{wildcards['accession']}/{wildcards['accession']}_1.fastq.gz",
+                f"samples/{wildcards['bioproject']}/{wildcards['accession']}/{wildcards['accession']}_2.fastq.gz"
             ]
         else:
             return [
-                f"samples/{wildcards['bioproject']}/{wildcards['accession']}/{wildcards['accession']}.fastq"
+                f"samples/{wildcards['bioproject']}/{wildcards['accession']}/{wildcards['accession']}.fastq.gz"
             ]
         
     # Function to check if a sample is paired-end
@@ -79,7 +77,6 @@ for sra_file in sra_samples:
             print(f"Unexpected output from fastq-dump on {sra_file}")
             return None  # Handle unexpected output
 
-
 # Populate the output lists based on paired-end status
 for sra_file in sra_samples:
     # Extract bioproject and accession from the file path
@@ -96,10 +93,11 @@ print("Single-end outputs:", all_output_se)
 
 rule all:
     input:
-        sra_samples,
+#        sra_samples,
         all_output_pe,
         all_output_se,
-
+        expand("results/qc/fastqc_pre/{bioproject}/{accession}_fastqc.html", zip, bioproject=df.bioproject, accession=df.run),
+        expand("results/qc/fastqc_pre/{bioproject}/{accession}_fastqc.zip", zip, bioproject=df.bioproject, accession=df.run)
 
 rule prefetch_sra_sample:
     output:
@@ -121,7 +119,6 @@ rule prefetch_sra_sample:
 ##        prefetch -X 40G -p -o {output} {wildcards.accession}
 ##        module purge
 ##        """
-
 
 rule fasterq_dump_pe:
     input:
@@ -164,59 +161,62 @@ rule fasterq_dump_se:
 ##        -O samples/{wildcards.bioproject}/{wildcards.accession}/
 ##        """
 
-#rule fqzip:
-#    input:
-#        i1 = "samples/{bioproject}/{accession}/{accession}_1.fastq",
-#        i2 = "samples/{bioproject}/{accession}/{accession}_2.fastq"
-#    output:
-#        o1 = "samples/{bioproject}/{accession}_1.fastq.gz",
-#        o2 = "samples/{bioproject}/{accession}_2.fastq.gz"
+ruleorder: fqzip_pe > fqzip_se
+
+# Rule to gzip paired-end FASTQ files
+rule fqzip_pe:
+    input:
+        i1 = "samples/{bioproject}/{accession}/{accession}_1.fastq",
+        i2 = "samples/{bioproject}/{accession}/{accession}_2.fastq"
+    output:
+        o1 = "samples/{bioproject}/{accession}_1.fastq.gz",
+        o2 = "samples/{bioproject}/{accession}_2.fastq.gz"
 ##    threads: config['THREADS']['fqzip']
 ##    resources:
 ##        mem_mb=config['RESOURCEMOD']['boost'],
-#    shell:
-#        """
-#        gzip -c {input.i1} > {output.o1}
-#        gzip -c {input.i2} > {output.o2}
-#        """
-
-# Rule to gzip paired-end FASTQ files
-#rule fqzip_pe:
-#    input:
-#        i1 = "samples/{bioproject}/{accession}/{accession}_1.fastq",
-#        i2 = "samples/{bioproject}/{accession}/{accession}_2.fastq"
-#    output:
-#        o1 = "samples/{bioproject}/{accession}_1.fastq.gz",
-#        o2 = "samples/{bioproject}/{accession}_2.fastq.gz"
-#    shell:
-#        """
-#        gzip -c {input.i1} > {output.o1}
-#        gzip -c {input.i2} > {output.o2}
-#        """
+    shell:
+        """
+        gzip -c {input.i1} > {output.o1}
+        gzip -c {input.i2} > {output.o2}
+        """
 
 # Rule to gzip single-end FASTQ files
-#rule fqzip_se:
-#    input:
-#        "samples/{bioproject}/{accession}/{accession}.fastq"
-#    output:
-#        "samples/{bioproject}/{accession}.fastq.gz"
-#    shell:
-#        """
-#        gzip -c {input} > {output}
-#        """
+rule fqzip_se:
+    input:
+        "samples/{bioproject}/{accession}/{accession}.fastq"
+    output:
+        "samples/{bioproject}/{accession}.fastq.gz"
+##    threads: config['THREADS']['fqzip']
+##    resources:
+##        mem_mb=config['RESOURCEMOD']['boost'],
+    shell:
+        """
+        gzip -c {input} > {output}
+        """
 
-#rule fastqc_pre:
-#    input:
-#        "samples/{bioproject}/{sample}_{read}.fastq.gz"
-#    output:
-#        html="results/qc/fastqc_pre/{bioproject}/{sample}_{read}.html",
-#        zip="results/qc/fastqc_pre/{bioproject}/{sample}_{read}_fastqc.zip" # the suffix _fastqc.zip is necessary for multiqc to find the file. If not using multiqc, you are free to choose an arbitrary filename
-#    params: "--quiet"
-#    threads: 1
-#    resources:
-#        mem_mb=10000,
-#    wrapper:
-#        "file://workflow/wrappers/fastqc"
+# Initial fastqc analysis
+rule fastqc_pre:
+    input:
+        "samples/{bioproject}/{accession}.fastq.gz"
+    output:
+        html="results/qc/fastqc_pre/{bioproject}/{accession}_fastqc.html",
+        zip="results/qc/fastqc_pre/{bioproject}/{accession}_fastqc.zip" # the suffix _fastqc.zip is necessary for multiqc to find the file. If not using multiqc, you are free to choose an arbitrary filename
+    log:
+        "logs/fastqc_pre/{bioproject}/{accession}.log"
+##    params: "--quiet"
+##    threads: 1
+##    resources:
+##        mem_mb=10000,
+    shell:
+        """
+        fastqc -o results/qc/fastqc_pre/ -f fastq --extract --delete {input} > {log} 2>&1
+        """
+##        """
+##        module load autoload profile/bioinf
+##        module load autoload fastqc
+##        fastqc -o results/qc/fastqc_pre/ -t {threads} -f fastq --extract {input}
+##        module purge
+##        """
 
 
 #rule trimmomatic_pe:
