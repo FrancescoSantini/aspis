@@ -1,5 +1,6 @@
 import re
 import os
+import glob
 import pandas as pd
 import subprocess as sp
 
@@ -7,23 +8,11 @@ configfile: "config/config.yaml"
 
 # Load sample data 
 df = pd.read_table('config/sample_sheet.csv', sep=',').set_index('sample_name', drop=False)
-#print(df)
+print(df)
 
-#rule all:
-#    input:
-#        expand("samples/{bioproject}/{accession}_{read}.fastq.gz", zip, bioproject=df.bioproject, accession=df.run, read=[1, 2]),
-#        expand("results/qc/fastqc_pre/{bioproject}/{sample}_1_fastqc.zip", zip, bioproject=df.bioproject, sample=df.sample_name),
-#        expand("results/qc/fastqc_pre/{bioproject}/{sample}_2_fastqc.zip", zip, bioproject=df.bioproject, sample=df.sample_name),
-#        expand("results/trimmed/{bioproject}/{sample}_{read}.fastq.gz", zip, bioproject=df.bioproject, sample=df.sample_name, read=[1, 2]),
-#        expand("results/qc/fastqc_aft/{bioproject}/{sample}_1_fastqc.zip", zip, bioproject=df.bioproject, sample=df.sample_name),
-#        expand("results/qc/fastqc_aft/{bioproject}/{sample}_2_fastqc.zip", zip, bioproject=df.bioproject, sample=df.sample_name),
-#        expand("results/sorted/{bioproject}/{sample}.bam", zip, bioproject=df.bioproject, sample=df.sample_name),
-#        expand("results/assembly/{bioproject}/sample_lst.txt", bioproject=df.bioproject),
-#        expand("results/deg/{bioproject}/phenodata.csv", bioproject=df.bioproject),
-#        expand("results/deg/{bioproject}/gene_count_matrix.csv", bioproject=df.bioproject),
-#        expand("results/deg/{bioproject}/parameters.txt", bioproject=df.bioproject)
-
-#wildcard_constraints:
+wildcard_constraints:
+    bioproject="\w+",
+    accession="\w+"
 #    sample="|".join(df.index)
 
 # Function to check if a sample is coming from SRA
@@ -38,7 +27,49 @@ sra_samples = [
     for _, row in df.iterrows()
     if check_sample(row['run'], row['bioproject']) is not None
 ]
-    
+
+def get_local_sample(accession, bioproject):
+    pattern = r"^(SRR|ERR|DRR)[0-9]+$"
+    if not re.match(pattern, accession):
+        sample_dir = f"samples/{bioproject}/{accession}"
+        if os.path.exists(sample_dir):
+        # Check for paired-end files
+            paired_files = sorted(glob.glob(f"{sample_dir}/{accession}_[1-2].fastq.gz"))
+            if len(paired_files) == 2:
+                return ('pe', paired_files)
+            
+            # Check for single-end file
+            single_file = glob.glob(f"{sample_dir}/{accession}.fastq.gz")
+            if single_file:
+                return ('se', single_file[0])
+
+            # If no matching files found, return None
+            return None
+    return None
+
+# Initialize separate lists for paired-end and single-end samples
+local_samples_pe = []
+local_samples_se = []
+
+for _, row in df.iterrows():
+    result = get_local_sample(row['run'], row['bioproject'])
+    if result is not None:
+        sample_type, sample_files = result
+        if sample_type == 'pe':
+            local_samples_pe.extend(sample_files)  # Add both files for paired-end
+        else:
+            local_samples_se.append(sample_files)  # Add single file for single-end
+
+# Print the results
+print("Paired-end local samples found:")
+for sample in local_samples_pe:
+    print(sample)
+
+print("Single-end local samples found:")
+for sample in local_samples_se:
+    print(sample)
+
+
 #Global lists for output files
 all_output_pe = []
 all_output_se = []
@@ -91,41 +122,36 @@ for sra_file in sra_samples:
 print("Paired-end outputs:", all_output_pe)
 print("Single-end outputs:", all_output_se)
 
+
 rule all:
     input:
 #        sra_samples,
         all_output_pe,
         all_output_se,
-        expand("results/qc/fastqc_pre/{bioproject}/{accession}_fastqc.html", zip, bioproject=df.bioproject, accession=df.run),
-        expand("results/qc/fastqc_pre/{bioproject}/{accession}_fastqc.zip", zip, bioproject=df.bioproject, accession=df.run)
+        local_samples_pe,
+        local_samples_se,
+#        expand("results/qc/fastqc_pre/{bioproject}/{accession}_fastqc.html", zip, bioproject=df.bioproject, accession=df.run),
+#        expand("results/qc/fastqc_pre/{bioproject}/{accession}_fastqc.zip", zip, bioproject=df.bioproject, accession=df.run),
+#
+#        expand("samples/{bioproject}/{accession}_{read}.fastq.gz", zip, bioproject=df.bioproject, accession=df.run, read=[1, 2]),
+#        expand("results/qc/fastqc_pre/{bioproject}/{sample}_1_fastqc.zip", zip, bioproject=df.bioproject, sample=df.sample_name),
+#        expand("results/qc/fastqc_pre/{bioproject}/{sample}_2_fastqc.zip", zip, bioproject=df.bioproject, sample=df.sample_name),
+#        expand("results/trimmed/{bioproject}/{sample}_{read}.fastq.gz", zip, bioproject=df.bioproject, sample=df.sample_name, read=[1, 2]),
+#        expand("results/qc/fastqc_aft/{bioproject}/{sample}_1_fastqc.zip", zip, bioproject=df.bioproject, sample=df.sample_name),
+#        expand("results/qc/fastqc_aft/{bioproject}/{sample}_2_fastqc.zip", zip, bioproject=df.bioproject, sample=df.sample_name),
+#        expand("results/sorted/{bioproject}/{sample}.bam", zip, bioproject=df.bioproject, sample=df.sample_name),
+#        expand("results/assembly/{bioproject}/sample_lst.txt", bioproject=df.bioproject),
+#        expand("results/deg/{bioproject}/phenodata.csv", bioproject=df.bioproject),
+#        expand("results/deg/{bioproject}/gene_count_matrix.csv", bioproject=df.bioproject),
+#        expand("results/deg/{bioproject}/parameters.txt", bioproject=df.bioproject)
 
-rule prefetch_sra_sample:
-    output:
-        "samples/{bioproject}/{accession}/{accession}.sra"
-    threads: 1
-    resources:
-##        partition="g100_all_serial",
-        mem_mb=7800,
-
-        time="04:00:00"
-    shell:
-        """
-        prefetch -X 40G -p -o {output} {wildcards.accession}
-        echo "Downloaded data for sample {wildcards.accession} from SRA."
-        """
-##        """
-##        module load autoload profile/bioinf
-##        module load autoload sra
-##        prefetch -X 40G -p -o {output} {wildcards.accession}
-##        module purge
-##        """
 
 rule fasterq_dump_pe:
     input:
         "samples/{bioproject}/{accession}/{accession}.sra"
     output:
-            "samples/{bioproject}/{accession}/{accession}_1.fastq",
-            "samples/{bioproject}/{accession}/{accession}_2.fastq"
+        "samples/{bioproject}/{accession}/{accession}_1.fastq",
+        "samples/{bioproject}/{accession}/{accession}_2.fastq"
 ##    threads: config['THREADS']['zhex']
 ##    resources:
 ##        mem_mb=config['RESOURCEMOD']['boost'],
@@ -145,7 +171,7 @@ rule fasterq_dump_se:
     input:
         "samples/{bioproject}/{accession}/{accession}.sra"
     output:
-            "samples/{bioproject}/{accession}/{accession}.fastq"
+        "samples/{bioproject}/{accession}/{accession}.fastq"
 ##    threads: config['THREADS']['zhex']
 ##    resources:
 ##        mem_mb=config['RESOURCEMOD']['boost'],
@@ -169,8 +195,8 @@ rule fqzip_pe:
         i1 = "samples/{bioproject}/{accession}/{accession}_1.fastq",
         i2 = "samples/{bioproject}/{accession}/{accession}_2.fastq"
     output:
-        o1 = "samples/{bioproject}/{accession}_1.fastq.gz",
-        o2 = "samples/{bioproject}/{accession}_2.fastq.gz"
+        o1 = "samples/{bioproject}/{accession}/{accession}_1.fastq.gz",
+        o2 = "samples/{bioproject}/{accession}/{accession}_2.fastq.gz"
 ##    threads: config['THREADS']['fqzip']
 ##    resources:
 ##        mem_mb=config['RESOURCEMOD']['boost'],
@@ -185,7 +211,7 @@ rule fqzip_se:
     input:
         "samples/{bioproject}/{accession}/{accession}.fastq"
     output:
-        "samples/{bioproject}/{accession}.fastq.gz"
+        "samples/{bioproject}/{accession}/{accession}.fastq.gz"
 ##    threads: config['THREADS']['fqzip']
 ##    resources:
 ##        mem_mb=config['RESOURCEMOD']['boost'],
@@ -197,7 +223,7 @@ rule fqzip_se:
 # Initial fastqc analysis
 rule fastqc_pre:
     input:
-        "samples/{bioproject}/{accession}.fastq.gz"
+        "samples/{bioproject}/{accession}/{accession}.fastq.gz"
     output:
         html="results/qc/fastqc_pre/{bioproject}/{accession}_fastqc.html",
         zip="results/qc/fastqc_pre/{bioproject}/{accession}_fastqc.zip" # the suffix _fastqc.zip is necessary for multiqc to find the file. If not using multiqc, you are free to choose an arbitrary filename
