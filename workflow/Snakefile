@@ -12,7 +12,8 @@ print(df)
 
 wildcard_constraints:
     bioproject="\w+",
-    accession="\w+"
+    accession="\w+",
+    read="(_1|_2)?"
 #    sample="|".join(df.index)
 
 # Function to check if a sample is coming from SRA
@@ -71,24 +72,12 @@ for sample in local_samples_se:
 
 
 #Global lists for output files
-all_output_pe = []
-all_output_se = []
+all_output_pe = [] + local_samples_pe
+all_output_se = [] + local_samples_se
+
 
 for sra_file in sra_samples:
 
-    # Function to generate expected output files based on paired-end status
-    def get_output_files(wildcards):
-        sra_file = f"samples/{wildcards['bioproject']}/{wildcards['accession']}/{wildcards['accession']}.sra"
-        if isPairedSRA(sra_file):
-            return [
-                f"samples/{wildcards['bioproject']}/{wildcards['accession']}/{wildcards['accession']}_1.fastq.gz",
-                f"samples/{wildcards['bioproject']}/{wildcards['accession']}/{wildcards['accession']}_2.fastq.gz"
-            ]
-        else:
-            return [
-                f"samples/{wildcards['bioproject']}/{wildcards['accession']}/{wildcards['accession']}.fastq.gz"
-            ]
-        
     # Function to check if a sample is paired-end
     def isPairedSRA(sra_file):
         sra_file = os.path.abspath(sra_file)
@@ -108,6 +97,21 @@ for sra_file in sra_samples:
             print(f"Unexpected output from fastq-dump on {sra_file}")
             return None  # Handle unexpected output
 
+
+    # Function to generate expected output files based on paired-end status
+    def get_output_files(wildcards):
+        sra_file = f"samples/{wildcards['bioproject']}/{wildcards['accession']}/{wildcards['accession']}.sra"
+        if isPairedSRA(sra_file):
+            return [
+                f"samples/{wildcards['bioproject']}/{wildcards['accession']}/{wildcards['accession']}_1.fastq.gz",
+                f"samples/{wildcards['bioproject']}/{wildcards['accession']}/{wildcards['accession']}_2.fastq.gz"
+            ]
+        else:
+            return [
+                f"samples/{wildcards['bioproject']}/{wildcards['accession']}/{wildcards['accession']}.fastq.gz"
+            ]
+        
+
 # Populate the output lists based on paired-end status
 for sra_file in sra_samples:
     # Extract bioproject and accession from the file path
@@ -122,6 +126,32 @@ for sra_file in sra_samples:
 print("Paired-end outputs:", all_output_pe)
 print("Single-end outputs:", all_output_se)
 
+for file in all_output_pe:
+    print(file)
+for file in all_output_se:
+    print(file)
+
+fastqc_output_pe = []
+fastqc_output_se = []
+
+for file in all_output_pe:
+    base = file.replace("samples/", "results/qc/fastqc_pre/").replace(".fastq.gz", "")
+    fastqc_output_pe.extend([f"{base}_fastqc.html", f"{base}_fastqc.zip"])
+
+for file in all_output_se:
+    base = file.replace("samples/", "results/qc/fastqc_pre/").replace(".fastq.gz", "")
+    fastqc_output_se.extend([f"{base}_fastqc.html", f"{base}_fastqc.zip"])
+
+
+
+#fastqc_output_pe = [f.replace('samples/', 'results/qc/fastqc_pre/').replace('.fastq.gz', '_fastqc.html') for f in all_output_pe]
+#fastqc_output_pe += [f.replace('html', 'zip') for f in fastqc_output_pe]
+#fastqc_output_se = [f.replace('samples/', 'results/qc/fastqc_pre/').replace('.fastq.gz', '_fastqc.html') for f in all_output_se]
+#fastqc_output_se += [f.replace('html', 'zip') for f in fastqc_output_se]
+
+fastqc_pre_output = fastqc_output_pe + fastqc_output_se
+for file in fastqc_pre_output:
+    print(file)
 
 rule all:
     input:
@@ -130,12 +160,9 @@ rule all:
         all_output_se,
         local_samples_pe,
         local_samples_se,
-#        expand("results/qc/fastqc_pre/{bioproject}/{accession}_fastqc.html", zip, bioproject=df.bioproject, accession=df.run),
-#        expand("results/qc/fastqc_pre/{bioproject}/{accession}_fastqc.zip", zip, bioproject=df.bioproject, accession=df.run),
-#
-#        expand("samples/{bioproject}/{accession}_{read}.fastq.gz", zip, bioproject=df.bioproject, accession=df.run, read=[1, 2]),
-#        expand("results/qc/fastqc_pre/{bioproject}/{sample}_1_fastqc.zip", zip, bioproject=df.bioproject, sample=df.sample_name),
-#        expand("results/qc/fastqc_pre/{bioproject}/{sample}_2_fastqc.zip", zip, bioproject=df.bioproject, sample=df.sample_name),
+        fastqc_output_pe,
+        fastqc_output_se
+
 #        expand("results/trimmed/{bioproject}/{sample}_{read}.fastq.gz", zip, bioproject=df.bioproject, sample=df.sample_name, read=[1, 2]),
 #        expand("results/qc/fastqc_aft/{bioproject}/{sample}_1_fastqc.zip", zip, bioproject=df.bioproject, sample=df.sample_name),
 #        expand("results/qc/fastqc_aft/{bioproject}/{sample}_2_fastqc.zip", zip, bioproject=df.bioproject, sample=df.sample_name),
@@ -220,30 +247,32 @@ rule fqzip_se:
         gzip -c {input} > {output}
         """
 
+
 # Initial fastqc analysis
 rule fastqc_pre:
     input:
-        "samples/{bioproject}/{accession}/{accession}.fastq.gz"
+        "samples/{bioproject}/{accession}/{accession}{read}.fastq.gz"
     output:
-        html="results/qc/fastqc_pre/{bioproject}/{accession}_fastqc.html",
-        zip="results/qc/fastqc_pre/{bioproject}/{accession}_fastqc.zip" # the suffix _fastqc.zip is necessary for multiqc to find the file. If not using multiqc, you are free to choose an arbitrary filename
+        html="results/qc/fastqc_pre/{bioproject}/{accession}/{accession}{read}_fastqc.html",
+        zip="results/qc/fastqc_pre/{bioproject}/{accession}/{accession}{read}_fastqc.zip" # the suffix _fastqc.zip is necessary for multiqc to find the file. If not using multiqc, you are free to choose an arbitrary filename
     log:
-        "logs/fastqc_pre/{bioproject}/{accession}.log"
+        "logs/fastqc_pre/{bioproject}/{accession}{read}.log"
 ##    params: "--quiet"
 ##    threads: 1
 ##    resources:
 ##        mem_mb=10000,
     shell:
         """
-        fastqc -o results/qc/fastqc_pre/ -f fastq --extract --delete {input} > {log} 2>&1
+        fastqc -o results/qc/fastqc_pre/{wildcards.bioproject}/{wildcards.accession} -f fastq --extract {input} > {log} 2>&1
         """
 ##        """
 ##        module load autoload profile/bioinf
 ##        module load autoload fastqc
-##        fastqc -o results/qc/fastqc_pre/ -t {threads} -f fastq --extract {input}
+##        fastqc -o results/qc/fastqc_pre/{wildcards.bioproject}/{wildcards.accession} -t {threads} -f fastq --extract {input} > {log} 2>&1
 ##        module purge
 ##        """
 
+#ruleorder: trimmomatic_pe > trimmomatic_se
 
 #rule trimmomatic_pe:
 #    input:
