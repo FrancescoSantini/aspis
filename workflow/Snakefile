@@ -133,24 +133,30 @@ for file in all_output_se:
 
 fastqc_output_pe = []
 fastqc_output_se = []
+trimmed_output_pe = []
+trimmed_output_se = []
 
 for file in all_output_pe:
-    base = file.replace("samples/", "results/qc/fastqc_pre/").replace(".fastq.gz", "")
-    fastqc_output_pe.extend([f"{base}_fastqc.html", f"{base}_fastqc.zip"])
+    basefqcpre = file.replace("samples/", "results/qc/fastqc_pre/").replace(".fastq.gz", "")
+    fastqc_output_pe.extend([f"{basefqcpre}_fastqc.html", f"{basefqcpre}_fastqc.zip"])
+    basetrm = file.replace("samples/", "results/trimmed/").replace(".fastq.gz", "")
+    trimmed_output_pe.extend([f"{basetrm}_trimmed.fastq.gz"])
+    basefqcaft = file.replace("samples/", "results/qc/fastqc_aft/").replace(".fastq.gz", "")
+    fastqc_output_pe.extend([f"{basefqcaft}_trimmed_fastqc.html", f"{basefqcaft}_trimmed_fastqc.zip"])
 
 for file in all_output_se:
-    base = file.replace("samples/", "results/qc/fastqc_pre/").replace(".fastq.gz", "")
-    fastqc_output_se.extend([f"{base}_fastqc.html", f"{base}_fastqc.zip"])
-
-
-
-#fastqc_output_pe = [f.replace('samples/', 'results/qc/fastqc_pre/').replace('.fastq.gz', '_fastqc.html') for f in all_output_pe]
-#fastqc_output_pe += [f.replace('html', 'zip') for f in fastqc_output_pe]
-#fastqc_output_se = [f.replace('samples/', 'results/qc/fastqc_pre/').replace('.fastq.gz', '_fastqc.html') for f in all_output_se]
-#fastqc_output_se += [f.replace('html', 'zip') for f in fastqc_output_se]
+    basefqcpre = file.replace("samples/", "results/qc/fastqc_pre/").replace(".fastq.gz", "")
+    fastqc_output_se.extend([f"{basefqcpre}_fastqc.html", f"{basefqcpre}_fastqc.zip"])
+    basetrm = file.replace("samples/", "results/trimmed/").replace(".fastq.gz", "")
+    trimmed_output_se.extend([f"{basetrm}_trimmed.fastq.gz"])
+    basefqcaft = file.replace("samples/", "results/qc/fastqc_aft/").replace(".fastq.gz", "")
+    fastqc_output_pe.extend([f"{basefqcaft}_trimmed_fastqc.html", f"{basefqcaft}_trimmed_fastqc.zip"])
 
 fastqc_pre_output = fastqc_output_pe + fastqc_output_se
 for file in fastqc_pre_output:
+    print(file)
+trimmed_output = trimmed_output_pe + trimmed_output_se
+for file in trimmed_output:
     print(file)
 
 rule all:
@@ -161,11 +167,10 @@ rule all:
         local_samples_pe,
         local_samples_se,
         fastqc_output_pe,
-        fastqc_output_se
+        fastqc_output_se,
+        trimmed_output_pe,
+        trimmed_output_se
 
-#        expand("results/trimmed/{bioproject}/{sample}_{read}.fastq.gz", zip, bioproject=df.bioproject, sample=df.sample_name, read=[1, 2]),
-#        expand("results/qc/fastqc_aft/{bioproject}/{sample}_1_fastqc.zip", zip, bioproject=df.bioproject, sample=df.sample_name),
-#        expand("results/qc/fastqc_aft/{bioproject}/{sample}_2_fastqc.zip", zip, bioproject=df.bioproject, sample=df.sample_name),
 #        expand("results/sorted/{bioproject}/{sample}.bam", zip, bioproject=df.bioproject, sample=df.sample_name),
 #        expand("results/assembly/{bioproject}/sample_lst.txt", bioproject=df.bioproject),
 #        expand("results/deg/{bioproject}/phenodata.csv", bioproject=df.bioproject),
@@ -272,36 +277,76 @@ rule fastqc_pre:
 ##        module purge
 ##        """
 
-#ruleorder: trimmomatic_pe > trimmomatic_se
+ruleorder: trimmomatic_pe > trimmomatic_se
 
-#rule trimmomatic_pe:
-#    input:
-#        r1="samples/{bioproject}/{sample}_1.fastq.gz",
-#        r2="samples/{bioproject}/{sample}_2.fastq.gz"
-#    output:
-#        r1="results/trimmed/{bioproject}/{sample}_1.fastq.gz",
-#        r2="results/trimmed/{bioproject}/{sample}_2.fastq.gz",
-#        # reads where trimming entirely removed the mate
-#        r1_unpaired="results/trimmed/{bioproject}/{sample}_1.unpaired.fastq.gz",
-#        r2_unpaired="results/trimmed/{bioproject}/{sample}_2.unpaired.fastq.gz"
-#    params:
-#        **config["params"]["trimmomatic"]["pe"],
-#    threads: config['THREADS']['trimmo']
-#    wrapper:
-#        "file://workflow/wrappers/trimmomatic/pe"
+rule trimmomatic_pe:
+    input:
+        r1="samples/{bioproject}/{accession}/{accession}_1.fastq.gz",
+        r2="samples/{bioproject}/{accession}/{accession}_2.fastq.gz"
+    output:
+        r1="results/trimmed/{bioproject}/{accession}/{accession}_1_trimmed.fastq.gz",
+        r2="results/trimmed/{bioproject}/{accession}/{accession}_2_trimmed.fastq.gz",
+        r1_unpaired="results/trimmed/{bioproject}/{accession}/{accession}_1.unpaired.fastq.gz",
+        r2_unpaired="results/trimmed/{bioproject}/{accession}/{accession}_2.unpaired.fastq.gz"
+    log:
+        "logs/trimmomatic/{bioproject}/{accession}_pe.log"
+    params:
+        trimmer = ["ILLUMINACLIP:TruSeq3-PE.fa:2:30:10", "LEADING:3", "TRAILING:3", "SLIDINGWINDOW:4:15", "MINLEN:36"]
+##        **config["params"]["trimmomatic"]["pe"],
+##    threads: config['THREADS']['trimmo']
+    shell:
+        """
+        trimmomatic PE -threads {threads} \
+        {input.r1} {input.r2} \
+        {output.r1} {output.r1_unpaired} \
+        {output.r2} {output.r2_unpaired} \
+        {params.trimmer} \
+        2> {log}
+        """
 
+rule trimmomatic_se:
+    input:
+        "samples/{bioproject}/{accession}/{accession}.fastq.gz"
+    output:
+        "results/trimmed/{bioproject}/{accession}/{accession}_trimmed.fastq.gz"
+    log:
+        "logs/trimmomatic/{bioproject}/{accession}_se.log"
+    params:
+        trimmer = ["ILLUMINACLIP:TruSeq3-SE.fa:2:30:10", "LEADING:3", "TRAILING:3", "SLIDINGWINDOW:4:15", "MINLEN:36"]
+##    **config["params"]["trimmomatic"]["pe"],
+##    threads: config['THREADS']['trimmo']
+    shell:
+        """
+        trimmomatic SE -threads {threads} \
+        {input} \
+        {output} \
+        {params.trimmer} \
+        2> {log}
+        """
 
-#rule fastqc_aft:
-#    input:
-#        "results/trimmed/{bioproject}/{sample}_{read}.fastq.gz"
-#    output:
-#        html="results/qc/fastqc_aft/{bioproject}/{sample}_{read}.html",
-#        zip="results/qc/fastqc_aft/{bioproject}/{sample}_{read}_fastqc.zip" # the suffix _fastqc.zip is necess$    params: "--quiet"
-#    threads: 1
-#    resources:
-#        mem_mb=10000,
-#    wrapper:
-#        "file://workflow/wrappers/fastqc"
+# Post trimming fastqc analysis
+rule fastqc_aft:
+    input:
+        "results/trimmed/{bioproject}/{accession}/{accession}{read}_trimmed.fastq.gz"
+    output:
+        html="results/qc/fastqc_aft/{bioproject}/{accession}/{accession}{read}_trimmed_fastqc.html",
+        zip="results/qc/fastqc_aft/{bioproject}/{accession}/{accession}{read}_trimmed_fastqc.zip" # the suffix _fastqc.zip is necessary for multiqc to find the file. If not using multiqc, you are free to choose an arbitrary filename
+    log:
+        "logs/fastqc_aft/{bioproject}/{accession}{read}_trimmed.log"
+##    params: "--quiet"
+##    threads: 1
+##    resources:
+##        mem_mb=10000,
+    shell:
+        """
+        fastqc -o results/qc/fastqc_aft/{wildcards.bioproject}/{wildcards.accession} -f fastq --extract {input} > {log} 2>&1
+        """
+##        """
+##        module load autoload profile/bioinf
+##        module load autoload fastqc
+##        fastqc -o results/qc/fastqc_pre/{wildcards.bioproject}/{wildcards.accession} -t {threads} -f fastq --extract {input} > {log} 2>&1
+##        module purge
+##        """
 
 
 #rule hisat2_index:
