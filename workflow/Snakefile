@@ -169,9 +169,9 @@ rule all:
         fastqc_output_pe,
         fastqc_output_se,
         trimmed_output_pe,
-        trimmed_output_se
-
-#        expand("results/sorted/{bioproject}/{sample}.bam", zip, bioproject=df.bioproject, sample=df.sample_name),
+        trimmed_output_se,
+        "genome/hisat2_index/genome.1.ht2",
+        expand("results/sorted/{bioproject}/{accession}_sorted.bam", zip, bioproject=df.bioproject, accession=df.run),
 #        expand("results/assembly/{bioproject}/sample_lst.txt", bioproject=df.bioproject),
 #        expand("results/deg/{bioproject}/phenodata.csv", bioproject=df.bioproject),
 #        expand("results/deg/{bioproject}/gene_count_matrix.csv", bioproject=df.bioproject),
@@ -304,6 +304,7 @@ rule trimmomatic_pe:
         2> {log}
         """
 
+
 rule trimmomatic_se:
     input:
         "samples/{bioproject}/{accession}/{accession}.fastq.gz"
@@ -323,6 +324,7 @@ rule trimmomatic_se:
         {params.trimmer} \
         2> {log}
         """
+
 
 # Post trimming fastqc analysis
 rule fastqc_aft:
@@ -349,47 +351,67 @@ rule fastqc_aft:
 ##        """
 
 
-#rule hisat2_index:
-#    input:
-#        fasta = "{genome}.fasta"
-#    output:
-#        directory("index_{genome}")
-#    params:
-#        prefix = "index_{genome}/"
-#    threads: config['THREADS']['fqzip']
-#    resources:
-#        mem_mb=config['RESOURCEMOD']['high'],
-#    wrapper:
-#        "file://workflow/wrappers/hisat2/index"
+rule hisat2_index:
+    input:
+        fasta = config["reference_genome"]
+    output:
+        directory("genome/hisat2_index")
+    log:
+        "logs/hisat2_index/index.log"
+##    params:
+##        prefix = "index_{genome}/"
+    threads: 4
+##    resources:
+##        mem_mb=config['RESOURCEMOD']['high'],
+    shell:
+        """
+        mkdir -p {output}
+        hisat2-build -p {threads} {input.fasta} {output}/genome 2> {log}
+        """
 
 
-#rule hisat2_align:
-#    input:
-#        reads=["results/trimmed/{bioproject}/{sample}_1.fastq.gz", "results/trimmed/{bioproject}/{sample}_2.fastq.gz"]
-#    output:
-#        "results/mapped/{bioproject}/{sample}.bam"
-#    params:
-#        extra="",
-#        idx="hg38_UCSC/genome",
-#    threads: config['THREADS']['hisat']
+rule hisat2_align:
+    input:
+        index = "genome/hisat2_index/genome.1.ht2",
+        reads = lambda wildcards: (
+            [f"results/trimmed/{wildcards.bioproject}/{wildcards.accession}/{wildcards.accession}_{read}_trimmed.fastq.gz" for read in [1, 2]]
+            if f"results/trimmed/{wildcards.bioproject}/{wildcards.accession}/{wildcards.accession}_1_trimmed.fastq.gz" in trimmed_output_pe
+            else f"results/trimmed/{wildcards.bioproject}/{wildcards.accession}/{wildcards.accession}_trimmed.fastq.gz"
+        )
+    output:
+        bam = "results/aligned/{bioproject}/{accession}.bam"
+    log:
+        "logs/hisat2/{bioproject}/{accession}.log"
+    threads: 8
+    params:
+        idx="genome/hisat2_index/genome"
 #    resources:
 #        mem_mb=config['RESOURCEMOD']['high'],
 #        time=config['RESOURCEMOD']['moretime'],
-#    wrapper:
-#      "file://workflow/wrappers/hisat2/align"
+    shell:
+        """
+        if [ -f {input.reads[1]} ]; then
+            hisat2 -x {params.idx} -1 {input.reads[0]} -2 {input.reads[1]} -p {threads} | \
+            samtools view -bS - > {output.bam}
+        else
+            hisat2 -x {params.idx} -U {input.reads} -p {threads} | \
+            samtools view -bS - > {output.bam}
+        fi
+        """
 
 
-#rule samtools_sort:
-#    input:
-#        "results/mapped/{bioproject}/{sample}.bam"
-#    output:
-#        "results/sorted/{bioproject}/{sample}.bam"
+rule samtools_sort:
+    input:
+        "results/aligned/{bioproject}/{accession}.bam"
+    output:
+        "results/sorted/{bioproject}/{accession}_sorted.bam"
 #    threads: config['THREADS']['samsort']
 #    resources:
 #        mem_mb=config['RESOURCEMOD']['high'],
-#    wrapper:
-#        "file://workflow/wrappers/samtools/sort"
-
+    shell:
+        """
+        samtools sort {input} -o {output}
+        """
 
 #rule stringtie:
 #    input:
