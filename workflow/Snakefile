@@ -172,6 +172,7 @@ rule all:
         trimmed_output_se,
         "genome/hisat2_index/genome.1.ht2",
         expand("results/sorted/{bioproject}/{accession}_sorted.bam", zip, bioproject=df.bioproject, accession=df.run),
+        expand("results/assembly/{bioproject}/stringtie_merged.gtf", bioproject=df.bioproject)
 #        expand("results/assembly/{bioproject}/sample_lst.txt", bioproject=df.bioproject),
 #        expand("results/deg/{bioproject}/phenodata.csv", bioproject=df.bioproject),
 #        expand("results/deg/{bioproject}/gene_count_matrix.csv", bioproject=df.bioproject),
@@ -355,7 +356,8 @@ rule hisat2_index:
     input:
         fasta = config["reference_genome"]
     output:
-        directory("genome/hisat2_index")
+        folder = directory("genome/hisat2_index"),
+        index = "genome/hisat2_index/genome.1.ht2"
     log:
         "logs/hisat2_index/index.log"
 ##    params:
@@ -365,8 +367,8 @@ rule hisat2_index:
 ##        mem_mb=config['RESOURCEMOD']['high'],
     shell:
         """
-        mkdir -p {output}
-        hisat2-build -p {threads} {input.fasta} {output}/genome 2> {log}
+        mkdir -p {output.folder}
+        hisat2-build -p {threads} {input.fasta} {output.folder}/genome
         """
 
 
@@ -385,68 +387,92 @@ rule hisat2_align:
     threads: 8
     params:
         idx="genome/hisat2_index/genome"
-#    resources:
-#        mem_mb=config['RESOURCEMOD']['high'],
-#        time=config['RESOURCEMOD']['moretime'],
+##    resources:
+##        mem_mb=config['RESOURCEMOD']['high'],
+##        time=config['RESOURCEMOD']['moretime'],
+#    run:
+#        if isinstance(input.reads, list):
+            #Paired-end
+#            shell("""
+#                hisat2 -x {params.idx} -1 {input.reads[0]} -2 {input.reads[1]} -p {threads} | \
+#                samtools view -bS - > {output.bam}
+#            """)
+#        else:
+#            shell("""
+#                hisat2 -x {params.idx} -U {input.reads} -p {threads} | \
+#                samtools view -bS - > {output.bam}
+#            """)
     shell:
         """
         if [ -f {input.reads[1]} ]; then
-            hisat2 -x {params.idx} -1 {input.reads[0]} -2 {input.reads[1]} -p {threads} | \
+            hisat2 -x {params.idx} -1 {input.reads[0]} -2 {input.reads[1]} -p {threads} |
             samtools view -bS - > {output.bam}
         else
-            hisat2 -x {params.idx} -U {input.reads} -p {threads} | \
+            hisat2 -x {params.idx} -U {input.reads} -p {threads} |
             samtools view -bS - > {output.bam}
-        fi
+        fi 2> {log}
         """
-
 
 rule samtools_sort:
     input:
         "results/aligned/{bioproject}/{accession}.bam"
     output:
         "results/sorted/{bioproject}/{accession}_sorted.bam"
-#    threads: config['THREADS']['samsort']
-#    resources:
-#        mem_mb=config['RESOURCEMOD']['high'],
+##    threads: config['THREADS']['samsort']
+##    resources:
+##        mem_mb=config['RESOURCEMOD']['high'],
     shell:
         """
         samtools sort {input} -o {output}
         """
 
-#rule stringtie:
-#    input:
-#        "results/sorted/{bioproject}/{sample}.bam"
-#    output:
-#        "results/assembly/{bioproject}/{sample}.gtf"
-#    threads: 4
-#    shell:
-#        """
-#        module load autoload profile/bioinf && \
-#        module load stringtie && \
-#        module load illumina_genome_Homo_sapiens/hg38 && \
-#        stringtie {input} \
-#        -G $ANNOTATION/Genes/genes.gtf \
-#        -o {output} \
-#        -e
-#        """
+rule stringtie:
+    input:
+        bam = "results/sorted/{bioproject}/{accession}_sorted.bam",
+        annotation = config["reference_annotation"]
+    output:
+        "results/assembly/{bioproject}/{accession}.gtf"
+    threads: 4
+    shell:
+        """
+        stringtie {input.bam} \
+        -G {input.annotation} \
+        -o {output} \
+        -e
+        """
+##        """
+##        module load autoload profile/bioinf && \
+##        module load stringtie && \
+##        module load illumina_genome_Homo_sapiens/hg38 && \
+##        stringtie {input} \
+##        -G $ANNOTATION/Genes/genes.gtf \
+##        -o {output} \
+##        -e
+##        """
 
-
-#rule merge:
-#    input:
-#        expand("results/assembly/{bioproject}/{sample}.gtf", zip, bioproject=df.bioproject, sample=df.sample_name)
-#    output:
-#        "results/assembly/{bioproject}/stringtie_merged.gtf"
-#    threads: 4
-#    shell:
-#        """
-#        module load autoload profile/bioinf && \
-#        module load stringtie && \
-#        module load illumina_genome_Homo_sapiens/hg38 && \
+rule merge:
+    input:
+        gtfs = expand("results/assembly/{bioproject}/{accession}.gtf", zip, bioproject=df.bioproject, accession=df.run),
+        annotation = config["reference_annotation"]
+    output:
+        "results/assembly/{bioproject}/stringtie_merged.gtf"
+    threads: 4
+    shell:
+        """
 #        stringtie --merge \
-#        -G $ANNOTATION/Genes/genes.gtf \
+#        -G {input.annotation} \
 #        -o {output} \
-#        {input}
+#        {input.gtfs}
 #        """
+##        """
+##        module load autoload profile/bioinf && \
+##        module load stringtie && \
+##        module load illumina_genome_Homo_sapiens/hg38 && \
+##        stringtie --merge \
+##        -G $ANNOTATION/Genes/genes.gtf \
+##        -o {output} \
+##        {input}
+##        """
 
 
 #rule preprep:
