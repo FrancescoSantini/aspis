@@ -4,6 +4,8 @@ samples: config/sample_sheet.csv
 # Units are technical replicates (e.g. lanes, or resequencing of the same biological
 # sample).
 #units: config/units.csv
+reference_genome: genome/Homo_sapiens.GRCh38.dna.toplevel.fa
+reference_annotation: genome/Homo_sapiens.GRCh38.112.chr.gtf
 
 THREADS:
   zhex: 7
