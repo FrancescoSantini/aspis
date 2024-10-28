@@ -61,14 +61,14 @@ for _, row in df.iterrows():
         else:
             local_samples_se.append(sample_files)  # Add single file for single-end
 
-# Print the results
-print("Paired-end local samples found:")
-for sample in local_samples_pe:
-    print(sample)
+## Print the results
+#print("Paired-end local samples found:")
+#for sample in local_samples_pe:
+#    print(sample)
 
-print("Single-end local samples found:")
-for sample in local_samples_se:
-    print(sample)
+#print("Single-end local samples found:")
+#for sample in local_samples_se:
+#    print(sample)
 
 
 #Global lists for output files
@@ -123,8 +123,8 @@ for sra_file in sra_samples:
     else:
         all_output_se.extend(output_files)
 
-print("Paired-end outputs:", all_output_pe)
-print("Single-end outputs:", all_output_se)
+#print("Paired-end outputs:", all_output_pe)
+#print("Single-end outputs:", all_output_se)
 
 #for file in all_output_pe:
 #    print(file)
@@ -163,8 +163,8 @@ def get_gtf_files(wildcards):
     gtf_files = expand("results/assembly/{bioproject}/{accession}.gtf",
                        bioproject=wildcards.bioproject,
                        accession=df[df['bioproject'] == wildcards.bioproject]['run'])
-    print(f"GTF files for bioproject {wildcards.bioproject}:")
-    print(gtf_files)
+ #   print(f"GTF files for bioproject {wildcards.bioproject}:")
+ #   print(gtf_files)
     return gtf_files
 
 
@@ -184,7 +184,7 @@ rule all:
         expand("results/assembly/{bioproject}/{bioproject}_stringtie_merged.gtf", bioproject=df.bioproject),
         expand("results/assembly/{bioproject}/{bioproject}_sample_lst.txt", bioproject=df.bioproject),
         expand("results/deg/{bioproject}/phenodata.csv", bioproject=df.bioproject),
-#        expand("results/deg/{bioproject}/gene_count_matrix.csv", bioproject=df.bioproject),
+        expand("results/deg/{bioproject}/gene_count_matrix.csv", bioproject=df.bioproject),
 #        expand("results/deg/{bioproject}/parameters.txt", bioproject=df.bioproject)
 
 
@@ -482,42 +482,28 @@ rule merge:
 
 rule preprep:
     input:
-        "config/sample_sheet.csv",
-        "results/assembly/{bioproject}/{bioproject}_stringtie_merged.gtf"
+        i1 = "config/sample_sheet.csv",
+        i2 = "results/assembly/{bioproject}/{bioproject}_stringtie_merged.gtf"
     output:
-        "results/assembly/{bioproject}/{bioproject}_sample_lst.txt",
-        "results/deg/{bioproject}/phenodata.csv"
-    run:
-        with open(output[0], 'w') as out0, open(output[1], 'w') as out1:
-            hdr = 'sample\tcondition\n'
-            out1.write(hdr)
-            hnd = open(input[0], 'r')
-            bioproject = wildcards.bioproject
-            for line in hnd.readlines()[1:]:
-                smp = line.split(',')[1]
-                prj = line.split(',')[2]
-                cnd = line.split(',')[3].rstrip()
-                if prj==bioproject:
-                    oln0 = smp + '\t' + 'results/assembly/' + prj + '/' + smp + '.gtf' + '\n'
-                    out0.write(oln0)
-                    oln1 = smp + '\t' + cnd + '\n'
-                    out1.write(oln1)
-            hnd.close()
-        out0.close()
-        out1.close()
+        o1 = "results/assembly/{bioproject}/{bioproject}_sample_lst.txt",
+        o2 = "results/deg/{bioproject}/phenodata.csv"
+    shell:
+        """
+        python3 workflow/scripts/preprep.py {input.i1} {input.i2} {output.o1} {output.o2}
+        """
 
-#rule prepDE:
-#    input:
-#        i1 = "results/assembly/{bioproject}/{bioproject}_sample_lst.txt"
-#    output:
-#        o1 = "results/deg/{bioproject}/gene_count_matrix.csv",
-#        o2 = "results/deg/{bioproject}/transcript_count_matrix.csv"
+rule prepDE:
+    input:
+        i1 = "results/assembly/{bioproject}/{bioproject}_sample_lst.txt"
+    output:
+        o1 = "results/deg/{bioproject}/gene_count_matrix.csv",
+        o2 = "results/deg/{bioproject}/transcript_count_matrix.csv"
 #    threads: 1
-#    shell:
-#        """
-#        python3 workflow/scripts/prepDE.py \
-#        -i {input.i1} -g {output.o1} -t {output.o2}
-#        """
+    shell:
+        """
+        python3 workflow/scripts/prepDE.py \
+        -i {input.i1} -g {output.o1} -t {output.o2}
+        """
 
 #rule DESeq2:
 #    input:
@@ -527,6 +513,16 @@ rule preprep:
 #        "results/deg/{bioproject}/parameters.txt"
 #    threads: 8
 #    shell:
+#        """
+#        Rscript workflow/scripts/produce_DEG.R \
+#        -p {input.i1} \
+#        -o results/deg/{wildcards.bioproject}/ \
+#        -i {input.i2} \
+#        -v condition \
+#        -n control \
+#        -m Homo_sapiens \
+#        -d org.Hs.eg.db
+#        """
 #        """
 #        module load autoload profile/bioinf &&
 #        module load autoload r/4.1.0--gcc--10.2.0-python--3.8.6 &&
