@@ -71,6 +71,7 @@ write.table(t(as.data.frame(opt)), file=paste(PATH, "parameters.txt", sep=""))
 print("#######  DATA IMPORT ##############")
 print(paste("Reading gene counts from ", GENE_COUNTS))
 countData <- as.matrix(read.csv(GENE_COUNTS, row.names="gene_id"))
+countData <- countData[complete.cases(countData), ]
 print("Input matrix dimension is: dim(countData)")
 
 print(paste("Reading phenodata form ", PHENO_DATA))
@@ -122,7 +123,7 @@ print(paste("The subsetted and filtered dataset dimension is :", dim(countData_f
 
 ##Questo relevel non è sempre fondamentale. Si può saltare se non c'è un vero e proprio campione di controllo (ad. es Pioppo, maiale). E' importante perché il segno del FC dipende da chi si trova al denominatore. Va invece utilizzato ad esempio nel caso dello stress laddove il valore di riferimento DEVE essere "control".
 if ( ! is.null(CONTROL_NAME) )
-colData_filt[[VAR_TO_TEST]] <- relevel(colData_filt[[VAR_TO_TEST]], ref = CONTROL_NAME)
+colData_filt[[VAR_TO_TEST]] <- relevel(factor(colData_filt[[VAR_TO_TEST]]), ref = CONTROL_NAME)
 
 ###################################
 #######  DESeq2 ANALYSIS ###########
@@ -303,5 +304,7 @@ print("Table of DEGs does not contain any results: No volcano plot produced")
 #dev.off()
 
 
+#p.heatmap come tesina
+#a valle kegg go clusterprofiler chiedi silvia pacchetti per go
  
  
