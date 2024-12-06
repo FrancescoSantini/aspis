@@ -185,7 +185,7 @@ rule all:
         expand("results/assembly/{bioproject}/{bioproject}_sample_lst.txt", bioproject=df.bioproject),
         expand("results/deg/{bioproject}/phenodata.csv", bioproject=df.bioproject),
         expand("results/deg/{bioproject}/gene_count_matrix.csv", bioproject=df.bioproject),
-#        expand("results/deg/{bioproject}/parameters.txt", bioproject=df.bioproject)
+        expand("results/deg/{bioproject}/parameters.txt", bioproject=df.bioproject)
 
 
 rule fasterq_dump_pe:
@@ -491,6 +491,7 @@ rule preprep:
         """
         python3 workflow/scripts/preprep.py {input.i1} {input.i2} {output.o1} {output.o2}
         """
+# Maybe here should be added a rule to merge the different bioproject files in user-selected groups of samples 
 
 rule prepDE:
     input:
@@ -498,31 +499,30 @@ rule prepDE:
     output:
         o1 = "results/deg/{bioproject}/gene_count_matrix.csv",
         o2 = "results/deg/{bioproject}/transcript_count_matrix.csv"
-#    threads: 1
     shell:
         """
         python3 workflow/scripts/prepDE.py \
         -i {input.i1} -g {output.o1} -t {output.o2}
         """
 
-#rule DESeq2:
-#    input:
-#        i1 = "results/deg/{bioproject}/phenodata.csv",
-#        i2 = "results/deg/{bioproject}/gene_count_matrix.csv",
-#    output:
-#        "results/deg/{bioproject}/parameters.txt"
-#    threads: 8
-#    shell:
-#        """
-#        Rscript workflow/scripts/produce_DEG.R \
-#        -p {input.i1} \
-#        -o results/deg/{wildcards.bioproject}/ \
-#        -i {input.i2} \
-#        -v condition \
-#        -n control \
-#        -m Homo_sapiens \
-#        -d org.Hs.eg.db
-#        """
+rule DESeq2:
+    input:
+        i1 = "results/deg/{bioproject}/phenodata.csv",
+        i2 = "results/deg/{bioproject}/gene_count_matrix.csv",
+    output:
+        "results/deg/{bioproject}/parameters.txt"
+    threads: 8
+    shell:
+        """
+        Rscript workflow/scripts/produce_DEG.R \
+        -p {input.i1} \
+        -o results/deg/{wildcards.bioproject}/ \
+        -i {input.i2} \
+        -v condition \
+        -n control \
+        -m Homo_sapiens \
+        -d org.Hs.eg.db
+        """
 #        """
 #        module load autoload profile/bioinf &&
 #        module load autoload r/4.1.0--gcc--10.2.0-python--3.8.6 &&
