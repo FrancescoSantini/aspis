@@ -523,15 +523,15 @@ rule DESeq2:
         -m Homo_sapiens \
         -d org.Hs.eg.db
         """
-#        """
-#        module load autoload profile/bioinf &&
-#        module load autoload r/4.1.0--gcc--10.2.0-python--3.8.6 &&
-#        Rscript workflow/scripts/produce_DEG.R \
-#        -p {input.i1} \
-#        -o results/deg/{wildcards.bioproject}/ \
-#        -i {input.i2} \
-#        -v condition \
-#        -n control \
-#        -m Homo_sapiens \
-#        -d org.Hs.eg.db
-#        """
+##        """
+##        module load autoload profile/bioinf &&
+##        module load autoload r/4.1.0--gcc--10.2.0-python--3.8.6 &&
+##        Rscript workflow/scripts/produce_DEG.R \
+##        -p {input.i1} \
+##        -o results/deg/{wildcards.bioproject}/ \
+##        -i {input.i2} \
+##        -v condition \
+##        -n control \
+##        -m Homo_sapiens \
+##        -d org.Hs.eg.db
+##        """
