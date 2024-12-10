@@ -185,7 +185,11 @@ rule all:
         expand("results/assembly/{bioproject}/{bioproject}_sample_lst.txt", bioproject=df.bioproject),
         expand("results/deg/{bioproject}/phenodata.csv", bioproject=df.bioproject),
         expand("results/deg/{bioproject}/gene_count_matrix.csv", bioproject=df.bioproject),
-        expand("results/deg/{bioproject}/parameters.txt", bioproject=df.bioproject)
+        expand("results/deg/{bioproject}/parameters.txt", bioproject=df.bioproject),
+        expand("results/deg/{bioproject}/KEGG_enrichment.csv", bioproject=df.bioproject),
+        expand("results/deg/{bioproject}/GO_enrichment.csv", bioproject=df.bioproject),
+        expand("results/deg/{bioproject}/KEGG_dotplot.png", bioproject=df.bioproject),
+        expand("results/deg/{bioproject}/GO_dotplot.png", bioproject=df.bioproject)
 
 
 rule fasterq_dump_pe:
@@ -510,11 +514,15 @@ rule DESeq2:
         i1 = "results/deg/{bioproject}/phenodata.csv",
         i2 = "results/deg/{bioproject}/gene_count_matrix.csv",
     output:
-        "results/deg/{bioproject}/parameters.txt"
+        "results/deg/{bioproject}/parameters.txt",
+        "results/deg/{bioproject}/KEGG_enrichment.csv",
+        "results/deg/{bioproject}/GO_enrichment.csv",
+        "results/deg/{bioproject}/KEGG_dotplot.png",
+        "results/deg/{bioproject}/GO_dotplot.png"
     threads: 8
     shell:
         """
-        Rscript workflow/scripts/produce_DEG.R \
+        Rscript workflow/scripts/produce_DEG_with_enrichment.R \
         -p {input.i1} \
         -o results/deg/{wildcards.bioproject}/ \
         -i {input.i2} \
