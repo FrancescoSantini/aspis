@@ -297,17 +297,53 @@ ggsave(file=paste(PATH, "DEGs_volcanoplot-", CONDITION_STRING, ".png", sep=""), 
 print("Table of DEGs does not contain any results: No volcano plot produced")
 }
 
+# Enhanced Volcano Plot
+library(EnhancedVolcano)
+
+EnhancedVolcano(res,
+    lab = rownames(res),
+    x = 'log2FoldChange',
+    y = 'padj',
+    pCutoff = PADJ,
+    FCcutoff = FC_THR,
+    pointSize = 3.0,
+    labSize = 6.0)
+
+ggsave(file=paste(PATH, "Enhanced_Volcano_Plot.png", sep=""), width=12, height=10)
+
+# Improved PCA Plot
+vsd <- vst(dds, blind=FALSE)
+pcaData <- plotPCA(vsd, intgroup=c(VAR_TO_TEST), returnData=TRUE)
+percentVar <- round(100 * attr(pcaData, "percentVar"))
+
+ggplot(pcaData, aes(PC1, PC2, color=!!sym(VAR_TO_TEST))) +
+  geom_point(size=3) +
+  xlab(paste0("PC1: ",percentVar[1],"% variance")) +
+  ylab(paste0("PC2: ",percentVar[2],"% variance")) +
+  coord_fixed() +
+  theme_bw()
+
+ggsave(file=paste(PATH, "Improved_PCA_Plot.png", sep=""), width=10, height=8)
+
+# Heatmap Generation
+library(pheatmap)
+
+# Select top 50 genes by adjusted p-value
+top_genes <- head(order(res$padj), 50)
+mat <- assay(vsd)[top_genes, ]
+mat <- mat - rowMeans(mat)
+
+pheatmap(mat, 
+         annotation_col = colData_filt[, c(VAR_TO_TEST), drop=FALSE],
+         show_rownames = FALSE,
+         filename = paste(PATH, "Top50_DEGs_Heatmap.png", sep=""))
+
+
 ###Sample distances
 
 #png(file=paste(PATH, "samples_dist", ".png", sep=""))
 #dist(t(assay(vsd)))
 #dev.off()
-
-
-#p.heatmap come tesina
-#a valle kegg go clusterprofiler chiedi silvia pacchetti per go
- 
- 
 
 ###################################
 #### KEGG and GO Enrichment #######
