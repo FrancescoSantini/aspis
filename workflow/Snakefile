@@ -14,7 +14,6 @@ wildcard_constraints:
     bioproject="\w+",
     accession="\w+",
     read="(_1|_2)?"
-#    sample="|".join(df.index)
 
 # Function to check if a sample is coming from SRA
 def check_sample(accession, bioproject):
@@ -136,6 +135,7 @@ fastqc_output_se = []
 trimmed_output_pe = []
 trimmed_output_se = []
 
+
 for file in all_output_pe:
     basefqcpre = file.replace("samples/", "results/qc/fastqc_pre/").replace(".fastq.gz", "")
     fastqc_output_pe.extend([f"{basefqcpre}_fastqc.html", f"{basefqcpre}_fastqc.zip"])
@@ -159,6 +159,31 @@ trimmed_output = trimmed_output_pe + trimmed_output_se
 #for file in trimmed_output:
 #    print(file)
 
+def get_multiqc_input(wildcards):
+    """
+    Gather FastQC files and other QC-related files for the specific bioproject identified by the wildcard.
+    Includes FastQC files, trimmed FASTQ files, and sorted BAM files.
+    """
+    bioproject = wildcards.bioproject  # Get the current bioproject from wildcards
+    multiqc_input = []
+
+    # FastQC files
+    fastqc_path = f"results/qc/fastqc_*/{bioproject}"
+    multiqc_input += glob.glob(f"{fastqc_path}/*/*_fastqc.zip")
+    
+    # Trimmed FASTQ files
+    trimmed_path = f"results/trimmed/{bioproject}"
+    multiqc_input += glob.glob(f"{trimmed_path}/*/*_trimmed.fastq.gz")
+    
+    # Sorted BAM files
+    sorted_path = f"results/sorted/{bioproject}"
+    multiqc_input += glob.glob(f"{sorted_path}/*_sorted.bam")
+        
+#    # Debugging outputs
+#    print(f"Processing bioproject: {bioproject}")
+#    print(f"Found files: {multiqc_input}")
+    return multiqc_input
+
 def get_gtf_files(wildcards):
     gtf_files = expand("results/assembly/{bioproject}/{accession}.gtf",
                        bioproject=wildcards.bioproject,
@@ -181,6 +206,7 @@ rule all:
         trimmed_output_se,
         "genome/hisat2_index/genome.1.ht2",
         expand("results/sorted/{bioproject}/{accession}_sorted.bam", zip, bioproject=df.bioproject, accession=df.run),
+        expand("results/qc/{bioproject}_multiqc_report.html", bioproject=df.bioproject),
         expand("results/assembly/{bioproject}/{bioproject}_stringtie_merged.gtf", bioproject=df.bioproject),
         expand("results/assembly/{bioproject}/{bioproject}_sample_lst.txt", bioproject=df.bioproject),
         expand("results/deg/{bioproject}/phenodata.csv", bioproject=df.bioproject),
@@ -435,6 +461,20 @@ rule samtools_sort:
     shell:
         """
         samtools sort {input} -o {output}
+        """
+
+rule multiqc:
+    input:
+        get_multiqc_input
+    output:
+        report = "results/qc/{bioproject}_multiqc_report.html"
+    params:
+        dir="results/qc"
+    shell:
+        """
+        multiqc {input} \
+        -o {params.dir} \
+        -n {wildcards.bioproject}_multiqc_report.html
         """
 
 rule stringtie:
