@@ -74,41 +74,60 @@ for _, row in df.iterrows():
 all_output_pe = [] + local_samples_pe
 all_output_se = [] + local_samples_se
 
+def isPairedSRA(sra_file):
+    """
+    Determine if an SRA file is paired-end using fastq-dump.
+    Suppresses verbose output and provides robust error handling.
+    """
+    sra_file = os.path.abspath(sra_file)
+    if not os.path.exists(sra_file):
+        print(f"File {sra_file} does not exist. Skipping paired-end check.")
+        return None  # Handle as needed (e.g., log or skip)
 
-for sra_file in sra_samples:
-
-    # Function to check if a sample is paired-end
-    def isPairedSRA(sra_file):
-        sra_file = os.path.abspath(sra_file)
-        if not os.path.exists(sra_file):
-            print(f"File {sra_file} does not exist. Skipping paired-end check.")
-            return None  # Return None or handle as needed
-        try:
-            contents = sp.check_output(["fastq-dump", "-X", "1", "-Z", "--split-spot", sra_file], text=True)
-        except sp.CalledProcessError as e:
-            raise Exception(f"Error running fastq-dump on {sra_file}: {e}")
+    try:
+        # Suppress verbose output from fastq-dump
+        contents = sp.check_output(
+            ["fastq-dump", "-X", "1", "-Z", "--split-spot", sra_file],
+            text=True,
+            stderr=sp.DEVNULL  # Suppresses stderr
+        )
+    except sp.CalledProcessError as e:
+        print(f"Error running fastq-dump on {sra_file}: {e}")
+        return None  # Log or decide how to handle the error
     
-        if contents.count("\n") == 4:
-            return False
-        elif contents.count("\n") == 8:
-            return True
-        else:
-            print(f"Unexpected output from fastq-dump on {sra_file}")
-            return None  # Handle unexpected output
+    # Determine paired-end status based on line count
+    line_count = contents.count("\n")
+    if line_count == 4:
+        return False  # Single-end
+    elif line_count == 8:
+        return True  # Paired-end
+    else:
+        print(f"Unexpected output from fastq-dump on {sra_file}. Line count: {line_count}")
+        return None  # Handle unexpected output gracefully
 
+# Precompute paired-end status
+print("Evaluating paired-end status for all SRA files. Please wait...")  # Notify user about progress
+paired_status = {sra_file: isPairedSRA(sra_file) for sra_file in sra_samples}
 
-    # Function to generate expected output files based on paired-end status
-    def get_output_files(wildcards):
-        sra_file = f"samples/{wildcards['bioproject']}/{wildcards['accession']}/{wildcards['accession']}.sra"
-        if isPairedSRA(sra_file):
-            return [
-                f"samples/{wildcards['bioproject']}/{wildcards['accession']}/{wildcards['accession']}_1.fastq.gz",
-                f"samples/{wildcards['bioproject']}/{wildcards['accession']}/{wildcards['accession']}_2.fastq.gz"
-            ]
-        else:
-            return [
-                f"samples/{wildcards['bioproject']}/{wildcards['accession']}/{wildcards['accession']}.fastq.gz"
-            ]
+def get_output_files(wildcards):
+    """
+    Generate expected output files based on paired-end status.
+    """
+    sra_file = f"samples/{wildcards['bioproject']}/{wildcards['accession']}/{wildcards['accession']}.sra"
+    paired = paired_status.get(sra_file)
+
+    if paired is None:
+        raise ValueError(f"Cannot determine paired-end status for {sra_file}")
+
+    if paired:
+        return [
+            f"samples/{wildcards['bioproject']}/{wildcards['accession']}/{wildcards['accession']}_1.fastq.gz",
+            f"samples/{wildcards['bioproject']}/{wildcards['accession']}/{wildcards['accession']}_2.fastq.gz"
+        ]
+    else:
+        return [
+            f"samples/{wildcards['bioproject']}/{wildcards['accession']}/{wildcards['accession']}.fastq.gz"
+        ]
         
 
 # Populate the output lists based on paired-end status
@@ -117,7 +136,7 @@ for sra_file in sra_samples:
     parts = sra_file.split('/')
     wildcards = {'bioproject': parts[1], 'accession': parts[2]}
     output_files = get_output_files(wildcards)
-    if isPairedSRA(sra_file):
+    if paired_status[sra_file]:
         all_output_pe.extend(output_files)
     else:
         all_output_se.extend(output_files)
@@ -161,28 +180,73 @@ trimmed_output = trimmed_output_pe + trimmed_output_se
 
 def get_multiqc_input(wildcards):
     """
-    Gather FastQC files and other QC-related files for the specific bioproject identified by the wildcard.
-    Includes FastQC files, trimmed FASTQ files, and sorted BAM files.
+    Gather all required input files for MultiQC for the specified bioproject.
+    Includes FastQC files, trimmed FASTQ files, and sorted BAM files, 
+    dynamically handling paired-end and single-end files.
     """
-    bioproject = wildcards.bioproject  # Get the current bioproject from wildcards
+    bioproject = wildcards.bioproject
     multiqc_input = []
 
-    # FastQC files
-    fastqc_path = f"results/qc/fastqc_*/{bioproject}"
-    multiqc_input += glob.glob(f"{fastqc_path}/*/*_fastqc.zip")
-    
-    # Trimmed FASTQ files
-    trimmed_path = f"results/trimmed/{bioproject}"
-    multiqc_input += glob.glob(f"{trimmed_path}/*/*_trimmed.fastq.gz")
-    
-    # Sorted BAM files
-    sorted_path = f"results/sorted/{bioproject}"
-    multiqc_input += glob.glob(f"{sorted_path}/*_sorted.bam")
-        
-#    # Debugging outputs
-#    print(f"Processing bioproject: {bioproject}")
-#    print(f"Found files: {multiqc_input}")
+    # Process each run in the bioproject
+    accessions = df[df['bioproject'] == bioproject]['run'].tolist()
+
+    for accession in accessions:
+        if any(bioproject.startswith(prefix) for prefix in ["PRJNA", "PRJEB", "SRP", "PRJDB"]):
+            # Handle SRA-derived samples
+            sra_file = f"samples/{bioproject}/{accession}/{accession}.sra"
+            paired = paired_status.get(sra_file)
+
+            if paired is None:
+                raise ValueError(f"Paired-end status for {sra_file} could not be determined")
+
+            # Add FastQC outputs and trimmed FASTQ files
+            if paired:
+                multiqc_input += [
+                    f"results/qc/fastqc_pre/{bioproject}/{accession}/{accession}_1_fastqc.zip",
+                    f"results/qc/fastqc_pre/{bioproject}/{accession}/{accession}_2_fastqc.zip",
+                    f"results/qc/fastqc_aft/{bioproject}/{accession}/{accession}_1_trimmed_fastqc.zip",
+                    f"results/qc/fastqc_aft/{bioproject}/{accession}/{accession}_2_trimmed_fastqc.zip",
+                    f"results/trimmed/{bioproject}/{accession}/{accession}_1_trimmed.fastq.gz",
+                    f"results/trimmed/{bioproject}/{accession}/{accession}_2_trimmed.fastq.gz",
+                ]
+            else:
+                multiqc_input += [
+                    f"results/qc/fastqc_pre/{bioproject}/{accession}/{accession}_fastqc.zip",
+                    f"results/qc/fastqc_aft/{bioproject}/{accession}/{accession}_trimmed_fastqc.zip",
+                    f"results/trimmed/{bioproject}/{accession}/{accession}_trimmed.fastq.gz",
+                ]
+
+            # Add sorted BAM files
+            multiqc_input += [
+                f"results/sorted/{bioproject}/{accession}_sorted.bam",
+            ]
+        else:
+            # Handle user-provided personal/local samples
+            if f"samples/{bioproject}/{accession}/{accession}_1.fastq.gz" in local_samples_pe:
+                # Paired-end personal/local samples
+                multiqc_input += [
+                    f"results/qc/fastqc_pre/{bioproject}/{accession}/{accession}_1_fastqc.zip",
+                    f"results/qc/fastqc_pre/{bioproject}/{accession}/{accession}_2_fastqc.zip",
+                    f"results/qc/fastqc_aft/{bioproject}/{accession}/{accession}_1_trimmed_fastqc.zip",
+                    f"results/qc/fastqc_aft/{bioproject}/{accession}/{accession}_2_trimmed_fastqc.zip",
+                    f"results/trimmed/{bioproject}/{accession}/{accession}_1_trimmed.fastq.gz",
+                    f"results/trimmed/{bioproject}/{accession}/{accession}_2_trimmed.fastq.gz",
+                ]
+            else:
+                # Single-end personal/local samples
+                multiqc_input += [
+                    f"results/qc/fastqc_pre/{bioproject}/{accession}/{accession}_fastqc.zip",
+                    f"results/qc/fastqc_aft/{bioproject}/{accession}/{accession}_trimmed_fastqc.zip",
+                    f"results/trimmed/{bioproject}/{accession}/{accession}_trimmed.fastq.gz",
+                ]
+
+            # Add sorted BAM files
+            multiqc_input += [
+                f"results/sorted/{bioproject}/{accession}_sorted.bam",
+            ]
+
     return multiqc_input
+
 
 def get_gtf_files(wildcards):
     gtf_files = expand("results/assembly/{bioproject}/{accession}.gtf",
@@ -427,18 +491,6 @@ rule hisat2_align:
 ##    resources:
 ##        mem_mb=config['RESOURCEMOD']['high'],
 ##        time=config['RESOURCEMOD']['moretime'],
-#    run:
-#        if isinstance(input.reads, list):
-            #Paired-end
-#            shell("""
-#                hisat2 -x {params.idx} -1 {input.reads[0]} -2 {input.reads[1]} -p {threads} | \
-#                samtools view -bS - > {output.bam}
-#            """)
-#        else:
-#            shell("""
-#                hisat2 -x {params.idx} -U {input.reads} -p {threads} | \
-#                samtools view -bS - > {output.bam}
-#            """)
     shell:
         """
         if [ -f {input.reads[1]} ]; then
