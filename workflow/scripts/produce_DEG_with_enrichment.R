@@ -1,5 +1,7 @@
 #!/usr/bin/env Rscript
 
+pdf(NULL)
+
 library("optparse")
 
 ###################################
