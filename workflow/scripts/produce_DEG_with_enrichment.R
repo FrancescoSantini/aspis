@@ -109,7 +109,6 @@ countData_subs <- countData[,colnames(countData) %in% rownames(colData_filt)]
 colData_filt = colData
 countData_subs = countData
 }
-
 print(paste("The subsetted dataset is :", dim(countData_subs), sep=""))
 
 #filtering:
@@ -132,22 +131,116 @@ colData_filt[[VAR_TO_TEST]] <- relevel(factor(colData_filt[[VAR_TO_TEST]]), ref 
 ###################################
 
 library(DESeq2)
+library(sva)
+print("loading ggplot2 package")
+library(ggplot2)
 
 # Create a DESeqDataSet from count matrix and labels
 # (bisogna ricostruire nuovamente l'oggetto DESeq ogni volta che si cambia il design!)
 print("#######  DESeq2 ANALYSIS ###########")
+# Add a default batch column if missing
+if (!"batch" %in% colnames(colData_filt)) {
+    print("No batch information found. Assigning a single batch to all samples.")
+    colData_filt$batch <- 1  # All samples assigned to a single batch
+}
+
 dds <- DESeqDataSetFromMatrix(countData = countData_filt, colData = colData_filt, design = as.formula(paste("~", VAR_TO_TEST)))
 
 # Run the default analysis for DESeq2 and generate results table
 dds <- DESeq(dds)
 #Lowe dice che è meglio usare DESeq e non ReplaceOutliers poiché la prima funzione invoca già la seconda. Inoltre sconsiglia caldamente di scendere sotto il 7 per minReplicatesForReplace.
 
-#diagnostic plot
+#diagnostic PCA plot
 png(paste(PATH,"PCA_diagnostica.png",sep=""))
 plotMDS(countData_filt )
 dev.off()
 
+# Variance-stabilizing transformation
+print("Applying VST...")
+vsd <- vst(dds, blind=FALSE)
+
+# Step 1: Clustering Exploration
+print("Performing PCA for exploratory clustering analysis...")
+pcaData <- plotPCA(vsd, intgroup=c(VAR_TO_TEST), returnData=TRUE)
+percentVar <- round(100 * attr(pcaData, "percentVar"))
+
+ggplot(pcaData, aes(PC1, PC2, color=!!sym(VAR_TO_TEST))) +
+  geom_point(size=3) +
+  xlab(paste0("PC1: ", percentVar[1], "% variance")) +
+  ylab(paste0("PC2: ", percentVar[2], "% variance")) +
+  coord_fixed() +
+  theme_bw()
+
+ggsave(file=paste(PATH, "Exploratory_PCA_Plot.png", sep=""), width=10, height=8)
+
+# Optional: Hierarchical Clustering
+sample_dist <- dist(t(assay(vsd)))
+hc <- hclust(sample_dist)
+
+png(file=paste(PATH, "Sample_Clustering_Dendrogram.png", sep=""))
+plot(hc, main="Sample Clustering Dendrogram", xlab="Samples", sub="")
+dev.off()
+
+# Step 2: Detect Hidden Batches with SVA (If No Explicit Batch Variable)
+print("Detecting hidden batch effects using SVA...")
+mod <- model.matrix(~ colData_filt[[VAR_TO_TEST]], colData_filt)
+mod0 <- model.matrix(~ 1, colData_filt)
+
+# Run SVA
+svobj <- sva(assay(vsd), mod, mod0)
+
+# Add surrogate variables to colData
+colData_filt$sv1 <- svobj$sv[, 1]  # Add first surrogate variable
+if (ncol(svobj$sv) > 1) {
+    colData_filt$sv2 <- svobj$sv[, 2]  # Add second surrogate variable (if available)
+}
+
+# Print detected surrogate variables
+print("Detected surrogate variables (hidden batch effects):")
+print(svobj$sv)
+
+# Step 3: Update DESeq2 Object for SVA
+print("Updating DESeq2 design to account for surrogate variables...")
+dds <- DESeqDataSetFromMatrix(
+    countData = countData_filt,
+    colData = colData_filt,
+    design = as.formula(paste("~ sv1 +", VAR_TO_TEST))
+)
+
+# Run DESeq2 pipeline with updated design
+dds <- DESeq(dds)
+
+# Step 4: Differential Expression Analysis
+print("Running differential expression analysis...")
 res <- results(dds)
+
+# Step 5: Correct for Batch Effects Using ComBat (If Explicit Batch Variable Exists)
+if (length(unique(colData_filt$batch)) > 1) {
+    print("Correcting for batch effects using ComBat...")
+    batch <- colData_filt$batch
+    mod <- model.matrix(~ colData_filt[[VAR_TO_TEST]], colData_filt)
+
+    # Apply ComBat
+    assay_corrected <- ComBat(dat=assay(vsd), batch=batch, mod=mod)
+    assay(vsd) <- assay_corrected  # Replace assay with corrected data
+
+    # Save PCA plot after batch correction
+    print("Performing PCA after batch effect correction...")
+    pcaData_corrected <- plotPCA(vsd, intgroup=c(VAR_TO_TEST), returnData=TRUE)
+    percentVar_corrected <- round(100 * attr(pcaData_corrected, "percentVar"))
+
+    ggplot(pcaData_corrected, aes(PC1, PC2, color=!!sym(VAR_TO_TEST))) +
+      geom_point(size=3) +
+      xlab(paste0("PC1: ", percentVar_corrected[1], "% variance")) +
+      ylab(paste0("PC2: ", percentVar_corrected[2], "% variance")) +
+      coord_fixed() +
+      theme_bw()
+
+    ggsave(file=paste(PATH, "Corrected_PCA_Plot.png", sep=""), width=10, height=8)
+} else {
+    print("Only one batch detected. Skipping ComBat correction.")
+}
+
 #add an extra column to mark outliers:
 res$outlier = res$baseMean > 0 & is.na(res$pvalue)
 
@@ -194,8 +287,7 @@ print("Written table of DEGs")
 ###################################
 
 print("######### GRAPHICAL PART #########")
-print("loading ggplot2 package")
-library(ggplot2)
+
 
 ################################################################################Graphic part:
 ##Plot2: Istogramma di tutti i p.value:
