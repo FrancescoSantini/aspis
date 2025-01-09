@@ -2,16 +2,21 @@ import sys
 
 def preprep(input_csv, input_gtf, output_lst, output_csv):
     with open(output_lst, 'w') as out0, open(output_csv, 'w') as out1:
-        hdr = 'sample\tcondition\n'
+        # Update the header to include 'biosample'
+        hdr = 'sample\tcondition\tbiosample\n'
         out1.write(hdr)
         with open(input_csv, 'r') as hnd:
-            bioproject = input_gtf.split('/')[-2]  # Extract bioproject from input_gtf path
-            for line in hnd.readlines()[1:]:
-                smp, prj, cnd = line.strip().split(',')[1:4]
+            # Extract bioproject from input_gtf path
+            bioproject = input_gtf.split('/')[-2]
+            for line in hnd.readlines()[1:]:  # Skip the header row
+                # Extract columns: sample_name, run, biosample, bioproject, condition
+                smp, run, bsm, prj, cnd = line.strip().split(',')
                 if prj == bioproject:
-                    oln0 = f"{smp}\tresults/assembly/{prj}/{smp}.gtf\n"
+                    # Write to the GTF list file (unchanged)
+                    oln0 = f"{run}\tresults/assembly/{prj}/{run}.gtf\n"
                     out0.write(oln0)
-                    oln1 = f"{smp}\t{cnd}\n"
+                    # Write to phenodata CSV, including biosample
+                    oln1 = f"{run}\t{cnd}\t{bsm}\n"
                     out1.write(oln1)
 
 if __name__ == "__main__":
