@@ -8,6 +8,13 @@ configfile: "config/config.yaml"
 
 # Load sample data 
 df = pd.read_table('config/sample_sheet.csv', sep=',').set_index('sample_name', drop=False)
+
+# Adjust pandas display options
+pd.set_option('display.max_rows', None)  # Show all rows
+pd.set_option('display.max_columns', None)  # Show all columns
+pd.set_option('display.width', 1000)  # Adjust the width of the display
+pd.set_option('display.colheader_justify', 'center')  # Adjust column header alignment
+
 print(df)
 
 wildcard_constraints:
