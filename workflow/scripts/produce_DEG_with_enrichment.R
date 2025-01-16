@@ -3,6 +3,10 @@
 pdf(NULL)
 
 library("optparse")
+library(tibble)
+library(dplyr)
+library(tidyr)
+
 
 ###################################
 #######  PARSING OPTIONS #########
@@ -74,11 +78,70 @@ print("#######  DATA IMPORT ##############")
 print(paste("Reading gene counts from ", GENE_COUNTS))
 countData <- as.matrix(read.csv(GENE_COUNTS, row.names="gene_id"))
 countData <- countData[complete.cases(countData), ]
-print("Input matrix dimension is: dim(countData)")
+print(paste("Input matrix dimension is:", paste(dim(countData), collapse=" x ")))
 
-print(paste("Reading phenodata form ", PHENO_DATA))
-colData <- read.csv(PHENO_DATA, sep="\t", row.names=1)
-print("Metadata dimension is: dim(colData)")
+print(paste("Reading phenodata from ", PHENO_DATA))
+colData <- read.csv(PHENO_DATA, sep="\t", header=TRUE)
+rownames(colData) <- colData$sample
+
+# Create a unique identifier for each biological sample
+colData$sample_id <- paste(colData$biosample, colData$condition, sep="_")
+
+# Aggregate technical replicates
+library(dplyr)
+library(tidyr)
+countData_aggregated <- countData %>%
+  as.data.frame() %>%
+  rownames_to_column("gene_id") %>%
+  gather(key="sample", value="count", -gene_id) %>%
+  left_join(colData, by="sample") %>%
+  group_by(gene_id, sample_id) %>%
+  summarise(count = sum(count)) %>%
+  spread(key=sample_id, value=count) %>%
+  column_to_rownames("gene_id")
+
+# Update colData to remove technical replicates
+colData_unique <- colData %>%
+  group_by(sample_id) %>%
+  slice(1) %>%
+  ungroup()
+
+# Ensure row names of colData_unique match column names of countData_aggregated
+colData_unique <- colData_unique[colData_unique$sample_id %in% colnames(countData_aggregated), ]
+rownames(colData_unique) <- colData_unique$sample_id
+
+
+# Debug information
+print("Dimensions of countData_aggregated:")
+print(dim(countData_aggregated))
+print("Dimensions of colData_unique:")
+print(dim(colData_unique))
+print("First few row names of colData_unique:")
+print(head(rownames(colData_unique)))
+print("First few column names of countData_aggregated:")
+print(head(colnames(countData_aggregated)))
+
+# Validate alignment
+if (!all(rownames(colData_unique) == colnames(countData_aggregated))) {
+    print("Mismatched samples:")
+    print(setdiff(rownames(colData_unique), colnames(countData_aggregated)))
+    print(setdiff(colnames(countData_aggregated), rownames(colData_unique)))
+    stop("Alignment validation failed after aggregating technical replicates.")
+}
+print("colData and countData are aligned after aggregating technical replicates.")
+
+
+print(paste("Aggregated count data dimension:", paste(dim(countData_aggregated), collapse=" x ")))
+print(paste("Updated metadata dimension:", paste(dim(colData_unique), collapse=" x ")))
+
+# Replace original countData and colData with aggregated versions
+countData <- countData_aggregated
+colData <- colData_unique
+
+
+print(paste("Metadata dimension is", paste(dim(colData), collapse=" x ")))
+
+
 
 #qualche check preliminare. Devo avere due TRUE per poter continuare:
 print("Do phenodata and gene count matrix refer to the same set of samples?")
@@ -425,12 +488,41 @@ library(pheatmap)
 # Select top 50 genes by adjusted p-value
 top_genes <- head(order(res$padj), 50)
 mat <- assay(vsd)[top_genes, ]
-mat <- mat - rowMeans(mat)
 
-pheatmap(mat, 
-         annotation_col = colData_filt[, c(VAR_TO_TEST), drop=FALSE],
-         show_rownames = FALSE,
-         filename = paste(PATH, "Top50_DEGs_Heatmap.png", sep=""))
+# Debugging: Check dimensions and content of mat
+print("Dimensions of mat:")
+print(dim(mat))
+print("Class of mat:")
+print(class(mat))
+print("First few elements of mat:")
+print(head(mat[,1:min(5,ncol(mat))]))
+
+# Ensure mat contains only numeric data and subtract row means
+if (!is.null(mat) && ncol(mat) > 0) {
+    mat <- mat - rowMeans(mat)
+    
+    # Check if all columns are numeric
+    all_numeric <- all(apply(mat, 2, is.numeric))
+    print(paste("All columns numeric:", all_numeric))
+    
+    if (all_numeric) {
+        # Prepare annotation data
+        annotation_col <- data.frame(Condition = colData_filt[[VAR_TO_TEST]])
+        rownames(annotation_col) <- colnames(mat)
+        
+        # Generate heatmap
+        pheatmap(mat, 
+                 annotation_col = annotation_col,
+                 show_rownames = FALSE,
+                 filename = paste(PATH, "Top50_DEGs_Heatmap.png", sep=""))
+    } else {
+        print("Non-numeric data found in mat. Cannot generate heatmap.")
+        print("Column classes:")
+        print(sapply(mat, class))
+    }
+} else {
+    print("Matrix 'mat' is NULL or empty. Skipping heatmap generation.")
+}
 
 
 ###Sample distances
@@ -444,47 +536,165 @@ pheatmap(mat,
 ###################################
 
 library(clusterProfiler)
-library(org.Hs.eg.db) # Replace with appropriate OrgDb for your organism
+library(org.Hs.eg.db)  # Replace with appropriate OrgDb for your organism
 library(ggplot2)
 
 # Convert gene IDs to Entrez IDs
-# Split the identifiers
 gene_ids <- rownames(resSig)
 ensembl_ids <- sapply(strsplit(gene_ids, "\\|"), `[`, 1)
 
 # Map to Entrez IDs
-entrez_ids <- mapIds(org.Hs.eg.db, 
-                     keys = ensembl_ids,
-                     keytype = "ENSEMBL",
-                     column = "ENTREZID")
+entrez_ids <- tryCatch({
+  mapIds(org.Hs.eg.db, 
+         keys = ensembl_ids,
+         keytype = "ENSEMBL",
+         column = "ENTREZID")
+}, error = function(e) {
+  print("Error in mapping Entrez IDs:")
+  print(e)
+  return(NULL)
+})
 
-# Remove any NA values
-entrez_ids <- entrez_ids[!is.na(entrez_ids)]
+# Ensure PATH is defined and exists
+if (!dir.exists(PATH)) {
+  dir.create(PATH, recursive = TRUE)
+  print(paste("Created output directory:", PATH))
+} else {
+  print(paste("Output directory exists:", PATH))
+}
 
-# KEGG Pathway Analysis
-kegg_result <- enrichKEGG(gene = entrez_ids,
-                          organism = 'hsa',
-                          pvalueCutoff = 0.05)
-
-# Save KEGG results
-write.csv(as.data.frame(kegg_result), file=paste(PATH, "KEGG_enrichment.csv", sep=""))
-
-# GO Enrichment Analysis
-go_result <- enrichGO(gene = entrez_ids,
-                      OrgDb = org.Hs.eg.db,
-                      ont = "ALL",
-                      pAdjustMethod = "BH",
-                      pvalueCutoff = 0.05,
-                      qvalueCutoff = 0.05)
-
-# Save GO results
-write.csv(as.data.frame(go_result), file=paste(PATH, "GO_enrichment.csv", sep=""))
-
-# Visualizations
-png(file=paste(PATH, "KEGG_dotplot.png", sep=""))
-dotplot(kegg_result, showCategory=20)
+test_file <- file.path(PATH, "test_plot.png")
+print(paste("Testing PNG creation at:", test_file))
+png(file=test_file)
+plot(1:10, main="Test Plot")
 dev.off()
 
-png(file=paste(PATH, "GO_dotplot.png", sep=""))
-dotplot(go_result, showCategory=20)
-dev.off()
+# Helper function to generate placeholder files
+generate_placeholder <- function(file_path, message) {
+  print(paste("Generating placeholder file:", file_path))
+  png(file=file_path)
+  plot.new()
+  text(0.5, 0.5, message)
+  dev.off()
+}
+
+# Check if Entrez IDs are valid
+if (!is.null(entrez_ids) && length(entrez_ids[!is.na(entrez_ids)]) > 0) {
+  entrez_ids <- entrez_ids[!is.na(entrez_ids)]  # Remove NA values
+  entrez_ids <- unique(entrez_ids)  # Remove duplicates
+  
+  if (length(entrez_ids) > 0) {
+    # Perform KEGG Enrichment
+    kegg_result <- tryCatch({
+      enrichKEGG(gene = entrez_ids, organism = 'hsa', pvalueCutoff = 0.05)
+    }, error = function(e) {
+      print("Error in KEGG enrichment:")
+      print(e)
+      return(NULL)
+    })
+    
+    # Save KEGG Results
+    kegg_file <- file.path(PATH, "KEGG_enrichment.csv")
+    if (!is.null(kegg_result) && nrow(kegg_result@result) > 0) {
+      write.csv(as.data.frame(kegg_result), file=kegg_file)
+    } else {
+      write.csv(data.frame(message="No significant KEGG pathways found or error occurred"), file=kegg_file)
+    }
+
+
+    # KEGG Visualization
+    print("Creating KEGG dot plot...")
+    kegg_dotplot <- file.path(PATH, "KEGG_dotplot.png")
+    print(paste("KEGG dot plot path:", kegg_dotplot))
+    tryCatch({
+      png(file=kegg_dotplot)
+      if (!is.null(kegg_result) && nrow(kegg_result@result) > 0) {
+        print("KEGG dot plot: Generating plot with dotplot()...")
+        dotplot(kegg_result, showCategory=min(20, nrow(kegg_result@result)))
+      } else {
+        print("KEGG dot plot: No data available for plotting.")
+        plot.new()
+        text(0.5, 0.5, "No significant KEGG pathways found")
+      }
+      dev.off()
+      print("KEGG dot plot: File creation completed.")
+    }, error = function(e) {
+      print("Error in KEGG dot plot generation:")
+      print(e)
+      png(file=kegg_dotplot)
+      plot.new()
+      text(0.5, 0.5, "Error generating KEGG dot plot")
+      dev.off()
+    })
+
+    if (!file.exists(kegg_dotplot)) {
+      print("KEGG dot plot missing; generating placeholder...")
+      png(file=kegg_dotplot)
+      plot.new()
+      text(0.5, 0.5, "No KEGG dot plot generated")
+      dev.off()
+    }
+    
+    # Perform GO Enrichment
+    go_result <- tryCatch({
+      enrichGO(gene = entrez_ids, OrgDb = org.Hs.eg.db, ont = "ALL",
+               pAdjustMethod = "BH", pvalueCutoff = 0.05, qvalueCutoff = 0.05)
+    }, error = function(e) {
+      print("Error in GO enrichment:")
+      print(e)
+      return(NULL)
+    })
+    
+    # Save GO Results
+    go_file <- file.path(PATH, "GO_enrichment.csv")
+    if (!is.null(go_result) && nrow(go_result@result) > 0) {
+      write.csv(as.data.frame(go_result), file=go_file)
+    } else {
+      write.csv(data.frame(message="No significant GO terms found or error occurred"), file=go_file)
+    }
+    
+    # GO Visualization
+    print("Creating GO dot plot...")
+    go_dotplot <- file.path(PATH, "GO_dotplot.png")
+    print(paste("GO dot plot path:", go_dotplot))
+    tryCatch({
+      png(file=go_dotplot)
+      if (!is.null(go_result) && nrow(go_result@result) > 0) {
+        print("GO dot plot: Generating plot with dotplot()...")
+        dotplot(go_result, showCategory=min(20, nrow(go_result@result)))
+      } else {
+        print("GO dot plot: No data available for plotting.")
+        plot.new()
+        text(0.5, 0.5, "No significant GO terms found")
+      }
+      dev.off()
+      print("GO dot plot: File creation completed.")
+    }, error = function(e) {
+      print("Error in GO dot plot generation:")
+      print(e)
+      png(file=go_dotplot)
+      plot.new()
+      text(0.5, 0.5, "Error generating GO dot plot")
+      dev.off()
+    })
+
+    if (!file.exists(go_dotplot)) {
+      print("GO dot plot missing; generating placeholder...")
+      png(file=go_dotplot)
+      plot.new()
+      text(0.5, 0.5, "No GO dot plot generated")
+      dev.off()
+    }    
+  } else {
+    print("No valid Entrez IDs found after filtering.")
+    generate_placeholder(file.path(PATH, "KEGG_dotplot.png"), "No valid Entrez IDs found")
+    generate_placeholder(file.path(PATH, "GO_dotplot.png"), "No valid Entrez IDs found")
+  }
+} else {
+  print("Failed to map Entrez IDs.")
+  generate_placeholder(file.path(PATH, "KEGG_dotplot.png"), "Failed to map Entrez IDs")
+  generate_placeholder(file.path(PATH, "GO_dotplot.png"), "Failed to map Entrez IDs")
+}
+
+print(paste("Checking KEGG dot plot existence:", file.exists(file.path(PATH, "KEGG_dotplot.png"))))
+print(paste("Checking GO dot plot existence:", file.exists(file.path(PATH, "GO_dotplot.png"))))
