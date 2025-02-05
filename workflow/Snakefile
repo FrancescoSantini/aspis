@@ -263,6 +263,20 @@ def get_gtf_files(wildcards):
  #   print(gtf_files)
     return gtf_files
 
+# # # Function to get unique conditions per bioproject (excluding 'control')
+# Create a dictionary: {bioproject: [conditions excluding control]}
+bioproject_conditions = {}
+for bioproject in df["bioproject"].unique():
+    conditions = df[df["bioproject"] == bioproject]["condition"].unique().tolist()
+    bioproject_conditions[bioproject] = [cond for cond in conditions if cond != "control"]
+
+# Create a list of tuples [(bioproject, condition), (bioproject, condition), ...]
+bioproject_condition_pairs = [
+    (bioproject, condition)
+    for bioproject, conditions in bioproject_conditions.items()
+    for condition in conditions
+]
+
 
 rule all:
     input:
@@ -282,14 +296,30 @@ rule all:
         expand("results/assembly/{bioproject}/{bioproject}_sample_lst.txt", bioproject=df.bioproject),
         expand("results/deg/{bioproject}/phenodata.csv", bioproject=df.bioproject),
         expand("results/deg/{bioproject}/gene_count_matrix.csv", bioproject=df.bioproject),
-        expand("results/deg/{bioproject}/parameters.txt", bioproject=df.bioproject),
-        expand("results/deg/{bioproject}/Enhanced_Volcano_Plot.png", bioproject=df.bioproject),
-        expand("results/deg/{bioproject}/Improved_PCA_Plot.png", bioproject=df.bioproject),
-        expand("results/deg/{bioproject}/Top50_DEGs_Heatmap.png", bioproject=df.bioproject),
-        expand("results/deg/{bioproject}/KEGG_enrichment.csv", bioproject=df.bioproject),
-        expand("results/deg/{bioproject}/GO_enrichment.csv", bioproject=df.bioproject),
-        expand("results/deg/{bioproject}/KEGG_dotplot.png", bioproject=df.bioproject),
-        expand("results/deg/{bioproject}/GO_dotplot.png", bioproject=df.bioproject)
+        expand("results/deg/{bioproject}/{condition}_vs_control/parameters.txt",
+               zip, bioproject=[bp for bp, _ in bioproject_condition_pairs],
+               condition=[cond for _, cond in bioproject_condition_pairs]),
+        expand("results/deg/{bioproject}/{condition}_vs_control/Enhanced_Volcano_Plot_{condition}_vs_control.png",
+               zip, bioproject=[bp for bp, _ in bioproject_condition_pairs],
+               condition=[cond for _, cond in bioproject_condition_pairs]),
+        expand("results/deg/{bioproject}/{condition}_vs_control/Improved_PCA_Plot_{condition}_vs_control.png",
+               zip, bioproject=[bp for bp, _ in bioproject_condition_pairs],
+               condition=[cond for _, cond in bioproject_condition_pairs]),
+        expand("results/deg/{bioproject}/{condition}_vs_control/Top50_DEGs_Heatmap_{condition}_vs_control.png",
+               zip, bioproject=[bp for bp, _ in bioproject_condition_pairs],
+               condition=[cond for _, cond in bioproject_condition_pairs]),
+        expand("results/deg/{bioproject}/{condition}_vs_control/KEGG_enrichment_{condition}_vs_control.csv",
+               zip, bioproject=[bp for bp, _ in bioproject_condition_pairs],
+               condition=[cond for _, cond in bioproject_condition_pairs]),
+        expand("results/deg/{bioproject}/{condition}_vs_control/GO_enrichment_{condition}_vs_control.csv", 
+               zip, bioproject=[bp for bp, _ in bioproject_condition_pairs],
+               condition=[cond for _, cond in bioproject_condition_pairs]),
+        # expand("results/deg/{bioproject}/{condition}_vs_control/KEGG_dotplot_{condition}_vs_control.png", 
+        #         zip, bioproject=[bp for bp, _ in bioproject_condition_pairs],
+        #        condition=[cond for _, cond in bioproject_condition_pairs]),
+        # expand("results/deg/{bioproject}/{condition}_vs_control/GO_dotplot_{condition}_vs_control.png", 
+        #         zip, bioproject=[bp for bp, _ in bioproject_condition_pairs],
+        #        condition=[cond for _, cond in bioproject_condition_pairs])
 
 
 rule fasterq_dump_pe:
@@ -611,31 +641,7 @@ rule prepDE:
         -i {input.i1} -g {output.o1} -t {output.o2}
         """
 
-rule DESeq2:
-    input:
-        i1 = "results/deg/{bioproject}/phenodata.csv",
-        i2 = "results/deg/{bioproject}/gene_count_matrix.csv",
-    output:
-        "results/deg/{bioproject}/parameters.txt",
-        "results/deg/{bioproject}/Enhanced_Volcano_Plot.png",
-        "results/deg/{bioproject}/Improved_PCA_Plot.png",
-        "results/deg/{bioproject}/Top50_DEGs_Heatmap.png",
-        "results/deg/{bioproject}/KEGG_enrichment.csv",
-        "results/deg/{bioproject}/GO_enrichment.csv",
-        "results/deg/{bioproject}/KEGG_dotplot.png",
-        "results/deg/{bioproject}/GO_dotplot.png"
-    threads: 8
-    shell:
-        """
-        Rscript workflow/scripts/produce_DEG_with_enrichment.R \
-        -p {input.i1} \
-        -o results/deg/{wildcards.bioproject}/ \
-        -i {input.i2} \
-        -v condition \
-        -n control \
-        -m Homo_sapiens \
-        -d org.Hs.eg.db
-        """
+
 ##        """
 ##        module load autoload profile/bioinf &&
 ##        module load autoload r/4.1.0--gcc--10.2.0-python--3.8.6 &&
@@ -644,6 +650,44 @@ rule DESeq2:
 ##        -o results/deg/{wildcards.bioproject}/ \
 ##        -i {input.i2} \
 ##        -v condition \
+##        -n control \
+##        -m Homo_sapiens \
+##        -d org.Hs.eg.db
+##        """
+
+rule DESeq2:
+    input:
+        i1 = "results/deg/{bioproject}/phenodata.csv",
+        i2 = "results/deg/{bioproject}/gene_count_matrix.csv",
+    output:
+        "results/deg/{bioproject}/{condition}_vs_control/parameters.txt",
+        "results/deg/{bioproject}/{condition}_vs_control/Enhanced_Volcano_Plot_{condition}_vs_control.png",
+        "results/deg/{bioproject}/{condition}_vs_control/Improved_PCA_Plot_{condition}_vs_control.png",
+        "results/deg/{bioproject}/{condition}_vs_control/Top50_DEGs_Heatmap_{condition}_vs_control.png",
+        "results/deg/{bioproject}/{condition}_vs_control/KEGG_enrichment_{condition}_vs_control.csv",
+        "results/deg/{bioproject}/{condition}_vs_control/GO_enrichment_{condition}_vs_control.csv",
+#        "results/deg/{bioproject}/{condition}_vs_control/KEGG_dotplot_{condition}_vs_control.png",
+#        "results/deg/{bioproject}/{condition}_vs_control/GO_dotplot_{condition}_vs_control.png"
+    threads: 8
+    shell:
+        """
+        Rscript workflow/scripts/produce_DEG_with_enrichment.R \
+        -p {input.i1} \
+        -o results/deg/{wildcards.bioproject}/{wildcards.condition}_vs_control/ \
+        -i {input.i2} \
+        -v {wildcards.condition} \
+        -n control \
+        -m Homo_sapiens \
+        -d org.Hs.eg.db
+        """
+##        """
+##        module load autoload profile/bioinf &&
+##        module load autoload r/4.1.0--gcc--10.2.0-python--3.8.6 &&
+##        Rscript workflow/scripts/produce_DEG_with_enrichment.R \
+##        -p {input.i1} \
+##        -o results/deg/{wildcards.bioproject}/{wildcards.condition}_vs_control/ \
+##        -i {input.i2} \
+##        -v {wildcards.condition} \
 ##        -n control \
 ##        -m Homo_sapiens \
 ##        -d org.Hs.eg.db
