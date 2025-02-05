@@ -3,10 +3,6 @@
 pdf(NULL)
 
 library("optparse")
-library(tibble)
-library(dplyr)
-library(tidyr)
-
 
 ###################################
 #######  PARSING OPTIONS #########
@@ -78,70 +74,11 @@ print("#######  DATA IMPORT ##############")
 print(paste("Reading gene counts from ", GENE_COUNTS))
 countData <- as.matrix(read.csv(GENE_COUNTS, row.names="gene_id"))
 countData <- countData[complete.cases(countData), ]
-print(paste("Input matrix dimension is:", paste(dim(countData), collapse=" x ")))
+print("Input matrix dimension is: dim(countData)")
 
-print(paste("Reading phenodata from ", PHENO_DATA))
-colData <- read.csv(PHENO_DATA, sep="\t", header=TRUE)
-rownames(colData) <- colData$sample
-
-# Create a unique identifier for each biological sample
-colData$sample_id <- paste(colData$biosample, colData$condition, sep="_")
-
-# Aggregate technical replicates
-library(dplyr)
-library(tidyr)
-countData_aggregated <- countData %>%
-  as.data.frame() %>%
-  rownames_to_column("gene_id") %>%
-  gather(key="sample", value="count", -gene_id) %>%
-  left_join(colData, by="sample") %>%
-  group_by(gene_id, sample_id) %>%
-  summarise(count = sum(count)) %>%
-  spread(key=sample_id, value=count) %>%
-  column_to_rownames("gene_id")
-
-# Update colData to remove technical replicates
-colData_unique <- colData %>%
-  group_by(sample_id) %>%
-  slice(1) %>%
-  ungroup()
-
-# Ensure row names of colData_unique match column names of countData_aggregated
-colData_unique <- colData_unique[colData_unique$sample_id %in% colnames(countData_aggregated), ]
-rownames(colData_unique) <- colData_unique$sample_id
-
-
-# Debug information
-print("Dimensions of countData_aggregated:")
-print(dim(countData_aggregated))
-print("Dimensions of colData_unique:")
-print(dim(colData_unique))
-print("First few row names of colData_unique:")
-print(head(rownames(colData_unique)))
-print("First few column names of countData_aggregated:")
-print(head(colnames(countData_aggregated)))
-
-# Validate alignment
-if (!all(rownames(colData_unique) == colnames(countData_aggregated))) {
-    print("Mismatched samples:")
-    print(setdiff(rownames(colData_unique), colnames(countData_aggregated)))
-    print(setdiff(colnames(countData_aggregated), rownames(colData_unique)))
-    stop("Alignment validation failed after aggregating technical replicates.")
-}
-print("colData and countData are aligned after aggregating technical replicates.")
-
-
-print(paste("Aggregated count data dimension:", paste(dim(countData_aggregated), collapse=" x ")))
-print(paste("Updated metadata dimension:", paste(dim(colData_unique), collapse=" x ")))
-
-# Replace original countData and colData with aggregated versions
-countData <- countData_aggregated
-colData <- colData_unique
-
-
-print(paste("Metadata dimension is", paste(dim(colData), collapse=" x ")))
-
-
+print(paste("Reading phenodata form ", PHENO_DATA))
+colData <- read.csv(PHENO_DATA, sep="\t", row.names=1)
+print("Metadata dimension is: dim(colData)")
 
 #qualche check preliminare. Devo avere due TRUE per poter continuare:
 print("Do phenodata and gene count matrix refer to the same set of samples?")
@@ -161,33 +98,87 @@ library("genefilter")
 #######  DATA SUBSET AND PRE-FILTERING ##############
 ###################################
 
-## costruisco a monte la stringa per il subset che abbia un aspetto come questa:
-## SUBS <- quote(condition=="drought" | condition=="watered")
-if (! is.null(SUBS) )
-{
-#Posso così subsettare phenodata e matrice di conta:
-colData_filt <- subset(colData, eval(parse(text = SUBS)))
-countData_subs <- countData[,colnames(countData) %in% rownames(colData_filt)]
-} else {
-colData_filt = colData
-countData_subs = countData
+# ## costruisco a monte la stringa per il subset che abbia un aspetto come questa:
+# ## SUBS <- quote(condition=="drought" | condition=="watered")
+# if (! is.null(SUBS) )
+# {
+# #Posso così subsettare phenodata e matrice di conta:
+# colData_filt <- subset(colData, eval(parse(text = SUBS)))
+# countData_subs <- countData[,colnames(countData) %in% rownames(colData_filt)]
+# } else {
+# colData_filt = colData
+# countData_subs = countData
+# }
+# # Ensure that both conditions exist after subsetting
+# print("Checking if both groups are still present after filtering:")
+# print(table(colData_filt[["condition"]]))
+
+# if (length(unique(colData_filt[[VAR_TO_TEST]])) < 2) {
+#     stop("Error: Subsetting removed one of the groups. Adjust filtering to keep both conditions.")
+# }
+# Ensure only the selected condition and control are included
+# Debug: Print the condition name received from Snakemake
+print(paste("Filtering for condition:", opt$var_to_test, "and control"))
+print("Available conditions before filtering:")
+print(table(colData[["condition"]]))
+
+# Ensure only the selected condition and control are included
+colData_filt <- colData[colData$condition %in% c(opt$var_to_test, CONTROL_NAME), , drop=FALSE]
+countData_subs <- countData[, colnames(countData) %in% rownames(colData_filt), drop=FALSE]
+
+# Debug: Check if filtering removed all samples
+if (nrow(colData_filt) == 0) {
+    stop("Error: colData_filt is empty! The condition name might be incorrect or missing.")
 }
+
+print("Checking if both groups are still present after filtering:")
+print(table(colData_filt[["condition"]]))
+# Ensure condition column is a factor with only two levels: {condition} and "control"
+colData_filt$condition <- relevel(factor(colData_filt$condition), ref = CONTROL_NAME)
+
+# Debug: Print factor levels
+print("Final condition levels:")
+print(levels(colData_filt$condition))
+
+# Check again if both conditions are present
+if (length(unique(colData_filt$condition)) < 2) {
+    stop("Error: The condition or control is missing after filtering. DESeq2 requires at least two groups.")
+}
+
+# Ensure that both the selected condition and control are still present
+if (length(unique(colData_filt[["condition"]])) < 2) {
+    stop(paste("Error: The condition", opt$var_to_test, "or control is missing after filtering."))
+}
+
+
 print(paste("The subsetted dataset is :", dim(countData_subs), sep=""))
 
 #filtering:
 library(genefilter)
 print("####### DATASET PRE-FILTERING ###########")
 print("Removing genes whose mean expression is less than 5 FPKM in at least 80% of the samples")
+print(paste("Genes before filtering:", dim(countData_subs)[1]))
+
 #Define a function to remove genes whose mean expression is less than 5 in at least 80% of the samples:
-fun <- kOverA(round(dim(countData_subs)[2]*80/100),5)
+fun <- kOverA(round(dim(countData_subs)[2]*50/100),1)
+
 #Apply it to my matrix:
-filter1 <-  apply( countData_subs, 1, fun)
+filter1 <- apply( countData_subs, 1, fun)
 countData_filt <- countData_subs[filter1,]
+print(paste("Genes after filtering:", dim(countData_filt)[1]))
+
+
 print(paste("The subsetted and filtered dataset dimension is :", dim(countData_filt), sep=""))
 
 ##Questo relevel non è sempre fondamentale. Si può saltare se non c'è un vero e proprio campione di controllo (ad. es Pioppo, maiale). E' importante perché il segno del FC dipende da chi si trova al denominatore. Va invece utilizzato ad esempio nel caso dello stress laddove il valore di riferimento DEVE essere "control".
-if ( ! is.null(CONTROL_NAME) )
-colData_filt[[VAR_TO_TEST]] <- relevel(factor(colData_filt[[VAR_TO_TEST]]), ref = CONTROL_NAME)
+# if ( ! is.null(CONTROL_NAME) )
+# colData_filt[["condition"]] <- relevel(factor(colData_filt[["condition"]]), ref = CONTROL_NAME)
+
+
+# Check if both conditions are present
+if (length(unique(colData_filt$condition)) < 2) {
+    stop("Error: The condition or control is missing after filtering. DESeq2 requires at least two groups.")
+}
 
 ###################################
 #######  DESeq2 ANALYSIS ###########
@@ -207,7 +198,67 @@ if (!"batch" %in% colnames(colData_filt)) {
     colData_filt$batch <- 1  # All samples assigned to a single batch
 }
 
-dds <- DESeqDataSetFromMatrix(countData = countData_filt, colData = colData_filt, design = as.formula(paste("~", VAR_TO_TEST)))
+# Ensure the variable has at least two unique values
+if (length(unique(colData_filt$condition)) < 2) {
+    stop("Error: The variable to test (`condition`) must have at least two unique values (e.g., Control vs. Treatment).")
+}
+
+# Debug: Check sample counts per condition before DESeq2
+print("Final sample count per condition before DESeq2:")
+print(table(colData_filt$condition))
+
+# Debug: Check matrix dimensions before DESeq2
+print(paste("Final count matrix dimensions:", dim(countData_filt)[1], "genes x", dim(countData_filt)[2], "samples"))
+
+# Stop if there's only one condition remaining (to prevent DESeq2 errors)
+if (length(unique(colData_filt$condition)) < 2) {
+    stop("Error: Only one condition remains in the dataset after pre-filtering. DESeq2 requires at least two.")
+}
+
+print("Debug: Checking if colData_filt and countData_filt samples match...")
+
+# Check sample names
+print("Samples in colData_filt:")
+print(rownames(colData_filt))
+print("Samples in countData_filt:")
+print(colnames(countData_filt))
+
+# Ensure matching sample names
+valid_samples <- intersect(rownames(colData_filt), colnames(countData_filt))
+
+print("Matched sample names:")
+print(valid_samples)
+
+# Subset colData_filt using the matched samples
+colData_filt <- colData_filt[valid_samples, , drop=FALSE]
+countData_filt <- countData_filt[, valid_samples, drop=FALSE]
+
+filtered_conditions <- colData_filt$condition
+
+print("Final sample count per condition after filtering:")
+print(table(filtered_conditions))
+
+if (length(unique(filtered_conditions)) < 2) {
+    stop("Error: Only one condition remains after filtering. DESeq2 requires at least two.")
+}
+
+
+if (length(unique(filtered_conditions)) < 2) {
+    stop("Error: Only one condition remains after filtering. DESeq2 requires at least two.")
+}
+
+colData_filt$condition <- factor(colData_filt$condition)  # Ensure 'condition' is a factor
+print("Debug: Final colData_filt before DESeq2:")
+print(colData_filt)  # Print the full metadata table
+
+print("Debug: Checking colData_filt before DESeq2:")
+print(colData_filt)  # Print colData_filt
+
+# Ensure 'condition' is a factor
+colData_filt$condition <- factor(colData_filt$condition)
+
+# Create DESeq2 object
+dds <- DESeqDataSetFromMatrix(countData = countData_filt, colData = colData_filt, design = ~ condition)
 
 # Run the default analysis for DESeq2 and generate results table
 dds <- DESeq(dds)
@@ -222,19 +273,38 @@ dev.off()
 print("Applying VST...")
 vsd <- vst(dds, blind=FALSE)
 
+# Ensure 'condition' exists in colData(dds) before PCA
+print("Debug: Full colData(dds) before PCA (ensure 'condition' exists)...")
+print(as.data.frame(colData(dds)))  # Print as a data frame for easy reading
+
+print("Columns in colData(dds):")
+print(colnames(colData(dds)))
+
+if (!"condition" %in% colnames(colData(dds))) {
+    print("Fixing: Adding 'condition' to colData(dds)...")
+    colData(dds)$condition <- colData_filt$condition  # Explicitly copy from colData_filt
+}
+
+print("Columns in colData(dds) after fix:")
+print(colnames(colData(dds)))
+
+if (!"condition" %in% colnames(colData(dds))) {
+    stop("Error: The 'condition' column is still missing from colData(dds) after fixing.")
+}
+
 # Step 1: Clustering Exploration
 print("Performing PCA for exploratory clustering analysis...")
-pcaData <- plotPCA(vsd, intgroup=c(VAR_TO_TEST), returnData=TRUE)
+pcaData <- plotPCA(vsd, intgroup=c("condition"), returnData=TRUE)
 percentVar <- round(100 * attr(pcaData, "percentVar"))
 
-ggplot(pcaData, aes(PC1, PC2, color=!!sym(VAR_TO_TEST))) +
+ggplot(pcaData, aes(PC1, PC2, color=condition)) +
   geom_point(size=3) +
   xlab(paste0("PC1: ", percentVar[1], "% variance")) +
   ylab(paste0("PC2: ", percentVar[2], "% variance")) +
   coord_fixed() +
   theme_bw()
 
-ggsave(file=paste(PATH, "Exploratory_PCA_Plot.png", sep=""), width=10, height=8)
+ggsave(file=paste(PATH, "Exploratory_PCA_Plot_", gsub(" ","_",opt$var_to_test), "_vs_control.png", sep=""), width=10, height=8)
 
 # Optional: Hierarchical Clustering
 sample_dist <- dist(t(assay(vsd)))
@@ -246,11 +316,13 @@ dev.off()
 
 # Step 2: Detect Hidden Batches with SVA (If No Explicit Batch Variable)
 print("Detecting hidden batch effects using SVA...")
-mod <- model.matrix(~ colData_filt[[VAR_TO_TEST]], colData_filt)
-mod0 <- model.matrix(~ 1, colData_filt)
+mod <- model.matrix(~ condition, colData_filt)
+mod0 <- model.matrix(~ 1, colData_filt) #modello nullo senza la variabile sperimentale.
 
 # Run SVA
-svobj <- sva(assay(vsd), mod, mod0)
+#svobj <- sva(assay(vsd), mod, mod0) #Confronta la varianza spiegata dal modello sperimentale con la varianza residua.
+##SVA dovrebbe essere applicato direttamente ai dati raw count, non ai dati trasformati con VST. Sarebbe più corretto:
+svobj <- sva(counts(dds, normalized=TRUE), mod, mod0)
 
 # Add surrogate variables to colData
 colData_filt$sv1 <- svobj$sv[, 1]  # Add first surrogate variable
@@ -267,8 +339,8 @@ print("Updating DESeq2 design to account for surrogate variables...")
 dds <- DESeqDataSetFromMatrix(
     countData = countData_filt,
     colData = colData_filt,
-    design = as.formula(paste("~ sv1 +", VAR_TO_TEST))
-)
+    design = ~ sv1 + condition)
+##modello aggiornato che assorbe il batch effect
 
 # Run DESeq2 pipeline with updated design
 dds <- DESeq(dds)
@@ -281,15 +353,38 @@ res <- results(dds)
 if (length(unique(colData_filt$batch)) > 1) {
     print("Correcting for batch effects using ComBat...")
     batch <- colData_filt$batch
-    mod <- model.matrix(~ colData_filt[[VAR_TO_TEST]], colData_filt)
+    mod <- model.matrix(~ condition, colData_filt)
 
     # Apply ComBat
     assay_corrected <- ComBat(dat=assay(vsd), batch=batch, mod=mod)
     assay(vsd) <- assay_corrected  # Replace assay with corrected data
+    ###ATTENZIONE: Modificare assay(vsd) non ha alcun effetto sull’analisi DESeq2, 
+    ##perché vsd viene usato solo per la PCA e non per calcolare i DEGs.
+    # Ensure 'condition' exists in colData(dds) before PCA
+    print("Debug: Full colData(dds) before batch-corrected PCA (ensure 'condition' exists)...")
+    print(as.data.frame(colData(dds)))  # Print as a data frame for easy reading
+
+    print("Columns in colData(dds):")
+    print(colnames(colData(dds)))
+
+    if (!"condition" %in% colnames(colData(dds))) {
+        print("Fixing: Adding 'condition' to colData(dds)...")
+        colData(dds)$condition <- colData_filt$condition  # Explicitly copy from colData_filt
+    }
+
+    print("Columns in colData(dds) after fix:")
+    print(colnames(colData(dds)))
+
+    if (!"condition" %in% colnames(colData(dds))) {
+        stop("Error: The 'condition' column is still missing from colData(dds) after fixing.")
+    }
+
+    print("Performing PCA after batch effect correction...")
+    pcaData_corrected <- plotPCA(vsd, intgroup=c("condition"), returnData=TRUE)  # Fix VAR_TO_TEST
 
     # Save PCA plot after batch correction
     print("Performing PCA after batch effect correction...")
-    pcaData_corrected <- plotPCA(vsd, intgroup=c(VAR_TO_TEST), returnData=TRUE)
+    pcaData_corrected <- plotPCA(vsd, intgroup=c("condition"), returnData=TRUE)
     percentVar_corrected <- round(100 * attr(pcaData_corrected, "percentVar"))
 
     ggplot(pcaData_corrected, aes(PC1, PC2, color=!!sym(VAR_TO_TEST))) +
@@ -299,10 +394,30 @@ if (length(unique(colData_filt$batch)) > 1) {
       coord_fixed() +
       theme_bw()
 
-    ggsave(file=paste(PATH, "Corrected_PCA_Plot.png", sep=""), width=10, height=8)
+    ggsave(file=paste(PATH, "Corrected_PCA_Plot_", gsub(" ","_",opt$var_to_test), "_vs_control.png", sep=""), width=10, height=8)
 } else {
     print("Only one batch detected. Skipping ComBat correction.")
 }
+
+######PARTE NUOVA:
+countData_norm <- counts(dds, normalized=TRUE) 
+batch <- colData_filt$batch 
+mod <- model.matrix(~ condition, colData_filt)
+if (length(unique(batch)) < 2) {
+    print("Only one batch detected. Skipping ComBat correction.")
+    countData_corrected <- round(countData_norm)  # Convert to integers
+} else {
+    countData_corrected <- ComBat(dat=countData_norm, batch=batch, mod=mod)
+    countData_corrected <- round(countData_corrected)  # Ensure integer values
+}
+
+
+ 
+dds_corrected <- DESeqDataSetFromMatrix(countData = countData_corrected,  colData = colData_filt,  design = ~ condition) 
+# Rianalisi con DESeq2 tenendo conto della correzione di COMBAT:
+dds_corrected <- DESeq(dds_corrected) 
+res <- results(dds_corrected)
+##FINE NUOVA PARTE
 
 #add an extra column to mark outliers:
 res$outlier = res$baseMean > 0 & is.na(res$pvalue)
@@ -354,13 +469,13 @@ print("######### GRAPHICAL PART #########")
 
 ################################################################################Graphic part:
 ##Plot2: Istogramma di tutti i p.value:
-png(file=paste(PATH, "pvalues-histogram.png" , ".png", sep=""), res=100)
+png(file=paste(PATH, "pvalues-histogram" , ".png", sep=""), res=100)
 hist(res$pvalue,main="p.values distribution", col="green4", breaks=20, xlab="p-value")
 abline(v=0.05,col="red",lwd=3, lty=2)
 dev.off()
 
 ##Plot2bis: Istogramma di tutti i q.value:
-png(file=paste(PATH, "qvalues-histogram.png" , ".png", sep=""), res=100 )
+png(file=paste(PATH, "qvalues-histogram" , ".png", sep=""), res=100 )
 hist(res$padj,main="q-values distribution", ylab="q-values", col="green4", breaks=20, ylim=c(0, 2500), xlab="q-value")
 abline(v=0.05,col="red",lwd=3, lty=2)
 dev.off()
@@ -449,7 +564,7 @@ if(nrow(toptable)!=0)
 {
 print("Table of DEGs contains results: I'm plotting a volcano plot")
 volc <- EnhancedVolcanoDESeq2(toptable, AdjustedCutoff=PADJ, LabellingCutoff=PADJ, FCCutoff=FC_THR, main=paste("Volcano Plot of differentially expressed genes", gsub(" ","_",tested_cat), sep="\n"))
-ggsave(file=paste(PATH, "DEGs_volcanoplot-", CONDITION_STRING, ".png", sep=""), volc)
+ggsave(file=paste(PATH, "DEGs_volcanoplot_", CONDITION_STRING, ".png", sep=""), volc)
 } else {
 print("Table of DEGs does not contain any results: No volcano plot produced")
 }
@@ -466,21 +581,41 @@ EnhancedVolcano(res,
     pointSize = 3.0,
     labSize = 6.0)
 
-ggsave(file=paste(PATH, "Enhanced_Volcano_Plot.png", sep=""), width=12, height=10)
+ggsave(file=paste(PATH, "Enhanced_Volcano_Plot_", gsub(" ","_",opt$var_to_test), "_vs_control.png", sep=""), width=12, height=10)
 
 # Improved PCA Plot
 vsd <- vst(dds, blind=FALSE)
-pcaData <- plotPCA(vsd, intgroup=c(VAR_TO_TEST), returnData=TRUE)
+
+print("Debug: Full colData(dds) before PCA (ensure 'condition' exists)...")
+print(as.data.frame(colData(dds)))  # Print as a data frame for easy reading
+
+# Ensure 'condition' is in colData(dds)
+if (!"condition" %in% colnames(colData(dds))) {
+    print("Fixing: Adding 'condition' to colData(dds)...")
+    colData(dds)$condition <- colData_filt$condition  # Explicitly copy from colData_filt
+}
+
+print("Columns in colData(dds):")
+print(colnames(colData(dds)))
+
+if (!"condition" %in% colnames(colData(dds))) {
+    stop("Error: The 'condition' column is still missing from colData(dds) after fixing.")
+}
+
+
+
+
+pcaData <- plotPCA(vsd, intgroup=c("condition"), returnData=TRUE)
 percentVar <- round(100 * attr(pcaData, "percentVar"))
 
-ggplot(pcaData, aes(PC1, PC2, color=!!sym(VAR_TO_TEST))) +
+ggplot(pcaData, aes(PC1, PC2, color=condition)) +
   geom_point(size=3) +
   xlab(paste0("PC1: ",percentVar[1],"% variance")) +
   ylab(paste0("PC2: ",percentVar[2],"% variance")) +
   coord_fixed() +
   theme_bw()
 
-ggsave(file=paste(PATH, "Improved_PCA_Plot.png", sep=""), width=10, height=8)
+ggsave(file=paste(PATH, "Improved_PCA_Plot_", gsub(" ","_",opt$var_to_test), "_vs_control.png", sep=""), width=10, height=8)
 
 # Heatmap Generation
 library(pheatmap)
@@ -488,41 +623,12 @@ library(pheatmap)
 # Select top 50 genes by adjusted p-value
 top_genes <- head(order(res$padj), 50)
 mat <- assay(vsd)[top_genes, ]
+mat <- mat - rowMeans(mat)
 
-# Debugging: Check dimensions and content of mat
-print("Dimensions of mat:")
-print(dim(mat))
-print("Class of mat:")
-print(class(mat))
-print("First few elements of mat:")
-print(head(mat[,1:min(5,ncol(mat))]))
-
-# Ensure mat contains only numeric data and subtract row means
-if (!is.null(mat) && ncol(mat) > 0) {
-    mat <- mat - rowMeans(mat)
-    
-    # Check if all columns are numeric
-    all_numeric <- all(apply(mat, 2, is.numeric))
-    print(paste("All columns numeric:", all_numeric))
-    
-    if (all_numeric) {
-        # Prepare annotation data
-        annotation_col <- data.frame(Condition = colData_filt[[VAR_TO_TEST]])
-        rownames(annotation_col) <- colnames(mat)
-        
-        # Generate heatmap
-        pheatmap(mat, 
-                 annotation_col = annotation_col,
-                 show_rownames = FALSE,
-                 filename = paste(PATH, "Top50_DEGs_Heatmap.png", sep=""))
-    } else {
-        print("Non-numeric data found in mat. Cannot generate heatmap.")
-        print("Column classes:")
-        print(sapply(mat, class))
-    }
-} else {
-    print("Matrix 'mat' is NULL or empty. Skipping heatmap generation.")
-}
+pheatmap(mat, 
+        annotation_col = colData_filt[, "condition", drop=FALSE],
+         show_rownames = FALSE,
+         filename = paste(PATH, "Top50_DEGs_Heatmap_", gsub(" ","_",opt$var_to_test), "_vs_control.png", sep=""))
 
 
 ###Sample distances
@@ -536,165 +642,47 @@ if (!is.null(mat) && ncol(mat) > 0) {
 ###################################
 
 library(clusterProfiler)
-library(org.Hs.eg.db)  # Replace with appropriate OrgDb for your organism
+library(org.Hs.eg.db) # Replace with appropriate OrgDb for your organism
 library(ggplot2)
 
 # Convert gene IDs to Entrez IDs
+# Split the identifiers
 gene_ids <- rownames(resSig)
 ensembl_ids <- sapply(strsplit(gene_ids, "\\|"), `[`, 1)
 
 # Map to Entrez IDs
-entrez_ids <- tryCatch({
-  mapIds(org.Hs.eg.db, 
-         keys = ensembl_ids,
-         keytype = "ENSEMBL",
-         column = "ENTREZID")
-}, error = function(e) {
-  print("Error in mapping Entrez IDs:")
-  print(e)
-  return(NULL)
-})
+entrez_ids <- mapIds(org.Hs.eg.db, 
+                     keys = ensembl_ids,
+                     keytype = "ENSEMBL",
+                     column = "ENTREZID")
 
-# Ensure PATH is defined and exists
-if (!dir.exists(PATH)) {
-  dir.create(PATH, recursive = TRUE)
-  print(paste("Created output directory:", PATH))
-} else {
-  print(paste("Output directory exists:", PATH))
-}
+# Remove any NA values
+entrez_ids <- entrez_ids[!is.na(entrez_ids)]
 
-test_file <- file.path(PATH, "test_plot.png")
-print(paste("Testing PNG creation at:", test_file))
-png(file=test_file)
-plot(1:10, main="Test Plot")
-dev.off()
+# KEGG Pathway Analysis
+kegg_result <- enrichKEGG(gene = entrez_ids,
+                          organism = 'hsa',
+                          pvalueCutoff = 0.05)
 
-# Helper function to generate placeholder files
-generate_placeholder <- function(file_path, message) {
-  print(paste("Generating placeholder file:", file_path))
-  png(file=file_path)
-  plot.new()
-  text(0.5, 0.5, message)
-  dev.off()
-}
+# Save KEGG results
+write.csv(as.data.frame(kegg_result), file=paste(PATH, "KEGG_enrichment_", gsub(" ","_",opt$var_to_test), "_vs_control.csv", sep=""))
 
-# Check if Entrez IDs are valid
-if (!is.null(entrez_ids) && length(entrez_ids[!is.na(entrez_ids)]) > 0) {
-  entrez_ids <- entrez_ids[!is.na(entrez_ids)]  # Remove NA values
-  entrez_ids <- unique(entrez_ids)  # Remove duplicates
-  
-  if (length(entrez_ids) > 0) {
-    # Perform KEGG Enrichment
-    kegg_result <- tryCatch({
-      enrichKEGG(gene = entrez_ids, organism = 'hsa', pvalueCutoff = 0.05)
-    }, error = function(e) {
-      print("Error in KEGG enrichment:")
-      print(e)
-      return(NULL)
-    })
-    
-    # Save KEGG Results
-    kegg_file <- file.path(PATH, "KEGG_enrichment.csv")
-    if (!is.null(kegg_result) && nrow(kegg_result@result) > 0) {
-      write.csv(as.data.frame(kegg_result), file=kegg_file)
-    } else {
-      write.csv(data.frame(message="No significant KEGG pathways found or error occurred"), file=kegg_file)
-    }
+# GO Enrichment Analysis
+go_result <- enrichGO(gene = entrez_ids,
+                      OrgDb = org.Hs.eg.db,
+                      ont = "ALL",
+                      pAdjustMethod = "BH",
+                      pvalueCutoff = 0.05,
+                      qvalueCutoff = 0.05)
 
+# Save GO results
+write.csv(as.data.frame(go_result), file=paste(PATH, "GO_enrichment_", gsub(" ","_",opt$var_to_test), "_vs_control.csv", sep=""))
 
-    # KEGG Visualization
-    print("Creating KEGG dot plot...")
-    kegg_dotplot <- file.path(PATH, "KEGG_dotplot.png")
-    print(paste("KEGG dot plot path:", kegg_dotplot))
-    tryCatch({
-      png(file=kegg_dotplot)
-      if (!is.null(kegg_result) && nrow(kegg_result@result) > 0) {
-        print("KEGG dot plot: Generating plot with dotplot()...")
-        dotplot(kegg_result, showCategory=min(20, nrow(kegg_result@result)))
-      } else {
-        print("KEGG dot plot: No data available for plotting.")
-        plot.new()
-        text(0.5, 0.5, "No significant KEGG pathways found")
-      }
-      dev.off()
-      print("KEGG dot plot: File creation completed.")
-    }, error = function(e) {
-      print("Error in KEGG dot plot generation:")
-      print(e)
-      png(file=kegg_dotplot)
-      plot.new()
-      text(0.5, 0.5, "Error generating KEGG dot plot")
-      dev.off()
-    })
+# Visualizations
+# png(file=paste(PATH, "KEGG_dotplot_", gsub(" ","_",opt$var_to_test), "_vs_control.png", sep=""))
+# dotplot(kegg_result, showCategory=20)
+# dev.off()
 
-    if (!file.exists(kegg_dotplot)) {
-      print("KEGG dot plot missing; generating placeholder...")
-      png(file=kegg_dotplot)
-      plot.new()
-      text(0.5, 0.5, "No KEGG dot plot generated")
-      dev.off()
-    }
-    
-    # Perform GO Enrichment
-    go_result <- tryCatch({
-      enrichGO(gene = entrez_ids, OrgDb = org.Hs.eg.db, ont = "ALL",
-               pAdjustMethod = "BH", pvalueCutoff = 0.05, qvalueCutoff = 0.05)
-    }, error = function(e) {
-      print("Error in GO enrichment:")
-      print(e)
-      return(NULL)
-    })
-    
-    # Save GO Results
-    go_file <- file.path(PATH, "GO_enrichment.csv")
-    if (!is.null(go_result) && nrow(go_result@result) > 0) {
-      write.csv(as.data.frame(go_result), file=go_file)
-    } else {
-      write.csv(data.frame(message="No significant GO terms found or error occurred"), file=go_file)
-    }
-    
-    # GO Visualization
-    print("Creating GO dot plot...")
-    go_dotplot <- file.path(PATH, "GO_dotplot.png")
-    print(paste("GO dot plot path:", go_dotplot))
-    tryCatch({
-      png(file=go_dotplot)
-      if (!is.null(go_result) && nrow(go_result@result) > 0) {
-        print("GO dot plot: Generating plot with dotplot()...")
-        dotplot(go_result, showCategory=min(20, nrow(go_result@result)))
-      } else {
-        print("GO dot plot: No data available for plotting.")
-        plot.new()
-        text(0.5, 0.5, "No significant GO terms found")
-      }
-      dev.off()
-      print("GO dot plot: File creation completed.")
-    }, error = function(e) {
-      print("Error in GO dot plot generation:")
-      print(e)
-      png(file=go_dotplot)
-      plot.new()
-      text(0.5, 0.5, "Error generating GO dot plot")
-      dev.off()
-    })
-
-    if (!file.exists(go_dotplot)) {
-      print("GO dot plot missing; generating placeholder...")
-      png(file=go_dotplot)
-      plot.new()
-      text(0.5, 0.5, "No GO dot plot generated")
-      dev.off()
-    }    
-  } else {
-    print("No valid Entrez IDs found after filtering.")
-    generate_placeholder(file.path(PATH, "KEGG_dotplot.png"), "No valid Entrez IDs found")
-    generate_placeholder(file.path(PATH, "GO_dotplot.png"), "No valid Entrez IDs found")
-  }
-} else {
-  print("Failed to map Entrez IDs.")
-  generate_placeholder(file.path(PATH, "KEGG_dotplot.png"), "Failed to map Entrez IDs")
-  generate_placeholder(file.path(PATH, "GO_dotplot.png"), "Failed to map Entrez IDs")
-}
-
-print(paste("Checking KEGG dot plot existence:", file.exists(file.path(PATH, "KEGG_dotplot.png"))))
-print(paste("Checking GO dot plot existence:", file.exists(file.path(PATH, "GO_dotplot.png"))))
+# png(file=paste(PATH, "GO_dotplot_", gsub(" ","_",opt$var_to_test), "_vs_control.png", sep=""))
+# dotplot(go_result, showCategory=20)
+# dev.off()
