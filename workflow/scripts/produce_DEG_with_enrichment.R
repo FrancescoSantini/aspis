@@ -74,11 +74,11 @@ print("#######  DATA IMPORT ##############")
 print(paste("Reading gene counts from ", GENE_COUNTS))
 countData <- as.matrix(read.csv(GENE_COUNTS, row.names="gene_id"))
 countData <- countData[complete.cases(countData), ]
-print("Input matrix dimension is: dim(countData)")
+print(paste("Input matrix dimension is:", paste(dim(countData), collapse = "x")))
 
 print(paste("Reading phenodata form ", PHENO_DATA))
 colData <- read.csv(PHENO_DATA, sep="\t", row.names=1)
-print("Metadata dimension is: dim(colData)")
+print(paste("Metadata dimension is:", paste(dim(colData), collapse = "x")))
 
 #qualche check preliminare. Devo avere due TRUE per poter continuare:
 print("Do phenodata and gene count matrix refer to the same set of samples?")
@@ -151,7 +151,7 @@ if (length(unique(colData_filt[["condition"]])) < 2) {
 }
 
 
-print(paste("The subsetted dataset is :", dim(countData_subs), sep=""))
+print(paste("The subsetted dataset is:", paste(dim(countData_subs), collapse="x")))
 
 #filtering:
 library(genefilter)
@@ -168,7 +168,7 @@ countData_filt <- countData_subs[filter1,]
 print(paste("Genes after filtering:", dim(countData_filt)[1]))
 
 
-print(paste("The subsetted and filtered dataset dimension is :", dim(countData_filt), sep=""))
+print(paste("The subsetted and filtered dataset dimension is :", paste(dim(countData_filt), collapse="x")))
 
 ##Questo relevel non è sempre fondamentale. Si può saltare se non c'è un vero e proprio campione di controllo (ad. es Pioppo, maiale). E' importante perché il segno del FC dipende da chi si trova al denominatore. Va invece utilizzato ad esempio nel caso dello stress laddove il valore di riferimento DEVE essere "control".
 # if ( ! is.null(CONTROL_NAME) )
