@@ -160,7 +160,7 @@ print("Removing genes whose mean expression is less than 5 FPKM in at least 80% 
 print(paste("Genes before filtering:", dim(countData_subs)[1]))
 
 #Define a function to remove genes whose mean expression is less than 5 in at least 80% of the samples:
-fun <- kOverA(round(dim(countData_subs)[2]*50/100),1)
+fun <- kOverA(round(dim(countData_subs)[2]*80/100),5)
 
 #Apply it to my matrix:
 filter1 <- apply( countData_subs, 1, fun)
@@ -324,25 +324,36 @@ mod0 <- model.matrix(~ 1, colData_filt) #modello nullo senza la variabile sperim
 ##SVA dovrebbe essere applicato direttamente ai dati raw count, non ai dati trasformati con VST. Sarebbe più corretto:
 svobj <- sva(counts(dds, normalized=TRUE), mod, mod0)
 
-# Add surrogate variables to colData
-colData_filt$sv1 <- svobj$sv[, 1]  # Add first surrogate variable
-if (ncol(svobj$sv) > 1) {
-    colData_filt$sv2 <- svobj$sv[, 2]  # Add second surrogate variable (if available)
+# Check if SVA detected any surrogate variables
+if (ncol(svobj$sv) > 0) {
+    # Add first surrogate variable to colData
+    colData_filt$sv1 <- svobj$sv[, 1]
+    if (ncol(svobj$sv) > 1) {
+        colData_filt$sv2 <- svobj$sv[, 2]  # Add second surrogate variable if available
+    }
+    
+    print("Detected surrogate variables (hidden batch effects):")
+    print(svobj$sv)
+    
+    # Update DESeq2 design to include SVA batch correction
+    print("Updating DESeq2 design to account for surrogate variables...")
+    dds <- DESeqDataSetFromMatrix(
+        countData = countData_filt,
+        colData = colData_filt,
+        design = ~ sv1 + condition
+    )
+} else {
+    print("No significant surrogate variables detected. Proceeding without SVA correction.")
+    
+    # Keep the original design without SVA correction
+    dds <- DESeqDataSetFromMatrix(
+        countData = countData_filt,
+        colData = colData_filt,
+        design = ~ condition
+    )
 }
 
-# Print detected surrogate variables
-print("Detected surrogate variables (hidden batch effects):")
-print(svobj$sv)
-
-# Step 3: Update DESeq2 Object for SVA
-print("Updating DESeq2 design to account for surrogate variables...")
-dds <- DESeqDataSetFromMatrix(
-    countData = countData_filt,
-    colData = colData_filt,
-    design = ~ sv1 + condition)
-##modello aggiornato che assorbe il batch effect
-
-# Run DESeq2 pipeline with updated design
+# Run DESeq2 pipeline with the appropriate design
 dds <- DESeq(dds)
 
 # Step 4: Differential Expression Analysis
@@ -638,26 +649,38 @@ pheatmap(mat,
 #dev.off()
 
 ###################################
-#### KEGG and GO Enrichment #######
+#### KEGG, GO, and Reactome Enrichment #######
 ###################################
 
 library(clusterProfiler)
 library(org.Hs.eg.db) # Replace with appropriate OrgDb for your organism
 library(ggplot2)
+library(goseq)
+library(biomaRt)
+library(ReactomePA)
 
 # Convert gene IDs to Entrez IDs
 # Split the identifiers
 gene_ids <- rownames(resSig)
 ensembl_ids <- sapply(strsplit(gene_ids, "\\|"), `[`, 1)
 
-# Map to Entrez IDs
+# Map to Entrez IDs (fixing the 'select()' error by ensuring single mapping)
 entrez_ids <- mapIds(org.Hs.eg.db, 
                      keys = ensembl_ids,
                      keytype = "ENSEMBL",
-                     column = "ENTREZID")
+                     column = "ENTREZID",
+                     multiVals = "first")  # Ensure single mapping
 
 # Remove any NA values
 entrez_ids <- entrez_ids[!is.na(entrez_ids)]
+
+# Debugging: Ensure some IDs were mapped
+print(paste("Mapped Entrez IDs:", length(entrez_ids)))
+
+# Ensure we have DE genes before proceeding
+if (length(entrez_ids) == 0) {
+    stop("Error: No Entrez IDs were mapped. Check Ensembl ID formatting.")
+}
 
 # KEGG Pathway Analysis
 kegg_result <- enrichKEGG(gene = entrez_ids,
@@ -665,7 +688,7 @@ kegg_result <- enrichKEGG(gene = entrez_ids,
                           pvalueCutoff = 0.05)
 
 # Save KEGG results
-write.csv(as.data.frame(kegg_result), file=paste(PATH, "KEGG_enrichment_", gsub(" ","_",opt$var_to_test), "_vs_control.csv", sep=""))
+write.csv(as.data.frame(kegg_result), file=paste(PATH, "KEGG_enrichment_", gsub(" ", "_", opt$var_to_test), "_vs_control.csv", sep=""))
 
 # GO Enrichment Analysis
 go_result <- enrichGO(gene = entrez_ids,
@@ -676,13 +699,259 @@ go_result <- enrichGO(gene = entrez_ids,
                       qvalueCutoff = 0.05)
 
 # Save GO results
-write.csv(as.data.frame(go_result), file=paste(PATH, "GO_enrichment_", gsub(" ","_",opt$var_to_test), "_vs_control.csv", sep=""))
+write.csv(as.data.frame(go_result), file=paste(PATH, "GO_enrichment_", gsub(" ", "_", opt$var_to_test), "_vs_control.csv", sep=""))
 
-# Visualizations
-# png(file=paste(PATH, "KEGG_dotplot_", gsub(" ","_",opt$var_to_test), "_vs_control.png", sep=""))
-# dotplot(kegg_result, showCategory=20)
-# dev.off()
+# Define a function to get gene lengths dynamically
+get_gene_lengths <- function(entrez_ids, organism) {
+    ensembl_datasets <- list(
+        "Homo sapiens" = "hsapiens_gene_ensembl",
+        "Mus musculus" = "mmusculus_gene_ensembl",
+        "Rattus norvegicus" = "rnorvegicus_gene_ensembl",
+        "Danio rerio" = "drerio_gene_ensembl",
+        "Drosophila melanogaster" = "dmelanogaster_gene_ensembl",
+        "Caenorhabditis elegans" = "celegans_gene_ensembl"
+    )
 
-# png(file=paste(PATH, "GO_dotplot_", gsub(" ","_",opt$var_to_test), "_vs_control.png", sep=""))
-# dotplot(go_result, showCategory=20)
-# dev.off()
+    if (!(organism %in% names(ensembl_datasets))) {
+        stop(paste("Error: Organism", organism, "is not supported!"))
+    }
+    
+    dataset <- ensembl_datasets[[organism]]
+    mirrors <- c("www", "useast", "uswest", "asia")
+
+    for (mirror in mirrors) {
+        print(paste("Trying Ensembl mirror:", mirror))
+        tryCatch({
+            mart <- useEnsembl(biomart = "genes", dataset = dataset, mirror = mirror)
+            gene_annotations <- getBM(attributes = c("entrezgene_id", "transcript_length"),
+                                      filters = "entrezgene_id",
+                                      values = entrez_ids,
+                                      mart = mart)
+
+            # Ensure only genes with lengths are kept
+            gene_annotations <- gene_annotations[!is.na(gene_annotations$transcript_length), ]
+
+            # Convert to named vector with Entrez IDs
+            gene_lengths <- setNames(gene_annotations$transcript_length, gene_annotations$entrezgene_id)
+            
+            if (length(gene_lengths) == 0) {
+                stop("Error: No gene lengths retrieved! Check Ensembl query.")
+            }
+            
+            return(gene_lengths)
+        }, error = function(e) {
+            print(paste("Failed to connect to", mirror, ":", e$message))
+        })
+    }
+    
+    stop("All Ensembl mirrors are unavailable. Try again later.")
+}
+
+# Set organism
+selected_organism <- "Homo sapiens"
+
+# Ensure Entrez IDs are character
+entrez_ids <- as.character(entrez_ids)
+
+# Get gene lengths using corrected function
+gene_lengths <- get_gene_lengths(entrez_ids, selected_organism)
+
+# Ensure all gene length IDs are character
+names(gene_lengths) <- as.character(names(gene_lengths))
+
+# Ensure valid genes exist before filtering
+valid_genes <- intersect(entrez_ids, names(gene_lengths))
+
+if (length(valid_genes) == 0) {
+    stop("Error: No valid genes found after intersection! Check ID conversion.")
+}
+
+# Assign DE_genes
+DE_genes <- as.integer(entrez_ids %in% valid_genes)
+names(DE_genes) <- valid_genes
+
+# Remove duplicate transcript lengths
+gene_lengths <- gene_lengths[!duplicated(names(gene_lengths))]
+
+# Assign default length to missing genes
+default_length <- median(gene_lengths, na.rm = TRUE)
+missing_genes <- setdiff(as.character(entrez_ids), as.character(names(gene_lengths)))
+for (gene in missing_genes) {
+    if (!(gene %in% names(gene_lengths))) {
+        gene_lengths[gene] <- default_length
+    }
+}
+
+# Final matching step
+valid_genes <- intersect(names(DE_genes), names(gene_lengths))
+DE_genes <- DE_genes[valid_genes]
+gene_lengths <- gene_lengths[valid_genes]
+
+# Final validation
+if (length(DE_genes) != length(gene_lengths)) {
+    stop("❌ Error: DE_genes and gene_lengths must have the same length before GOseq!")
+}
+
+print("✅ Successfully matched DE_genes and gene_lengths. Proceeding with GOseq...")
+
+# GOseq Analysis
+print("🚀 Running GOseq analysis...")
+
+# Verify genome version before proceeding
+available_genomes <- supportedGenomes()
+if (!("hg38" %in% available_genomes)) {
+    print("⚠️ Warning: hg38 genome not found in GOseq. Trying hg19 instead...")
+    genome_version <- "hg19"
+} else {
+    genome_version <- "hg38"
+}
+print(paste("✅ Using genome version:", genome_version))
+
+# Run GOseq with enhanced error handling
+suppressWarnings({
+    print("🚀 Running nullp() for GOseq...")
+    pwf <- tryCatch(
+        nullp(DE_genes, genome_version, "ensGene", bias.data = gene_lengths),
+        error = function(e) {
+            print("❌ Error in nullp():")
+            print(as.character(e))
+            return(NULL)
+        }
+    )
+    
+    if (is.null(pwf)) {
+        stop("❌ Error: PWF is NULL, possibly due to invalid gene IDs or missing annotations.")
+    }
+    print("✅ Successfully generated pwf. Proceeding with GO annotation mapping...")
+    
+    # Ensure GO annotations are correctly mapped before proceeding
+    go_map <- tryCatch(
+        getgo(names(DE_genes), genome_version, "ensGene"),
+        error = function(e) {
+            print("❌ Error in getgo():")
+            print(as.character(e))
+            return(NULL)
+        }
+    )
+    
+    if (is.null(go_map)) {
+        stop("❌ Error: GO annotation mapping returned NULL. Check genome version and database availability.")
+    }
+    
+    print(paste("✅ Initial GO mappings retrieved:", length(go_map)))
+    print("🔍 Sample GO mappings:")
+    print(utils::head(go_map, 10))  # Print first 10 mappings for verification
+    
+    # Validate and clean the GO map before proceeding
+    go_map <- go_map[!sapply(go_map, is.null)]
+    go_map <- go_map[lengths(go_map) > 0]  # Ensure no empty lists
+    
+    if (length(go_map) == 0) {
+        warning("⚠️ Warning: Filtered GO annotation mapping is empty. Proceeding with an empty GOseq analysis.")
+    } else {
+        print(paste("✅ Filtered GO mappings available:", length(go_map)))
+    }
+    
+    # Run GOseq only if we have valid mappings
+    if (length(go_map) > 0) {
+        print("✅ GO annotation mapping cleaned and validated. Running GOseq...")
+        goseq_results <- tryCatch(
+            goseq(pwf, genome_version, "ensGene", use_genes_without_cat = TRUE),
+            error = function(e) {
+                print("❌ Error in goseq():")
+                print(as.character(e))
+                return(NULL)
+            }
+        )
+        
+        if (is.null(goseq_results) || nrow(goseq_results) == 0) {
+            warning("⚠️ GOseq returned no results. Placeholder file will be created.")
+            goseq_results <- data.frame(Term=character(), Ontology=character(), Pvalue=numeric())
+        }
+    } else {
+        goseq_results <- data.frame(Term=character(), Ontology=character(), Pvalue=numeric())
+        print("⚠️ GOseq was skipped due to missing GO annotations. Placeholder file will be created.")
+    }
+})
+
+# Save GOseq results
+output_file <- paste(PATH, "GOseq_enrichment_", gsub(" ", "_", opt$var_to_test), "_vs_control.csv", sep="")
+write.csv(goseq_results, file=output_file, row.names=FALSE)
+
+
+print("✅ GOseq analysis completed with placeholder file handling.")
+
+# Run Reactome Pathway Analysis
+reactome_result <- enrichPathway(gene = entrez_ids, organism = "human", pvalueCutoff = 0.05)
+
+# Save Reactome results
+write.csv(as.data.frame(reactome_result), file=paste(PATH, "Reactome_enrichment_", gsub(" ", "_", opt$var_to_test), "_vs_control.csv", sep=""))
+
+# Generate dotplots for KEGG, GO, GOseq, and Reactome (ensuring placeholders are created if needed)
+library(ggplot2)
+library(clusterProfiler)
+
+safe_dotplot <- function(enrichment_result, filename, title) {
+    png(filename)
+    
+    if (!is.null(enrichment_result) && nrow(as.data.frame(enrichment_result)) > 0) {
+        print(paste("Generating dotplot for:", title))
+        print(paste("Saving file to:", filename))
+        tryCatch({
+            p <- dotplot(enrichment_result, showCategory=20) + ggtitle(title)
+            print(p)
+            dev.off()
+        }, error = function(e) {
+            print(paste("Error in generating dotplot for:", title, "-", e$message))
+            dev.off()
+        })
+    } else {
+        print(paste("No data for:", title, "Generating placeholder."))
+        tryCatch({
+            p <- ggplot() + 
+                annotate("text", x=1, y=1, label="No Data Available", size=6, color="red") +
+                theme_void() + 
+                ggtitle(title)
+            print(p)
+            dev.off()
+        }, error = function(e) {
+            print(paste("Error in generating placeholder for:", title, "-", e$message))
+            dev.off()
+        })
+    }
+}
+
+# Ensure all dotplot files exist even if empty
+dotplot_files <- list(
+    paste(PATH, "KEGG_dotplot_", gsub(" ", "_", opt$var_to_test), "_vs_control.png", sep=""),
+    paste(PATH, "GO_dotplot_", gsub(" ", "_", opt$var_to_test), "_vs_control.png", sep=""),
+    paste(PATH, "GOseq_dotplot_", gsub(" ", "_", opt$var_to_test), "_vs_control.png", sep=""),
+    paste(PATH, "Reactome_dotplot_", gsub(" ", "_", opt$var_to_test), "_vs_control.png", sep="")
+)
+
+# Generate dotplots for KEGG, GO, GOseq, and Reactome
+if (exists("kegg_result") && !is.null(kegg_result)) safe_dotplot(kegg_result, dotplot_files[[1]], "KEGG Pathway Enrichment")
+if (exists("go_result") && !is.null(go_result)) safe_dotplot(go_result, dotplot_files[[2]], "GO Enrichment")
+if (exists("goseq_results") && !is.null(goseq_results)) safe_dotplot(goseq_results, dotplot_files[[3]], "GOseq Enrichment")
+if (exists("reactome_result") && !is.null(reactome_result)) safe_dotplot(reactome_result, dotplot_files[[4]], "Reactome Pathway Enrichment")
+
+# Ensure placeholder files exist in case of missing plots
+for (file in dotplot_files) {
+    if (!file.exists(file)) {
+        tryCatch({
+            png(file)
+            print(paste("Generating placeholder for:", file))
+            p <- ggplot() + 
+                annotate("text", x=1, y=1, label="No Data Available", size=6, color="red") +
+                theme_void() + 
+                ggtitle("Placeholder Plot")
+            print(p)
+            dev.off()
+        }, error = function(e) {
+            print(paste("Error in creating placeholder for:", file, "-", e$message))
+            dev.off()
+        })
+    }
+}
+
+print("✅ Dotplots generated and placeholders ensured.")
