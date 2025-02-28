@@ -314,12 +314,24 @@ rule all:
         expand("results/deg/{bioproject}/{condition}_vs_control/GO_enrichment_{condition}_vs_control.csv", 
                zip, bioproject=[bp for bp, _ in bioproject_condition_pairs],
                condition=[cond for _, cond in bioproject_condition_pairs]),
-        # expand("results/deg/{bioproject}/{condition}_vs_control/KEGG_dotplot_{condition}_vs_control.png", 
-        #         zip, bioproject=[bp for bp, _ in bioproject_condition_pairs],
-        #        condition=[cond for _, cond in bioproject_condition_pairs]),
-        # expand("results/deg/{bioproject}/{condition}_vs_control/GO_dotplot_{condition}_vs_control.png", 
-        #         zip, bioproject=[bp for bp, _ in bioproject_condition_pairs],
-        #        condition=[cond for _, cond in bioproject_condition_pairs])
+        expand("results/deg/{bioproject}/{condition}_vs_control/GOseq_enrichment_{condition}_vs_control.csv", 
+               zip, bioproject=[bp for bp, _ in bioproject_condition_pairs],
+               condition=[cond for _, cond in bioproject_condition_pairs]),
+        expand("results/deg/{bioproject}/{condition}_vs_control/Reactome_enrichment_{condition}_vs_control.csv", 
+               zip, bioproject=[bp for bp, _ in bioproject_condition_pairs],
+               condition=[cond for _, cond in bioproject_condition_pairs]),
+        expand("results/deg/{bioproject}/{condition}_vs_control/KEGG_dotplot_{condition}_vs_control.png", 
+                zip, bioproject=[bp for bp, _ in bioproject_condition_pairs],
+               condition=[cond for _, cond in bioproject_condition_pairs]),
+        expand("results/deg/{bioproject}/{condition}_vs_control/GO_dotplot_{condition}_vs_control.png", 
+                zip, bioproject=[bp for bp, _ in bioproject_condition_pairs],
+               condition=[cond for _, cond in bioproject_condition_pairs]),
+        expand("results/deg/{bioproject}/{condition}_vs_control/GOseq_dotplot_{condition}_vs_control.png", 
+                zip, bioproject=[bp for bp, _ in bioproject_condition_pairs],
+               condition=[cond for _, cond in bioproject_condition_pairs]),
+        expand("results/deg/{bioproject}/{condition}_vs_control/Reactome_dotplot_{condition}_vs_control.png", 
+                zip, bioproject=[bp for bp, _ in bioproject_condition_pairs],
+               condition=[cond for _, cond in bioproject_condition_pairs])
 
 
 rule fasterq_dump_pe:
@@ -666,8 +678,12 @@ rule DESeq2:
         "results/deg/{bioproject}/{condition}_vs_control/Top50_DEGs_Heatmap_{condition}_vs_control.png",
         "results/deg/{bioproject}/{condition}_vs_control/KEGG_enrichment_{condition}_vs_control.csv",
         "results/deg/{bioproject}/{condition}_vs_control/GO_enrichment_{condition}_vs_control.csv",
-#        "results/deg/{bioproject}/{condition}_vs_control/KEGG_dotplot_{condition}_vs_control.png",
-#        "results/deg/{bioproject}/{condition}_vs_control/GO_dotplot_{condition}_vs_control.png"
+        "results/deg/{bioproject}/{condition}_vs_control/GOseq_enrichment_{condition}_vs_control.csv",
+        "results/deg/{bioproject}/{condition}_vs_control/Reactome_enrichment_{condition}_vs_control.csv",
+        "results/deg/{bioproject}/{condition}_vs_control/KEGG_dotplot_{condition}_vs_control.png",
+        "results/deg/{bioproject}/{condition}_vs_control/GO_dotplot_{condition}_vs_control.png",
+        "results/deg/{bioproject}/{condition}_vs_control/GOseq_dotplot_{condition}_vs_control.png",
+        "results/deg/{bioproject}/{condition}_vs_control/Reactome_dotplot_{condition}_vs_control.png"
     threads: 8
     shell:
         """
