@@ -1,0 +1,399 @@
+# Snakefile: smallRNA-seq pipeline (mature miRNA quantification, human, 50nt reads)
+
+configfile: "config/config.yaml"
+
+import os
+import pandas as pd
+
+# Load sample sheet and filter for smallRNA entries
+df = pd.read_csv("config/sample_sheet.csv").set_index("sample_name", drop=False)
+df = df[df["bioproject"].str.endswith("_short")]
+#print(df)
+# Extract unique samples
+SAMPLES = df["sample_name"].tolist()
+BIOPROJECTS = df["bioproject"].unique().tolist()
+
+# Map each sample to its metadata
+sample_info = {
+    row["sample_name"]: {
+        "run": row["run"],
+        "bioproject": row["bioproject"]
+    }
+    for _, row in df.iterrows()
+}
+#print(SAMPLES)
+#print(BIOPROJECTS)
+#print(sample_info)
+
+# Write filtered metadata for DESeq2
+os.makedirs("results/deg", exist_ok=True)
+for bp in BIOPROJECTS:
+    os.makedirs(f"results/deg/{bp}", exist_ok=True)
+    df[df.bioproject == bp].to_csv(f"results/deg/{bp}/phenodata.csv", index=False)
+
+def get_multiqc_input(wildcards):
+    bioproject = wildcards.bioproject
+    runs = df[df['bioproject'] == bioproject]['run'].tolist()
+    inputs = []
+
+    for run in runs:
+        inputs += [
+            f"results/qc/fastqc_pre/{bioproject}/{run}/{run}_short_fastqc.html",
+            f"results/trimmed/{bioproject}/{run}/{run}_short_trimmed.fq.gz",
+            f"logs/cutadapt/{bioproject}/{run}_short_summary.json",
+            f"results/qc/fastqc_aft/{bioproject}/{run}/{run}_short_trimmed_fastqc.html",
+            f"results/depleted/{bioproject}/{run}_short_clean.stats.txt",
+            f"results/aligned/{bioproject}/{run}_short.bam",
+            f"results/aligned/{bioproject}/{run}_short.flagstat.txt",
+        ]
+
+    # Add the counts file specific to this bioproject
+    inputs += [f"results/counts/{bioproject}/counts.txt"]
+
+    return inputs
+
+
+rule all:
+    input:
+        "genome/mirbase.fa",
+        "genome/mirbase.saf",
+        expand("results/qc/fastqc_pre/{bioproject}/{run}/{run}_short_fastqc.html", zip, bioproject=df.bioproject, run=df.run),
+        expand("results/trimmed/{bioproject}/{run}/{run}_short_trimmed.fq.gz", zip, bioproject=df.bioproject, run=df.run),
+        expand("results/qc/fastqc_aft/{bioproject}/{run}/{run}_short_trimmed_fastqc.html", zip, bioproject=df.bioproject, run=df.run),
+        expand("logs/cutadapt/{bioproject}/{run}_short_summary.json", zip, bioproject=df.bioproject, run=df.run),
+        expand("results/depleted/{bioproject}/{run}_short_clean.fq.gz", zip, bioproject=df.bioproject, run=df.run),
+        expand("results/depleted/{bioproject}/{run}_short_clean.stats.txt", zip, bioproject=df.bioproject, run=df.run),
+        expand("results/depleted/{bioproject}_summary_clean.flagstat.txt", bioproject=BIOPROJECTS),
+        expand("results/aligned/{bioproject}/{run}_short.bam", zip, bioproject=df.bioproject, run=df.run),
+        expand("results/aligned/{bioproject}/{run}_short.flagstat.txt", zip, bioproject=df.bioproject, run=df.run),
+        expand("results/aligned/{bioproject}_summary.flagstat.txt", bioproject=BIOPROJECTS),
+        expand("results/qc/{bioproject}_multiqc_report.html", bioproject=BIOPROJECTS),
+        expand("results/counts/{bioproject}/counts.txt", bioproject=BIOPROJECTS),
+        expand("results/deg/{bioproject}/deseq_results.csv", bioproject=BIOPROJECTS),
+        expand("results/deg/{bioproject}/deseq_results_GO_enrichment.csv", bioproject=BIOPROJECTS),
+        expand("results/deg/{bioproject}/deseq_results_KEGG_enrichment.csv", bioproject=BIOPROJECTS),
+        expand("results/deg/{bioproject}/deseq_results_Reactome_enrichment.csv", bioproject=BIOPROJECTS),
+        expand("results/deg/{bioproject}/deseq_results_all_enrichments_summary.csv", bioproject=BIOPROJECTS),
+        expand("results/deg/{bioproject}/deseq_results_summary_report.html", bioproject=BIOPROJECTS),
+
+
+
+rule download_mirbase_fasta:
+    output:
+        fasta="genome/mirbase.fa"
+    resources:
+        mem_mb=100
+    shell:
+        """
+        wget -O genome/mature.fa https://www.mirbase.org/download/mature.fa
+        wget -O genome/hairpin.fa https://www.mirbase.org/download/hairpin.fa
+        awk '/^>hsa/ {{print; getline; print}}' genome/mature.fa > genome/mature_hsa.fa
+        awk '/^>hsa/ {{print; getline; print}}' genome/hairpin.fa > genome/hairpin_hsa.fa
+        cat genome/mature_hsa.fa genome/hairpin_hsa.fa | \
+        awk '{{ if ($0 ~ /^>/) print; else {{ gsub(/U/, "T"); print }} }}' > {output.fasta}
+        """
+
+# rule download_mirbase_gtf:
+#     output:
+#         gtf="genome/mirbase.gff3"
+#     resources:
+#         mem_mb=100
+#     shell:
+#         """
+#         mkdir -p genome
+#         wget -O {output.gtf} https://www.mirbase.org/download/hsa.gff3
+#         """
+
+rule fasta_to_saf:
+    input:
+        fasta="genome/mirbase.fa"
+    output:
+        saf="genome/mirbase.saf"
+    resources:
+        mem_mb=500
+    run:
+        with open(input.fasta) as fin, open(output.saf, "w") as fout:
+            fout.write("GeneID\tChr\tStart\tEnd\tStrand\n")
+            gene_id = None
+            seq = []
+            for line in fin:
+                if line.startswith(">"):
+                    if gene_id:
+                        fout.write(f"{gene_id}\t{gene_id}\t1\t{len(''.join(seq))}\t+\n")
+                    gene_id = line[1:].split()[0]
+                    seq = []
+                else:
+                    seq.append(line.strip())
+            if gene_id:
+                fout.write(f"{gene_id}\t{gene_id}\t1\t{len(''.join(seq))}\t+\n")
+
+rule bowtie_build:
+    input:
+        fasta = rules.download_mirbase_fasta.output.fasta
+    output:
+        index = directory("genome/bowtie_index")
+    threads: 4
+    resources:
+        mem_mb=4000
+    log:
+        "logs/bowtie_build.log"
+    shell:
+        """
+        mkdir -p {output.index}
+        bowtie-build {input.fasta} {output.index}/mirbase > {log} 2>&1
+        """
+
+rule download_contaminants:
+    output:
+        "genome/contaminants_dna.fa"
+    shell:
+        """
+        wget --no-check-certificate -O genome/human_tRNA.fa https://gtrnadb.ucsc.edu/genomes/eukaryota/Hsapi19/hg19-mature-tRNAs.fa
+        wget -O genome/rRNA_SSU.fa.gz https://www.arb-silva.de/fileadmin/silva_databases/current/Exports/SILVA_138.2_SSURef_NR99_tax_silva_trunc.fasta.gz
+        wget -O genome/rRNA_LSU.fa.gz https://www.arb-silva.de/fileadmin/silva_databases/current/Exports/SILVA_138.2_LSURef_NR99_tax_silva_trunc.fasta.gz
+        gunzip -c genome/rRNA_SSU.fa.gz | awk '/^>.*Homo sapiens/ {{print; getline; print}}' > genome/rRNA_SSU.fa
+        gunzip -c genome/rRNA_LSU.fa.gz | awk '/^>.*Homo sapiens/ {{print; getline; print}}' > genome/rRNA_LSU.fa
+        cat genome/human_tRNA.fa genome/rRNA_SSU.fa genome/rRNA_LSU.fa > genome/contaminants.fa
+         awk '/^>/ {{ print; next }} {{ gsub(/U/, "T"); print }}' genome/contaminants.fa > {output}
+        """
+
+rule build_contaminant_index:
+    input:
+        "genome/contaminants_dna.fa"
+    output:
+        index=directory("genome/contaminants_index")
+    threads: 4
+    log: "logs/bowtie_contaminants_build.log"
+    shell:
+        """
+        mkdir -p {output.index}
+        bowtie-build {input} {output.index}/contaminants > {log} 2>&1
+        """
+
+rule fastqc_pre:
+    input:
+        "samples/{bioproject}/{run}/{run}_short.fq.gz"
+    output:
+        html="results/qc/fastqc_pre/{bioproject}/{run}/{run}_short_fastqc.html",
+        zip="results/qc/fastqc_pre/{bioproject}/{run}/{run}_short_fastqc.zip"
+    log:
+        "logs/fastqc_pre/{bioproject}/{run}_short.log"
+    threads: 2
+    resources:
+        mem_mb=2000
+    shell:
+        """
+        fastqc -o results/qc/fastqc_pre/{wildcards.bioproject}/{wildcards.run} {input} > {log} 2>&1
+        """
+
+rule cutadapt:
+    input:
+        "samples/{bioproject}/{run}/{run}_short.fq.gz"
+    output:
+        trimmed="results/trimmed/{bioproject}/{run}/{run}_short_trimmed.fq.gz",
+        summary="logs/cutadapt/{bioproject}/{run}_short_summary.json"
+    log:
+        "logs/cutadapt/{bioproject}/{run}_short.log"
+    threads: 2
+    resources:
+        mem_mb=2000
+    params:
+        adapter="AGATCGGAAGAGCACACGTCTGAACTCC"
+    shell:
+        """
+        cutadapt \
+            -a {params.adapter} --overlap 5 --quality-cutoff 20 -m 16 -M 50 --match-read-wildcards --trim-n --report=full \
+            --json {output.summary} -o {output.trimmed} {input} > {log} 2>&1
+        """
+
+rule fastqc_aft:
+    input:
+        "results/trimmed/{bioproject}/{run}/{run}_short_trimmed.fq.gz"
+    output:
+        html="results/qc/fastqc_aft/{bioproject}/{run}/{run}_short_trimmed_fastqc.html",
+        zip="results/qc/fastqc_aft/{bioproject}/{run}/{run}_short_trimmed_fastqc.zip"
+    log:
+        "logs/fastqc_aft/{bioproject}/{run}_short_trimmed.log"
+    threads: 2
+    resources:
+        mem_mb=2000
+    shell:
+        """
+        fastqc -o results/qc/fastqc_aft/{wildcards.bioproject}/{wildcards.run} {input} > {log} 2>&1
+        """
+
+rule deplete_contaminants:
+    input:
+        index=rules.build_contaminant_index.output.index,
+        trimmed="results/trimmed/{bioproject}/{run}/{run}_short_trimmed.fq.gz"
+    output:
+        clean="results/depleted/{bioproject}/{run}_short_clean.fq.gz",
+        aligned="results/depleted/{bioproject}/{run}_short_contaminants.sam"
+    log:
+        "logs/deplete/{bioproject}/{run}_short.log"
+    threads: 4
+    resources:
+        mem_mb=4000
+    shell:
+        """
+        bowtie -v 1 -p {threads} --un >(gzip > {output.clean}) -x {input.index}/contaminants {input.trimmed} > {output.aligned} 2> {log}
+        """
+
+rule flagstat_depleted:
+    input:
+        fq="results/depleted/{bioproject}/{run}_short_clean.fq.gz"
+    output:
+        txt="results/depleted/{bioproject}/{run}_short_clean.stats.txt"
+    log:
+        "logs/flagstat_deplete/{bioproject}/{run}_short_clean.log"
+    threads: 1
+    resources:
+        mem_mb=100
+    shell:
+        """
+        echo "Total reads after contaminant depletion:" > {output.txt}
+        zcat {input.fq} | echo $(( $(wc -l) / 4 )) >> {output.txt} 2> {log}
+        """
+
+rule merge_flagstats_depleted:
+    input:
+        lambda wildcards: expand(
+            "results/depleted/{bioproject}/{run}_short_clean.stats.txt",
+            bioproject=wildcards.bioproject,
+            run=df[df.bioproject == wildcards.bioproject]["run"].tolist()
+        )
+    output:
+        "results/depleted/{bioproject}_summary_clean.flagstat.txt"
+    threads: 1
+    resources:
+        mem_mb=50
+    shell:
+        """
+        echo "### Merged contaminant depletion summary for {wildcards.bioproject} ###" > {output}
+        for f in {input}; do
+            echo "--- $f ---" >> {output}
+            cat $f >> {output}
+            echo "" >> {output}
+        done
+        """
+
+rule bowtie_align:
+    input:
+        index=rules.bowtie_build.output.index,
+        trimmed="results/depleted/{bioproject}/{run}_short_clean.fq.gz"
+    output:
+        bam="results/aligned/{bioproject}/{run}_short.bam"
+    log:
+        "logs/bowtie/{bioproject}/{run}_short.log"
+    threads: 4
+    resources:
+        mem_mb=4000
+    shell:
+        """
+        bowtie -v 2 -k 10 --best --strata -p {threads} -S -x genome/bowtie_index/mirbase {input.trimmed} 2> {log} | \
+        samtools view -bS - | samtools sort -o {output.bam}
+        """
+
+rule flagstat_alignment:
+    input:
+        bam="results/aligned/{bioproject}/{run}_short.bam"
+    output:
+        "results/aligned/{bioproject}/{run}_short.flagstat.txt"
+    log:
+        "logs/flagstat/{bioproject}/{run}_short.log"
+    threads: 1
+    resources:
+        mem_mb=200
+    shell:
+        """
+        samtools flagstat {input.bam} > {output} 2> {log}
+        """
+
+rule merge_flagstats:
+    input:
+        lambda wildcards: expand(
+            "results/aligned/{bioproject}/{run}_short.flagstat.txt",
+            bioproject=wildcards.bioproject,
+            run=df[df.bioproject == wildcards.bioproject]["run"].tolist()
+        )
+    output:
+        "results/aligned/{bioproject}_summary.flagstat.txt"
+    threads: 1
+    resources:
+        mem_mb=50
+    shell:
+        """
+        echo "### Merged flagstat summary for {wildcards.bioproject} ###" > {output}
+        for f in {input}; do
+            echo "--- $f ---" >> {output}
+            cat $f >> {output}
+            echo "" >> {output}
+        done
+        """
+
+rule featurecounts:
+    input:
+        saf=rules.fasta_to_saf.output.saf,
+        bam=lambda wildcards: expand(
+            "results/aligned/{bioproject}/{sample}.bam",
+            bioproject=wildcards.bioproject,
+            sample=df[df.bioproject == wildcards.bioproject]["sample_name"].tolist()
+        )
+    output:
+        counts="results/counts/{bioproject}/counts.txt"
+    threads: 4
+    resources:
+        mem_mb=8000
+    log:
+        "logs/featurecounts/{bioproject}.log"
+    shell:
+        """
+        featureCounts -T {threads} -a {input.saf} -F SAF -o {output.counts} {input.bam} > {log} 2>&1
+        """
+
+rule multiqc:
+    input:
+        get_multiqc_input
+    output:
+        html="results/qc/{bioproject}_multiqc_report.html"
+    params:
+        dir="results/qc"
+    log:
+        "logs/qc/{bioproject}_multiqc.log"
+    threads: 1
+    resources:
+        mem_mb=500
+    shell:
+        """
+        multiqc {input} \
+        -o {params.dir} \
+        -n {wildcards.bioproject}_multiqc_report.html > {log} 2>&1
+        """
+
+rule DESeq2:
+    input:
+        counts="results/counts/{bioproject}/counts.txt",
+        metadata="results/deg/{bioproject}/phenodata.csv"
+    output:
+        csv="results/deg/{bioproject}/deseq_results.csv",
+        go="results/deg/{bioproject}/deseq_results_GO_enrichment.csv",
+        kegg="results/deg/{bioproject}/deseq_results_KEGG_enrichment.csv",
+        reactome="results/deg/{bioproject}/deseq_results_Reactome_enrichment.csv",
+        summary="results/deg/{bioproject}/deseq_results_all_enrichments_summary.csv",
+        html="results/deg/{bioproject}/deseq_results_summary_report.html",
+    threads: 2
+    resources:
+        mem_mb=16000
+    log:
+        "logs/deg/{bioproject}.log"
+    shell:
+        """
+        mkdir -p results/deseq2
+        Rscript workflow/scripts/deseq2_smallrna.R \
+            -c {input.counts} \
+            -p {input.metadata} \
+            -o {output.csv} > {log} 2>&1
+        """
+
+
+        
