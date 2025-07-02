@@ -70,24 +70,76 @@ write.table(t(as.data.frame(opt)), file=paste(PATH, "parameters.txt", sep=""))
 ###################################
 #######  DATA IMPORT ##############
 ###################################
+
 print("#######  DATA IMPORT ##############")
+
+# Read count matrix and preserve original column names (avoid R prepending 'X' to numeric headers)
 print(paste("Reading gene counts from ", GENE_COUNTS))
-countData <- as.matrix(read.csv(GENE_COUNTS, row.names="gene_id"))
+countData <- as.matrix(read.csv(GENE_COUNTS, row.names = "gene_id", check.names = FALSE))
 countData <- countData[complete.cases(countData), ]
 print(paste("Input matrix dimension is:", paste(dim(countData), collapse = "x")))
 
-print(paste("Reading phenodata form ", PHENO_DATA))
-colData <- read.csv(PHENO_DATA, sep="\t", row.names=1)
+# Read phenodata
+print(paste("Reading phenodata from ", PHENO_DATA))
+colData <- read.csv(PHENO_DATA, sep = "\t", row.names = 1)
 print(paste("Metadata dimension is:", paste(dim(colData), collapse = "x")))
 
-#qualche check preliminare. Devo avere due TRUE per poter continuare:
+# Confirm matching samples
 print("Do phenodata and gene count matrix refer to the same set of samples?")
+
+# Check 1: all samples in phenodata are present in count matrix
 print("Check n.1:")
-all(rownames(colData) %in% colnames(countData))
+check1 <- all(rownames(colData) %in% colnames(countData))
+print(check1)
+
+# Check 2: same order
+print("Check n.2:")
+check2 <- all(rownames(colData) == colnames(countData))
+print(check2)
+
+# Debug if checks fail
+if (!check1 || !check2) {
+    print("🔍 DEBUG: Listing sample name mismatches")
+
+    pheno_samples <- rownames(colData)
+    count_samples <- colnames(countData)
+
+    for (i in seq_along(pheno_samples)) {
+        if (i > length(count_samples)) {
+            cat(sprintf("⚠️ Extra phenodata sample at position %d: '%s'\n", i, pheno_samples[i]))
+            next
+        }
+
+        ps <- pheno_samples[i]
+        cs <- count_samples[i]
+        if (ps != cs) {
+            cat(sprintf("❌ Mismatch at position %d:\n", i))
+            cat(sprintf("  phenodata: '%s' | ASCII: %s\n", ps, paste(as.integer(charToRaw(ps)), collapse = ' ')))
+            cat(sprintf("  countData: '%s' | ASCII: %s\n", cs, paste(as.integer(charToRaw(cs)), collapse = ' ')))
+        }
+    }
+
+    if (length(count_samples) > length(pheno_samples)) {
+        for (j in (length(pheno_samples) + 1):length(count_samples)) {
+            cat(sprintf("⚠️ Extra count matrix sample at position %d: '%s'\n", j, count_samples[j]))
+        }
+    }
+
+    if (!check1) {
+        stop("❌ Error: Some samples in phenodata are missing from the count matrix.")
+    }
+    if (!check2) {
+        stop("❌ Error: Sample names are not in the same order. Please reorder columns of countData.")
+    }
+}
+
+# Subset count matrix to match phenodata order
 countData <- countData[, rownames(colData)]
 
-print("Check n.2:")
-all(rownames(colData) == colnames(countData))
+# Final confirmation
+print("✅ Final sample order check:")
+print(all(rownames(colData) == colnames(countData)))
+
 
 
 library("DESeq2")
@@ -660,27 +712,55 @@ library(biomaRt)
 library(ReactomePA)
 
 # Convert gene IDs to Entrez IDs
-# Split the identifiers
 gene_ids <- rownames(resSig)
+# Subset DEGs
+resSig <- subset(res, padj < PADJ & abs(log2FoldChange) >= FC_THR)
+resSig <- resSig[order(abs(resSig$log2FoldChange), decreasing = TRUE), ]
+
+# ✅ Stop enrichment early if resSig is empty
+if (nrow(resSig) == 0) {
+    print("⚠️ No significant DEGs found. Skipping enrichment analysis.")
+
+    # Write empty placeholder CSVs
+    write.csv(data.frame(), file=paste0(PATH, "KEGG_enrichment_", gsub(" ", "_", opt$var_to_test), "_vs_control.csv"))
+    write.csv(data.frame(), file=paste0(PATH, "GO_enrichment_", gsub(" ", "_", opt$var_to_test), "_vs_control.csv"))
+    write.csv(data.frame(), file=paste0(PATH, "GOseq_enrichment_", gsub(" ", "_", opt$var_to_test), "_vs_control.csv"))
+    write.csv(data.frame(), file=paste0(PATH, "Reactome_enrichment_", gsub(" ", "_", opt$var_to_test), "_vs_control.csv"))
+
+    # Skip the rest of this script
+    quit(save = "no", status = 0)
+}
+
 ensembl_ids <- sapply(strsplit(gene_ids, "\\|"), `[`, 1)
 
-# Map to Entrez IDs (fixing the 'select()' error by ensuring single mapping)
-entrez_ids <- mapIds(org.Hs.eg.db, 
-                     keys = ensembl_ids,
-                     keytype = "ENSEMBL",
-                     column = "ENTREZID",
-                     multiVals = "first")  # Ensure single mapping
+# Clean and filter
+ensembl_ids <- ensembl_ids[!is.na(ensembl_ids) & ensembl_ids != ""]
+
+if (length(ensembl_ids) == 0) {
+    stop("❌ Error: No valid Ensembl IDs found in DEGs.")
+}
+
+# Map to Entrez IDs (fail safely if nothing found)
+entrez_ids <- tryCatch({
+    mapIds(org.Hs.eg.db,
+           keys = ensembl_ids,
+           keytype = "ENSEMBL",
+           column = "ENTREZID",
+           multiVals = "first")
+}, error = function(e) {
+    stop("❌ Error during mapIds(): ", e$message)
+})
 
 # Remove any NA values
 entrez_ids <- entrez_ids[!is.na(entrez_ids)]
 
-# Debugging: Ensure some IDs were mapped
-print(paste("Mapped Entrez IDs:", length(entrez_ids)))
-
-# Ensure we have DE genes before proceeding
+# Final check
 if (length(entrez_ids) == 0) {
-    stop("Error: No Entrez IDs were mapped. Check Ensembl ID formatting.")
+    stop("❌ Error: No Entrez IDs were mapped. Check gene ID format.")
 }
+
+print(paste("✅ Mapped Entrez IDs:", length(entrez_ids)))
+
 
 # KEGG Pathway Analysis
 kegg_result <- enrichKEGG(gene = entrez_ids,

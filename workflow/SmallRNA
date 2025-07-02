@@ -26,7 +26,7 @@ sample_info = {
 os.makedirs("results/deg", exist_ok=True)
 for bp in BIOPROJECTS:
     os.makedirs(f"results/deg/{bp}", exist_ok=True)
-    df[df.bioproject == bp].to_csv(f"results/deg/{bp}/phenodata.csv", index=False)
+    df[df.bioproject == bp][["sample_name", "biosample", "condition"]].set_index("sample_name").to_csv(f"results/deg/{bp}/phenodata.csv", sep=",")
 
 def get_multiqc_input(wildcards):
     bioproject = wildcards.bioproject
@@ -61,9 +61,21 @@ rule all:
         expand("results/qc/{bioproject}_multiqc_report.html", bioproject=BIOPROJECTS),
         expand("results/counts/{bioproject}/counts.txt", bioproject=BIOPROJECTS),
         expand("results/deg/{bioproject}/deseq_results.csv", bioproject=BIOPROJECTS),
+        expand("results/deg/{bioproject}/deseq_results_filtered.csv", bioproject=BIOPROJECTS),
+        expand("results/deg/{bioproject}/deseq_results_interaction.csv", bioproject=BIOPROJECTS),
+        expand("results/deg/{bioproject}/deseq_results_interaction_filtered.csv", bioproject=BIOPROJECTS),
+        expand("results/deg/{bioproject}/deseq_results_volcano.pdf", bioproject=BIOPROJECTS),
+        expand("results/deg/{bioproject}/deseq_results_PCA.pdf", bioproject=BIOPROJECTS),
+        expand("results/deg/{bioproject}/deseq_results_heatmap.pdf", bioproject=BIOPROJECTS),
+        expand("results/deg/{bioproject}/all_mirnas.csv", bioproject=BIOPROJECTS),
+        expand("cache/{bioproject}_mirna_targets.rds", bioproject=BIOPROJECTS),
+        expand("results/deg/{bioproject}/deseq_results_mirna_targets.csv", bioproject=BIOPROJECTS),
         expand("results/deg/{bioproject}/deseq_results_GO_enrichment.csv", bioproject=BIOPROJECTS),
+        expand("results/deg/{bioproject}/deseq_results_GO_dotplot.pdf", bioproject=BIOPROJECTS),
         expand("results/deg/{bioproject}/deseq_results_KEGG_enrichment.csv", bioproject=BIOPROJECTS),
+        expand("results/deg/{bioproject}/deseq_results_KEGG_dotplot.pdf", bioproject=BIOPROJECTS),
         expand("results/deg/{bioproject}/deseq_results_Reactome_enrichment.csv", bioproject=BIOPROJECTS),
+        expand("results/deg/{bioproject}/deseq_results_Reactome_dotplot.pdf", bioproject=BIOPROJECTS),
         expand("results/deg/{bioproject}/deseq_results_all_enrichments_summary.csv", bioproject=BIOPROJECTS),
         expand("results/deg/{bioproject}/deseq_results_summary_report.html", bioproject=BIOPROJECTS),
 
@@ -337,11 +349,11 @@ rule multiqc:
         html="results/qc/{bioproject}_multiqc_report.html"
     params:
         dir="results/qc"
-    log:
-        "logs/qc/{bioproject}_multiqc.log"
     threads: 1
     resources:
         mem_mb=500
+    log:
+        "logs/qc/{bioproject}_multiqc.log"
     shell:
         """
         multiqc --force {input} \
@@ -349,30 +361,138 @@ rule multiqc:
         -n {wildcards.bioproject}_multiqc_report.html > {log} 2>&1
         """
 
-rule DESeq2:
+rule deseq2:
     input:
         counts="results/counts/{bioproject}/counts.txt",
         metadata="results/deg/{bioproject}/phenodata.csv"
     output:
         csv="results/deg/{bioproject}/deseq_results.csv",
-        go="results/deg/{bioproject}/deseq_results_GO_enrichment.csv",
-        kegg="results/deg/{bioproject}/deseq_results_KEGG_enrichment.csv",
-        reactome="results/deg/{bioproject}/deseq_results_Reactome_enrichment.csv",
-        summary="results/deg/{bioproject}/deseq_results_all_enrichments_summary.csv",
-        html="results/deg/{bioproject}/deseq_results_summary_report.html",
+        filtered="results/deg/{bioproject}/deseq_results_filtered.csv",
+        interaction="results/deg/{bioproject}/deseq_results_interaction.csv",
+        interaction_filtered="results/deg/{bioproject}/deseq_results_interaction_filtered.csv"
+    params:
+        padj = lambda wildcards: {"BEAS_2B_short": 0.1, "HEP_G2_short": 0.2}.get(wildcards.bioproject, 0.1),
+        logfc=1
     threads: 2
     resources:
         mem_mb=16000
     log:
-        "logs/deg/{bioproject}.log"
+        "logs/deg/{bioproject}_deseq.log"
     shell:
         """
-        mkdir -p results/deseq2
-        Rscript workflow/scripts/deseq2_smallrna.R \
+        Rscript workflow/scripts/deseq2_core.R \
             -c {input.counts} \
             -p {input.metadata} \
-            -o {output.csv} > {log} 2>&1
+            -o {output.csv} \
+            -x {output.interaction} \
+            --padj {params.padj} \
+            --logfc {params.logfc} > {log} 2>&1
         """
 
+rule plot_deseq2:
+    input:
+        csv="results/deg/{bioproject}/deseq_results.csv",
+        filtered="results/deg/{bioproject}/deseq_results_filtered.csv",
+        counts="results/counts/{bioproject}/counts.txt",
+        metadata="results/deg/{bioproject}/phenodata.csv"
+    output:
+        volcano = "results/deg/{bioproject}/deseq_results_volcano.pdf",
+        pca = "results/deg/{bioproject}/deseq_results_PCA.pdf",
+        heatmap = "results/deg/{bioproject}/deseq_results_heatmap.pdf"
+    params:
+        padj = lambda wildcards: {"BEAS_2B_short": 0.1, "HEP_G2_short": 0.2}.get(wildcards.bioproject, 0.1),
+        logfc=1
+    threads: 1
+    resources:
+        mem_mb=8000
+    log:
+        "logs/deg/{bioproject}_plots.log"
+    shell:
+        """
+        Rscript workflow/scripts/plot_deseq.R \
+            -r {input.csv} \
+            -f {input.filtered} \
+            -c {input.counts} \
+            -m {input.metadata} \
+            -o results/deg/{wildcards.bioproject} \
+            --padj {params.padj} --logfc {params.logfc} > {log} 2>&1
+        """
 
-        
+rule extract_mirna_names:
+    input:
+        csv = "results/deg/{bioproject}/deseq_results.csv"
+    output:
+        csv = "results/deg/{bioproject}/all_mirnas.csv"
+    log:
+        "logs/deg/{bioproject}_extract_mirna_names.log"
+    params:
+        topn = 30
+    shell:
+        """
+        Rscript workflow/scripts/extract_mirna_names.R \
+            -i {input.csv} -o {output.csv} -n {params.topn} > {log} 2>&1
+        """
+
+rule cache_mirna_targets:
+    input:
+        mirna_data = "results/deg/{bioproject}/all_mirnas.csv"
+    output:
+        rds = "cache/{bioproject}_mirna_targets.rds"
+    log:
+        "logs/deg/{bioproject}_cache_targets.log"
+    threads: 1
+    resources:
+        mem_mb=8000
+    shell:
+        """
+        Rscript workflow/scripts/cache_mirna_targets.R \
+            -i {input.mirna_data} -o {output.rds} -l {log}
+        """
+
+rule enrich_mirna_targets:
+    input:
+        mirnas = "results/deg/{bioproject}/all_mirnas.csv",
+        targets = "cache/{bioproject}_mirna_targets.rds"
+    output:
+        targets = "results/deg/{bioproject}/deseq_results_mirna_targets.csv",
+        go="results/deg/{bioproject}/deseq_results_GO_enrichment.csv",
+        go_dotplot="results/deg/{bioproject}/deseq_results_GO_dotplot.pdf",
+        kegg="results/deg/{bioproject}/deseq_results_KEGG_enrichment.csv",
+        kegg_dotplot="results/deg/{bioproject}/deseq_results_KEGG_dotplot.pdf",
+        reactome="results/deg/{bioproject}/deseq_results_Reactome_enrichment.csv",
+        reactome_dotplot="results/deg/{bioproject}/deseq_results_Reactome_dotplot.pdf",
+        summary="results/deg/{bioproject}/deseq_results_all_enrichments_summary.csv"
+    threads: 1
+    resources:
+        mem_mb=8000
+    log:
+        "logs/deg/{bioproject}_enrich.log"
+    shell:
+        """
+        Rscript workflow/scripts/enrich_mirna_targets.R \
+            -i {input.mirnas} \
+            -t {input.targets} \
+            -o results/deg/{wildcards.bioproject} \
+            --padj-threshold 0.05 > {log} 2>&1
+        """
+
+rule deseq_summary_report:
+    input:
+        filtered="results/deg/{bioproject}/deseq_results_filtered.csv",
+        volcano="results/deg/{bioproject}/deseq_results_volcano.pdf",
+        pca="results/deg/{bioproject}/deseq_results_PCA.pdf",
+        heatmap="results/deg/{bioproject}/deseq_results_heatmap.pdf",
+        go_dotplot="results/deg/{bioproject}/deseq_results_GO_dotplot.pdf",
+        kegg_dotplot="results/deg/{bioproject}/deseq_results_KEGG_dotplot.pdf",
+        reactome_dotplot="results/deg/{bioproject}/deseq_results_Reactome_dotplot.pdf"
+    output:
+        html="results/deg/{bioproject}/deseq_results_summary_report.html"
+    threads: 1
+    resources:
+        mem_mb=4000
+    shell:
+        """
+        Rscript workflow/scripts/summary_report.R \
+            -i {input.filtered} \
+            -o {output.html}
+        """
