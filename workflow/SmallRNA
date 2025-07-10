@@ -139,7 +139,7 @@ rule download_contaminants:
         "genome/contaminants_dna.fa"
     shell:
         """
-        wget --no-check-certificate -O genome/human_tRNA.fa https://gtrnadb.ucsc.edu/genomes/eukaryota/Hsapi19/hg19-mature-tRNAs.fa
+        wget --no-check-certificate -O genome/human_tRNA.fa https://gtrnadb.ucsc.edu/genomes/eukaryota/Hsapi38/hg38-mature-tRNAs.fa
         wget -O genome/rRNA_SSU.fa.gz https://www.arb-silva.de/fileadmin/silva_databases/current/Exports/SILVA_138.2_SSURef_NR99_tax_silva_trunc.fasta.gz
         wget -O genome/rRNA_LSU.fa.gz https://www.arb-silva.de/fileadmin/silva_databases/current/Exports/SILVA_138.2_LSURef_NR99_tax_silva_trunc.fasta.gz
         gunzip -c genome/rRNA_SSU.fa.gz | awk '/^>.*Homo sapiens/ {{print; getline; print}}' > genome/rRNA_SSU.fa
@@ -193,7 +193,7 @@ rule cutadapt:
     shell:
         """
         cutadapt \
-            -a {params.adapter} --overlap 5 --quality-cutoff 20 -m 16 -M 50 --match-read-wildcards --trim-n --report=full \
+            -a {params.adapter} --overlap 5 --quality-cutoff 20 -m 18 -M 50 --match-read-wildcards --trim-n --report=full \
             --json {output.summary} -o {output.trimmed} {input} > {log} 2>&1
         """
 
@@ -243,7 +243,7 @@ rule flagstat_depleted:
     shell:
         """
         echo "Total reads after contaminant depletion:" > {output.txt}
-        zcat {input.fq} | echo $(( $(wc -l) / 4 )) >> {output.txt} 2> {log}
+        zcat {input.fq} | awk 'END{{print NR/4}}' >> {output.txt} 2> {log}
         """
 
 rule merge_flagstats_depleted:
@@ -326,9 +326,9 @@ rule featurecounts:
     input:
         saf=rules.fasta_to_saf.output.saf,
         bam=lambda wildcards: expand(
-            "results/aligned/{bioproject}/{sample}.bam",
+            "results/aligned/{bioproject}/{run}_short.bam",
             bioproject=wildcards.bioproject,
-            sample=df[df.bioproject == wildcards.bioproject]["sample_name"].tolist()
+            run=df[df.bioproject == wildcards.bioproject]["run"].tolist()
         )
     output:
         counts="results/counts/{bioproject}/counts.txt"
@@ -371,8 +371,8 @@ rule deseq2:
         interaction="results/deg/{bioproject}/deseq_results_interaction.csv",
         interaction_filtered="results/deg/{bioproject}/deseq_results_interaction_filtered.csv"
     params:
-        padj = lambda wildcards: {"BEAS_2B_short": 0.1, "HEP_G2_short": 0.2}.get(wildcards.bioproject, 0.1),
-        logfc=1
+        padj = lambda wildcards: {"BEAS_2B_short": 0.05, "HEP_G2_short": 0.05}.get(wildcards.bioproject, 0.05),
+        logfc=0.03
     threads: 2
     resources:
         mem_mb=16000
@@ -385,6 +385,8 @@ rule deseq2:
             -p {input.metadata} \
             -o {output.csv} \
             -x {output.interaction} \
+            --filtered {output.filtered} \
+            --interaction_filtered {output.interaction_filtered} \
             --padj {params.padj} \
             --logfc {params.logfc} > {log} 2>&1
         """
@@ -400,8 +402,8 @@ rule plot_deseq2:
         pca = "results/deg/{bioproject}/deseq_results_PCA.pdf",
         heatmap = "results/deg/{bioproject}/deseq_results_heatmap.pdf"
     params:
-        padj = lambda wildcards: {"BEAS_2B_short": 0.1, "HEP_G2_short": 0.2}.get(wildcards.bioproject, 0.1),
-        logfc=1
+        padj = lambda wildcards: {"BEAS_2B_short": 0.05, "HEP_G2_short": 0.05}.get(wildcards.bioproject, 0.05),
+        logfc=0.03
     threads: 1
     resources:
         mem_mb=8000

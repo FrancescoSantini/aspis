@@ -1,0 +1,6 @@
+.snakemake/
+cache/
+genome/
+logs/
+results/
+samples/
