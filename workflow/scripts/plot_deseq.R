@@ -32,38 +32,69 @@ plot_logfc <- opt$logfc
 # Filter out rows with NA in padj or log2FC BEFORE plotting
 res <- na.omit(res)
 
-# Initialize columns safely
-res$Significant <- rep(FALSE, nrow(res))
+# ---- Enhanced Volcano Plot ----
+
+# Define significance categories
+res$SigCategory <- "NS"
+res$SigCategory[abs(res$log2FoldChange) > plot_logfc] <- "FC"
+res$SigCategory[res$padj < plot_padj] <- "FDR"
+res$SigCategory[res$padj < plot_padj & abs(res$log2FoldChange) > plot_logfc] <- "FC_FDR"
+res$SigCategory <- factor(res$SigCategory, levels = c("NS", "FC", "FDR", "FC_FDR"))
+
+# Initialize label column
 res$label <- rep("", nrow(res))
 
-# Define significance
-res$Significant <- with(res, padj < plot_padj & abs(log2FoldChange) > plot_logfc)
-
-# Label top hits
-if (sum(res$Significant) > 0) {
-  top_sig <- head(rownames(res[res$Significant, , drop = FALSE]), 10)
+# Add labels to top genes (only FC+FDR)
+if (any(res$SigCategory == "FC_FDR")) {
+  top_sig <- head(rownames(res[res$SigCategory == "FC_FDR", , drop = FALSE]), 10)
   res$label[rownames(res) %in% top_sig] <- top_sig
 } else {
-  cat("[INFO] Filtered results are empty — will highlight top 10 miRNAs by padj for plotting.\n")
+  cat("[INFO] No FC+FDR hits — labeling top 10 by padj\n")
   top10 <- head(order(res$padj), 10)
-  res$Significant[top10] <- TRUE
   res$label[top10] <- rownames(res)[top10]
 }
 
-# ---- Volcano Plot ----
-volcano_title <- if (sum(res$Significant) > 0) {
+# Define legend title
+volcano_title <- if (any(res$SigCategory == "FC_FDR")) {
   sprintf("Volcano Plot (padj < %.2f, |log2FC| > %.2f)", plot_padj, plot_logfc)
 } else {
-  "Top 10 miRNAs by padj (no hits at current thresholds)"
+  "Top miRNAs by padj and/or FC (no hits in intersection)"
 }
 
+# Plot
 pdf(file.path(opt$outdir, paste0(basename_stub, "_volcano.pdf")))
-ggplot(res, aes(x = log2FoldChange, y = -log10(padj), color = Significant)) +
-  geom_point(alpha = 0.6) +
-  scale_color_manual(values = c("grey", "red")) +
-  geom_text_repel(aes(label = label), color = "black", size = 3, max.overlaps = Inf) +
-  theme_minimal() +
-  labs(title = volcano_title, x = "log2 Fold Change", y = "-log10 Adjusted P-Value")
+ggplot(res, aes(x = log2FoldChange, y = -log10(padj), color = SigCategory)) +
+  geom_point(alpha = 0.6, size = 0.8) +
+  scale_color_manual(
+    values = c(NS = "grey30", FC = "forestgreen", FDR = "royalblue", FC_FDR = "red2"),
+    labels = c(
+      NS = "NS",
+      FC = paste("LogFC > |", plot_logfc, "|"),
+      FDR = paste("FDR < ", plot_padj),
+      FC_FDR = paste("FDR < ", plot_padj, " & LogFC > |", plot_logfc, "|")
+    )
+  ) +
+  theme_bw(base_size = 14) +
+  theme(
+    legend.position = "top",
+    legend.title = element_blank(),
+    legend.text = element_text(size = 9),
+    legend.key.size = unit(0.5, "cm"),
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank()
+  ) +
+  labs(
+    title = volcano_title,
+    x = expression(log[2]~"fold change"),
+    y = expression(-log[10]~adjusted~italic(P))
+  ) +
+  geom_text_repel(
+    data = subset(res, label != ""),
+    aes(label = label),
+    color = "black", size = 2.5, max.overlaps = Inf
+  ) +
+  geom_vline(xintercept = c(-plot_logfc, plot_logfc), linetype = "longdash", color = "black", size = 0.4) +
+  geom_hline(yintercept = -log10(plot_padj), linetype = "longdash", color = "black", size = 0.4)
 dev.off()
 
 # ---- Load counts and metadata ----
@@ -131,6 +162,10 @@ if (all(grepl("^biosampletime\\d+$", coldata$biosample))) {
   coldata$time_numeric <- NA
 }
 
+coldata$Timepoint <- factor(coldata$time_numeric,
+                            levels = c(24, 48, 72),
+                            labels = c("24h", "48h", "72h"))
+
 # Filter to significant genes or fallback
 res_filtered <- na.omit(res_filtered)
 top_genes <- if (sig_exists) {
@@ -147,10 +182,23 @@ mat <- mat - rowMeans(mat)
 if (!all(is.na(coldata$time_numeric))) {
   ordering <- order(coldata$condition, coldata$time_numeric)
   mat <- mat[, ordering]
-  annotation <- coldata[ordering, c("condition", "biosample"), drop = FALSE]
+  annotation <- coldata[ordering, c("condition", "Timepoint"), drop = FALSE]
 } else {
-  annotation <- coldata[, c("condition", "biosample"), drop = FALSE]
+  annotation <- coldata[, c("condition", "Timepoint"), drop = FALSE]
 }
+
+annotation_colors <- list(
+  condition = c(
+    "control" = "#1f77b4",    # blue
+    "PS_10uM" = "#2ca02c",    # green
+    "PS_100uM" = "#d62728"    # red
+  ),
+  Timepoint = c(
+    "24h" = "#a6cee3",  # light blue
+    "48h" = "#1f78b4",  # mid blue
+    "72h" = "#b2df8a"   # light green
+  )
+)
 
 heat_colors <- colorRampPalette(c("green", "black", "red"))(100)
 
@@ -164,6 +212,7 @@ heatmap_title <- if (sig_exists) {
 pdf(file.path(opt$outdir, paste0(basename_stub, "_heatmap.pdf")))
 pheatmap(mat,
          annotation_col = annotation,
+         annotation_colors = annotation_colors,
          clustering_distance_rows = "correlation",
          clustering_distance_cols = "correlation",
          clustering_method = "ward.D2",
