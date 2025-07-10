@@ -418,9 +418,9 @@ rule fastqc_pre:
     log:
         "logs/fastqc_pre/{bioproject}/{accession}{read}.log"
 ##    params: "--quiet"
-##    threads: 1
-##    resources:
-##        mem_mb=10000,
+    threads: 4
+    resources:
+        mem_mb=4000,
     shell:
         """
         fastqc -o results/qc/fastqc_pre/{wildcards.bioproject}/{wildcards.accession} -f fastq --extract {input} > {log} 2>&1
@@ -537,7 +537,8 @@ rule hisat2_align:
     threads: 8
     params:
         idx="genome/hisat2_index/genome"
-##    resources:
+    resources:
+        mem_mb=8000,
 ##        mem_mb=config['RESOURCEMOD']['high'],
 ##        time=config['RESOURCEMOD']['moretime'],
     shell:
@@ -556,6 +557,9 @@ rule samtools_sort:
         "results/aligned/{bioproject}/{accession}.bam"
     output:
         "results/sorted/{bioproject}/{accession}_sorted.bam"
+    threads: 4
+    resources:
+        mem_mb=8000
 ##    threads: config['THREADS']['samsort']
 ##    resources:
 ##        mem_mb=config['RESOURCEMOD']['high'],
@@ -585,6 +589,8 @@ rule stringtie:
     output:
         "results/assembly/{bioproject}/{accession}.gtf"
     threads: 4
+    resources:
+        mem_mb=6000
     shell:
         """
         stringtie {input.bam} \
@@ -610,7 +616,9 @@ rule merge:
         "results/assembly/{bioproject}/{bioproject}_stringtie_merged.gtf"
     log:
         "logs/assembly/{bioproject}/{bioproject}_stringtie_merged.log"
-    threads: 4
+    threads: 12
+    resources:
+        mem_mb=12000
     shell:
         """
         stringtie --merge \
@@ -684,7 +692,9 @@ rule DESeq2:
         "results/deg/{bioproject}/{condition}_vs_control/GO_dotplot_{condition}_vs_control.png",
         "results/deg/{bioproject}/{condition}_vs_control/GOseq_dotplot_{condition}_vs_control.png",
         "results/deg/{bioproject}/{condition}_vs_control/Reactome_dotplot_{condition}_vs_control.png"
-    threads: 8
+    threads: 4
+    resources:
+        mem_mb=16000
     shell:
         """
         Rscript workflow/scripts/produce_DEG_with_enrichment.R \
@@ -693,6 +703,8 @@ rule DESeq2:
         -i {input.i2} \
         -v {wildcards.condition} \
         -n control \
+        -q 0.1 \
+        -f 0.58 \
         -m Homo_sapiens \
         -d org.Hs.eg.db
         """
