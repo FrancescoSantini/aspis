@@ -8,6 +8,7 @@ import pandas as pd
 # Load sample sheet and filter for smallRNA entries
 df = pd.read_csv("config/sample_sheet.csv").set_index("sample_name", drop=False)
 df = df[df["bioproject"].str.endswith("_short")]
+#print(df)
 
 # Extract unique samples
 SAMPLES = df["sample_name"].tolist()
@@ -26,8 +27,32 @@ sample_info = {
 os.makedirs("results/deg", exist_ok=True)
 for bp in BIOPROJECTS:
     os.makedirs(f"results/deg/{bp}", exist_ok=True)
-    df[df.bioproject == bp][["sample_name", "biosample", "condition"]].set_index("sample_name").to_csv(f"results/deg/{bp}/phenodata.csv", sep=",")
+    df_filtered = df[df.bioproject == bp].copy()
+    phenodata = df_filtered[["sample_name", "biosample", "condition"] +
+                            [col for col in df.columns if col.startswith("covariate")]] \
+                .set_index("sample_name") \
+                .fillna("NA")
 
+    phenodata.to_csv(f"results/deg/{bp}/phenodata.csv", sep=",")
+
+# Create triple list for DESeq2 contrasts (bioproject, condition != control, covariate1)
+bioproject_condition_covariate_triples = []
+for bp in BIOPROJECTS:
+    subdf = df[df["bioproject"] == bp]
+    conditions = subdf["condition"].dropna().unique().tolist()
+    conditions = [c for c in conditions if c != "control"]
+    covariates = subdf["covariate1"].dropna().unique().tolist()
+
+    for condition in conditions:
+        for covariate in covariates:
+            bioproject_condition_covariate_triples.append((bp, condition, covariate))
+
+# Define zipped components for use in expand() in rule all
+BIOPROJECTS_TRIPLE = [bp for bp, cond, cov in bioproject_condition_covariate_triples]
+CONDITIONS_TRIPLE  = [cond for bp, cond, cov in bioproject_condition_covariate_triples]
+COVARIATES_TRIPLE  = [cov for bp, cond, cov in bioproject_condition_covariate_triples]
+
+# Utility for MultiQC input collection
 def get_multiqc_input(wildcards):
     bioproject = wildcards.bioproject
     runs = df[df['bioproject'] == bioproject]['run'].tolist()
@@ -60,24 +85,41 @@ rule all:
         expand("results/aligned/{bioproject}_summary.flagstat.txt", bioproject=BIOPROJECTS),
         expand("results/qc/{bioproject}_multiqc_report.html", bioproject=BIOPROJECTS),
         expand("results/counts/{bioproject}/counts.txt", bioproject=BIOPROJECTS),
-        expand("results/deg/{bioproject}/deseq_results.csv", bioproject=BIOPROJECTS),
-        expand("results/deg/{bioproject}/deseq_results_filtered.csv", bioproject=BIOPROJECTS),
-        expand("results/deg/{bioproject}/deseq_results_interaction.csv", bioproject=BIOPROJECTS),
-        expand("results/deg/{bioproject}/deseq_results_interaction_filtered.csv", bioproject=BIOPROJECTS),
-        expand("results/deg/{bioproject}/deseq_results_volcano.pdf", bioproject=BIOPROJECTS),
-        expand("results/deg/{bioproject}/deseq_results_PCA.pdf", bioproject=BIOPROJECTS),
-        expand("results/deg/{bioproject}/deseq_results_heatmap.pdf", bioproject=BIOPROJECTS),
-        expand("results/deg/{bioproject}/all_mirnas.csv", bioproject=BIOPROJECTS),
-        expand("cache/{bioproject}_mirna_targets.rds", bioproject=BIOPROJECTS),
-        expand("results/deg/{bioproject}/deseq_results_mirna_targets.csv", bioproject=BIOPROJECTS),
-        expand("results/deg/{bioproject}/deseq_results_GO_enrichment.csv", bioproject=BIOPROJECTS),
-        expand("results/deg/{bioproject}/deseq_results_GO_dotplot.pdf", bioproject=BIOPROJECTS),
-        expand("results/deg/{bioproject}/deseq_results_KEGG_enrichment.csv", bioproject=BIOPROJECTS),
-        expand("results/deg/{bioproject}/deseq_results_KEGG_dotplot.pdf", bioproject=BIOPROJECTS),
-        expand("results/deg/{bioproject}/deseq_results_Reactome_enrichment.csv", bioproject=BIOPROJECTS),
-        expand("results/deg/{bioproject}/deseq_results_Reactome_dotplot.pdf", bioproject=BIOPROJECTS),
-        expand("results/deg/{bioproject}/deseq_results_all_enrichments_summary.csv", bioproject=BIOPROJECTS),
-        expand("results/deg/{bioproject}/deseq_results_summary_report.html", bioproject=BIOPROJECTS),
+        expand("results/deg/{bioproject}/{condition}_vs_control_{covariate}/deseq_results.csv",
+            zip, bioproject=BIOPROJECTS_TRIPLE, condition=CONDITIONS_TRIPLE, covariate=COVARIATES_TRIPLE),
+        expand("results/deg/{bioproject}/{condition}_vs_control_{covariate}/deseq_results_filtered.csv",
+            zip, bioproject=BIOPROJECTS_TRIPLE, condition=CONDITIONS_TRIPLE, covariate=COVARIATES_TRIPLE),
+        expand("results/deg/{bioproject}/{condition}_vs_control_{covariate}/deseq_results_volcano.pdf",
+            zip, bioproject=BIOPROJECTS_TRIPLE, condition=CONDITIONS_TRIPLE, covariate=COVARIATES_TRIPLE),
+        expand("results/deg/{bioproject}/{condition}_vs_control_{covariate}/deseq_results_PCA.pdf",
+            zip, bioproject=BIOPROJECTS_TRIPLE, condition=CONDITIONS_TRIPLE, covariate=COVARIATES_TRIPLE),
+        expand("results/deg/{bioproject}/{condition}_vs_control_{covariate}/deseq_results_heatmap.pdf",
+            zip, bioproject=BIOPROJECTS_TRIPLE, condition=CONDITIONS_TRIPLE, covariate=COVARIATES_TRIPLE),
+        expand("results/deg/{bioproject}/{condition}_vs_control_{covariate}/deseq_results_vst.csv",
+            zip, bioproject=BIOPROJECTS_TRIPLE, condition=CONDITIONS_TRIPLE, covariate=COVARIATES_TRIPLE),
+        expand("results/deg/{bioproject}/{condition}_vs_control_{covariate}/all_mirnas.csv",
+            zip, bioproject=BIOPROJECTS_TRIPLE, condition=CONDITIONS_TRIPLE, covariate=COVARIATES_TRIPLE),
+        expand("results/deg/{bioproject}/{condition}_vs_control_{covariate}/mirna_targets.rds",
+            zip, bioproject=BIOPROJECTS_TRIPLE, condition=CONDITIONS_TRIPLE, covariate=COVARIATES_TRIPLE),
+        expand("results/deg/{bioproject}/{condition}_vs_control_{covariate}/deseq_results_mirna_targets.csv",
+            zip, bioproject=BIOPROJECTS_TRIPLE, condition=CONDITIONS_TRIPLE, covariate=COVARIATES_TRIPLE),
+        expand("results/deg/{bioproject}/{condition}_vs_control_{covariate}/deseq_results_GO_enrichment.csv",
+            zip, bioproject=BIOPROJECTS_TRIPLE, condition=CONDITIONS_TRIPLE, covariate=COVARIATES_TRIPLE),
+        expand("results/deg/{bioproject}/{condition}_vs_control_{covariate}/deseq_results_GO_dotplot.pdf",
+            zip, bioproject=BIOPROJECTS_TRIPLE, condition=CONDITIONS_TRIPLE, covariate=COVARIATES_TRIPLE),
+        expand("results/deg/{bioproject}/{condition}_vs_control_{covariate}/deseq_results_KEGG_enrichment.csv",
+            zip, bioproject=BIOPROJECTS_TRIPLE, condition=CONDITIONS_TRIPLE, covariate=COVARIATES_TRIPLE),
+        expand("results/deg/{bioproject}/{condition}_vs_control_{covariate}/deseq_results_KEGG_dotplot.pdf",
+            zip, bioproject=BIOPROJECTS_TRIPLE, condition=CONDITIONS_TRIPLE, covariate=COVARIATES_TRIPLE),
+        expand("results/deg/{bioproject}/{condition}_vs_control_{covariate}/deseq_results_Reactome_enrichment.csv",
+            zip, bioproject=BIOPROJECTS_TRIPLE, condition=CONDITIONS_TRIPLE, covariate=COVARIATES_TRIPLE),
+        expand("results/deg/{bioproject}/{condition}_vs_control_{covariate}/deseq_results_Reactome_dotplot.pdf",
+            zip, bioproject=BIOPROJECTS_TRIPLE, condition=CONDITIONS_TRIPLE, covariate=COVARIATES_TRIPLE),
+        expand("results/deg/{bioproject}/{condition}_vs_control_{covariate}/deseq_results_all_enrichments_summary.csv",
+            zip, bioproject=BIOPROJECTS_TRIPLE, condition=CONDITIONS_TRIPLE, covariate=COVARIATES_TRIPLE),
+        expand("results/deg/{bioproject}/{condition}_vs_control_{covariate}/deseq_results_summary_report.html",
+            zip, bioproject=BIOPROJECTS_TRIPLE, condition=CONDITIONS_TRIPLE, covariate=COVARIATES_TRIPLE),
+
 
 
 rule download_mirbase_fasta:
@@ -366,49 +408,49 @@ rule deseq2:
         counts="results/counts/{bioproject}/counts.txt",
         metadata="results/deg/{bioproject}/phenodata.csv"
     output:
-        csv="results/deg/{bioproject}/deseq_results.csv",
-        filtered="results/deg/{bioproject}/deseq_results_filtered.csv",
-        interaction="results/deg/{bioproject}/deseq_results_interaction.csv",
-        interaction_filtered="results/deg/{bioproject}/deseq_results_interaction_filtered.csv"
+        csv="results/deg/{bioproject}/{condition}_vs_control_{covariate}/deseq_results.csv",
+        filtered="results/deg/{bioproject}/{condition}_vs_control_{covariate}/deseq_results_filtered.csv",
     params:
-        padj = lambda wildcards: {"BEAS_2B_short": 0.05, "HEP_G2_short": 0.05}.get(wildcards.bioproject, 0.05),
-        logfc=0.03
+        padj = lambda wildcards: {"BEAS_2B_short": 0.02, "HEP_G2_short": 0.02}.get(wildcards.bioproject, 0.02),
+        logfc = 0.2,
+        covariate = "{covariate}"
     threads: 2
     resources:
         mem_mb=16000
     log:
-        "logs/deg/{bioproject}_deseq.log"
+        "logs/deg/{bioproject}/{condition}_vs_control_{covariate}.log"
     shell:
         """
         Rscript workflow/scripts/deseq2_core.R \
             -c {input.counts} \
             -p {input.metadata} \
             -o {output.csv} \
-            -x {output.interaction} \
             --filtered {output.filtered} \
-            --interaction_filtered {output.interaction_filtered} \
             --padj {params.padj} \
-            --logfc {params.logfc} > {log} 2>&1
+            --logfc {params.logfc} \
+            --covariate {params.covariate} \
+            --condition {wildcards.condition} > {log} 2>&1
         """
 
 rule plot_deseq2:
     input:
-        csv="results/deg/{bioproject}/deseq_results.csv",
-        filtered="results/deg/{bioproject}/deseq_results_filtered.csv",
+        csv="results/deg/{bioproject}/{condition}_vs_control_{covariate}/deseq_results.csv",
+        filtered="results/deg/{bioproject}/{condition}_vs_control_{covariate}/deseq_results_filtered.csv",
         counts="results/counts/{bioproject}/counts.txt",
         metadata="results/deg/{bioproject}/phenodata.csv"
     output:
-        volcano = "results/deg/{bioproject}/deseq_results_volcano.pdf",
-        pca = "results/deg/{bioproject}/deseq_results_PCA.pdf",
-        heatmap = "results/deg/{bioproject}/deseq_results_heatmap.pdf"
+        volcano = "results/deg/{bioproject}/{condition}_vs_control_{covariate}/deseq_results_volcano.pdf",
+        pca = "results/deg/{bioproject}/{condition}_vs_control_{covariate}/deseq_results_PCA.pdf",
+        heatmap = "results/deg/{bioproject}/{condition}_vs_control_{covariate}/deseq_results_heatmap.pdf",
+        vst = "results/deg/{bioproject}/{condition}_vs_control_{covariate}/deseq_results_vst.csv"
     params:
-        padj = lambda wildcards: {"BEAS_2B_short": 0.05, "HEP_G2_short": 0.05}.get(wildcards.bioproject, 0.05),
-        logfc=0.03
+        padj = lambda wildcards: {"BEAS_2B_short": 0.02, "HEP_G2_short": 0.02}.get(wildcards.bioproject, 0.02),
+        logfc = 0.2
     threads: 1
     resources:
-        mem_mb=8000
+        mem_mb = 8000
     log:
-        "logs/deg/{bioproject}_plots.log"
+        "logs/deg/{bioproject}/{condition}_vs_control_{covariate}_plots.log"
     shell:
         """
         Rscript workflow/scripts/plot_deseq.R \
@@ -416,17 +458,18 @@ rule plot_deseq2:
             -f {input.filtered} \
             -c {input.counts} \
             -m {input.metadata} \
-            -o results/deg/{wildcards.bioproject} \
-            --padj {params.padj} --logfc {params.logfc} > {log} 2>&1
+            -o results/deg/{wildcards.bioproject}/{wildcards.condition}_vs_control_{wildcards.covariate} \
+            --padj {params.padj} \
+            --logfc {params.logfc} > {log} 2>&1
         """
 
 rule extract_mirna_names:
     input:
-        csv = "results/deg/{bioproject}/deseq_results.csv"
+        csv = "results/deg/{bioproject}/{condition}_vs_control_{covariate}/deseq_results.csv"
     output:
-        csv = "results/deg/{bioproject}/all_mirnas.csv"
+        csv = "results/deg/{bioproject}/{condition}_vs_control_{covariate}/all_mirnas.csv"
     log:
-        "logs/deg/{bioproject}_extract_mirna_names.log"
+        "logs/deg/{bioproject}/{condition}_vs_control_{covariate}_extract_mirna_names.log"
     params:
         topn = 30
     shell:
@@ -437,11 +480,11 @@ rule extract_mirna_names:
 
 rule cache_mirna_targets:
     input:
-        mirna_data = "results/deg/{bioproject}/all_mirnas.csv"
+        mirna_data = "results/deg/{bioproject}/{condition}_vs_control_{covariate}/all_mirnas.csv"
     output:
-        rds = "cache/{bioproject}_mirna_targets.rds"
+        rds = "results/deg/{bioproject}/{condition}_vs_control_{covariate}/mirna_targets.rds"
     log:
-        "logs/deg/{bioproject}_cache_targets.log"
+        "logs/deg/{bioproject}/{condition}_vs_control_{covariate}_cache_targets.log"
     threads: 1
     resources:
         mem_mb=8000
@@ -453,45 +496,47 @@ rule cache_mirna_targets:
 
 rule enrich_mirna_targets:
     input:
-        mirnas = "results/deg/{bioproject}/all_mirnas.csv",
-        targets = "cache/{bioproject}_mirna_targets.rds"
+        mirnas = "results/deg/{bioproject}/{condition}_vs_control_{covariate}/all_mirnas.csv",
+        targets = "results/deg/{bioproject}/{condition}_vs_control_{covariate}/mirna_targets.rds"
     output:
-        targets = "results/deg/{bioproject}/deseq_results_mirna_targets.csv",
-        go="results/deg/{bioproject}/deseq_results_GO_enrichment.csv",
-        go_dotplot="results/deg/{bioproject}/deseq_results_GO_dotplot.pdf",
-        kegg="results/deg/{bioproject}/deseq_results_KEGG_enrichment.csv",
-        kegg_dotplot="results/deg/{bioproject}/deseq_results_KEGG_dotplot.pdf",
-        reactome="results/deg/{bioproject}/deseq_results_Reactome_enrichment.csv",
-        reactome_dotplot="results/deg/{bioproject}/deseq_results_Reactome_dotplot.pdf",
-        summary="results/deg/{bioproject}/deseq_results_all_enrichments_summary.csv"
+        targets = "results/deg/{bioproject}/{condition}_vs_control_{covariate}/deseq_results_mirna_targets.csv",
+        go = "results/deg/{bioproject}/{condition}_vs_control_{covariate}/deseq_results_GO_enrichment.csv",
+        go_dotplot = "results/deg/{bioproject}/{condition}_vs_control_{covariate}/deseq_results_GO_dotplot.pdf",
+        kegg = "results/deg/{bioproject}/{condition}_vs_control_{covariate}/deseq_results_KEGG_enrichment.csv",
+        kegg_dotplot = "results/deg/{bioproject}/{condition}_vs_control_{covariate}/deseq_results_KEGG_dotplot.pdf",
+        reactome = "results/deg/{bioproject}/{condition}_vs_control_{covariate}/deseq_results_Reactome_enrichment.csv",
+        reactome_dotplot = "results/deg/{bioproject}/{condition}_vs_control_{covariate}/deseq_results_Reactome_dotplot.pdf",
+        summary = "results/deg/{bioproject}/{condition}_vs_control_{covariate}/deseq_results_all_enrichments_summary.csv"
     threads: 1
     resources:
-        mem_mb=8000
+        mem_mb = 8000
     log:
-        "logs/deg/{bioproject}_enrich.log"
+        "logs/deg/{bioproject}/{condition}_vs_control_{covariate}_enrich.log"
     shell:
         """
         Rscript workflow/scripts/enrich_mirna_targets.R \
             -i {input.mirnas} \
             -t {input.targets} \
-            -o results/deg/{wildcards.bioproject} \
+            -o results/deg/{wildcards.bioproject}/{wildcards.condition}_vs_control_{wildcards.covariate} \
             --padj-threshold 0.05 > {log} 2>&1
         """
 
 rule deseq_summary_report:
     input:
-        filtered="results/deg/{bioproject}/deseq_results_filtered.csv",
-        volcano="results/deg/{bioproject}/deseq_results_volcano.pdf",
-        pca="results/deg/{bioproject}/deseq_results_PCA.pdf",
-        heatmap="results/deg/{bioproject}/deseq_results_heatmap.pdf",
-        go_dotplot="results/deg/{bioproject}/deseq_results_GO_dotplot.pdf",
-        kegg_dotplot="results/deg/{bioproject}/deseq_results_KEGG_dotplot.pdf",
-        reactome_dotplot="results/deg/{bioproject}/deseq_results_Reactome_dotplot.pdf"
+        filtered = "results/deg/{bioproject}/{condition}_vs_control_{covariate}/deseq_results_filtered.csv",
+        volcano = "results/deg/{bioproject}/{condition}_vs_control_{covariate}/deseq_results_volcano.pdf",
+        pca = "results/deg/{bioproject}/{condition}_vs_control_{covariate}/deseq_results_PCA.pdf",
+        heatmap = "results/deg/{bioproject}/{condition}_vs_control_{covariate}/deseq_results_heatmap.pdf",
+        go_dotplot = "results/deg/{bioproject}/{condition}_vs_control_{covariate}/deseq_results_GO_dotplot.pdf",
+        kegg_dotplot = "results/deg/{bioproject}/{condition}_vs_control_{covariate}/deseq_results_KEGG_dotplot.pdf",
+        reactome_dotplot = "results/deg/{bioproject}/{condition}_vs_control_{covariate}/deseq_results_Reactome_dotplot.pdf"
     output:
-        html="results/deg/{bioproject}/deseq_results_summary_report.html"
+        html = "results/deg/{bioproject}/{condition}_vs_control_{covariate}/deseq_results_summary_report.html"
     threads: 1
     resources:
-        mem_mb=4000
+        mem_mb = 4000
+    log:
+        "logs/deg/{bioproject}/{condition}_vs_control_{covariate}_summary.log"
     shell:
         """
         Rscript workflow/scripts/summary_report.R \
