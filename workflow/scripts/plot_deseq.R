@@ -6,6 +6,7 @@ suppressPackageStartupMessages({
   library(ggplot2)
   library(pheatmap)
   library(ggrepel)
+  library(limma)
 })
 
 # ---- Parse arguments ----
@@ -29,22 +30,75 @@ basename_stub <- sub("\\.csv$", "", basename(opt$results))
 plot_padj <- opt$padj
 plot_logfc <- opt$logfc
 
-# Filter out rows with NA in padj or log2FC BEFORE plotting
+# ---- Load counts and metadata ----
+counts <- read.table(opt$counts, header = TRUE, row.names = 1, check.names = FALSE)
+counts <- counts[, 6:ncol(counts)]
+counts <- round(counts)
+colnames(counts) <- gsub("\\.bam$", "", basename(colnames(counts)))
+
+coldata <- read.csv(opt$metadata, row.names = 1)
+coldata <- coldata[colnames(counts), , drop = FALSE]
+stopifnot(all(rownames(coldata) == colnames(counts)))
+
+# ---- Subset to relevant samples for this contrast ----
+# Expected format: results/deg/{bioproject}/{condition}_vs_control_{covariate}/
+contrast_folder <- basename(dirname(opt$results))
+parts <- strsplit(contrast_folder, "_vs_control_")[[1]]
+
+if (length(parts) == 2) {
+  condition_of_interest <- parts[1]
+  covariate_value <- parts[2]
+
+  cat(sprintf("[INFO] Subsetting to condition = %s and covariate1 = %s\n", condition_of_interest, covariate_value))
+
+  coldata <- coldata[
+    coldata$condition %in% c("control", condition_of_interest) &
+    coldata$covariate1 == covariate_value, , drop = FALSE
+  ]
+
+  counts <- counts[, rownames(coldata)]
+} else {
+  stop("Failed to parse condition and covariate from result folder name.")
+}
+
+cat("[INFO] Plotting PCA and heatmap for samples:\n")
+print(rownames(coldata))
+
+# ---- Process covariate1 (e.g., time) as numeric
+has_time <- FALSE
+if ("covariate1" %in% colnames(coldata)) {
+  suppressWarnings({
+    coldata$time_numeric <- as.numeric(as.character(coldata$covariate1))
+  })
+  if (!all(is.na(coldata$time_numeric))) {
+    has_time <- TRUE
+    coldata$Timepoint <- factor(coldata$time_numeric,
+                                levels = sort(unique(coldata$time_numeric)),
+                                labels = paste0(sort(unique(coldata$time_numeric)), "h"))
+  }
+}
+
+# ---- VST transformation
+dds <- DESeqDataSetFromMatrix(countData = counts, colData = coldata, design = ~ condition)
+vsd <- vst(dds, blind = FALSE)
+
+# ---- Export VST matrix
+write.csv(assay(vsd), file.path(opt$outdir, paste0(basename_stub, "_vst.csv")))
+
+# ---- Write summary line to console
+contrast_label <- basename(dirname(opt$results))
+cat(sprintf("[SUMMARY] %s: %d significant genes (padj < %.2f & |log2FC| > %.2f)\n",
+            contrast_label, nrow(res_filtered), plot_padj, plot_logfc))
+
+# ---- Volcano Plot ----
 res <- na.omit(res)
-
-# ---- Enhanced Volcano Plot ----
-
-# Define significance categories
 res$SigCategory <- "NS"
 res$SigCategory[abs(res$log2FoldChange) > plot_logfc] <- "FC"
 res$SigCategory[res$padj < plot_padj] <- "FDR"
 res$SigCategory[res$padj < plot_padj & abs(res$log2FoldChange) > plot_logfc] <- "FC_FDR"
 res$SigCategory <- factor(res$SigCategory, levels = c("NS", "FC", "FDR", "FC_FDR"))
-
-# Initialize label column
 res$label <- rep("", nrow(res))
 
-# Add labels to top genes (only FC+FDR)
 if (any(res$SigCategory == "FC_FDR")) {
   top_sig <- head(rownames(res[res$SigCategory == "FC_FDR", , drop = FALSE]), 10)
   res$label[rownames(res) %in% top_sig] <- top_sig
@@ -54,14 +108,12 @@ if (any(res$SigCategory == "FC_FDR")) {
   res$label[top10] <- rownames(res)[top10]
 }
 
-# Define legend title
 volcano_title <- if (any(res$SigCategory == "FC_FDR")) {
   sprintf("Volcano Plot (padj < %.2f, |log2FC| > %.2f)", plot_padj, plot_logfc)
 } else {
   "Top miRNAs by padj and/or FC (no hits in intersection)"
 }
 
-# Plot
 pdf(file.path(opt$outdir, paste0(basename_stub, "_volcano.pdf")))
 ggplot(res, aes(x = log2FoldChange, y = -log10(padj), color = SigCategory)) +
   geom_point(alpha = 0.6, size = 0.8) +
@@ -77,11 +129,7 @@ ggplot(res, aes(x = log2FoldChange, y = -log10(padj), color = SigCategory)) +
   theme_bw(base_size = 14) +
   theme(
     legend.position = "top",
-    legend.title = element_blank(),
-    legend.text = element_text(size = 9),
-    legend.key.size = unit(0.5, "cm"),
-    panel.grid.major = element_blank(),
-    panel.grid.minor = element_blank()
+    legend.title = element_blank()
   ) +
   labs(
     title = volcano_title,
@@ -97,45 +145,20 @@ ggplot(res, aes(x = log2FoldChange, y = -log10(padj), color = SigCategory)) +
   geom_hline(yintercept = -log10(plot_padj), linetype = "longdash", color = "black", size = 0.4)
 dev.off()
 
-# ---- Load counts and metadata ----
-counts <- read.table(opt$counts, header = TRUE, row.names = 1, check.names = FALSE)
-counts <- counts[, 6:ncol(counts)]
-counts <- round(counts)
-colnames(counts) <- gsub("\\.bam$", "", basename(colnames(counts)))
-
-coldata <- read.csv(opt$metadata, row.names = 1)
-coldata <- coldata[colnames(counts), , drop = FALSE]
-stopifnot(all(rownames(coldata) == colnames(counts)))
-
-# ---- Add time_numeric_centered if biosample is numeric ----
-if (all(grepl("^biosampletime\\d+$", coldata$biosample))) {
-  cat("[INFO] Using centered numeric time from biosample\n")
-  coldata$time_numeric <- as.numeric(gsub("biosampletime", "", coldata$biosample))
-  coldata$time_numeric_centered <- scale(coldata$time_numeric, center = TRUE, scale = FALSE)
-} else {
-  cat("[INFO] Skipping time_numeric_centered: biosample not in expected format\n")
-}
-
 # ---- PCA ----
-library(limma)
-
-if (!"time_numeric_centered" %in% colnames(coldata)) {
-  stop("time_numeric_centered is not available in coldata — check earlier parsing step.")
+if (has_time) {
+  pcaData <- plotPCA(vsd, intgroup = c("condition", "time_numeric"), returnData = TRUE)
+  pcaData$Sample <- rownames(pcaData)
+  pcaData$Timepoint <- factor(pcaData$time_numeric,
+                              levels = sort(unique(pcaData$time_numeric)),
+                              labels = paste0(sort(unique(pcaData$time_numeric)), "h"))
+} else {
+  pcaData <- plotPCA(vsd, intgroup = c("condition"), returnData = TRUE)
+  pcaData$Sample <- rownames(pcaData)
+  pcaData$Timepoint <- "NA"
 }
-dds <- DESeqDataSetFromMatrix(countData = counts, colData = coldata, design = ~ time_numeric_centered + condition)
-vsd <- vst(dds, blind = FALSE)
-
-# Remove batch effects based on time (if relevant)
-assay(vsd) <- removeBatchEffect(assay(vsd), covariates = vsd$time_numeric_centered)
-
-pcaData <- plotPCA(vsd, intgroup = c("condition", "time_numeric"), returnData = TRUE)
-pcaData$Sample <- rownames(pcaData)
-pcaData$Timepoint <- factor(pcaData$time_numeric,
-                            levels = c(24, 48, 72),
-                            labels = c("24h", "48h", "72h"))
 
 percentVar <- round(100 * attr(pcaData, "percentVar"))
-
 pca_title <- sprintf("PCA (padj < %.2f, |log2FC| > %.2f) - %s miRNAs",
                      plot_padj, plot_logfc,
                      if (sig_exists) nrow(res_filtered) else "top 30 fallback")
@@ -151,58 +174,44 @@ ggplot(pcaData, aes(PC1, PC2, color = condition, shape = Timepoint)) +
   theme_minimal()
 dev.off()
 
-
 # ---- Heatmap ----
-
-if (all(grepl("^biosampletime\\d+$", coldata$biosample))) {
-  cat("[INFO] Parsing numeric time from biosample for heatmap ordering\n")
-  coldata$time_numeric <- as.numeric(gsub("biosampletime", "", coldata$biosample))
-} else {
-  cat("[INFO] biosample format not numeric — skipping time ordering\n")
-  coldata$time_numeric <- NA
-}
-
-coldata$Timepoint <- factor(coldata$time_numeric,
-                            levels = c(24, 48, 72),
-                            labels = c("24h", "48h", "72h"))
-
-# Filter to significant genes or fallback
-res_filtered <- na.omit(res_filtered)
 top_genes <- if (sig_exists) {
-  rownames(res_filtered)
+  rownames(na.omit(res_filtered))
 } else {
   head(rownames(res[order(res$padj), ]), 30)
 }
-
-# Build expression matrix
 mat <- assay(vsd)[top_genes, ]
 mat <- mat - rowMeans(mat)
 
-# Reorder columns by condition and time if available
-if (!all(is.na(coldata$time_numeric))) {
+if (has_time) {
   ordering <- order(coldata$condition, coldata$time_numeric)
   mat <- mat[, ordering]
   annotation <- coldata[ordering, c("condition", "Timepoint"), drop = FALSE]
 } else {
-  annotation <- coldata[, c("condition", "Timepoint"), drop = FALSE]
+  annotation <- coldata[, "condition", drop = FALSE]
 }
 
-annotation_colors <- list(
-  condition = c(
-    "control" = "#1f77b4",    # blue
-    "PS_10uM" = "#2ca02c",    # green
-    "PS_100uM" = "#d62728"    # red
-  ),
-  Timepoint = c(
-    "24h" = "#a6cee3",  # light blue
-    "48h" = "#1f78b4",  # mid blue
-    "72h" = "#b2df8a"   # light green
-  )
+# Preferred palettes
+preferred_condition_colors <- c("#1f77b4", "#2ca02c", "#d62728", "#ff7f0e")
+preferred_time_colors <- c("#a6cee3", "#1f78b4", "#b2df8a", "#fb9a99")
+
+condition_levels <- unique(coldata$condition)
+condition_colors <- setNames(
+  rep(preferred_condition_colors, length.out = length(condition_levels)),
+  condition_levels
 )
 
-heat_colors <- colorRampPalette(c("green", "black", "red"))(100)
+annotation_colors <- list(condition = condition_colors)
 
-# Title fallback logic
+if (!all(is.na(coldata$Timepoint))) {
+  time_levels <- unique(coldata$Timepoint)
+  time_colors <- setNames(
+    rep(preferred_time_colors, length.out = length(time_levels)),
+    time_levels
+  )
+  annotation_colors$Timepoint <- time_colors
+}
+
 heatmap_title <- if (sig_exists) {
   sprintf("Heatmap (padj < %.2f, |log2FC| > %.2f)", plot_padj, plot_logfc)
 } else {
@@ -216,9 +225,8 @@ pheatmap(mat,
          clustering_distance_rows = "correlation",
          clustering_distance_cols = "correlation",
          clustering_method = "ward.D2",
-         color = heat_colors,
+         color = colorRampPalette(c("green", "black", "red"))(100),
          fontsize_row = 8,
          fontsize_col = 9,
          main = heatmap_title)
 dev.off()
-
