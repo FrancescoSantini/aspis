@@ -125,8 +125,11 @@ rule all:
 rule download_mirbase_fasta:
     output:
         fasta="genome/mirbase.fa"
+    threads: config["resources"]["tiny"]["threads"]
     resources:
-        mem_mb=100
+        mem_mb = config["resources"]["tiny"]["mem_mb"]
+    log:
+        "logs/mirbase/download_mirbase_fasta.log"
     shell:
         """
         wget -O genome/mature.fa https://www.mirbase.org/download/mature.fa
@@ -142,8 +145,11 @@ rule fasta_to_saf:
         fasta="genome/mirbase.fa"
     output:
         saf="genome/mirbase.saf"
+    threads: config["resources"]["tiny"]["threads"]
     resources:
-        mem_mb=500
+        mem_mb = config["resources"]["tiny"]["mem_mb"]
+    log:
+        "logs/fasta_to_saf.log"
     run:
         with open(input.fasta) as fin, open(output.saf, "w") as fout:
             fout.write("GeneID\tChr\tStart\tEnd\tStrand\n")
@@ -165,9 +171,9 @@ rule bowtie_build:
         fasta = rules.download_mirbase_fasta.output.fasta
     output:
         index = directory("genome/bowtie_index")
-    threads: 4
+    threads: config["resources"]["small"]["threads"]
     resources:
-        mem_mb=4000
+        mem_mb = config["resources"]["small"]["mem_mb"]
     log:
         "logs/bowtie_build.log"
     shell:
@@ -179,6 +185,11 @@ rule bowtie_build:
 rule download_contaminants:
     output:
         "genome/contaminants_dna.fa"
+    threads: config["resources"]["tiny"]["threads"]
+    resources:
+        mem_mb = config["resources"]["tiny"]["mem_mb"]
+    log:
+        "logs/genome/download_contaminants.log"
     shell:
         """
         wget --no-check-certificate -O genome/human_tRNA.fa https://gtrnadb.ucsc.edu/genomes/eukaryota/Hsapi38/hg38-mature-tRNAs.fa
@@ -195,7 +206,9 @@ rule build_contaminant_index:
         "genome/contaminants_dna.fa"
     output:
         index=directory("genome/contaminants_index")
-    threads: 4
+    threads: config["resources"]["small"]["threads"]
+    resources:
+        mem_mb = config["resources"]["small"]["mem_mb"]
     log: "logs/bowtie_contaminants_build.log"
     shell:
         """
@@ -209,11 +222,11 @@ rule fastqc_pre:
     output:
         html="results/qc/fastqc_pre/{bioproject}/{run}/{run}_short_fastqc.html",
         zip="results/qc/fastqc_pre/{bioproject}/{run}/{run}_short_fastqc.zip"
+    threads: config["resources"]["light"]["threads"]
+    resources:
+        mem_mb = config["resources"]["light"]["mem_mb"]
     log:
         "logs/fastqc_pre/{bioproject}/{run}_short.log"
-    threads: 2
-    resources:
-        mem_mb=2000
     shell:
         """
         fastqc -o results/qc/fastqc_pre/{wildcards.bioproject}/{wildcards.run} {input} > {log} 2>&1
@@ -223,20 +236,28 @@ rule cutadapt:
     input:
         "samples/{bioproject}/{run}/{run}_short.fq.gz"
     output:
-        trimmed="results/trimmed/{bioproject}/{run}/{run}_short_trimmed.fq.gz",
-        summary="logs/cutadapt/{bioproject}/{run}_short_summary.json"
+        trimmed = "results/trimmed/{bioproject}/{run}/{run}_short_trimmed.fq.gz",
+        summary = "logs/cutadapt/{bioproject}/{run}_short_summary.json"
+    params:
+        adapter = config["cutadapt"]["adapter"],
+        minlen = config["cutadapt"]["min_length"],
+        maxlen = config["cutadapt"]["max_length"],
+        qual = config["cutadapt"]["quality_cutoff"]
+    threads: config["resources"]["small"]["threads"]
+    resources:
+        mem_mb = config["resources"]["small"]["mem_mb"]
     log:
         "logs/cutadapt/{bioproject}/{run}_short.log"
-    threads: 2
-    resources:
-        mem_mb=2000
-    params:
-        adapter="AGATCGGAAGAGCACACGTCTGAACTCC"
     shell:
         """
         cutadapt \
-            -a {params.adapter} --overlap 5 --quality-cutoff 20 -m 18 -M 50 --match-read-wildcards --trim-n --report=full \
-            --json {output.summary} -o {output.trimmed} {input} > {log} 2>&1
+            -a {params.adapter} \
+            --overlap 5 \
+            --quality-cutoff {params.qual} \
+            -m {params.minlen} -M {params.maxlen} \
+            --match-read-wildcards --trim-n --report=full \
+            --json {output.summary} \
+            -o {output.trimmed} {input} > {log} 2>&1
         """
 
 rule fastqc_aft:
@@ -245,11 +266,11 @@ rule fastqc_aft:
     output:
         html="results/qc/fastqc_aft/{bioproject}/{run}/{run}_short_trimmed_fastqc.html",
         zip="results/qc/fastqc_aft/{bioproject}/{run}/{run}_short_trimmed_fastqc.zip"
+    threads: config["resources"]["light"]["threads"]
+    resources:
+        mem_mb = config["resources"]["light"]["mem_mb"]
     log:
         "logs/fastqc_aft/{bioproject}/{run}_short_trimmed.log"
-    threads: 2
-    resources:
-        mem_mb=2000
     shell:
         """
         fastqc -o results/qc/fastqc_aft/{wildcards.bioproject}/{wildcards.run} {input} > {log} 2>&1
@@ -262,11 +283,11 @@ rule deplete_contaminants:
     output:
         clean="results/depleted/{bioproject}/{run}_short_clean.fq.gz",
         aligned="results/depleted/{bioproject}/{run}_short_contaminants.sam"
+    threads: config["resources"]["small"]["threads"]
+    resources:
+        mem_mb = config["resources"]["small"]["mem_mb"]
     log:
         "logs/deplete/{bioproject}/{run}_short.log"
-    threads: 4
-    resources:
-        mem_mb=4000
     shell:
         """
         bowtie -v 1 -p {threads} --un >(gzip > {output.clean}) -x {input.index}/contaminants {input.trimmed} > {output.aligned} 2> {log}
@@ -277,11 +298,11 @@ rule flagstat_depleted:
         fq="results/depleted/{bioproject}/{run}_short_clean.fq.gz"
     output:
         txt="results/depleted/{bioproject}/{run}_short_clean.stats.txt"
+    threads: config["resources"]["tiny"]["threads"]
+    resources:
+        mem_mb = config["resources"]["tiny"]["mem_mb"]
     log:
         "logs/flagstat_deplete/{bioproject}/{run}_short_clean.log"
-    threads: 1
-    resources:
-        mem_mb=100
     shell:
         """
         echo "Total reads after contaminant depletion:" > {output.txt}
@@ -297,9 +318,11 @@ rule merge_flagstats_depleted:
         )
     output:
         "results/depleted/{bioproject}_summary_clean.flagstat.txt"
-    threads: 1
+    threads: config["resources"]["tiny"]["threads"]
     resources:
-        mem_mb=50
+        mem_mb = config["resources"]["tiny"]["mem_mb"]
+    log:
+        "logs/flagstat_deplete/{bioproject}_summary_clean.log"
     shell:
         """
         echo "### Merged contaminant depletion summary for {wildcards.bioproject} ###" > {output}
@@ -316,11 +339,11 @@ rule bowtie_align:
         trimmed="results/depleted/{bioproject}/{run}_short_clean.fq.gz"
     output:
         bam="results/aligned/{bioproject}/{run}_short.bam"
+    threads: config["resources"]["medium"]["threads"]
+    resources:
+        mem_mb = config["resources"]["medium"]["mem_mb"]
     log:
         "logs/bowtie/{bioproject}/{run}_short.log"
-    threads: 4
-    resources:
-        mem_mb=4000
     shell:
         """
         bowtie -v 2 -k 10 --best --strata -p {threads} -S -x genome/bowtie_index/mirbase {input.trimmed} 2> {log} | \
@@ -332,11 +355,11 @@ rule flagstat_alignment:
         bam="results/aligned/{bioproject}/{run}_short.bam"
     output:
         "results/aligned/{bioproject}/{run}_short.flagstat.txt"
+    threads: config["resources"]["tiny"]["threads"]
+    resources:
+        mem_mb = config["resources"]["tiny"]["mem_mb"]
     log:
         "logs/flagstat/{bioproject}/{run}_short.log"
-    threads: 1
-    resources:
-        mem_mb=200
     shell:
         """
         samtools flagstat {input.bam} > {output} 2> {log}
@@ -351,9 +374,11 @@ rule merge_flagstats:
         )
     output:
         "results/aligned/{bioproject}_summary.flagstat.txt"
-    threads: 1
+    threads: config["resources"]["tiny"]["threads"]
     resources:
-        mem_mb=50
+        mem_mb = config["resources"]["tiny"]["mem_mb"]
+    log:
+        "logs/flagstat/{bioproject}_summary.log"
     shell:
         """
         echo "### Merged flagstat summary for {wildcards.bioproject} ###" > {output}
@@ -374,9 +399,9 @@ rule featurecounts:
         )
     output:
         counts="results/counts/{bioproject}/counts.txt"
-    threads: 4
+    threads: config["resources"]["medium"]["threads"]
     resources:
-        mem_mb=8000
+        mem_mb = config["resources"]["medium"]["mem_mb"]
     log:
         "logs/featurecounts/{bioproject}.log"
     shell:
@@ -391,9 +416,9 @@ rule multiqc:
         html="results/qc/{bioproject}_multiqc_report.html"
     params:
         dir="results/qc"
-    threads: 1
+    threads: config["resources"]["tiny"]["threads"]
     resources:
-        mem_mb=500
+        mem_mb = config["resources"]["tiny"]["mem_mb"]
     log:
         "logs/qc/{bioproject}_multiqc.log"
     shell:
@@ -411,12 +436,12 @@ rule deseq2:
         csv="results/deg/{bioproject}/{condition}_vs_control_{covariate}/deseq_results.csv",
         filtered="results/deg/{bioproject}/{condition}_vs_control_{covariate}/deseq_results_filtered.csv",
     params:
-        padj = lambda wildcards: {"BEAS_2B_short": 0.02, "HEP_G2_short": 0.02}.get(wildcards.bioproject, 0.02),
-        logfc = 0.2,
+        padj = lambda wildcards: config["deseq2"]["padj"].get(wildcards.bioproject, config["deseq2"]["padj"]["default"]),
+        logfc = config["deseq2"]["logfc"],
         covariate = "{covariate}"
-    threads: 2
+    threads: config["resources"]["medium"]["threads"]
     resources:
-        mem_mb=16000
+        mem_mb = config["resources"]["medium"]["mem_mb"]
     log:
         "logs/deg/{bioproject}/{condition}_vs_control_{covariate}.log"
     shell:
@@ -444,11 +469,11 @@ rule plot_deseq2:
         heatmap = "results/deg/{bioproject}/{condition}_vs_control_{covariate}/deseq_results_heatmap.pdf",
         vst = "results/deg/{bioproject}/{condition}_vs_control_{covariate}/deseq_results_vst.csv"
     params:
-        padj = lambda wildcards: {"BEAS_2B_short": 0.02, "HEP_G2_short": 0.02}.get(wildcards.bioproject, 0.02),
-        logfc = 0.2
-    threads: 1
+        padj = lambda wildcards: config["deseq2"]["padj"].get(wildcards.bioproject, config["deseq2"]["padj"]["default"]),
+        logfc = config["deseq2"]["logfc"]
+    threads: config["resources"]["medium"]["threads"]
     resources:
-        mem_mb = 8000
+        mem_mb = config["resources"]["medium"]["mem_mb"]
     log:
         "logs/deg/{bioproject}/{condition}_vs_control_{covariate}_plots.log"
     shell:
@@ -468,10 +493,13 @@ rule extract_mirna_names:
         csv = "results/deg/{bioproject}/{condition}_vs_control_{covariate}/deseq_results.csv"
     output:
         csv = "results/deg/{bioproject}/{condition}_vs_control_{covariate}/all_mirnas.csv"
+    params:
+        topn = config["plotting"]["topn"]
+    threads: config["resources"]["medium"]["threads"]
+    resources:
+        mem_mb = config["resources"]["medium"]["mem_mb"]
     log:
         "logs/deg/{bioproject}/{condition}_vs_control_{covariate}_extract_mirna_names.log"
-    params:
-        topn = 30
     shell:
         """
         Rscript workflow/scripts/extract_mirna_names.R \
@@ -483,11 +511,11 @@ rule cache_mirna_targets:
         mirna_data = "results/deg/{bioproject}/{condition}_vs_control_{covariate}/all_mirnas.csv"
     output:
         rds = "results/deg/{bioproject}/{condition}_vs_control_{covariate}/mirna_targets.rds"
+    threads: config["resources"]["medium"]["threads"]
+    resources:
+        mem_mb = config["resources"]["medium"]["mem_mb"]
     log:
         "logs/deg/{bioproject}/{condition}_vs_control_{covariate}_cache_targets.log"
-    threads: 1
-    resources:
-        mem_mb=8000
     shell:
         """
         Rscript workflow/scripts/cache_mirna_targets.R \
@@ -507,9 +535,9 @@ rule enrich_mirna_targets:
         reactome = "results/deg/{bioproject}/{condition}_vs_control_{covariate}/deseq_results_Reactome_enrichment.csv",
         reactome_dotplot = "results/deg/{bioproject}/{condition}_vs_control_{covariate}/deseq_results_Reactome_dotplot.pdf",
         summary = "results/deg/{bioproject}/{condition}_vs_control_{covariate}/deseq_results_all_enrichments_summary.csv"
-    threads: 1
+    threads: config["resources"]["heavy"]["threads"]
     resources:
-        mem_mb = 8000
+        mem_mb = config["resources"]["heavy"]["mem_mb"]
     log:
         "logs/deg/{bioproject}/{condition}_vs_control_{covariate}_enrich.log"
     shell:
@@ -532,9 +560,9 @@ rule deseq_summary_report:
         reactome_dotplot = "results/deg/{bioproject}/{condition}_vs_control_{covariate}/deseq_results_Reactome_dotplot.pdf"
     output:
         html = "results/deg/{bioproject}/{condition}_vs_control_{covariate}/deseq_results_summary_report.html"
-    threads: 1
+    threads: config["resources"]["tiny"]["threads"]
     resources:
-        mem_mb = 4000
+        mem_mb = config["resources"]["tiny"]["mem_mb"]
     log:
         "logs/deg/{bioproject}/{condition}_vs_control_{covariate}_summary.log"
     shell:
