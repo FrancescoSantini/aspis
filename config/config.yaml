@@ -26,20 +26,49 @@ resources:
     threads: 12
     mem_mb: 32000
 
-# ---- DESeq2 Analysis ----
-deseq2:
-  padj:
-    BEAS_2B_short: 0.02
-    HEP_G2_short: 0.02
-    default: 0.05
-  logfc: 0.2
-
 # ---- Adapter Trimming ----
 cutadapt:
   adapter: AGATCGGAAGAGCACACGTCTGAACTCC
   min_length: 18
   max_length: 50
   quality_cutoff: 20
+trimmomatic:
+  pe:
+    - "ILLUMINACLIP:TruSeq3-PE.fa:2:30:10"
+    - "LEADING:3"
+    - "TRAILING:3"
+    - "SLIDINGWINDOW:4:15"
+    - "MINLEN:36"
+  se:
+    - "ILLUMINACLIP:TruSeq3-SE.fa:2:30:10"
+    - "LEADING:3"
+    - "TRAILING:3"
+    - "SLIDINGWINDOW:4:15"
+    - "MINLEN:36"
+
+# ---- DESeq2 Analysis ----
+deseq2_gene:
+  padj: 0.05
+  logfc: 0.5
+
+deseq2_transcript:
+  padj: 0.05
+  logfc: 0.5
+
+deseq2_smallrna:
+  padj:
+    BEAS_2B_short: 0.02
+    HEP_G2_short: 0.02
+    default: 0.05
+  logfc: 0.2
+
+# ---- GO, KEGG, Reactome Analysis ----
+enrichment:
+  padj: 0.05
+  logfc: 0.5
+
+enrichment_mirna:
+  padj: 0.05
 
 # ---- Plotting ----
 plotting:
