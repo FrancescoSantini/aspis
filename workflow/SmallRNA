@@ -8,7 +8,14 @@ import pandas as pd
 # Load sample sheet and filter for smallRNA entries
 df = pd.read_csv("config/sample_sheet.csv").set_index("sample_name", drop=False)
 df = df[df["bioproject"].str.endswith("_short")]
-#print(df)
+
+# Adjust pandas display options
+pd.set_option('display.max_rows', None)  # Show all rows
+pd.set_option('display.max_columns', None)  # Show all columns
+pd.set_option('display.width', 1000)  # Adjust the width of the display
+pd.set_option('display.colheader_justify', 'center')  # Adjust column header alignment
+
+print(df)
 
 # Extract unique samples
 SAMPLES = df["sample_name"].tolist()
@@ -436,8 +443,8 @@ rule deseq2:
         csv="results/deg/{bioproject}/{condition}_vs_control_{covariate}/deseq_results.csv",
         filtered="results/deg/{bioproject}/{condition}_vs_control_{covariate}/deseq_results_filtered.csv",
     params:
-        padj = lambda wildcards: config["deseq2"]["padj"].get(wildcards.bioproject, config["deseq2"]["padj"]["default"]),
-        logfc = config["deseq2"]["logfc"],
+        padj = lambda wildcards: config["deseq2_smallrna"]["padj"].get(wildcards.bioproject, config["deseq2_smallrna"]["padj"]["default"]),
+        logfc = config["deseq2_smallrna"]["logfc"],
         covariate = "{covariate}"
     threads: config["resources"]["medium"]["threads"]
     resources:
@@ -469,8 +476,8 @@ rule plot_deseq2:
         heatmap = "results/deg/{bioproject}/{condition}_vs_control_{covariate}/deseq_results_heatmap.pdf",
         vst = "results/deg/{bioproject}/{condition}_vs_control_{covariate}/deseq_results_vst.csv"
     params:
-        padj = lambda wildcards: config["deseq2"]["padj"].get(wildcards.bioproject, config["deseq2"]["padj"]["default"]),
-        logfc = config["deseq2"]["logfc"]
+        padj = lambda wildcards: config["deseq2_smallrna"]["padj"].get(wildcards.bioproject, config["deseq2_smallrna"]["padj"]["default"]),
+        logfc = config["deseq2_smallrna"]["logfc"]
     threads: config["resources"]["medium"]["threads"]
     resources:
         mem_mb = config["resources"]["medium"]["mem_mb"]
@@ -485,7 +492,8 @@ rule plot_deseq2:
             -m {input.metadata} \
             -o results/deg/{wildcards.bioproject}/{wildcards.condition}_vs_control_{wildcards.covariate} \
             --padj {params.padj} \
-            --logfc {params.logfc} > {log} 2>&1
+            --logfc {params.logfc} \
+            --label "miRNAs" > {log} 2>&1
         """
 
 rule extract_mirna_names:
@@ -535,6 +543,8 @@ rule enrich_mirna_targets:
         reactome = "results/deg/{bioproject}/{condition}_vs_control_{covariate}/deseq_results_Reactome_enrichment.csv",
         reactome_dotplot = "results/deg/{bioproject}/{condition}_vs_control_{covariate}/deseq_results_Reactome_dotplot.pdf",
         summary = "results/deg/{bioproject}/{condition}_vs_control_{covariate}/deseq_results_all_enrichments_summary.csv"
+    params:
+        padj = config["enrichment_mirna"]["padj"]
     threads: config["resources"]["heavy"]["threads"]
     resources:
         mem_mb = config["resources"]["heavy"]["mem_mb"]
@@ -546,10 +556,10 @@ rule enrich_mirna_targets:
             -i {input.mirnas} \
             -t {input.targets} \
             -o results/deg/{wildcards.bioproject}/{wildcards.condition}_vs_control_{wildcards.covariate} \
-            --padj-threshold 0.05 > {log} 2>&1
+            --padj-threshold {params.padj} > {log} 2>&1
         """
 
-rule deseq_summary_report:
+rule deseq_summary_report_mirna:
     input:
         filtered = "results/deg/{bioproject}/{condition}_vs_control_{covariate}/deseq_results_filtered.csv",
         volcano = "results/deg/{bioproject}/{condition}_vs_control_{covariate}/deseq_results_volcano.pdf",
@@ -569,5 +579,6 @@ rule deseq_summary_report:
         """
         Rscript workflow/scripts/summary_report.R \
             -i {input.filtered} \
-            -o {output.html}
+            -o {output.html} \
+            --label miRNA > {log} 2>&1
         """

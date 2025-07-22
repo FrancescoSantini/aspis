@@ -17,7 +17,8 @@ option_list <- list(
   make_option(c("-m", "--metadata"), type = "character", help = "Path to phenodata.csv"),
   make_option(c("-o", "--outdir"), type = "character", help = "Output directory"),
   make_option(c("--padj"), type = "double", default = 0.1, help = "Adjusted p-value threshold"),
-  make_option(c("--logfc"), type = "double", default = 1.0, help = "Absolute log2FC threshold")
+  make_option(c("--logfc"), type = "double", default = 1.0, help = "Absolute log2FC threshold"),
+  make_option("--label", type = "character", default = "features", help = "Label to use in plot titles (e.g. 'genes', 'transcripts', 'miRNAs')")
 )
 opt <- parse_args(OptionParser(option_list = option_list))
 
@@ -159,9 +160,10 @@ if (has_time) {
 }
 
 percentVar <- round(100 * attr(pcaData, "percentVar"))
-pca_title <- sprintf("PCA (padj < %.2f, |log2FC| > %.2f) - %s miRNAs",
+pca_title <- sprintf("PCA (padj < %.2f, |log2FC| > %.2f) - %s %s",
                      plot_padj, plot_logfc,
-                     if (sig_exists) nrow(res_filtered) else "top 30 fallback")
+                     if (sig_exists) nrow(res_filtered) else "top 30 fallback",
+                     opt$label)
 
 pdf(file.path(opt$outdir, paste0(basename_stub, "_PCA.pdf")))
 ggplot(pcaData, aes(PC1, PC2, color = condition, shape = Timepoint)) +
@@ -215,7 +217,7 @@ if (!all(is.na(coldata$Timepoint))) {
 heatmap_title <- if (sig_exists) {
   sprintf("Heatmap (padj < %.2f, |log2FC| > %.2f)", plot_padj, plot_logfc)
 } else {
-  "Top 30 miRNAs by padj (no hits at current thresholds)"
+  sprintf("Top 30 %s by padj (no hits at current thresholds)", opt$label)
 }
 
 pdf(file.path(opt$outdir, paste0(basename_stub, "_heatmap.pdf")))

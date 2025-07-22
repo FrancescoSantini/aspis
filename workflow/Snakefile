@@ -1,13 +1,16 @@
+# Snakefile: longRNA-seq pipeline
+
+configfile: "config/config.yaml"
+
 import re
 import os
 import glob
 import pandas as pd
 import subprocess as sp
 
-configfile: "config/config.yaml"
-
 # Load sample data 
 df = pd.read_table('config/sample_sheet.csv', sep=',').set_index('sample_name', drop=False)
+df = df[~df["bioproject"].str.endswith("_short")]
 
 # Adjust pandas display options
 pd.set_option('display.max_rows', None)  # Show all rows
@@ -16,6 +19,8 @@ pd.set_option('display.width', 1000)  # Adjust the width of the display
 pd.set_option('display.colheader_justify', 'center')  # Adjust column header alignment
 
 print(df)
+
+BIOPROJECTS = df["bioproject"].unique().tolist()
 
 wildcard_constraints:
     bioproject="\w+",
@@ -263,24 +268,38 @@ def get_gtf_files(wildcards):
  #   print(gtf_files)
     return gtf_files
 
-# # # Function to get unique conditions per bioproject (excluding 'control')
-# Create a dictionary: {bioproject: [conditions excluding control]}
-bioproject_conditions = {}
-for bioproject in df["bioproject"].unique():
-    conditions = df[df["bioproject"] == bioproject]["condition"].unique().tolist()
-    bioproject_conditions[bioproject] = [cond for cond in conditions if cond != "control"]
+# Write filtered metadata for DESeq2
+os.makedirs("results/deg", exist_ok=True)
+for bp in BIOPROJECTS:
+    os.makedirs(f"results/deg/{bp}", exist_ok=True)
+    df_filtered = df[df.bioproject == bp].copy()
+    phenodata = df_filtered[["sample_name", "biosample", "condition"] +
+                            [col for col in df.columns if col.startswith("covariate")]] \
+                .set_index("sample_name") \
+                .fillna("NA")
 
-# Create a list of tuples [(bioproject, condition), (bioproject, condition), ...]
-bioproject_condition_pairs = [
-    (bioproject, condition)
-    for bioproject, conditions in bioproject_conditions.items()
-    for condition in conditions
-]
+    phenodata.to_csv(f"results/deg/{bp}/phenodata.csv", sep=",")
+
+# Create triple list for DESeq2 contrasts (bioproject, condition != control, covariate1)
+bioproject_condition_covariate_triples = []
+for bp in BIOPROJECTS:
+    subdf = df[df["bioproject"] == bp]
+    conditions = subdf["condition"].dropna().unique().tolist()
+    conditions = [c for c in conditions if c != "control"]
+    covariates = subdf["covariate1"].dropna().unique().tolist()
+
+    for condition in conditions:
+        for covariate in covariates:
+            bioproject_condition_covariate_triples.append((bp, condition, covariate))
+
+# Define zipped components for use in expand() in rule all
+BIOPROJECTS_TRIPLE = [bp for bp, cond, cov in bioproject_condition_covariate_triples]
+CONDITIONS_TRIPLE  = [cond for bp, cond, cov in bioproject_condition_covariate_triples]
+COVARIATES_TRIPLE  = [cov for bp, cond, cov in bioproject_condition_covariate_triples]
 
 
 rule all:
     input:
-#        sra_samples,
         all_output_pe,
         all_output_se,
         local_samples_pe,
@@ -292,92 +311,114 @@ rule all:
         "genome/hisat2_index/genome.1.ht2",
         expand("results/sorted/{bioproject}/{accession}_sorted.bam", zip, bioproject=df.bioproject, accession=df.run),
         expand("results/qc/{bioproject}_multiqc_report.html", bioproject=df.bioproject),
+        expand("results/assembly/{bioproject}/{accession}.gtf", zip, bioproject=df.bioproject, accession=df.run),
         expand("results/assembly/{bioproject}/{bioproject}_stringtie_merged.gtf", bioproject=df.bioproject),
-        expand("results/assembly/{bioproject}/{bioproject}_sample_lst.txt", bioproject=df.bioproject),
-        expand("results/deg/{bioproject}/phenodata.csv", bioproject=df.bioproject),
-        expand("results/deg/{bioproject}/gene_count_matrix.csv", bioproject=df.bioproject),
-        expand("results/deg/{bioproject}/{condition}_vs_control/parameters.txt",
-               zip, bioproject=[bp for bp, _ in bioproject_condition_pairs],
-               condition=[cond for _, cond in bioproject_condition_pairs]),
-        expand("results/deg/{bioproject}/{condition}_vs_control/Enhanced_Volcano_Plot_{condition}_vs_control.png",
-               zip, bioproject=[bp for bp, _ in bioproject_condition_pairs],
-               condition=[cond for _, cond in bioproject_condition_pairs]),
-        expand("results/deg/{bioproject}/{condition}_vs_control/Improved_PCA_Plot_{condition}_vs_control.png",
-               zip, bioproject=[bp for bp, _ in bioproject_condition_pairs],
-               condition=[cond for _, cond in bioproject_condition_pairs]),
-        expand("results/deg/{bioproject}/{condition}_vs_control/Top50_DEGs_Heatmap_{condition}_vs_control.png",
-               zip, bioproject=[bp for bp, _ in bioproject_condition_pairs],
-               condition=[cond for _, cond in bioproject_condition_pairs]),
-        expand("results/deg/{bioproject}/{condition}_vs_control/KEGG_enrichment_{condition}_vs_control.csv",
-               zip, bioproject=[bp for bp, _ in bioproject_condition_pairs],
-               condition=[cond for _, cond in bioproject_condition_pairs]),
-        expand("results/deg/{bioproject}/{condition}_vs_control/GO_enrichment_{condition}_vs_control.csv", 
-               zip, bioproject=[bp for bp, _ in bioproject_condition_pairs],
-               condition=[cond for _, cond in bioproject_condition_pairs]),
-        expand("results/deg/{bioproject}/{condition}_vs_control/GOseq_enrichment_{condition}_vs_control.csv", 
-               zip, bioproject=[bp for bp, _ in bioproject_condition_pairs],
-               condition=[cond for _, cond in bioproject_condition_pairs]),
-        expand("results/deg/{bioproject}/{condition}_vs_control/Reactome_enrichment_{condition}_vs_control.csv", 
-               zip, bioproject=[bp for bp, _ in bioproject_condition_pairs],
-               condition=[cond for _, cond in bioproject_condition_pairs]),
-        expand("results/deg/{bioproject}/{condition}_vs_control/KEGG_dotplot_{condition}_vs_control.png", 
-                zip, bioproject=[bp for bp, _ in bioproject_condition_pairs],
-               condition=[cond for _, cond in bioproject_condition_pairs]),
-        expand("results/deg/{bioproject}/{condition}_vs_control/GO_dotplot_{condition}_vs_control.png", 
-                zip, bioproject=[bp for bp, _ in bioproject_condition_pairs],
-               condition=[cond for _, cond in bioproject_condition_pairs]),
-        expand("results/deg/{bioproject}/{condition}_vs_control/GOseq_dotplot_{condition}_vs_control.png", 
-                zip, bioproject=[bp for bp, _ in bioproject_condition_pairs],
-               condition=[cond for _, cond in bioproject_condition_pairs]),
-        expand("results/deg/{bioproject}/{condition}_vs_control/Reactome_dotplot_{condition}_vs_control.png", 
-                zip, bioproject=[bp for bp, _ in bioproject_condition_pairs],
-               condition=[cond for _, cond in bioproject_condition_pairs])
+        expand("results/quantified/{bioproject}/{accession}.gtf", zip, bioproject=df.bioproject, accession=df.run),
+        expand("results/deg_tx/{bioproject}/gene_count_matrix.csv", bioproject=df.bioproject),
+        expand("results/deg_tx/{bioproject}/transcript_count_matrix.csv", bioproject=df.bioproject),
+        expand("results/isoform_switches/{bioproject}/isoform_switch_summary.csv", bioproject=df.bioproject),
+        expand("results/deg/{bioproject}/{condition}_vs_control_{covariate}/deseq_results.csv",
+            zip, bioproject=BIOPROJECTS_TRIPLE, condition=CONDITIONS_TRIPLE, covariate=COVARIATES_TRIPLE),
+        expand("results/deg/{bioproject}/{condition}_vs_control_{covariate}/deseq_results_filtered.csv",
+            zip, bioproject=BIOPROJECTS_TRIPLE, condition=CONDITIONS_TRIPLE, covariate=COVARIATES_TRIPLE),
+        expand("results/deg_tx/{bioproject}/{condition}_vs_control_{covariate}/deseq_results.csv",
+            zip, bioproject=BIOPROJECTS_TRIPLE, condition=CONDITIONS_TRIPLE, covariate=COVARIATES_TRIPLE),
+        expand("results/deg_tx/{bioproject}/{condition}_vs_control_{covariate}/deseq_results_filtered.csv",
+            zip, bioproject=BIOPROJECTS_TRIPLE, condition=CONDITIONS_TRIPLE, covariate=COVARIATES_TRIPLE),
+        expand("results/deg/{bioproject}/{condition}_vs_control_{covariate}/deseq_results_volcano.pdf",
+            zip, bioproject=BIOPROJECTS_TRIPLE, condition=CONDITIONS_TRIPLE, covariate=COVARIATES_TRIPLE),
+        expand("results/deg/{bioproject}/{condition}_vs_control_{covariate}/deseq_results_PCA.pdf",
+            zip, bioproject=BIOPROJECTS_TRIPLE, condition=CONDITIONS_TRIPLE, covariate=COVARIATES_TRIPLE),
+        expand("results/deg/{bioproject}/{condition}_vs_control_{covariate}/deseq_results_heatmap.pdf",
+            zip, bioproject=BIOPROJECTS_TRIPLE, condition=CONDITIONS_TRIPLE, covariate=COVARIATES_TRIPLE),
+        expand("results/deg/{bioproject}/{condition}_vs_control_{covariate}/deseq_results_vst.csv",
+            zip, bioproject=BIOPROJECTS_TRIPLE, condition=CONDITIONS_TRIPLE, covariate=COVARIATES_TRIPLE),
+        expand("results/deg_tx/{bioproject}/{condition}_vs_control_{covariate}/deseq_results_volcano.pdf",
+            zip, bioproject=BIOPROJECTS_TRIPLE, condition=CONDITIONS_TRIPLE, covariate=COVARIATES_TRIPLE),
+        expand("results/deg_tx/{bioproject}/{condition}_vs_control_{covariate}/deseq_results_PCA.pdf",
+            zip, bioproject=BIOPROJECTS_TRIPLE, condition=CONDITIONS_TRIPLE, covariate=COVARIATES_TRIPLE),
+        expand("results/deg_tx/{bioproject}/{condition}_vs_control_{covariate}/deseq_results_heatmap.pdf",
+            zip, bioproject=BIOPROJECTS_TRIPLE, condition=CONDITIONS_TRIPLE, covariate=COVARIATES_TRIPLE),
+        expand("results/deg_tx/{bioproject}/{condition}_vs_control_{covariate}/deseq_results_vst.csv",
+            zip, bioproject=BIOPROJECTS_TRIPLE, condition=CONDITIONS_TRIPLE, covariate=COVARIATES_TRIPLE),
+        expand("results/deg/{bioproject}/{condition}_vs_control_{covariate}/GO_enrichment.csv",
+            zip, bioproject=BIOPROJECTS_TRIPLE, condition=CONDITIONS_TRIPLE, covariate=COVARIATES_TRIPLE),
+        expand("results/deg/{bioproject}/{condition}_vs_control_{covariate}/GO_dotplot.pdf",
+            zip, bioproject=BIOPROJECTS_TRIPLE, condition=CONDITIONS_TRIPLE, covariate=COVARIATES_TRIPLE),
+        expand("results/deg/{bioproject}/{condition}_vs_control_{covariate}/KEGG_enrichment.csv",
+            zip, bioproject=BIOPROJECTS_TRIPLE, condition=CONDITIONS_TRIPLE, covariate=COVARIATES_TRIPLE),
+        expand("results/deg/{bioproject}/{condition}_vs_control_{covariate}/KEGG_dotplot.pdf",
+            zip, bioproject=BIOPROJECTS_TRIPLE, condition=CONDITIONS_TRIPLE, covariate=COVARIATES_TRIPLE),
+        expand("results/deg/{bioproject}/{condition}_vs_control_{covariate}/Reactome_enrichment.csv",
+            zip, bioproject=BIOPROJECTS_TRIPLE, condition=CONDITIONS_TRIPLE, covariate=COVARIATES_TRIPLE),
+        expand("results/deg/{bioproject}/{condition}_vs_control_{covariate}/Reactome_dotplot.pdf",
+            zip, bioproject=BIOPROJECTS_TRIPLE, condition=CONDITIONS_TRIPLE, covariate=COVARIATES_TRIPLE),
+        expand("results/deg/{bioproject}/{condition}_vs_control_{covariate}/all_enrichments_summary.csv",
+            zip, bioproject=BIOPROJECTS_TRIPLE, condition=CONDITIONS_TRIPLE, covariate=COVARIATES_TRIPLE),
+        expand("results/deg_tx/{bioproject}/{condition}_vs_control_{covariate}/GO_enrichment.csv",
+            zip, bioproject=BIOPROJECTS_TRIPLE, condition=CONDITIONS_TRIPLE, covariate=COVARIATES_TRIPLE),
+        expand("results/deg_tx/{bioproject}/{condition}_vs_control_{covariate}/GO_dotplot.pdf",
+            zip, bioproject=BIOPROJECTS_TRIPLE, condition=CONDITIONS_TRIPLE, covariate=COVARIATES_TRIPLE),
+        expand("results/deg_tx/{bioproject}/{condition}_vs_control_{covariate}/KEGG_enrichment.csv",
+            zip, bioproject=BIOPROJECTS_TRIPLE, condition=CONDITIONS_TRIPLE, covariate=COVARIATES_TRIPLE),
+        expand("results/deg_tx/{bioproject}/{condition}_vs_control_{covariate}/KEGG_dotplot.pdf",
+            zip, bioproject=BIOPROJECTS_TRIPLE, condition=CONDITIONS_TRIPLE, covariate=COVARIATES_TRIPLE),
+        expand("results/deg_tx/{bioproject}/{condition}_vs_control_{covariate}/Reactome_enrichment.csv",
+            zip, bioproject=BIOPROJECTS_TRIPLE, condition=CONDITIONS_TRIPLE, covariate=COVARIATES_TRIPLE),
+        expand("results/deg_tx/{bioproject}/{condition}_vs_control_{covariate}/Reactome_dotplot.pdf",
+            zip, bioproject=BIOPROJECTS_TRIPLE, condition=CONDITIONS_TRIPLE, covariate=COVARIATES_TRIPLE),
+        expand("results/deg_tx/{bioproject}/{condition}_vs_control_{covariate}/all_enrichments_summary.csv",
+            zip, bioproject=BIOPROJECTS_TRIPLE, condition=CONDITIONS_TRIPLE, covariate=COVARIATES_TRIPLE),
+        expand("results/deg/{bioproject}/{condition}_vs_control_{covariate}/summary_report.html",
+            zip, bioproject=BIOPROJECTS_TRIPLE, condition=CONDITIONS_TRIPLE, covariate=COVARIATES_TRIPLE),
+        expand("results/deg_tx/{bioproject}/{condition}_vs_control_{covariate}/summary_report.html",
+            zip, bioproject=BIOPROJECTS_TRIPLE, condition=CONDITIONS_TRIPLE, covariate=COVARIATES_TRIPLE),
 
 
 rule fasterq_dump_pe:
     input:
-        "samples/{bioproject}/{accession}/{accession}.sra"
+        sra="samples/{bioproject}/{accession}/{accession}.sra"
     output:
-        "samples/{bioproject}/{accession}/{accession}_1.fastq",
-        "samples/{bioproject}/{accession}/{accession}_2.fastq"
-##    threads: config['THREADS']['zhex']
-##    resources:
-##        mem_mb=config['RESOURCEMOD']['boost'],
+        r1="samples/{bioproject}/{accession}/{accession}_1.fastq",
+        r2="samples/{bioproject}/{accession}/{accession}_2.fastq"
+    threads: config["resources"]["medium"]["threads"]
+    resources:
+        mem_mb=config["resources"]["medium"]["mem_mb"]
+    log:
+        "logs/fasterq_dump/{bioproject}/{accession}.log"
     shell:
         """
-        fasterq-dump --split-files samples/{wildcards.bioproject}/{wildcards.accession} \
-        -O samples/{wildcards.bioproject}/{wildcards.accession}/
+        fasterq-dump --split-files {input.sra} -O samples/{wildcards.bioproject}/{wildcards.accession}/ \
+        > {log} 2>&1
         """
 ##        """
 ##        module load autoload profile/bioinf
 ##        module load autoload sra
-##        fasterq-dump --split-files samples/{wildcards.bioproject}/{wildcards.accession} \
-##        -O samples/{wildcards.bioproject}/{wildcards.accession}/
 ##        """
 
 rule fasterq_dump_se:
     input:
-        "samples/{bioproject}/{accession}/{accession}.sra"
+        sra="samples/{bioproject}/{accession}/{accession}.sra"
     output:
-        "samples/{bioproject}/{accession}/{accession}.fastq"
-##    threads: config['THREADS']['zhex']
-##    resources:
-##        mem_mb=config['RESOURCEMOD']['boost'],
+        fastq="samples/{bioproject}/{accession}/{accession}.fastq"
+    params:
+        outdir="samples/{bioproject}/{accession}/"
+    threads: config["resources"]["medium"]["threads"]
+    resources:
+        mem_mb=config["resources"]["medium"]["mem_mb"]
+    log:
+        "logs/fasterq_dump/{bioproject}/{accession}.log"
     shell:
         """
-        fasterq-dump samples/{wildcards.bioproject}/{wildcards.accession} \
-        -O samples/{wildcards.bioproject}/{wildcards.accession}/
+        fasterq-dump {input.sra} -O {params.outdir} > {log} 2>&1
         """
 ##        """
 ##        module load autoload profile/bioinf
 ##        module load autoload sra
-##        fasterq-dump samples/{wildcards.bioproject}/{wildcards.accession} \
-##        -O samples/{wildcards.bioproject}/{wildcards.accession}/
 ##        """
 
 ruleorder: fqzip_pe > fqzip_se
 
-# Rule to gzip paired-end FASTQ files
 rule fqzip_pe:
     input:
         i1 = "samples/{bioproject}/{accession}/{accession}_1.fastq",
@@ -385,50 +426,52 @@ rule fqzip_pe:
     output:
         o1 = "samples/{bioproject}/{accession}/{accession}_1.fastq.gz",
         o2 = "samples/{bioproject}/{accession}/{accession}_2.fastq.gz"
-##    threads: config['THREADS']['fqzip']
-##    resources:
-##        mem_mb=config['RESOURCEMOD']['boost'],
+    threads: config["resources"]["tiny"]["threads"]
+    resources:
+        mem_mb = config["resources"]["tiny"]["mem_mb"]
+    log:
+        "logs/fqzip/{bioproject}/{accession}_fqzip_pe.log"
     shell:
         """
         gzip -c {input.i1} > {output.o1}
         gzip -c {input.i2} > {output.o2}
         """
 
-# Rule to gzip single-end FASTQ files
 rule fqzip_se:
     input:
         "samples/{bioproject}/{accession}/{accession}.fastq"
     output:
         "samples/{bioproject}/{accession}/{accession}.fastq.gz"
-##    threads: config['THREADS']['fqzip']
-##    resources:
-##        mem_mb=config['RESOURCEMOD']['boost'],
+    threads: config["resources"]["tiny"]["threads"]
+    resources:
+        mem_mb=config["resources"]["tiny"]["mem_mb"]
+    log:
+        "logs/fqzip/{bioproject}/{accession}_fqzip.log"
     shell:
         """
-        gzip -c {input} > {output}
+        gzip -c {input} > {output} 2> {log}
         """
 
-# Initial fastqc analysis
 rule fastqc_pre:
     input:
         "samples/{bioproject}/{accession}/{accession}{read}.fastq.gz"
     output:
         html="results/qc/fastqc_pre/{bioproject}/{accession}/{accession}{read}_fastqc.html",
         zip="results/qc/fastqc_pre/{bioproject}/{accession}/{accession}{read}_fastqc.zip" # the suffix _fastqc.zip is necessary for multiqc to find the file. If not using multiqc, you are free to choose an arbitrary filename
+    params:
+        outdir="results/qc/fastqc_pre/{bioproject}/{accession}"
+    threads: config["resources"]["small"]["threads"]
+    resources:
+        mem_mb=config["resources"]["small"]["mem_mb"]
     log:
         "logs/fastqc_pre/{bioproject}/{accession}{read}.log"
-##    params: "--quiet"
-    threads: 4
-    resources:
-        mem_mb=4000,
     shell:
         """
-        fastqc -o results/qc/fastqc_pre/{wildcards.bioproject}/{wildcards.accession} -f fastq --extract {input} > {log} 2>&1
+        fastqc -o {params.outdir} -f fastq --extract {input} > {log} 2>&1
         """
 ##        """
 ##        module load autoload profile/bioinf
 ##        module load autoload fastqc
-##        fastqc -o results/qc/fastqc_pre/{wildcards.bioproject}/{wildcards.accession} -t {threads} -f fastq --extract {input} > {log} 2>&1
 ##        module purge
 ##        """
 
@@ -443,20 +486,21 @@ rule trimmomatic_pe:
         r2="results/trimmed/{bioproject}/{accession}/{accession}_2_trimmed.fastq.gz",
         r1_unpaired="results/trimmed/{bioproject}/{accession}/{accession}_1.unpaired.fastq.gz",
         r2_unpaired="results/trimmed/{bioproject}/{accession}/{accession}_2.unpaired.fastq.gz"
+    params:
+        trimmer = config["trimmomatic"]["pe"]
+    threads: config["resources"]["small"]["threads"]
+    resources:
+        mem_mb = config["resources"]["small"]["mem_mb"]
     log:
         "logs/trimmomatic/{bioproject}/{accession}_pe.log"
-    params:
-        trimmer = ["ILLUMINACLIP:TruSeq3-PE.fa:2:30:10", "LEADING:3", "TRAILING:3", "SLIDINGWINDOW:4:15", "MINLEN:36"]
-##        **config["params"]["trimmomatic"]["pe"],
-##    threads: config['THREADS']['trimmo']
     shell:
         """
         trimmomatic PE -threads {threads} \
-        {input.r1} {input.r2} \
-        {output.r1} {output.r1_unpaired} \
-        {output.r2} {output.r2_unpaired} \
-        {params.trimmer} \
-        2> {log}
+            {input.r1} {input.r2} \
+            {output.r1} {output.r1_unpaired} \
+            {output.r2} {output.r2_unpaired} \
+            {params.trimmer} \
+            2> {log}
         """
 
 rule trimmomatic_se:
@@ -464,42 +508,42 @@ rule trimmomatic_se:
         "samples/{bioproject}/{accession}/{accession}.fastq.gz"
     output:
         "results/trimmed/{bioproject}/{accession}/{accession}_trimmed.fastq.gz"
+    params:
+        trimmer = config["trimmomatic"]["se"]
+    threads: config["resources"]["small"]["threads"]
+    resources:
+        mem_mb = config["resources"]["small"]["mem_mb"]
     log:
         "logs/trimmomatic/{bioproject}/{accession}_se.log"
-    params:
-        trimmer = ["ILLUMINACLIP:TruSeq3-SE.fa:2:30:10", "LEADING:3", "TRAILING:3", "SLIDINGWINDOW:4:15", "MINLEN:36"]
-##    **config["params"]["trimmomatic"]["pe"],
-##    threads: config['THREADS']['trimmo']
     shell:
         """
         trimmomatic SE -threads {threads} \
-        {input} \
-        {output} \
-        {params.trimmer} \
-        2> {log}
+            {input} \
+            {output} \
+            {params.trimmer} \
+            2> {log}
         """
 
-# Post trimming fastqc analysis
 rule fastqc_aft:
     input:
         "results/trimmed/{bioproject}/{accession}/{accession}{read}_trimmed.fastq.gz"
     output:
         html="results/qc/fastqc_aft/{bioproject}/{accession}/{accession}{read}_trimmed_fastqc.html",
         zip="results/qc/fastqc_aft/{bioproject}/{accession}/{accession}{read}_trimmed_fastqc.zip" # the suffix _fastqc.zip is necessary for multiqc to find the file. If not using multiqc, you are free to choose an arbitrary filename
+    params:
+        outdir="results/qc/fastqc_aft/{bioproject}/{accession}"
+    threads: config["resources"]["light"]["threads"]
+    resources:
+        mem_mb=config["resources"]["light"]["mem_mb"]
     log:
         "logs/fastqc_aft/{bioproject}/{accession}{read}_trimmed.log"
-##    params: "--quiet"
-##    threads: 1
-##    resources:
-##        mem_mb=10000,
     shell:
         """
-        fastqc -o results/qc/fastqc_aft/{wildcards.bioproject}/{wildcards.accession} -f fastq --extract {input} > {log} 2>&1
+        fastqc -o {params.outdir} -f fastq --extract {input} > {log} 2>&1
         """
 ##        """
 ##        module load autoload profile/bioinf
 ##        module load autoload fastqc
-##        fastqc -o results/qc/fastqc_pre/{wildcards.bioproject}/{wildcards.accession} -t {threads} -f fastq --extract {input} > {log} 2>&1
 ##        module purge
 ##        """
 
@@ -509,13 +553,11 @@ rule hisat2_index:
     output:
         folder = directory("genome/hisat2_index"),
         index = "genome/hisat2_index/genome.1.ht2"
+    threads: config["resources"]["medium"]["threads"]
+    resources:
+        mem_mb = config["resources"]["medium"]["mem_mb"]
     log:
         "logs/hisat2_index/index.log"
-##    params:
-##        prefix = "index_{genome}/"
-    threads: 4
-##    resources:
-##        mem_mb=config['RESOURCEMOD']['high'],
     shell:
         """
         mkdir -p {output.folder}
@@ -532,15 +574,14 @@ rule hisat2_align:
         )
     output:
         bam = "results/aligned/{bioproject}/{accession}.bam"
+    params:
+        idx = "genome/hisat2_index/genome"
+    threads:
+        config["resources"]["medium"]["threads"]
+    resources:
+        mem_mb = config["resources"]["medium"]["mem_mb"]
     log:
         "logs/hisat2/{bioproject}/{accession}.log"
-    threads: 8
-    params:
-        idx="genome/hisat2_index/genome"
-    resources:
-        mem_mb=8000,
-##        mem_mb=config['RESOURCEMOD']['high'],
-##        time=config['RESOURCEMOD']['moretime'],
     shell:
         """
         if [ -f {input.reads[1]} ]; then
@@ -557,15 +598,14 @@ rule samtools_sort:
         "results/aligned/{bioproject}/{accession}.bam"
     output:
         "results/sorted/{bioproject}/{accession}_sorted.bam"
-    threads: 4
+    threads: config["resources"]["medium"]["threads"]
     resources:
-        mem_mb=8000
-##    threads: config['THREADS']['samsort']
-##    resources:
-##        mem_mb=config['RESOURCEMOD']['high'],
+        mem_mb=config["resources"]["medium"]["mem_mb"]
+    log:
+        "logs/samtools_sort/{bioproject}/{accession}_sort.log"
     shell:
         """
-        samtools sort {input} -o {output}
+        samtools sort -@ {threads} {input} -o {output} > {log} 2>&1
         """
 
 rule multiqc:
@@ -575,6 +615,11 @@ rule multiqc:
         report = "results/qc/{bioproject}_multiqc_report.html"
     params:
         dir="results/qc"
+    threads: config["resources"]["tiny"]["threads"]
+    resources:
+        mem_mb = config["resources"]["tiny"]["mem_mb"]
+    log:
+        "logs/multiqc/{bioproject}_multiqc.log"
     shell:
         """
         multiqc {input} \
@@ -582,15 +627,18 @@ rule multiqc:
         -n {wildcards.bioproject}_multiqc_report.html
         """
 
+# This rule is needed for gene-level DE
 rule stringtie:
     input:
         bam = "results/sorted/{bioproject}/{accession}_sorted.bam",
         annotation = config["reference_annotation"]
     output:
-        "results/assembly/{bioproject}/{accession}.gtf"
-    threads: 4
+        gtf = "results/assembly/{bioproject}/{accession}.gtf"
+    threads: config["resources"]["medium"]["threads"]
     resources:
-        mem_mb=6000
+        mem_mb = config["resources"]["medium"]["mem_mb"]
+    log:
+        "logs/stringtie/{bioproject}/{accession}_stringtie.log"
     shell:
         """
         stringtie {input.bam} \
@@ -601,122 +649,326 @@ rule stringtie:
 ##        """
 ##        module load autoload profile/bioinf && \
 ##        module load stringtie && \
-##        module load illumina_genome_Homo_sapiens/hg38 && \
-##        stringtie {input} \
-##        -G $ANNOTATION/Genes/genes.gtf \
-##        -o {output} \
-##        -e
+##        module load illumina_genome_Homo_sapiens/hg38
 ##        """
 
+# This rule is needed for transcript-level DE
 rule merge:
     input:
         gtfs = get_gtf_files,
         annotation = config["reference_annotation"]
     output:
-        "results/assembly/{bioproject}/{bioproject}_stringtie_merged.gtf"
+        merged = "results/assembly/{bioproject}/{bioproject}_stringtie_merged.gtf"
+    threads: config["resources"]["xheavy"]["threads"]
+    resources:
+        mem_mb = config["resources"]["xheavy"]["mem_mb"]
     log:
         "logs/assembly/{bioproject}/{bioproject}_stringtie_merged.log"
-    threads: 12
-    resources:
-        mem_mb=12000
     shell:
         """
         stringtie --merge \
         -G {input.annotation} \
-        -o {output} \
+        -o {output.merged} \
         {input.gtfs}
         """
 ##        """
 ##        module load autoload profile/bioinf && \
 ##        module load stringtie && \
 ##        module load illumina_genome_Homo_sapiens/hg38 && \
-##        stringtie --merge \
-##        -G $ANNOTATION/Genes/genes.gtf \
-##        -o {output} \
-##        {input}
 ##        """
 
-rule preprep:
+# This rule is needed for isoform-level DE
+rule stringtie_with_merged:
     input:
-        i1 = "config/sample_sheet.csv",
-        i2 = "results/assembly/{bioproject}/{bioproject}_stringtie_merged.gtf"
+        bam = "results/sorted/{bioproject}/{accession}_sorted.bam",
+        merged_gtf = "results/assembly/{bioproject}/{bioproject}_stringtie_merged.gtf"
     output:
-        o1 = "results/assembly/{bioproject}/{bioproject}_sample_lst.txt",
-        o2 = "results/deg/{bioproject}/phenodata.csv"
-    shell:
-        """
-        python3 workflow/scripts/preprep.py {input.i1} {input.i2} {output.o1} {output.o2}
-        """
-# Maybe here should be added a rule to merge the different bioproject files in user-selected groups of samples 
-
-rule prepDE:
-    input:
-        i1 = "results/assembly/{bioproject}/{bioproject}_sample_lst.txt"
-    output:
-        o1 = "results/deg/{bioproject}/gene_count_matrix.csv",
-        o2 = "results/deg/{bioproject}/transcript_count_matrix.csv"
-    shell:
-        """
-        python3 workflow/scripts/prepDE.py \
-        -i {input.i1} -g {output.o1} -t {output.o2}
-        """
-
-
-##        """
-##        module load autoload profile/bioinf &&
-##        module load autoload r/4.1.0--gcc--10.2.0-python--3.8.6 &&
-##        Rscript workflow/scripts/produce_DEG.R \
-##        -p {input.i1} \
-##        -o results/deg/{wildcards.bioproject}/ \
-##        -i {input.i2} \
-##        -v condition \
-##        -n control \
-##        -m Homo_sapiens \
-##        -d org.Hs.eg.db
-##        """
-
-rule DESeq2:
-    input:
-        i1 = "results/deg/{bioproject}/phenodata.csv",
-        i2 = "results/deg/{bioproject}/gene_count_matrix.csv",
-    output:
-        "results/deg/{bioproject}/{condition}_vs_control/parameters.txt",
-        "results/deg/{bioproject}/{condition}_vs_control/Enhanced_Volcano_Plot_{condition}_vs_control.png",
-        "results/deg/{bioproject}/{condition}_vs_control/Improved_PCA_Plot_{condition}_vs_control.png",
-        "results/deg/{bioproject}/{condition}_vs_control/Top50_DEGs_Heatmap_{condition}_vs_control.png",
-        "results/deg/{bioproject}/{condition}_vs_control/KEGG_enrichment_{condition}_vs_control.csv",
-        "results/deg/{bioproject}/{condition}_vs_control/GO_enrichment_{condition}_vs_control.csv",
-        "results/deg/{bioproject}/{condition}_vs_control/GOseq_enrichment_{condition}_vs_control.csv",
-        "results/deg/{bioproject}/{condition}_vs_control/Reactome_enrichment_{condition}_vs_control.csv",
-        "results/deg/{bioproject}/{condition}_vs_control/KEGG_dotplot_{condition}_vs_control.png",
-        "results/deg/{bioproject}/{condition}_vs_control/GO_dotplot_{condition}_vs_control.png",
-        "results/deg/{bioproject}/{condition}_vs_control/GOseq_dotplot_{condition}_vs_control.png",
-        "results/deg/{bioproject}/{condition}_vs_control/Reactome_dotplot_{condition}_vs_control.png"
-    threads: 4
+        gtf = "results/quantified/{bioproject}/{accession}.gtf"
+    threads: config["resources"]["medium"]["threads"]
     resources:
-        mem_mb=16000
+        mem_mb = config["resources"]["medium"]["mem_mb"]
+    log:
+        "logs/quantified/{bioproject}/{accession}.log"
     shell:
         """
-        Rscript workflow/scripts/produce_DEG_with_enrichment.R \
-        -p {input.i1} \
-        -o results/deg/{wildcards.bioproject}/{wildcards.condition}_vs_control/ \
-        -i {input.i2} \
-        -v {wildcards.condition} \
-        -n control \
-        -q 0.1 \
-        -f 0.58 \
-        -m Homo_sapiens \
-        -d org.Hs.eg.db
+        stringtie {input.bam} \
+        -G {input.merged_gtf} \
+        -o {output.gtf} \
+        -e -B > {log} 2>&1
         """
-##        """
+
+rule build_count_matrices_merged:
+    input:
+        gtfs = lambda wildcards: expand("results/quantified/{bioproject}/{accession}.gtf", 
+                                        bioproject=wildcards.bioproject, 
+                                        accession=df[df['bioproject'] == wildcards.bioproject]['run']),
+        phenodata = "results/deg/{bioproject}/phenodata.csv"
+    output:
+        gene_counts = "results/deg_tx/{bioproject}/gene_count_matrix.csv",
+        transcript_counts = "results/deg_tx/{bioproject}/transcript_count_matrix.csv"
+    threads: config["resources"]["medium"]["threads"]
+    resources:
+        mem_mb = config["resources"]["medium"]["mem_mb"]
+    log:
+        "logs/counts_tx/{bioproject}.log"
+    shell:
+        """
+        Rscript workflow/scripts/generate_counts_from_gtfs.R \
+            --gtfs {input.gtfs} \
+            --phenodata {input.phenodata} \
+            --gene-output {output.gene_counts} \
+            --transcript-output {output.transcript_counts} \
+            > {log} 2>&1
+        """
+
+rule isoform_switch:
+    input:
+        transcripts = "results/deg_tx/{bioproject}/transcript_count_matrix.csv",
+        phenodata = "results/deg/{bioproject}/phenodata.csv",
+        gtf = "results/assembly/{bioproject}/{bioproject}_stringtie_merged.gtf"
+    output:
+        summary = "results/isoform_switches/{bioproject}/isoform_switch_summary.csv"
+    threads: config["resources"]["xheavy"]["threads"]
+    resources:
+        mem_mb = config["resources"]["xheavy"]["mem_mb"]
+    log:
+        "logs/isoform_switches/{bioproject}.log"
+    shell:
+        """
+        Rscript workflow/scripts/run_isoform_switch_analysis.R \
+            --counts {input.transcripts} \
+            --phenodata {input.phenodata} \
+            --gtf {input.gtf} \
+            --outdir results/isoform_switches/{wildcards.bioproject} \
+            > {log} 2>&1
+        """
+
+rule deseq2_gene:
+    input:
+        counts = "results/deg/{bioproject}/gene_count_matrix.csv",
+        metadata = "results/deg/{bioproject}/phenodata.csv"
+    output:
+        csv = "results/deg/{bioproject}/{condition}_vs_control_{covariate}/deseq_results.csv",
+        filtered = "results/deg/{bioproject}/{condition}_vs_control_{covariate}/deseq_results_filtered.csv"
+    params:
+        padj = config["deseq2_gene"]["padj"],
+        logfc = config["deseq2_gene"]["logfc"],
+        covariate = "{covariate}"
+    threads: config["resources"]["medium"]["threads"]
+    resources:
+        mem_mb = config["resources"]["medium"]["mem_mb"]
+    log:
+        "logs/deg/{bioproject}/{condition}_vs_control_{covariate}_gene.log"
+    shell:
+        """
+        Rscript workflow/scripts/deseq2_core.R \
+            -c {input.counts} \
+            -p {input.metadata} \
+            -o {output.csv} \
+            --filtered {output.filtered} \
+            --padj {params.padj} \
+            --logfc {params.logfc} \
+            --covariate {params.covariate} \
+            --condition {wildcards.condition} > {log} 2>&1
+        """
+
+rule deseq2_transcript:
+    input:
+        counts = "results/deg_tx/{bioproject}/transcript_count_matrix.csv",
+        metadata = "results/deg/{bioproject}/phenodata.csv"
+    output:
+        csv = "results/deg_tx/{bioproject}/{condition}_vs_control_{covariate}/deseq_results.csv",
+        filtered = "results/deg_tx/{bioproject}/{condition}_vs_control_{covariate}/deseq_results_filtered.csv"
+    params:
+        padj = config["deseq2_transcript"]["padj"],
+        logfc = config["deseq2_transcript"]["logfc"],
+        covariate = "{covariate}"
+    threads: config["resources"]["medium"]["threads"]
+    resources:
+        mem_mb = config["resources"]["medium"]["mem_mb"]
+    log:
+        "logs/deg_tx/{bioproject}/{condition}_vs_control_{covariate}.log"
+    shell:
+        """
+        Rscript workflow/scripts/deseq2_core.R \
+            -c {input.counts} \
+            -p {input.metadata} \
+            -o {output.csv} \
+            --filtered {output.filtered} \
+            --padj {params.padj} \
+            --logfc {params.logfc} \
+            --covariate {params.covariate} \
+            --condition {wildcards.condition} > {log} 2>&1
+        """
+
+rule plot_deseq2_gene:
+    input:
+        csv = "results/deg/{bioproject}/{condition}_vs_control_{covariate}/deseq_results.csv",
+        filtered = "results/deg/{bioproject}/{condition}_vs_control_{covariate}/deseq_results_filtered.csv",
+        counts = "results/deg/{bioproject}/gene_count_matrix.csv",
+        metadata = "results/deg/{bioproject}/phenodata.csv"
+    output:
+        volcano = "results/deg/{bioproject}/{condition}_vs_control_{covariate}/deseq_results_volcano.pdf",
+        pca = "results/deg/{bioproject}/{condition}_vs_control_{covariate}/deseq_results_PCA.pdf",
+        heatmap = "results/deg/{bioproject}/{condition}_vs_control_{covariate}/deseq_results_heatmap.pdf",
+        vst = "results/deg/{bioproject}/{condition}_vs_control_{covariate}/deseq_results_vst.csv"
+    params:
+        padj = config["deseq2_gene"]["padj"],
+        logfc = config["deseq2_gene"]["logfc"]
+    threads: config["resources"]["medium"]["threads"]
+    resources:
+        mem_mb = config["resources"]["medium"]["mem_mb"]
+    log:
+        "logs/deg/{bioproject}/{condition}_vs_control_{covariate}_plots.log"
+    shell:
+        """
+        Rscript workflow/scripts/plot_deseq.R \
+            -r {input.csv} \
+            -f {input.filtered} \
+            -c {input.counts} \
+            -m {input.metadata} \
+            -o results/deg/{wildcards.bioproject}/{wildcards.condition}_vs_control_{wildcards.covariate} \
+            --padj {params.padj} \
+            --logfc {params.logfc} \
+            --label "genes" > {log} 2>&1
+        """
+
+rule plot_deseq2_transcript:
+    input:
+        csv = "results/deg_tx/{bioproject}/{condition}_vs_control_{covariate}/deseq_results.csv",
+        filtered = "results/deg_tx/{bioproject}/{condition}_vs_control_{covariate}/deseq_results_filtered.csv",
+        counts = "results/deg_tx/{bioproject}/transcript_count_matrix.csv",
+        metadata = "results/deg/{bioproject}/phenodata.csv"
+    output:
+        volcano = "results/deg_tx/{bioproject}/{condition}_vs_control_{covariate}/deseq_results_volcano.pdf",
+        pca = "results/deg_tx/{bioproject}/{condition}_vs_control_{covariate}/deseq_results_PCA.pdf",
+        heatmap = "results/deg_tx/{bioproject}/{condition}_vs_control_{covariate}/deseq_results_heatmap.pdf",
+        vst = "results/deg_tx/{bioproject}/{condition}_vs_control_{covariate}/deseq_results_vst.csv"
+    params:
+        padj = config["deseq2_transcript"]["padj"],
+        logfc = config["deseq2_transcript"]["logfc"]
+    threads: config["resources"]["medium"]["threads"]
+    resources:
+        mem_mb = config["resources"]["medium"]["mem_mb"]
+    log:
+        "logs/deg_tx/{bioproject}/{condition}_vs_control_{covariate}_plots.log"
+    shell:
+        """
+        Rscript workflow/scripts/plot_deseq.R \
+            -r {input.csv} \
+            -f {input.filtered} \
+            -c {input.counts} \
+            -m {input.metadata} \
+            -o results/deg_tx/{wildcards.bioproject}/{wildcards.condition}_vs_control_{wildcards.covariate} \
+            --padj {params.padj} \
+            --logfc {params.logfc} \
+            --label "transcripts" > {log} 2>&1
+        """
+
+rule enrich_gene_targets:
+    input:
+        filtered = "results/deg/{bioproject}/{condition}_vs_control_{covariate}/deseq_results_filtered.csv"
+    output:
+        go = "results/deg/{bioproject}/{condition}_vs_control_{covariate}/GO_enrichment.csv",
+        go_dotplot = "results/deg/{bioproject}/{condition}_vs_control_{covariate}/GO_dotplot.pdf",
+        kegg = "results/deg/{bioproject}/{condition}_vs_control_{covariate}/KEGG_enrichment.csv",
+        kegg_dotplot = "results/deg/{bioproject}/{condition}_vs_control_{covariate}/KEGG_dotplot.pdf",
+        reactome = "results/deg/{bioproject}/{condition}_vs_control_{covariate}/Reactome_enrichment.csv",
+        reactome_dotplot = "results/deg/{bioproject}/{condition}_vs_control_{covariate}/Reactome_dotplot.pdf",
+        summary = "results/deg/{bioproject}/{condition}_vs_control_{covariate}/all_enrichments_summary.csv"
+    params:
+        padj = config["enrichment"]["padj"],
+        logfc = config["enrichment"]["logfc"]
+    threads: config["resources"]["medium"]["threads"]
+    resources:
+        mem_mb = config["resources"]["medium"]["mem_mb"]
+    log:
+        "logs/deg/{bioproject}/{condition}_vs_control_{covariate}_enrich.log"
+    shell:
+        """
+        Rscript workflow/scripts/enrich_gene_targets.R \
+            -i {input.filtered} \
+            -o results/deg/{wildcards.bioproject}/{wildcards.condition}_vs_control_{wildcards.covariate} \
+            --padj-threshold {params.padj} \
+            --logfc-threshold {params.logfc} > {log} 2>&1
+        """
+
+rule enrich_transcript_targets:
+    input:
+        filtered = "results/deg_tx/{bioproject}/{condition}_vs_control_{covariate}/deseq_results_filtered.csv"
+    output:
+        go = "results/deg_tx/{bioproject}/{condition}_vs_control_{covariate}/GO_enrichment.csv",
+        go_dotplot = "results/deg_tx/{bioproject}/{condition}_vs_control_{covariate}/GO_dotplot.pdf",
+        kegg = "results/deg_tx/{bioproject}/{condition}_vs_control_{covariate}/KEGG_enrichment.csv",
+        kegg_dotplot = "results/deg_tx/{bioproject}/{condition}_vs_control_{covariate}/KEGG_dotplot.pdf",
+        reactome = "results/deg_tx/{bioproject}/{condition}_vs_control_{covariate}/Reactome_enrichment.csv",
+        reactome_dotplot = "results/deg_tx/{bioproject}/{condition}_vs_control_{covariate}/Reactome_dotplot.pdf",
+        summary = "results/deg_tx/{bioproject}/{condition}_vs_control_{covariate}/all_enrichments_summary.csv"
+    params:
+        padj = config["enrichment"]["padj"],
+        logfc = config["enrichment"]["logfc"]
+    threads: config["resources"]["medium"]["threads"]
+    resources:
+        mem_mb = config["resources"]["medium"]["mem_mb"]
+    log:
+        "logs/deg_tx/{bioproject}/{condition}_vs_control_{covariate}_enrich.log"
+    shell:
+        """
+        Rscript workflow/scripts/enrich_gene_targets.R \
+            -i {input.filtered} \
+            -o results/deg_tx/{wildcards.bioproject}/{wildcards.condition}_vs_control_{wildcards.covariate} \
+            --padj-threshold {params.padj} \
+            --logfc-threshold {params.logfc} > {log} 2>&1
+        """
+
+rule deseq_summary_report_gene:
+    input:
+        filtered = "results/deg/{bioproject}/{condition}_vs_control_{covariate}/deseq_results_filtered.csv",
+        volcano = "results/deg/{bioproject}/{condition}_vs_control_{covariate}/deseq_results_volcano.pdf",
+        pca = "results/deg/{bioproject}/{condition}_vs_control_{covariate}/deseq_results_PCA.pdf",
+        heatmap = "results/deg/{bioproject}/{condition}_vs_control_{covariate}/deseq_results_heatmap.pdf",
+        go_dotplot = "results/deg/{bioproject}/{condition}_vs_control_{covariate}/GO_dotplot.pdf",
+        kegg_dotplot = "results/deg/{bioproject}/{condition}_vs_control_{covariate}/KEGG_dotplot.pdf",
+        reactome_dotplot = "results/deg/{bioproject}/{condition}_vs_control_{covariate}/Reactome_dotplot.pdf"
+    output:
+        html = "results/deg/{bioproject}/{condition}_vs_control_{covariate}/summary_report.html"
+    threads: config["resources"]["tiny"]["threads"]
+    resources:
+        mem_mb = config["resources"]["tiny"]["mem_mb"]
+    log:
+        "logs/deg/{bioproject}/{condition}_vs_control_{covariate}_summary_report.log"
+    shell:
+        """
+        Rscript workflow/scripts/summary_report.R \
+            -i {input.filtered} \
+            -o {output.html} \
+            --label gene > {log} 2>&1
+        """
+
+rule deseq_summary_report_transcript:
+    input:
+        filtered = "results/deg_tx/{bioproject}/{condition}_vs_control_{covariate}/deseq_results_filtered.csv",
+        volcano = "results/deg_tx/{bioproject}/{condition}_vs_control_{covariate}/deseq_results_volcano.pdf",
+        pca = "results/deg_tx/{bioproject}/{condition}_vs_control_{covariate}/deseq_results_PCA.pdf",
+        heatmap = "results/deg_tx/{bioproject}/{condition}_vs_control_{covariate}/deseq_results_heatmap.pdf",
+        go_dotplot = "results/deg_tx/{bioproject}/{condition}_vs_control_{covariate}/GO_dotplot.pdf",
+        kegg_dotplot = "results/deg_tx/{bioproject}/{condition}_vs_control_{covariate}/KEGG_dotplot.pdf",
+        reactome_dotplot = "results/deg_tx/{bioproject}/{condition}_vs_control_{covariate}/Reactome_dotplot.pdf"
+    output:
+        html = "results/deg_tx/{bioproject}/{condition}_vs_control_{covariate}/summary_report.html"
+    threads: config["resources"]["tiny"]["threads"]
+    resources:
+        mem_mb = config["resources"]["tiny"]["mem_mb"]
+    log:
+        "logs/deg_tx/{bioproject}/{condition}_vs_control_{covariate}_summary_report.log"
+    shell:
+        """
+        Rscript workflow/scripts/summary_report.R \
+            -i {input.filtered} \
+            -o {output.html} \
+            --label transcript > {log} 2>&1
+        """
+#         """
 ##        module load autoload profile/bioinf &&
 ##        module load autoload r/4.1.0--gcc--10.2.0-python--3.8.6 &&
-##        Rscript workflow/scripts/produce_DEG_with_enrichment.R \
-##        -p {input.i1} \
-##        -o results/deg/{wildcards.bioproject}/{wildcards.condition}_vs_control/ \
-##        -i {input.i2} \
-##        -v {wildcards.condition} \
-##        -n control \
-##        -m Homo_sapiens \
-##        -d org.Hs.eg.db
 ##        """
