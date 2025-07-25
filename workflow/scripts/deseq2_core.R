@@ -20,7 +20,7 @@ opt <- parse_args(OptionParser(option_list = option_list))
 
 # Load and preprocess data
 counts <- read.table(opt$counts, header = TRUE, row.names = 1, check.names = FALSE)
-counts <- counts[, 6:ncol(counts)]
+counts <- counts[, !(colnames(counts) %in% c("Chr", "Start", "End", "Strand", "Length"))]
 counts <- round(counts)
 colnames(counts) <- gsub("\\.bam$", "", basename(colnames(counts)))
 

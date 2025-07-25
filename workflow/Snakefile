@@ -268,7 +268,7 @@ def get_gtf_files(wildcards):
  #   print(gtf_files)
     return gtf_files
 
-# Write filtered metadata for DESeq2
+# Write full phenodata (unfiltered by time or condition)
 os.makedirs("results/deg", exist_ok=True)
 for bp in BIOPROJECTS:
     os.makedirs(f"results/deg/{bp}", exist_ok=True)
@@ -277,8 +277,8 @@ for bp in BIOPROJECTS:
                             [col for col in df.columns if col.startswith("covariate")]] \
                 .set_index("sample_name") \
                 .fillna("NA")
-
     phenodata.to_csv(f"results/deg/{bp}/phenodata.csv", sep=",")
+
 
 # Create triple list for DESeq2 contrasts (bioproject, condition != control, covariate1)
 bioproject_condition_covariate_triples = []
@@ -314,7 +314,7 @@ rule all:
         expand("results/assembly/{bioproject}/{accession}.gtf", zip, bioproject=df.bioproject, accession=df.run),
         expand("results/assembly/{bioproject}/{bioproject}_stringtie_merged.gtf", bioproject=df.bioproject),
         expand("results/quantified/{bioproject}/{accession}.gtf", zip, bioproject=df.bioproject, accession=df.run),
-        expand("results/deg_tx/{bioproject}/gene_count_matrix.csv", bioproject=df.bioproject),
+        expand("results/deg/{bioproject}/gene_count_matrix.csv", bioproject=df.bioproject),
         expand("results/deg_tx/{bioproject}/transcript_count_matrix.csv", bioproject=df.bioproject),
         expand("results/isoform_switches/{bioproject}/isoform_switch_summary.csv", bioproject=df.bioproject),
         expand("results/deg/{bioproject}/{condition}_vs_control_{covariate}/deseq_results.csv",
@@ -622,7 +622,7 @@ rule multiqc:
         "logs/multiqc/{bioproject}_multiqc.log"
     shell:
         """
-        multiqc {input} \
+        multiqc --force {input} \
         -o {params.dir} \
         -n {wildcards.bioproject}_multiqc_report.html
         """
@@ -704,17 +704,19 @@ rule build_count_matrices_merged:
                                         accession=df[df['bioproject'] == wildcards.bioproject]['run']),
         phenodata = "results/deg/{bioproject}/phenodata.csv"
     output:
-        gene_counts = "results/deg_tx/{bioproject}/gene_count_matrix.csv",
+        gene_counts = "results/deg/{bioproject}/gene_count_matrix.csv",
         transcript_counts = "results/deg_tx/{bioproject}/transcript_count_matrix.csv"
+    params:
+        gtfs_csv = lambda wildcards, input: ",".join(input.gtfs)
     threads: config["resources"]["medium"]["threads"]
     resources:
         mem_mb = config["resources"]["medium"]["mem_mb"]
     log:
-        "logs/counts_tx/{bioproject}.log"
+        "logs/counts/{bioproject}.log"
     shell:
         """
         Rscript workflow/scripts/generate_counts_from_gtfs.R \
-            --gtfs {input.gtfs} \
+            --gtfs {params.gtfs_csv} \
             --phenodata {input.phenodata} \
             --gene-output {output.gene_counts} \
             --transcript-output {output.transcript_counts} \
