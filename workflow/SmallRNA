@@ -30,7 +30,7 @@ sample_info = {
     for _, row in df.iterrows()
 }
 
-# Write filtered metadata for DESeq2
+# Write full phenodata (unfiltered by time or condition)
 os.makedirs("results/deg", exist_ok=True)
 for bp in BIOPROJECTS:
     os.makedirs(f"results/deg/{bp}", exist_ok=True)
@@ -39,7 +39,6 @@ for bp in BIOPROJECTS:
                             [col for col in df.columns if col.startswith("covariate")]] \
                 .set_index("sample_name") \
                 .fillna("NA")
-
     phenodata.to_csv(f"results/deg/{bp}/phenodata.csv", sep=",")
 
 # Create triple list for DESeq2 contrasts (bioproject, condition != control, covariate1)
