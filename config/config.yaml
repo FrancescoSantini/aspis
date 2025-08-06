@@ -62,6 +62,11 @@ deseq2_smallrna:
     default: 0.05
   logfc: 0.2
 
+# ---- Isoform Switch Analysis ----
+isoform_switch:
+  gene_expression_cutoff: 0.0
+  isoform_expression_cutoff: 0.0
+
 # ---- GO, KEGG, Reactome Analysis ----
 enrichment:
   padj: 0.05

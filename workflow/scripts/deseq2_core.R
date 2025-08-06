@@ -22,7 +22,7 @@ opt <- parse_args(OptionParser(option_list = option_list))
 counts <- read.table(opt$counts, header = TRUE, row.names = 1, check.names = FALSE)
 counts <- counts[, !(colnames(counts) %in% c("Chr", "Start", "End", "Strand", "Length"))]
 counts <- round(counts)
-colnames(counts) <- gsub("\\.bam$", "", basename(colnames(counts)))
+colnames(counts) <- gsub("_sorted$", "", gsub("\\.bam$", "", basename(colnames(counts))))
 
 coldata <- read.csv(opt$phenodata, row.names = 1, na.strings = c("NA", ""))
 coldata <- coldata[colnames(counts), , drop = FALSE]

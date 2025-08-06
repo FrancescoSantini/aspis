@@ -316,7 +316,12 @@ rule all:
         expand("results/quantified/{bioproject}/{accession}.gtf", zip, bioproject=df.bioproject, accession=df.run),
         expand("results/deg/{bioproject}/gene_count_matrix.csv", bioproject=df.bioproject),
         expand("results/deg_tx/{bioproject}/transcript_count_matrix.csv", bioproject=df.bioproject),
-        expand("results/isoform_switches/{bioproject}/isoform_switch_summary.csv", bioproject=df.bioproject),
+        expand("results/isoform_switches/{bioproject}/{condition}_vs_control_{covariate}/isoform_switch_summary.csv",
+            zip, bioproject=BIOPROJECTS_TRIPLE, condition=CONDITIONS_TRIPLE, covariate=COVARIATES_TRIPLE),
+        expand("results/isoform_switches/{bioproject}/{condition}_vs_control_{covariate}/isoform_switch_qc.pdf",
+            zip, bioproject=BIOPROJECTS_TRIPLE, condition=CONDITIONS_TRIPLE, covariate=COVARIATES_TRIPLE),
+        expand("results/isoform_switches/{bioproject}/{condition}_vs_control_{covariate}/switch_list.rds",
+            zip, bioproject=BIOPROJECTS_TRIPLE, condition=CONDITIONS_TRIPLE, covariate=COVARIATES_TRIPLE),
         expand("results/deg/{bioproject}/{condition}_vs_control_{covariate}/deseq_results.csv",
             zip, bioproject=BIOPROJECTS_TRIPLE, condition=CONDITIONS_TRIPLE, covariate=COVARIATES_TRIPLE),
         expand("results/deg/{bioproject}/{condition}_vs_control_{covariate}/deseq_results_filtered.csv",
@@ -729,20 +734,28 @@ rule isoform_switch:
         phenodata = "results/deg/{bioproject}/phenodata.csv",
         gtf = "results/assembly/{bioproject}/{bioproject}_stringtie_merged.gtf"
     output:
-        summary = "results/isoform_switches/{bioproject}/isoform_switch_summary.csv"
+        summary = "results/isoform_switches/{bioproject}/{condition}_vs_control_{covariate}/isoform_switch_summary.csv",
+        qc = "results/isoform_switches/{bioproject}/{condition}_vs_control_{covariate}/isoform_switch_qc.pdf",
+        rds = "results/isoform_switches/{bioproject}/{condition}_vs_control_{covariate}/switch_list.rds"
+    params:
+        gene_expr_cutoff = config["isoform_switch"]["gene_expression_cutoff"],
+        iso_expr_cutoff = config["isoform_switch"]["isoform_expression_cutoff"]
     threads: config["resources"]["xheavy"]["threads"]
     resources:
         mem_mb = config["resources"]["xheavy"]["mem_mb"]
     log:
-        "logs/isoform_switches/{bioproject}.log"
+        "logs/isoform_switches/{bioproject}/{condition}_vs_control_{covariate}.log"
     shell:
         """
         Rscript workflow/scripts/run_isoform_switch_analysis.R \
             --counts {input.transcripts} \
             --phenodata {input.phenodata} \
             --gtf {input.gtf} \
-            --outdir results/isoform_switches/{wildcards.bioproject} \
-            > {log} 2>&1
+            --outdir results/isoform_switches/{wildcards.bioproject}/{wildcards.condition}_vs_control_{wildcards.covariate} \
+            --gene-expr {params.gene_expr_cutoff} \
+            --isoform-expr {params.iso_expr_cutoff} \
+            --condition {wildcards.condition} \
+            --covariate {wildcards.covariate} > {log} 2>&1
         """
 
 rule deseq2_gene:
