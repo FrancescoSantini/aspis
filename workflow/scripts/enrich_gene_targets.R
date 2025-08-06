@@ -37,9 +37,21 @@ if (nrow(sig) == 0) {
 
 # Extract Ensembl or gene symbols
 gene_ids <- sig[[id_col]]
+gene_ids <- gsub("\\|.*", "", gene_ids)
 
-# Map gene identifiers to Entrez
-entrez <- bitr(gene_ids, fromType = "ENSEMBL", toType = "ENTREZID", OrgDb = org.Hs.eg.db)
+if (all(grepl("^ENST", gene_ids))) {
+  from_key <- "ENSEMBLTRANS"
+} else if (all(grepl("^ENSG", gene_ids))) {
+  from_key <- "ENSEMBL"
+} else if (all(grepl("^MSTRG", gene_ids))) {
+  cat("[INFO] Skipping enrichment: only MSTRG IDs detected.\n")
+  quit(save = "no", status = 0)
+} else {
+  from_key <- "ENSEMBL"  # fallback
+}
+
+entrez <- bitr(gene_ids, fromType = from_key, toType = "ENTREZID", OrgDb = org.Hs.eg.db)
+
 entrez_ids <- na.omit(entrez$ENTREZID)
 
 if (length(entrez_ids) == 0) {

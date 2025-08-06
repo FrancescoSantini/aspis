@@ -33,9 +33,12 @@ plot_logfc <- opt$logfc
 
 # ---- Load counts and metadata ----
 counts <- read.table(opt$counts, header = TRUE, row.names = 1, check.names = FALSE)
-counts <- counts[, 6:ncol(counts)]
+counts <- counts[, !(colnames(counts) %in% c("Chr", "Start", "End", "Strand", "Length"))]
 counts <- round(counts)
-colnames(counts) <- gsub("\\.bam$", "", basename(colnames(counts)))
+colnames(counts) <- gsub("_sorted$", "", gsub("\\.bam$", "", basename(colnames(counts))))
+
+cat("[DEBUG] Normalized colnames(counts):\n")
+print(colnames(counts))
 
 coldata <- read.csv(opt$metadata, row.names = 1)
 coldata <- coldata[colnames(counts), , drop = FALSE]
@@ -48,14 +51,20 @@ parts <- strsplit(contrast_folder, "_vs_control_")[[1]]
 
 if (length(parts) == 2) {
   condition_of_interest <- parts[1]
-  covariate_value <- parts[2]
+  covariate_value <- as.numeric(parts[2])
 
   cat(sprintf("[INFO] Subsetting to condition = %s and covariate1 = %s\n", condition_of_interest, covariate_value))
 
   coldata <- coldata[
     coldata$condition %in% c("control", condition_of_interest) &
-    coldata$covariate1 == covariate_value, , drop = FALSE
+    as.character(coldata$covariate1) == as.character(covariate_value), , drop = FALSE
   ]
+
+  cat("[DEBUG] Samples present in coldata (after filtering):\n")
+  print(rownames(coldata))
+
+  cat("[DEBUG] Samples present in counts BEFORE subsetting:\n")
+  print(colnames(counts))
 
   counts <- counts[, rownames(coldata)]
 } else {
@@ -64,6 +73,21 @@ if (length(parts) == 2) {
 
 cat("[INFO] Plotting PCA and heatmap for samples:\n")
 print(rownames(coldata))
+
+cat("[DEBUG] Summary of condition values:\n")
+print(table(coldata$condition))
+
+cat("[DEBUG] Unique values in covariate1:\n")
+print(unique(coldata$covariate1))
+
+cat("[DEBUG] Number of rows in coldata after filtering:\n")
+print(nrow(coldata))
+
+cat("[DEBUG] colnames(counts):\n")
+print(colnames(counts))
+
+cat("[DEBUG] Do all coldata rownames match colnames(counts)?\n")
+print(all(rownames(coldata) == colnames(counts)))
 
 # ---- Process covariate1 (e.g., time) as numeric
 has_time <- FALSE
@@ -78,6 +102,18 @@ if ("covariate1" %in% colnames(coldata)) {
                                 labels = paste0(sort(unique(coldata$time_numeric)), "h"))
   }
 }
+# --- DEBUG: Verify sample/condition alignment
+cat("[DEBUG] unique conditions:\n")
+print(unique(coldata$condition))
+
+cat("[DEBUG] rownames(coldata):\n")
+print(rownames(coldata))
+
+cat("[DEBUG] colnames(counts):\n")
+print(colnames(counts))
+
+cat("[DEBUG] Are rownames(coldata) identical to colnames(counts)?\n")
+print(all(rownames(coldata) == colnames(counts)))
 
 # ---- VST transformation
 dds <- DESeqDataSetFromMatrix(countData = counts, colData = coldata, design = ~ condition)
