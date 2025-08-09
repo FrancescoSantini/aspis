@@ -64,8 +64,13 @@ deseq2_smallrna:
 
 # ---- Isoform Switch Analysis ----
 isoform_switch:
-  gene_expression_cutoff: 0.0
-  isoform_expression_cutoff: 0.0
+  # --- Pre-filtering thresholds (used before testing) ---
+  gene_expression_cutoff: 1.0         # Minimum average gene expression (CPM) to retain the gene
+  isoform_expression_cutoff: 1.0      # Minimum average isoform expression (CPM) to retain the isoform
+  # --- Post-analysis filtering (after statistical testing) ---
+  padj_cutoff: 0.1                    # Maximum adjusted p-value to consider switch significant (liberal for exploration)
+  dIF_cutoff: 0.1                     # Minimum absolute change in Isoform Fraction (|dIF|) to count as biologically relevant
+  max_genes_to_plot: 30              # Maximum number of significant switching genes to include in the output plot PDF
 
 # ---- GO, KEGG, Reactome Analysis ----
 enrichment:

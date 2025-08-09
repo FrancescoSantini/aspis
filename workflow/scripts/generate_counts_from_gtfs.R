@@ -42,6 +42,7 @@ parse_gtf <- function(gtf_file) {
   colnames(gtf) <- c("chr", "source", "feature", "start", "end", "score", "strand", "frame", "attribute")
   attr <- gtf$attribute
 
+  # Extract attributes
   tx_id   <- str_match(attr, 'transcript_id "([^"]+)"')[,2]
   g_id    <- str_match(attr, 'gene_id "([^"]+)"')[,2]
   g_name  <- str_match(attr, 'ref_gene_name "([^"]+)"')[,2]
@@ -53,8 +54,11 @@ parse_gtf <- function(gtf_file) {
   tx_id <- tx_id[valid]; g_id <- g_id[valid]; g_name <- g_name[valid]; cov <- cov[valid]
 
   len <- gtf$end - gtf$start + 1
+
+  gene_key <- ifelse(is.na(g_name) | g_name == "", g_id, paste0(g_id, "|", g_name))
+
+  cov[is.na(cov)] <- 0
   counts <- ceiling(cov * len / 75)
-  gene_key <- ifelse(g_name != "", paste0(g_id, "|", g_name), g_id)
 
   tibble(
     sample = sample_bam_path,
@@ -73,8 +77,7 @@ parsed_dfs <- parsed_dfs[!sapply(parsed_dfs, is.null)]
 all_data <- bind_rows(parsed_dfs)
 
 # --- Remove rows with NA gene or transcript identifiers ---
-all_data <- all_data %>%
-  filter(!is.na(gene), !is.na(transcript))
+all_data <- all_data %>% filter(!is.na(gene), !is.na(transcript))
 
 # --- Gene matrix ---
 gene_subset <- all_data %>%
