@@ -231,6 +231,7 @@ def get_multiqc_input(wildcards):
             # Add sorted BAM files
             multiqc_input += [
                 f"results/sorted/{bioproject}/{accession}_sorted.bam",
+                f"results/qc/flagstat/{bioproject}/{accession}_sorted.flagstat.txt"
             ]
         else:
             # Handle user-provided personal/local samples
@@ -255,6 +256,7 @@ def get_multiqc_input(wildcards):
             # Add sorted BAM files
             multiqc_input += [
                 f"results/sorted/{bioproject}/{accession}_sorted.bam",
+                f"results/qc/flagstat/{bioproject}/{accession}_sorted.flagstat.txt"
             ]
 
     return multiqc_input
@@ -310,6 +312,7 @@ rule all:
         trimmed_output_se,
         "genome/hisat2_index/genome.1.ht2",
         expand("results/sorted/{bioproject}/{accession}_sorted.bam", zip, bioproject=df.bioproject, accession=df.run),
+        expand("results/qc/flagstat/{bioproject}/{accession}_sorted.flagstat.txt", zip, bioproject=df.bioproject, accession=df.run),
         expand("results/qc/{bioproject}_multiqc_report.html", bioproject=df.bioproject),
         expand("results/assembly/{bioproject}/{accession}.gtf", zip, bioproject=df.bioproject, accession=df.run),
         expand("results/assembly/{bioproject}/{bioproject}_stringtie_merged.gtf", bioproject=df.bioproject),
@@ -321,6 +324,18 @@ rule all:
         expand("results/isoform_switches/{bioproject}/{condition}_vs_control_{covariate}/isoform_switch_qc.pdf",
             zip, bioproject=BIOPROJECTS_TRIPLE, condition=CONDITIONS_TRIPLE, covariate=COVARIATES_TRIPLE),
         expand("results/isoform_switches/{bioproject}/{condition}_vs_control_{covariate}/switch_list.rds",
+            zip, bioproject=BIOPROJECTS_TRIPLE, condition=CONDITIONS_TRIPLE, covariate=COVARIATES_TRIPLE),
+        expand("results/isoform_switches/{bioproject}/{condition}_vs_control_{covariate}/switch_consequences_summary.csv",
+            zip, bioproject=BIOPROJECTS_TRIPLE, condition=CONDITIONS_TRIPLE, covariate=COVARIATES_TRIPLE),
+        expand("results/isoform_switches/{bioproject}/{condition}_vs_control_{covariate}/expression_summary.txt",
+            zip, bioproject=BIOPROJECTS_TRIPLE, condition=CONDITIONS_TRIPLE, covariate=COVARIATES_TRIPLE),        
+        expand("results/isoform_switches/{bioproject}/{condition}_vs_control_{covariate}/isoform_switch_detailed.csv",
+            zip, bioproject=BIOPROJECTS_TRIPLE, condition=CONDITIONS_TRIPLE, covariate=COVARIATES_TRIPLE),
+        expand("results/isoform_switches/{bioproject}/{condition}_vs_control_{covariate}/dif_distribution.pdf",
+            zip, bioproject=BIOPROJECTS_TRIPLE, condition=CONDITIONS_TRIPLE, covariate=COVARIATES_TRIPLE),
+        expand("results/isoform_switches/{bioproject}/{condition}_vs_control_{covariate}/isoformSwitchAnalyzeR_nt.fasta",
+            zip, bioproject=BIOPROJECTS_TRIPLE, condition=CONDITIONS_TRIPLE, covariate=COVARIATES_TRIPLE),
+        expand("results/isoform_switches/{bioproject}/{condition}_vs_control_{covariate}/isoformSwitchAnalyzeR_AA.fasta",
             zip, bioproject=BIOPROJECTS_TRIPLE, condition=CONDITIONS_TRIPLE, covariate=COVARIATES_TRIPLE),
         expand("results/deg/{bioproject}/{condition}_vs_control_{covariate}/deseq_results.csv",
             zip, bioproject=BIOPROJECTS_TRIPLE, condition=CONDITIONS_TRIPLE, covariate=COVARIATES_TRIPLE),
@@ -613,6 +628,21 @@ rule samtools_sort:
         samtools sort -@ {threads} {input} -o {output} > {log} 2>&1
         """
 
+rule samtools_flagstat:
+    input:
+        bam = "results/sorted/{bioproject}/{accession}_sorted.bam"
+    output:
+        txt = "results/qc/flagstat/{bioproject}/{accession}_sorted.flagstat.txt"
+    threads: config["resources"]["tiny"]["threads"]
+    resources:
+        mem_mb = config["resources"]["tiny"]["mem_mb"]
+    log:
+        "logs/flagstat/{bioproject}/{accession}.log"
+    shell:
+        """
+        samtools flagstat {input.bam} > {output.txt} 2> {log}
+        """
+
 rule multiqc:
     input:
         get_multiqc_input
@@ -732,14 +762,23 @@ rule isoform_switch:
     input:
         transcripts = "results/deg_tx/{bioproject}/transcript_count_matrix.csv",
         phenodata = "results/deg/{bioproject}/phenodata.csv",
-        gtf = "results/assembly/{bioproject}/{bioproject}_stringtie_merged.gtf"
+        gtf = "results/assembly/{bioproject}/{bioproject}_stringtie_merged.gtf",
     output:
         summary = "results/isoform_switches/{bioproject}/{condition}_vs_control_{covariate}/isoform_switch_summary.csv",
         qc = "results/isoform_switches/{bioproject}/{condition}_vs_control_{covariate}/isoform_switch_qc.pdf",
-        rds = "results/isoform_switches/{bioproject}/{condition}_vs_control_{covariate}/switch_list.rds"
+        rds = "results/isoform_switches/{bioproject}/{condition}_vs_control_{covariate}/switch_list.rds",
+        consequences = "results/isoform_switches/{bioproject}/{condition}_vs_control_{covariate}/switch_consequences_summary.csv",
+        expr_debug = "results/isoform_switches/{bioproject}/{condition}_vs_control_{covariate}/expression_summary.txt",
+        detailed = "results/isoform_switches/{bioproject}/{condition}_vs_control_{covariate}/isoform_switch_detailed.csv",
+        dif_dist = "results/isoform_switches/{bioproject}/{condition}_vs_control_{covariate}/dif_distribution.pdf",
+        nt_fasta = "results/isoform_switches/{bioproject}/{condition}_vs_control_{covariate}/isoformSwitchAnalyzeR_nt.fasta",
+        aa_fasta = "results/isoform_switches/{bioproject}/{condition}_vs_control_{covariate}/isoformSwitchAnalyzeR_AA.fasta"
     params:
         gene_expr_cutoff = config["isoform_switch"]["gene_expression_cutoff"],
-        iso_expr_cutoff = config["isoform_switch"]["isoform_expression_cutoff"]
+        iso_expr_cutoff = config["isoform_switch"]["isoform_expression_cutoff"],
+        padj_cutoff = config["isoform_switch"]["padj_cutoff"],
+        dIF_cutoff = config["isoform_switch"]["dIF_cutoff"],
+        max_genes_to_plot = config["isoform_switch"]["max_genes_to_plot"]
     threads: config["resources"]["xheavy"]["threads"]
     resources:
         mem_mb = config["resources"]["xheavy"]["mem_mb"]
@@ -755,7 +794,10 @@ rule isoform_switch:
             --gene-expr {params.gene_expr_cutoff} \
             --isoform-expr {params.iso_expr_cutoff} \
             --condition {wildcards.condition} \
-            --covariate {wildcards.covariate} > {log} 2>&1
+            --covariate {wildcards.covariate} \
+            --padj {params.padj_cutoff} \
+            --dIF {params.dIF_cutoff} \
+            --max_genes {params.max_genes_to_plot} > {log} 2>&1
         """
 
 rule deseq2_gene:
