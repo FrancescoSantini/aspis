@@ -678,8 +678,7 @@ rule stringtie:
         """
         stringtie {input.bam} \
         -G {input.annotation} \
-        -o {output} \
-        -e
+        -o {output}
         """
 ##        """
 ##        module load autoload profile/bioinf && \
