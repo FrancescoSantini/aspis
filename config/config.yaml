@@ -82,7 +82,7 @@ enrichment_mirna:
 
 # ---- Plotting ----
 plotting:
-  topn: 30
+  topn: 60
 
 # ---- Additional resource mods ---
 RESOURCEMOD:

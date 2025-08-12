@@ -16,7 +16,9 @@ option_list <- list(
   make_option(c("--gtfs"), type = "character", help = "Comma-separated list of GTF files"),
   make_option(c("--phenodata"), type = "character", help = "Phenodata CSV with sample names"),
   make_option(c("--gene-output"), type = "character", help = "Path to write gene count matrix"),
-  make_option(c("--transcript-output"), type = "character", help = "Path to write transcript count matrix")
+  make_option(c("--transcript-output"), type = "character", help = "Path to write transcript count matrix"),
+  make_option(c("--metadata-output"), type = "character", help = "Path to write transcript metadata CSV"),
+  make_option(c("--tmap"), type = "character", default = NULL, help = "Optional .tmap file from gffcompare")
 )
 opt <- parse_args(OptionParser(option_list = option_list))
 
@@ -26,7 +28,7 @@ sample_names <- rownames(read.csv(opt$phenodata, row.names = 1))
 
 # --- Parse GTFs (in parallel) ---
 gtf_paths <- strsplit(opt$gtfs, ",")[[1]]
-plan(multisession, workers = max(1, availableCores() - 1))  # parallel setup
+plan(multisession, workers = max(1, availableCores() - 1))
 
 parse_gtf <- function(gtf_file) {
   sample_id <- sub(".*/([^/]+)\\.gtf$", "\\1", gtf_file)
@@ -43,10 +45,17 @@ parse_gtf <- function(gtf_file) {
   attr <- gtf$attribute
 
   # Extract attributes
-  tx_id   <- str_match(attr, 'transcript_id "([^"]+)"')[,2]
-  g_id    <- str_match(attr, 'gene_id "([^"]+)"')[,2]
-  g_name  <- str_match(attr, 'ref_gene_name "([^"]+)"')[,2]
-  cov     <- as.numeric(str_match(attr, 'cov "([^"]+)"')[,2])
+  tx_id     <- str_match(attr, 'transcript_id "([^"]+)"')[,2]
+  g_id      <- str_match(attr, 'gene_id "([^"]+)"')[,2]
+  ref_g_id  <- str_match(attr, 'ref_gene_id "([^"]+)"')[,2]
+  g_name    <- str_match(attr, 'ref_gene_name "([^"]+)"')[,2]
+  cov       <- as.numeric(str_match(attr, 'cov "([^"]+)"')[,2])
+
+  # Replace gene_id with ref_gene_id when available
+  g_id <- ifelse(!is.na(ref_g_id), ref_g_id, g_id)
+
+  # Fallback for missing gene_name: use ref_gene_id
+  g_name <- ifelse(is.na(g_name) | g_name == "", ref_g_id, g_name)
 
   # Filter valid rows
   valid <- !is.na(tx_id) & !is.na(g_id) & !is.na(cov)
@@ -54,10 +63,9 @@ parse_gtf <- function(gtf_file) {
   tx_id <- tx_id[valid]; g_id <- g_id[valid]; g_name <- g_name[valid]; cov <- cov[valid]
 
   len <- gtf$end - gtf$start + 1
+  cov[is.na(cov)] <- 0
 
   gene_key <- ifelse(is.na(g_name) | g_name == "", g_id, paste0(g_id, "|", g_name))
-
-  cov[is.na(cov)] <- 0
   counts <- ceiling(cov * len / 75)
 
   tibble(
@@ -132,3 +140,30 @@ write_tsv(tx_matrix, opt$`transcript-output`)
 
 cat(sprintf("[INFO] Written %d genes to %s\n", nrow(gene_matrix), opt$`gene-output`))
 cat(sprintf("[INFO] Written %d transcripts to %s\n", nrow(tx_matrix), opt$`transcript-output`))
+
+# --- Transcript metadata (transcript_id, gene_id, gene_name) ---
+tx_meta <- all_data %>%
+  select(transcript_id = transcript, gene = gene) %>%
+  mutate(
+    gene_name = ifelse(grepl("\\|", gene), sub(".*\\|", "", gene), NA),
+    gene_id = sub("\\|.*", "", gene)
+  ) %>%
+  distinct(transcript_id, gene_id, gene_name)
+
+# --- Optional: Join class_code from .tmap ---
+if (!is.null(opt$tmap) && file.exists(opt$tmap)) {
+  cat(sprintf("[INFO] Reading .tmap: %s\n", opt$tmap))
+  tmap <- read_tsv(opt$tmap, comment = "#", col_types = cols())
+  if ("q_id" %in% names(tmap) && "class_code" %in% names(tmap)) {
+    tx_meta <- left_join(tx_meta, tmap[, c("q_id", "class_code")], by = c("transcript_id" = "q_id"))
+    tx_meta <- tx_meta %>% filter(!(class_code %in% c("u", "i", "x")))
+    cat(sprintf("[INFO] Filtered to %d transcripts after class_code cleanup\n", nrow(tx_meta)))
+  } else {
+    cat("[WARN] .tmap file found but missing expected columns — skipping class_code join\n")
+  }
+} else {
+  cat("[INFO] No .tmap file provided or found — skipping class_code filtering\n")
+}
+
+write_csv(tx_meta, opt$`metadata-output`)
+cat(sprintf("[INFO] Written %d transcript annotations to %s\n", nrow(tx_meta), opt$`metadata-output`))
