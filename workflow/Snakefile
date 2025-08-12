@@ -316,9 +316,13 @@ rule all:
         expand("results/qc/{bioproject}_multiqc_report.html", bioproject=df.bioproject),
         expand("results/assembly/{bioproject}/{accession}.gtf", zip, bioproject=df.bioproject, accession=df.run),
         expand("results/assembly/{bioproject}/{bioproject}_stringtie_merged.gtf", bioproject=df.bioproject),
+        expand("results/assembly/{bioproject}/gffcompare/{bioproject}.annotated.gtf", bioproject=df.bioproject),
+        expand("results/assembly/{bioproject}/gffcompare/{bioproject}.annotated.clean.gtf", bioproject=df.bioproject),
+        expand("results/assembly/{bioproject}/gffcompare/{bioproject}.tracking", bioproject=df.bioproject),
         expand("results/quantified/{bioproject}/{accession}.gtf", zip, bioproject=df.bioproject, accession=df.run),
         expand("results/deg/{bioproject}/gene_count_matrix.csv", bioproject=df.bioproject),
         expand("results/deg_tx/{bioproject}/transcript_count_matrix.csv", bioproject=df.bioproject),
+        expand("results/deg_tx/{bioproject}/transcript_metadata.csv", bioproject=df.bioproject),
         expand("results/isoform_switches/{bioproject}/{condition}_vs_control_{covariate}/isoform_switch_summary.csv",
             zip, bioproject=BIOPROJECTS_TRIPLE, condition=CONDITIONS_TRIPLE, covariate=COVARIATES_TRIPLE),
         expand("results/isoform_switches/{bioproject}/{condition}_vs_control_{covariate}/isoform_switch_qc.pdf",
@@ -711,11 +715,52 @@ rule merge:
 ##        module load illumina_genome_Homo_sapiens/hg38 && \
 ##        """
 
+rule gffcompare_annotate:
+    input:
+        merged_gtf = "results/assembly/{bioproject}/{bioproject}_stringtie_merged.gtf",
+        reference = config["reference_annotation"]
+    output:
+        annotated_gtf_raw = "results/assembly/{bioproject}/gffcompare/{bioproject}.annotated.gtf",
+        tracking = "results/assembly/{bioproject}/gffcompare/{bioproject}.tracking"
+    threads: config["resources"]["tiny"]["threads"]
+    resources:
+        mem_mb = config["resources"]["tiny"]["mem_mb"]
+    log:
+        "logs/assembly/{bioproject}/{bioproject}_gffcompare.log"
+    shell:
+        """
+        gffcompare \
+          -r {input.reference} \
+          -o results/assembly/{wildcards.bioproject}/gffcompare/{wildcards.bioproject} \
+          {input.merged_gtf} > {log} 2>&1
+        mv results/assembly/{wildcards.bioproject}/{wildcards.bioproject}.{wildcards.bioproject}_stringtie_merged.gtf.tmap \
+           results/assembly/{wildcards.bioproject}/gffcompare/{wildcards.bioproject}_stringtie_merged.gtf.tmap || true
+        mv results/assembly/{wildcards.bioproject}/{wildcards.bioproject}.{wildcards.bioproject}_stringtie_merged.gtf.refmap \
+           results/assembly/{wildcards.bioproject}/gffcompare/{wildcards.bioproject}_stringtie_merged.gtf.refmap || true
+        """
+
+rule gffcompare_clean_annotated:
+    input:
+        raw = "results/assembly/{bioproject}/gffcompare/{bioproject}.annotated.gtf"
+    output:
+        cleaned = "results/assembly/{bioproject}/gffcompare/{bioproject}.annotated.clean.gtf"
+    threads: config["resources"]["tiny"]["threads"]
+    resources:
+        mem_mb = config["resources"]["tiny"]["mem_mb"]
+    log:
+        "logs/assembly/{bioproject}/{bioproject}_clean_annotated.log"
+    shell:
+        """
+        Rscript workflow/scripts/clean_annotated_gtf.R \
+            --input {input.raw} \
+            --output {output.cleaned} > {log} 2>&1
+        """
+
 # This rule is needed for isoform-level DE
 rule stringtie_with_merged:
     input:
         bam = "results/sorted/{bioproject}/{accession}_sorted.bam",
-        merged_gtf = "results/assembly/{bioproject}/{bioproject}_stringtie_merged.gtf"
+        merged_gtf = "results/assembly/{bioproject}/gffcompare/{bioproject}.annotated.gtf"
     output:
         gtf = "results/quantified/{bioproject}/{accession}.gtf"
     threads: config["resources"]["medium"]["threads"]
@@ -739,14 +784,16 @@ rule build_count_matrices_merged:
         phenodata = "results/deg/{bioproject}/phenodata.csv"
     output:
         gene_counts = "results/deg/{bioproject}/gene_count_matrix.csv",
-        transcript_counts = "results/deg_tx/{bioproject}/transcript_count_matrix.csv"
+        transcript_counts = "results/deg_tx/{bioproject}/transcript_count_matrix.csv",
+        transcript_metadata = "results/deg_tx/{bioproject}/transcript_metadata.csv"
     params:
-        gtfs_csv = lambda wildcards, input: ",".join(input.gtfs)
+        gtfs_csv = lambda wildcards, input: ",".join(input.gtfs),
+        tmap_path = lambda wildcards: f"results/assembly/{wildcards.bioproject}/gffcompare/{wildcards.bioproject}.tmap"
     threads: config["resources"]["medium"]["threads"]
     resources:
-        mem_mb = config["resources"]["medium"]["mem_mb"]
+        mem_mb = config["resources"]["xheavy"]["mem_mb"]
     log:
-        "logs/counts/{bioproject}.log"
+        "logs/counts/{bioproject}.log" 
     shell:
         """
         Rscript workflow/scripts/generate_counts_from_gtfs.R \
@@ -754,6 +801,8 @@ rule build_count_matrices_merged:
             --phenodata {input.phenodata} \
             --gene-output {output.gene_counts} \
             --transcript-output {output.transcript_counts} \
+            --metadata-output {output.transcript_metadata} \
+            --tmap {params.tmap_path} \
             > {log} 2>&1
         """
 
@@ -761,7 +810,7 @@ rule isoform_switch:
     input:
         transcripts = "results/deg_tx/{bioproject}/transcript_count_matrix.csv",
         phenodata = "results/deg/{bioproject}/phenodata.csv",
-        gtf = "results/assembly/{bioproject}/{bioproject}_stringtie_merged.gtf",
+        gtf = "results/assembly/{bioproject}/gffcompare/{bioproject}.annotated.gtf"
     output:
         summary = "results/isoform_switches/{bioproject}/{condition}_vs_control_{covariate}/isoform_switch_summary.csv",
         qc = "results/isoform_switches/{bioproject}/{condition}_vs_control_{covariate}/isoform_switch_qc.pdf",
@@ -870,7 +919,9 @@ rule plot_deseq2_gene:
         vst = "results/deg/{bioproject}/{condition}_vs_control_{covariate}/deseq_results_vst.csv"
     params:
         padj = config["deseq2_gene"]["padj"],
-        logfc = config["deseq2_gene"]["logfc"]
+        logfc = config["deseq2_gene"]["logfc"],
+        topn = config["plotting"]["topn"],
+        annotate = False
     threads: config["resources"]["medium"]["threads"]
     resources:
         mem_mb = config["resources"]["medium"]["mem_mb"]
@@ -886,7 +937,8 @@ rule plot_deseq2_gene:
             -o results/deg/{wildcards.bioproject}/{wildcards.condition}_vs_control_{wildcards.covariate} \
             --padj {params.padj} \
             --logfc {params.logfc} \
-            --label "genes" > {log} 2>&1
+            --topn {params.topn} \
+            --label "assembled loci" > {log} 2>&1
         """
 
 rule plot_deseq2_transcript:
@@ -894,7 +946,8 @@ rule plot_deseq2_transcript:
         csv = "results/deg_tx/{bioproject}/{condition}_vs_control_{covariate}/deseq_results.csv",
         filtered = "results/deg_tx/{bioproject}/{condition}_vs_control_{covariate}/deseq_results_filtered.csv",
         counts = "results/deg_tx/{bioproject}/transcript_count_matrix.csv",
-        metadata = "results/deg/{bioproject}/phenodata.csv"
+        metadata = "results/deg/{bioproject}/phenodata.csv",
+        annotate = "results/deg_tx/{bioproject}/transcript_metadata.csv"
     output:
         volcano = "results/deg_tx/{bioproject}/{condition}_vs_control_{covariate}/deseq_results_volcano.pdf",
         pca = "results/deg_tx/{bioproject}/{condition}_vs_control_{covariate}/deseq_results_PCA.pdf",
@@ -902,7 +955,8 @@ rule plot_deseq2_transcript:
         vst = "results/deg_tx/{bioproject}/{condition}_vs_control_{covariate}/deseq_results_vst.csv"
     params:
         padj = config["deseq2_transcript"]["padj"],
-        logfc = config["deseq2_transcript"]["logfc"]
+        logfc = config["deseq2_transcript"]["logfc"],
+        topn = config["plotting"]["topn"]
     threads: config["resources"]["medium"]["threads"]
     resources:
         mem_mb = config["resources"]["medium"]["mem_mb"]
@@ -918,6 +972,8 @@ rule plot_deseq2_transcript:
             -o results/deg_tx/{wildcards.bioproject}/{wildcards.condition}_vs_control_{wildcards.covariate} \
             --padj {params.padj} \
             --logfc {params.logfc} \
+            --topn {params.topn} \
+            --annotate {input.annotate} \
             --label "transcripts" > {log} 2>&1
         """
 
