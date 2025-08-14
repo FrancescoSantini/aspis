@@ -9,6 +9,7 @@ suppressPackageStartupMessages({
   library(dplyr)
   library(grid)
   library(gridExtra)
+  library(ggplot2)
 })
 
 # --- CLI parsing ---
@@ -28,6 +29,11 @@ option_list <- list(
 
 opt <- parse_args(OptionParser(option_list = option_list))
 dir.create(opt$outdir, recursive = TRUE, showWarnings = FALSE)
+
+# ---- thresholds used throughout plotting/selection ----
+padj_cutoff      <- opt$padj
+dIF_cutoff       <- opt$dIF
+max_genes_to_plot <- opt$max_genes
 
 cat("[DEBUG] IsoformSwitchAnalyzeR version: ", as.character(packageVersion("IsoformSwitchAnalyzeR")), "\n")
 
@@ -83,6 +89,28 @@ switchList <- importRdata(
   ignoreAfterBar = FALSE,
   showProgress = TRUE
 )
+
+if (all(is.na(switchList$isoformFeatures$gene_name))) {
+  cat("[INFO] gene_name missing in import — recovering from GTF directly\n")
+
+  gtf <- rtracklayer::import(opt$gtf)
+  gtf_df <- as.data.frame(gtf)
+  gtf_tx <- gtf_df[gtf_df$type == "transcript", ]
+  tx2name <- gtf_tx[, c("transcript_id", "gene_name")]
+  tx2name <- tx2name[!is.na(tx2name$gene_name), ]
+
+  matched_names <- tx2name$gene_name[match(
+    switchList$isoformFeatures$isoform_id,
+    tx2name$transcript_id
+  )]
+  switchList$isoformFeatures$gene_name <- matched_names
+}
+
+cat("[DEBUG] Top 5 gene_id values in switchAnalyzeRlist:\n")
+print(head(switchList$isoformFeatures$gene_id, 5))
+
+cat("[DEBUG] Top 5 gene_name values:\n")
+print(head(switchList$isoformFeatures$gene_name, 5))
 
 # --- Manual expression estimation ---
 cat("[INFO] Estimating expression manually...\n")
@@ -169,10 +197,64 @@ switchListTested <- analyzeSwitchConsequences(
 )
 cat("[INFO] Consequence analysis complete.\n")
 
-# --- Output summary table ---
+# --- Output comparison summary (unchanged) ---
 summary_path <- file.path(opt$outdir, "isoform_switch_summary.csv")
 summary_df <- extractSwitchSummary(switchListTested)
 write.csv(summary_df, summary_path, row.names = FALSE)
+
+# --- Build 'joined' isoform-level table (analysis + gene names) ---
+joined <- left_join(
+  switchListTested$isoformSwitchAnalysis,
+  switchListTested$isoformFeatures[, c("isoform_id", "gene_id", "gene_name")],
+  by = "isoform_id"
+)
+
+# --- Long-format consequences (isoform, direction, consequence), then COLLAPSE ---
+conseq_df <- switchListTested$switchConsequence
+if (!is.data.frame(conseq_df) ||
+    !all(c("isoformUpregulated","isoformDownregulated","switchConsequence") %in% names(conseq_df))) {
+  cat("[WARN] switchConsequence lacked expected columns; writing NA-only consequences.\n")
+  collapsed_conseq <- tibble(isoform_id = character(), direction = character(), consequence = character())
+} else {
+  up_conseq <- conseq_df %>%
+    filter(!is.na(isoformUpregulated)) %>%
+    transmute(isoform_id = isoformUpregulated,
+              direction = "up",
+              consequence = switchConsequence)
+
+  down_conseq <- conseq_df %>%
+    filter(!is.na(isoformDownregulated)) %>%
+    transmute(isoform_id = isoformDownregulated,
+              direction = "down",
+              consequence = switchConsequence)
+
+  conseq_long <- bind_rows(up_conseq, down_conseq)
+
+  # collapse: per (isoform_id, direction), keep unique non-NA consequences; drop lone NA duplicates
+  collapsed_conseq <- conseq_long %>%
+    mutate(consequence = ifelse(is.na(consequence) | consequence == "", NA_character_, consequence)) %>%
+    group_by(isoform_id, direction) %>%
+    summarise(
+      consequence = {
+        uniq <- sort(unique(na.omit(consequence)))
+        if (length(uniq) == 0) NA_character_ else paste(uniq, collapse = "; ")
+      },
+      .groups = "drop"
+    )
+}
+
+# --- Write out detailed and COLLAPSED CSVs for downstream sanity checks ---
+detail_path      <- file.path(opt$outdir, "isoform_switch_detailed.csv")
+detail_collapsed <- file.path(opt$outdir, "isoform_switch_detailed_collapsed.csv")
+
+# detailed with one row per (isoform_id, direction) after collapsing consequences
+joined_collapsed <- joined %>%
+  # Attach both 'up' and 'down' (may create up to 2 rows per isoform)
+  left_join(collapsed_conseq, by = "isoform_id")
+
+write.csv(joined,            detail_path,      row.names = FALSE)
+write.csv(joined_collapsed,  detail_collapsed, row.names = FALSE)
+cat("[INFO] Wrote detailed tables:\n  - ", detail_path, "\n  - ", detail_collapsed, "\n", sep = "")
 
 cat("[DEBUG] Columns in extractSwitchSummary:\n")
 print(colnames(summary_df))
@@ -200,15 +282,16 @@ if (!"dIF" %in% colnames(difs)) {
   pdf(dif_plot_path)
   print(
     ggplot(difs, aes(x = dIF)) +
-      geom_histogram(bins = 30, fill = "steelblue", color = "black") +
+      geom_histogram(bins = 30, fill = "steelblue", color = "black", size = 0.25) +
       theme_minimal() +
       labs(
         title = "Distribution of dIF values",
-        x = "dIF (delta Isoform Fraction)",
+        x = "dIF (Delta Isoform Fraction)",
         y = "Count"
       )
   )
   dev.off()
+
   cat("[INFO] dIF distribution plot saved.\n")
 }
 
@@ -259,19 +342,19 @@ if (length(top_genes) == 0) {
   title("Top Isoform Switches by dIF", cex.main = 1.8, line = -1)
   mtext(paste("Comparison:", opt$condition, "vs control"), side = 3, line = 2, cex = 1.2)
   mtext(paste("Samples:", length(unique(pheno$sampleID)), 
-              "— Genes analyzed:", length(unique(switchListTested$isoformFeatures$gene_id))), 
+              "- Genes analyzed:", length(unique(switchListTested$isoformFeatures$gene_id))), 
         side = 3, line = 3, cex = 1)
   mtext(paste("Cutoffs - Gene expr:", opt$`gene-expr`, ", Isoform expr:", opt$`isoform-expr`), 
         side = 3, line = 4, cex = 1)
   mtext(paste("Switch thresholds - padj <", opt$padj, 
             ", |dIF| >=", opt$dIF, 
-            ", max genes:", opt$`max-genes`), 
+            ", max genes:", opt$max_genes), 
       side = 3, line = 5, cex = 1)
 
   hist(switchListTested$isoformSwitchAnalysis$dIF,
        main = "Distribution of dIF Values",
        xlab = "dIF (Delta Isoform Fraction)",
-       col = "steelblue", border = "white", breaks = 30)
+       col = "steelblue", border = "black", breaks = 30)
 
   par(mfrow = c(1, 1))  # Reset layout
 
@@ -289,22 +372,26 @@ if (length(top_genes) == 0) {
     if (!is.null(p)) {
       print(p)
 
+      # isoforms for this gene
       iso_ids <- switchListTested$isoformFeatures %>%
         filter(gene_id == g) %>%
         pull(isoform_id)
 
+      # base table: one row per isoform in the gene
       tab <- switchListTested$isoformSwitchAnalysis %>%
         filter(isoform_id %in% iso_ids) %>%
         select(isoform_id, dIF, padj) %>%
         mutate(
-          dIF = round(dIF, 4),
+          dIF  = round(dIF, 4),
           padj = ifelse(
-            padj < 1e-4,
-            formatC(padj, format = "e", digits = 2),
-            formatC(padj, format = "f", digits = 4)
+            is.na(padj), NA_character_,
+            ifelse(padj < 1e-4,
+                   formatC(padj, format = "e", digits = 2),
+                   formatC(padj, format = "f", digits = 4))
           )
         )
 
+      # attach consequences (collapse duplicates)
       conseq_df <- switchListTested$switchConsequence
       cat("[DEBUG] switchConsequence is a", class(conseq_df), "with", nrow(conseq_df), "rows\n")
       cat("[DEBUG] switchConsequence column names:\n")
@@ -317,23 +404,39 @@ if (length(top_genes) == 0) {
         up_conseq <- conseq_df %>%
           filter(!is.na(isoformUpregulated)) %>%
           transmute(isoform_id = isoformUpregulated,
-                    consequence = switchConsequence,
-                    direction = "up")
+                    direction  = "up",
+                    consequence = switchConsequence)
 
         down_conseq <- conseq_df %>%
           filter(!is.na(isoformDownregulated)) %>%
           transmute(isoform_id = isoformDownregulated,
-                    consequence = switchConsequence,
-                    direction = "down")
+                    direction  = "down",
+                    consequence = switchConsequence)
 
-        all_conseq <- bind_rows(up_conseq, down_conseq) %>%
-          distinct()
+        # combine and collapse duplicates:
+        # - keep unique non-NA consequences
+        # - if only NA exists for (isoform_id, direction), keep a single NA
+        conseq_collapsed <- bind_rows(up_conseq, down_conseq) %>%
+          group_by(isoform_id, direction) %>%
+          summarise(
+            consequence = {
+              vals <- unique(consequence)
+              non_na <- vals[!is.na(vals) & vals != ""]
+              if (length(non_na) == 0) NA_character_
+              else paste(sort(non_na), collapse = "; ")
+            },
+            .groups = "drop"
+          )
 
-        tab <- left_join(tab, all_conseq, by = "isoform_id")
+        tab <- left_join(tab, conseq_collapsed, by = "isoform_id") %>%
+          # nicer ordering: down first, then up; strongest |dIF| first
+          mutate(direction = factor(direction, levels = c("down", "up"))) %>%
+          arrange(direction, desc(abs(as.numeric(dIF))))
       } else {
         cat("[INFO] Skipping consequence annotation: required isoform-level columns missing.\n")
       }
 
+      # draw table
       table_grob <- gridExtra::tableGrob(tab)
       grid::grid.draw(table_grob)
       plots_rendered <- plots_rendered + 1

@@ -760,7 +760,7 @@ rule gffcompare_clean_annotated:
 rule stringtie_with_merged:
     input:
         bam = "results/sorted/{bioproject}/{accession}_sorted.bam",
-        merged_gtf = "results/assembly/{bioproject}/gffcompare/{bioproject}.annotated.gtf"
+        merged_gtf = "results/assembly/{bioproject}/gffcompare/{bioproject}.annotated.clean.gtf"
     output:
         gtf = "results/quantified/{bioproject}/{accession}.gtf"
     threads: config["resources"]["medium"]["threads"]
@@ -778,39 +778,49 @@ rule stringtie_with_merged:
 
 rule build_count_matrices_merged:
     input:
-        gtfs = lambda wildcards: expand("results/quantified/{bioproject}/{accession}.gtf", 
-                                        bioproject=wildcards.bioproject, 
-                                        accession=df[df['bioproject'] == wildcards.bioproject]['run']),
+        gtfs = lambda wildcards: expand(
+            "results/quantified/{bioproject}/{accession}.gtf",
+            bioproject=wildcards.bioproject,
+            accession=df[df['bioproject'] == wildcards.bioproject]['run']
+        ),
         phenodata = "results/deg/{bioproject}/phenodata.csv"
     output:
         gene_counts = "results/deg/{bioproject}/gene_count_matrix.csv",
+        gene_metadata = "results/deg/{bioproject}/gene_metadata.csv",
         transcript_counts = "results/deg_tx/{bioproject}/transcript_count_matrix.csv",
         transcript_metadata = "results/deg_tx/{bioproject}/transcript_metadata.csv"
     params:
         gtfs_csv = lambda wildcards, input: ",".join(input.gtfs),
-        tmap_path = lambda wildcards: f"results/assembly/{wildcards.bioproject}/gffcompare/{wildcards.bioproject}.tmap"
+        tmap_path = lambda wildcards: f"results/assembly/{wildcards.bioproject}/gffcompare/{wildcards.bioproject}_stringtie_merged.gtf.tmap",
+        known_strict = config["known_codes_strict"],
+        known_lenient = config["known_codes_lenient"],
+        gene_type_view = config["gene_type_view"]
     threads: config["resources"]["medium"]["threads"]
     resources:
         mem_mb = config["resources"]["xheavy"]["mem_mb"]
     log:
-        "logs/counts/{bioproject}.log" 
+        "logs/counts/{bioproject}.log"
     shell:
         """
         Rscript workflow/scripts/generate_counts_from_gtfs.R \
-            --gtfs {params.gtfs_csv} \
-            --phenodata {input.phenodata} \
-            --gene-output {output.gene_counts} \
-            --transcript-output {output.transcript_counts} \
-            --metadata-output {output.transcript_metadata} \
-            --tmap {params.tmap_path} \
-            > {log} 2>&1
+          --gtfs {params.gtfs_csv} \
+          --phenodata {input.phenodata} \
+          --gene-count-output {output.gene_counts} \
+          --gene-metadata-output {output.gene_metadata} \
+          --transcript-count-output {output.transcript_counts} \
+          --transcript-metadata-output {output.transcript_metadata} \
+          --tmap {params.tmap_path} \
+          --known-codes-strict {params.known_strict} \
+          --known-codes-lenient {params.known_lenient} \
+          --gene-type-view {params.gene_type_view} \
+          > {log} 2>&1
         """
 
 rule isoform_switch:
     input:
         transcripts = "results/deg_tx/{bioproject}/transcript_count_matrix.csv",
         phenodata = "results/deg/{bioproject}/phenodata.csv",
-        gtf = "results/assembly/{bioproject}/gffcompare/{bioproject}.annotated.gtf"
+        gtf = "results/assembly/{bioproject}/gffcompare/{bioproject}.annotated.clean.gtf"
     output:
         summary = "results/isoform_switches/{bioproject}/{condition}_vs_control_{covariate}/isoform_switch_summary.csv",
         qc = "results/isoform_switches/{bioproject}/{condition}_vs_control_{covariate}/isoform_switch_qc.pdf",
@@ -911,7 +921,8 @@ rule plot_deseq2_gene:
         csv = "results/deg/{bioproject}/{condition}_vs_control_{covariate}/deseq_results.csv",
         filtered = "results/deg/{bioproject}/{condition}_vs_control_{covariate}/deseq_results_filtered.csv",
         counts = "results/deg/{bioproject}/gene_count_matrix.csv",
-        metadata = "results/deg/{bioproject}/phenodata.csv"
+        metadata = "results/deg/{bioproject}/phenodata.csv",
+        annotate = "results/deg/{bioproject}/gene_metadata.csv"
     output:
         volcano = "results/deg/{bioproject}/{condition}_vs_control_{covariate}/deseq_results_volcano.pdf",
         pca = "results/deg/{bioproject}/{condition}_vs_control_{covariate}/deseq_results_PCA.pdf",
@@ -921,7 +932,6 @@ rule plot_deseq2_gene:
         padj = config["deseq2_gene"]["padj"],
         logfc = config["deseq2_gene"]["logfc"],
         topn = config["plotting"]["topn"],
-        annotate = False
     threads: config["resources"]["medium"]["threads"]
     resources:
         mem_mb = config["resources"]["medium"]["mem_mb"]
@@ -938,6 +948,7 @@ rule plot_deseq2_gene:
             --padj {params.padj} \
             --logfc {params.logfc} \
             --topn {params.topn} \
+            --annotate {input.annotate} \
             --label "assembled loci" > {log} 2>&1
         """
 

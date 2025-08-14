@@ -7,70 +7,144 @@ suppressPackageStartupMessages({
   library(pheatmap)
   library(ggrepel)
   library(limma)
+  library(dplyr)
 })
 
-# ---- Parse arguments ----
+# ------------------------- CLI -------------------------
 option_list <- list(
-  make_option(c("-r", "--results"), type = "character"),
+  make_option(c("-r", "--results"),  type = "character"),
   make_option(c("-f", "--filtered"), type = "character"),
-  make_option(c("-c", "--counts"), type = "character"),
+  make_option(c("-c", "--counts"),   type = "character"),
   make_option(c("-m", "--metadata"), type = "character"),
-  make_option(c("-o", "--outdir"), type = "character"),
-  make_option(c("--padj"), type = "double", default = 0.1),
-  make_option(c("--logfc"), type = "double", default = 1.0),
-  make_option(c("--topn"), type = "integer", default = 30),
+  make_option(c("-o", "--outdir"),   type = "character"),
+  make_option(c("--padj"),  type = "double",  default = 0.1),
+  make_option(c("--logfc"), type = "double",  default = 1.0),
+  make_option(c("--topn"),  type = "integer", default = 30),
   make_option(c("--annotate"), type = "character", default = NULL),
   make_option("--label", type = "character", default = "features")
 )
 opt <- parse_args(OptionParser(option_list = option_list))
-plot_padj <- opt$padj
+plot_padj  <- opt$padj
 plot_logfc <- opt$logfc
 
-# ---- Load DE results ----
-res <- read.csv(opt$results, row.names = 1)
-res_filtered <- read.csv(opt$filtered, row.names = 1)
+msg <- function(...) cat(sprintf(...), "\n", sep = "")
 
-# ---- Clean up rownames ----
-rownames(res) <- gsub('^"|"$', '', rownames(res))
-rownames(res_filtered) <- gsub('^"|"$', '', rownames(res_filtered))
+# ------------------------- Load DE results -------------------------
+msg("[INFO] Reading DE tables (no rownames yet)")
+res <- read.csv(opt$results,  check.names = FALSE)
+res_filtered <- read.csv(opt$filtered, check.names = FALSE)
 
-cat(sprintf("[DEBUG] DESeq result table rows: %d (filtered: %d)\n", nrow(res), nrow(res_filtered)))
+res_ids      <- gsub('^"|"$', '', res[[1]])
+filtered_ids <- gsub('^"|"$', '', res_filtered[[1]])
 
-# ---- Annotate GeneType (Known / Novel) ----
-if (!is.null(opt$annotate)) {
-  cat("[DEBUG] Annotating GeneType using transcript metadata file\n")
-  meta <- read.csv(opt$annotate)
-  gene_id_map <- meta$gene_id
-  names(gene_id_map) <- meta$transcript_id
-
-  matched_gene_ids <- gene_id_map[rownames(res)]
-  cat("[DEBUG] matched_gene_ids NA count:\n")
-  print(sum(is.na(matched_gene_ids)))
-
-  gene_type <- ifelse(grepl("^MSTRG", matched_gene_ids), "Novel", "Known")
-  res$GeneType <- factor(gene_type, levels = c("Known", "Novel"))
-
-  res_filtered$GeneType <- res$GeneType[match(rownames(res_filtered), rownames(res))]
-} else {
-  cat("[DEBUG] Annotating GeneType using rowname pattern (MSTRG)\n")
-  gene_type <- ifelse(grepl("^MSTRG", rownames(res)), "Novel", "Known")
-  res$GeneType <- factor(gene_type, levels = c("Known", "Novel"))
-
-  res_filtered$GeneType <- res$GeneType[match(rownames(res_filtered), rownames(res))]
+if (anyDuplicated(res_ids)) {
+  dups <- unique(res_ids[duplicated(res_ids)])
+  stop(sprintf("Duplicate feature IDs in res: %s", paste(head(dups, 10), collapse = ", ")))
+}
+if (anyDuplicated(filtered_ids)) {
+  dups <- unique(filtered_ids[duplicated(filtered_ids)])
+  stop(sprintf("Duplicate feature IDs in res_filtered: %s", paste(head(dups, 10), collapse = ", ")))
 }
 
-cat("[DEBUG] GeneType counts in full table:\n")
-print(table(res$GeneType, useNA = "ifany"))
+rownames(res) <- res_ids;              res <- res[, -1, drop = FALSE]
+rownames(res_filtered) <- filtered_ids; res_filtered <- res_filtered[, -1, drop = FALSE]
 
-cat("[DEBUG] GeneType counts in filtered table:\n")
-print(table(res_filtered$GeneType, useNA = "ifany"))
+msg("[INFO] Rows: res=%d, filtered=%d", nrow(res), nrow(res_filtered))
 
-cat("[DEBUG] Unique GeneType values in filtered:\n")
-print(unique(res_filtered$GeneType))
+# ------------------------- Annotation join -------------------------
+# Strategy:
+# 1) Build keys from rownames like "MSTRG.123|CFTR" or "ENSG...|CFTR"
+# 2) Lookup order for GeneType/GeneName:
+#    feature_id -> gene_id -> gene_name (right side after '|')
+if (!is.null(opt$annotate) && file.exists(opt$annotate)) {
+  annot <- read.csv(opt$annotate, check.names = FALSE)
+  required_cols <- c("feature_id", "gene_id", "gene_name", "gene_type")
+  missing_cols  <- setdiff(required_cols, colnames(annot))
+  if (length(missing_cols)) {
+    stop("Annotation missing columns: ", paste(missing_cols, collapse = ", "))
+  }
 
-# ---- Load counts and metadata ----
+  # keys for res
+  split_res <- strsplit(rownames(res), "\\|")
+  res$feature_id_join <- vapply(split_res, `[`, "", 1)
+  res$gene_id_join    <- vapply(split_res, function(x) if (length(x) >= 2) x[2] else NA_character_, "")
+  right_name_res      <- sub(".*\\|", "", rownames(res))
+
+  # keys for res_filtered
+  split_filt <- strsplit(rownames(res_filtered), "\\|")
+  res_filtered$feature_id_join <- vapply(split_filt, `[`, "", 1)
+  res_filtered$gene_id_join    <- vapply(split_filt, function(x) if (length(x) >= 2) x[2] else NA_character_, "")
+  right_name_filt              <- sub(".*\\|", "", rownames(res_filtered))
+
+  # lookup maps
+  gt_by_feature <- setNames(annot$gene_type, annot$feature_id)
+  gt_by_gene    <- setNames(annot$gene_type, annot$gene_id)
+  gt_by_name    <- setNames(annot$gene_type, annot$gene_name)  # fallback by symbol/name
+
+  gn_by_feature <- setNames(annot$gene_name, annot$feature_id)
+  gn_by_gene    <- setNames(annot$gene_name, annot$gene_id)
+
+  # assign GeneType with fallback
+  res$GeneType <- dplyr::coalesce(
+    gt_by_feature[res$feature_id_join],
+    gt_by_gene[res$gene_id_join],
+    gt_by_name[right_name_res]
+  )
+  res_filtered$GeneType <- dplyr::coalesce(
+    gt_by_feature[res_filtered$feature_id_join],
+    gt_by_gene[res_filtered$gene_id_join],
+    gt_by_name[right_name_filt]
+  )
+
+  # assign GeneName with fallback (ensures readable labels)
+  res$GeneName <- dplyr::coalesce(
+    gn_by_feature[res$feature_id_join],
+    gn_by_gene[res$gene_id_join],
+    right_name_res
+  )
+  res_filtered$GeneName <- dplyr::coalesce(
+    gn_by_feature[res_filtered$feature_id_join],
+    gn_by_gene[res_filtered$gene_id_join],
+    right_name_filt
+  )
+
+  # finalize factors
+  res$GeneType <- ifelse(is.na(res$GeneType), "Novel", res$GeneType)
+  res_filtered$GeneType <- ifelse(is.na(res_filtered$GeneType), "Novel", res_filtered$GeneType)
+  res$GeneType <- factor(res$GeneType, levels = c("Known", "Novel"))
+  res_filtered$GeneType <- factor(res_filtered$GeneType, levels = c("Known", "Novel"))
+
+  # concise debug
+  gt_full  <- table(res$GeneType, useNA = "no")
+  gt_filt  <- table(res_filtered$GeneType, useNA = "no")
+  msg("[INFO] GeneType (full):   Known=%d Novel=%d", as.integer(gt_full["Known"]), as.integer(gt_full["Novel"]))
+  msg("[INFO] GeneType (filtered): Known=%d Novel=%d", as.integer(gt_filt["Known"]), as.integer(gt_filt["Novel"]))
+} else {
+  msg("[WARN] --annotate missing; using MSTRG prefix fallback")
+  res$GeneType <- factor(ifelse(grepl("^MSTRG", rownames(res)), "Novel", "Known"), levels = c("Known", "Novel"))
+  res_filtered$GeneType <- res$GeneType[match(rownames(res_filtered), rownames(res))]
+  res$GeneName <- sub(".*\\|", "", rownames(res))
+  res_filtered$GeneName <- sub(".*\\|", "", rownames(res_filtered))
+}
+
+# ------------------------- Filtering stats -------------------------
+n_non_na_padj <- sum(!is.na(res_filtered$padj))
+n_padj        <- sum(res_filtered$padj < plot_padj, na.rm = TRUE)
+n_fc          <- sum(abs(res_filtered$log2FoldChange) > plot_logfc, na.rm = TRUE)
+n_both        <- sum(res_filtered$padj < plot_padj & abs(res_filtered$log2FoldChange) > plot_logfc, na.rm = TRUE)
+msg("[INFO] Filter stats (filtered): nonNA padj=%d ; padj<%.3f=%d ; |log2FC|>%.2f=%d ; both=%d",
+    n_non_na_padj, plot_padj, n_padj, plot_logfc, n_fc, n_both)
+
+sig_mask <- !is.na(res_filtered$padj) &
+            (res_filtered$padj < plot_padj) &
+            !is.na(res_filtered$log2FoldChange) &
+            (abs(res_filtered$log2FoldChange) > plot_logfc)
+sig_res <- res_filtered[sig_mask, , drop = FALSE]
+msg("[INFO] Significant rows carried into plots: %d", nrow(sig_res))
+
+# ------------------------- Counts & coldata -------------------------
 counts <- read.table(opt$counts, header = TRUE, row.names = 1, check.names = FALSE)
-counts <- counts[, !(colnames(counts) %in% c("Chr", "Start", "End", "Strand", "Length"))]
+counts <- counts[, !(colnames(counts) %in% c("Chr", "Start", "End", "Strand", "Length")), drop = FALSE]
 counts <- round(counts)
 colnames(counts) <- gsub("_sorted$", "", gsub("\\.bam$", "", basename(colnames(counts))))
 
@@ -79,36 +153,38 @@ coldata$condition <- factor(coldata$condition)
 coldata <- coldata[colnames(counts), , drop = FALSE]
 stopifnot(all(rownames(coldata) == colnames(counts)))
 
-# ---- Parse condition + covariate
+# infer contrast from paths
 contrast_folder <- basename(dirname(opt$results))
-bioproject <- basename(dirname(dirname(opt$results)))
+bioproject      <- basename(dirname(dirname(opt$results)))
 parts <- strsplit(contrast_folder, "_vs_control_")[[1]]
 stopifnot(length(parts) == 2)
 condition_of_interest <- parts[1]
-covariate_value <- as.numeric(parts[2])
+covariate_value       <- as.numeric(parts[2])
 title_prefix <- sprintf("%s - %s_vs_control_%s", bioproject, condition_of_interest, covariate_value)
 
-# ---- Subset coldata/counts
+# subset to contrast
 coldata <- coldata[
   coldata$condition %in% c("control", condition_of_interest) &
-  as.character(coldata$covariate1) == as.character(covariate_value), , drop = FALSE
+    as.character(coldata$covariate1) == as.character(covariate_value),
+  , drop = FALSE
 ]
-counts <- counts[, rownames(coldata)]
+counts <- counts[, rownames(coldata), drop = FALSE]
 
-# ---- Handle timepoint
+# time/covariate
 has_time <- FALSE
 if ("covariate1" %in% colnames(coldata)) {
   coldata$time_numeric <- suppressWarnings(as.numeric(as.character(coldata$covariate1)))
   if (!all(is.na(coldata$time_numeric))) {
     has_time <- TRUE
-    coldata$Timepoint <- factor(coldata$time_numeric,
+    coldata$Timepoint <- factor(
+      coldata$time_numeric,
       levels = sort(unique(coldata$time_numeric)),
       labels = paste0(sort(unique(coldata$time_numeric)), "h")
     )
   }
 }
 
-# ---- VST and PCA
+# ------------------------- VST / PCA prep -------------------------
 dds <- DESeqDataSetFromMatrix(countData = counts, colData = coldata, design = ~ condition)
 vsd <- vst(dds, blind = FALSE)
 top_var_genes <- head(order(rowVars(assay(vsd)), decreasing = TRUE), 500)
@@ -116,99 +192,124 @@ vsd_top <- vsd[top_var_genes, ]
 basename_stub <- sub("\\.csv$", "", basename(opt$results))
 write.csv(assay(vsd), file.path(opt$outdir, paste0(basename_stub, "_vst.csv")))
 
-# ---- Setup annotation colors
+# colors (unchanged)
 condition_levels <- unique(coldata$condition)
-condition_colors <- setNames(rep(c("#1f77b4", "#2ca02c", "#d62728", "#ff7f0e"), length.out = length(condition_levels)), condition_levels)
+condition_colors <- setNames(rep(c("#1f77b4", "#2ca02c", "#d62728", "#ff7f0e"),
+                                 length.out = length(condition_levels)),
+                             condition_levels)
 annotation_colors <- list(condition = condition_colors)
 if (!all(is.na(coldata$Timepoint))) {
   time_levels <- unique(coldata$Timepoint)
-  time_colors <- setNames(rep(c("#a6cee3", "#1f78b4", "#b2df8a", "#fb9a99"), length.out = length(time_levels)), time_levels)
+  time_colors <- setNames(rep(c("#a6cee3", "#1f78b4", "#b2df8a", "#fb9a99"),
+                              length.out = length(time_levels)),
+                          time_levels)
   annotation_colors$Timepoint <- time_colors
 }
 
-# ---- Determine subset strategy based on identifier prefixes
-id_prefixes <- substr(rownames(res), 1, 5)
-has_ensg <- any(grepl("^ENSG", id_prefixes))
-has_mstrg <- any(grepl("^MSTRG", id_prefixes))
+# novelty splits availability
 has_gene_type_annotation <- any(res$GeneType %in% c("Known", "Novel"))
+subset_types <- if (has_gene_type_annotation) c("All", "Known", "Novel") else c("All")
 
-subset_types <- if (has_gene_type_annotation && (has_ensg || has_mstrg)) {
-  c("All", "Known", "Novel")
-} else {
-  message("[INFO] Gene novelty split disabled — using only 'All' mode.")
-  c("All")
-}
-
-# ---- Volcano plots ----
+# ------------------------- Volcano -------------------------
 pdf(file.path(opt$outdir, paste0(basename_stub, "_volcano.pdf")))
 for (subset_type in subset_types) {
-  subres <- switch(subset_type,
-    Known = res[res$GeneType == "Known", ],
-    Novel = res[res$GeneType == "Novel", ],
+  subres <- switch(
+    subset_type,
+    Known = res[res$GeneType == "Known", , drop = FALSE],
+    Novel = res[res$GeneType == "Novel", , drop = FALSE],
     res
   )
 
-  subres <- na.omit(subres)
+  if (!nrow(subres)) {
+    plot.new(); title(paste(title_prefix, sprintf("Volcano Plot - %s subset\n(no features)", subset_type), sep = "\n"))
+    next
+  }
+
+  # Ensure columns exist and are numeric
+  if (!("padj" %in% colnames(subres)) || !("log2FoldChange" %in% colnames(subres))) {
+    plot.new(); title(paste(title_prefix, sprintf("Volcano Plot - %s subset\n(missing padj/log2FoldChange)", subset_type), sep = "\n"))
+    next
+  }
+  suppressWarnings({
+    subres$padj <- as.numeric(subres$padj)
+    subres$log2FoldChange <- as.numeric(subres$log2FoldChange)
+  })
+
+  # Keep only rows plottable on volcano: finite padj>0 and finite log2FC
+  keep <- is.finite(subres$padj) & subres$padj > 0 & is.finite(subres$log2FoldChange)
+  subres <- subres[keep, , drop = FALSE]
+
+  if (!nrow(subres)) {
+    plot.new(); title(paste(title_prefix, sprintf("Volcano Plot - %s subset\n(no plottable rows after filtering padj/log2FC)", subset_type), sep = "\n"))
+    next
+  }
+
+  # Ensure GeneType exists for shape mapping
+  if (!("GeneType" %in% colnames(subres))) {
+    subres$GeneType <- factor("Known", levels = c("Known", "Novel"))
+  } else {
+    subres$GeneType <- factor(as.character(subres$GeneType), levels = c("Known", "Novel"))
+  }
+
+  # Significance categories
   subres$SigCategory <- "NS"
   subres$SigCategory[abs(subres$log2FoldChange) > opt$logfc] <- "FC"
   subres$SigCategory[subres$padj < opt$padj] <- "FDR"
   subres$SigCategory[subres$padj < opt$padj & abs(subres$log2FoldChange) > opt$logfc] <- "FC_FDR"
   subres$SigCategory <- factor(subres$SigCategory, levels = c("NS", "FC", "FDR", "FC_FDR"))
 
+  # Labels (prefer FC_FDR; else smallest padj). Build pretty labels.
   subres$label <- ""
+  pick <- if (any(subres$SigCategory == "FC_FDR")) which(subres$SigCategory == "FC_FDR") else order(subres$padj)
+  pick <- head(pick, opt$topn)
 
-  # Try to use gene_name from metadata (if available)
-  gene_name_map <- NULL
-  if (!is.null(opt$annotate)) {
-    meta <- read.csv(opt$annotate)
-    meta <- meta[!is.na(meta$transcript_id) & !is.na(meta$gene_name), ]
-    gene_name_map <- setNames(meta$gene_name, meta$transcript_id)
+  prettify <- function(id, gene_name) {
+    if (!is.null(gene_name) && !is.na(gene_name) && gene_name != "") return(gene_name)
+    if (grepl("\\|", id)) return(sub(".*\\|", "", id))
+    id
   }
-
-  if (any(subres$SigCategory == "FC_FDR")) {
-    top_fc_fdr <- head(rownames(subres[subres$SigCategory == "FC_FDR", ]), opt$topn)
-    if (!is.null(gene_name_map)) {
-      subres$label[rownames(subres) %in% top_fc_fdr] <- gene_name_map[rownames(subres)[rownames(subres) %in% top_fc_fdr]]
-    } else {
-      subres$label[rownames(subres) %in% top_fc_fdr] <- sub(".*\\|", "", top_fc_fdr)
-    }
-  } else {
-    top_padjs <- head(order(subres$padj), opt$topn)
-    if (!is.null(gene_name_map)) {
-      subres$label[top_padjs] <- gene_name_map[rownames(subres)[top_padjs]]
-    } else {
-      subres$label[top_padjs] <- rownames(subres)[top_padjs]
-    }
-  }
-
-  # Fallback: remove empty labels caused by missing names
+  subres$label[pick] <- mapply(
+    prettify,
+    id = rownames(subres)[pick],
+    gene_name = if ("GeneName" %in% colnames(subres)) subres$GeneName[pick] else NA
+  )
   subres$label[is.na(subres$label)] <- ""
 
   plot_title <- sprintf("Volcano Plot - %s subset\n%d features\npadj < %.2f, |log2FC| > %.2f",
-                      subset_type, nrow(subres), plot_padj, plot_logfc)
+                        subset_type, nrow(subres), plot_padj, plot_logfc)
 
-  print(
-    ggplot(subres, aes(x = log2FoldChange, y = -log10(padj), color = SigCategory, shape = GeneType)) +
-      geom_point(alpha = 0.6, size = 0.8) +
-      scale_color_manual(values = c(NS = "grey30", FC = "forestgreen", FDR = "royalblue", FC_FDR = "red2")) +
-      scale_shape_manual(values = c(Known = 16, Novel = 17)) +
-      theme_bw(base_size = 14) +
-      theme(legend.position = "top", legend.title = element_blank(), legend.direction = "vertical") +
-      labs(
-        title = paste(title_prefix, plot_title, sep = "\n"),
-        x = expression(log[2]~"fold change"),
-        y = expression(-log[10]~adjusted~italic(P))
-      ) +
-      geom_text_repel(data = subset(subres, label != ""), aes(label = label),
-                      color = "black", size = 2.5, segment.color = "grey60", segment.alpha = 0.5,
-                      max.overlaps = Inf) +
-      geom_vline(xintercept = c(-opt$logfc, opt$logfc), linetype = "longdash", color = "black", linewidth = 0.4) +
-      geom_hline(yintercept = -log10(opt$padj), linetype = "longdash", color = "black", linewidth = 0.4)
-  )
+  # Main points
+  p <- ggplot(subres, aes(x = log2FoldChange, y = -log10(padj), color = SigCategory, shape = GeneType)) +
+    geom_point(alpha = 0.6, size = 0.8) +
+    scale_color_manual(values = c(NS = "grey30", FC = "forestgreen", FDR = "royalblue", FC_FDR = "red2")) +
+    scale_shape_manual(values = c(Known = 16, Novel = 17)) +
+    theme_bw(base_size = 14) +
+    theme(legend.position = "top", legend.title = element_blank(), legend.direction = "vertical") +
+    labs(
+      title = paste(title_prefix, plot_title, sep = "\n"),
+      x = expression(log[2]~"fold change"),
+      y = expression(-log[10]~adjusted~italic(P))
+    ) +
+    geom_vline(xintercept = c(-opt$logfc, opt$logfc), linetype = "longdash", color = "black", linewidth = 0.4) +
+    geom_hline(yintercept = -log10(opt$padj), linetype = "longdash", color = "black", linewidth = 0.4)
+
+  # Labels (explicitly map x/y to avoid length-mismatch inheritance)
+  lab_df <- subset(subres, label != "" & is.finite(padj) & padj > 0 & is.finite(log2FoldChange))
+  if (nrow(lab_df)) {
+    p <- p + geom_text_repel(
+      data = lab_df,
+      aes(x = log2FoldChange, y = -log10(padj), label = label),
+      color = "black", size = 2.5,
+      segment.color = "grey60", segment.alpha = 0.5,
+      max.overlaps = Inf
+    )
+  }
+
+  print(p)
 }
 dev.off()
 
-# ---- PCA plot ----
+# ------------------------- PCA -------------------------
 pcaData <- if (has_time) {
   plotPCA(vsd_top, intgroup = c("condition", "time_numeric"), returnData = TRUE)
 } else {
@@ -217,81 +318,91 @@ pcaData <- if (has_time) {
 pcaData$Sample <- rownames(pcaData)
 pcaData$Timepoint <- if (has_time) factor(coldata$Timepoint) else "NA"
 percentVar <- round(100 * attr(pcaData, "percentVar"))
-pca_title <- sprintf("PCA\ntop 500 variable %s", opt$label)
+pca_title <- sprintf("PCA\nTop 500 most variable %s", opt$label)
 
 pdf(file.path(opt$outdir, paste0(basename_stub, "_PCA.pdf")))
-ggplot(pcaData, aes(PC1, PC2, color = condition, shape = Timepoint)) +
+ggplot(pcaData, aes(x = PC1, y = PC2, color = condition, shape = Timepoint)) +
   geom_point(size = 3) +
   geom_text_repel(aes(label = Sample), color = "black", size = 3, max.overlaps = Inf) +
-  xlab(paste0("PC1: ", percentVar[1], "% variance")) +
-  ylab(paste0("PC2: ", percentVar[2], "% variance")) +
+  xlab(sprintf("PC1: %.1f%% variance", percentVar[1])) +
+  ylab(sprintf("PC2: %.1f%% variance", percentVar[2])) +
   coord_fixed() +
   ggtitle(paste(title_prefix, pca_title, sep = "\n")) +
   theme_minimal()
 dev.off()
 
-# ---- Heatmaps ----
+# ------------------------- Heatmaps -------------------------
 pdf(file.path(opt$outdir, paste0(basename_stub, "_heatmap.pdf")))
 for (subset_type in c("All", "Known", "Novel")) {
   top_rows <- switch(subset_type,
-    Known = res_filtered[res_filtered$GeneType == "Known", ],
-    Novel = res_filtered[res_filtered$GeneType == "Novel", ],
-    res_filtered
-  )
+                     Known = res_filtered[res_filtered$GeneType == "Known", , drop = FALSE],
+                     Novel = res_filtered[res_filtered$GeneType == "Novel", , drop = FALSE],
+                     res_filtered)
 
   if (nrow(top_rows) < 2) {
-    plot.new()
-    title(paste(title_prefix, "Heatmap skipped - too few", subset_type, "features"), cex.main = 1.2)
+    plot.new(); title(paste(title_prefix, "Heatmap skipped - too few", subset_type, "features"), cex.main = 1.2)
     next
   }
 
-  top_genes <- rownames(head(top_rows[order(top_rows$padj), ], opt$topn))
-  top_genes <- intersect(top_genes, rownames(assay(vsd)))
-  if (length(top_genes) < 2) {
-    plot.new()
-    title(paste(title_prefix, "Heatmap skipped - too few overlapping genes:", subset_type), cex.main = 1.2)
+  # prefer significant rows if available; otherwise fall back to best padj
+  cand <- top_rows[!is.na(top_rows$padj) & !is.na(top_rows$log2FoldChange), , drop = FALSE]
+  sig_cand <- cand[(cand$padj < plot_padj) & (abs(cand$log2FoldChange) > plot_logfc), , drop = FALSE]
+  pick_from <- if (nrow(sig_cand) > 0) sig_cand else cand
+
+  if (nrow(pick_from) < 2) {
+    plot.new(); title(paste(title_prefix, "Heatmap skipped - too few usable", subset_type, "features"), cex.main = 1.2)
     next
   }
 
-  mat <- assay(vsd)[top_genes, , drop = FALSE]
+  pick_from <- pick_from[order(pick_from$padj), , drop = FALSE]
+  top_ids <- rownames(head(pick_from, opt$topn))
+
+  # intersection with VST matrix
+  top_ids <- intersect(top_ids, rownames(assay(vsd)))
+  if (length(top_ids) < 2) {
+    plot.new(); title(paste(title_prefix, "Heatmap skipped - too few overlapping features:", subset_type), cex.main = 1.2)
+    next
+  }
+
+
+  mat <- assay(vsd)[top_ids, , drop = FALSE]
   mat <- mat - rowMeans(mat)
 
-  # Clean up gene-level rownames: use only gene_name if available
-  rownames(mat) <- sub(".*\\|", "", rownames(mat))
+  # Prefer GeneName; else right side after '|'; else id
+  ids   <- rownames(mat)
+  right <- sub(".*\\|", "", ids)
+  rn <- right
+  if ("GeneName" %in% colnames(res)) {
+    # build a name map from both res and res_filtered
+    map_full <- setNames(res$GeneName, rownames(res))
+    map_filt <- if (exists("res_filtered")) setNames(res_filtered$GeneName, rownames(res_filtered)) else NULL
+    name_map <- c(map_full, map_filt)
+    rn2 <- name_map[ids]
+    rn[!is.na(rn2) & rn2 != ""] <- rn2[!is.na(rn2) & rn2 != ""]
+  }
+  rn[is.na(rn) | rn == ""] <- ids[is.na(rn) | rn == ""]
+  rownames(mat) <- rn
 
   annotation <- if (has_time) {
     ordering <- order(coldata$condition, coldata$time_numeric)
-    mat <- mat[, ordering]
+    mat <- mat[, ordering, drop = FALSE]
     coldata[ordering, c("condition", "Timepoint"), drop = FALSE]
   } else {
     coldata[, "condition", drop = FALSE]
   }
 
   heatmap_n <- nrow(top_rows)
-  heatmap_main <- sprintf("Heatmap (%s - top %d/%d %s)", subset_type, length(top_genes), heatmap_n, opt$label)
-
-  # Try to use gene names as heatmap rownames (if annotate provided)
-  if (!is.null(opt$annotate)) {
-    meta <- read.csv(opt$annotate)
-    meta_named <- setNames(meta$gene_name, meta$transcript_id)
-    valid_rows <- rownames(mat) %in% names(meta_named)
-    rownames(mat)[valid_rows] <- ifelse(
-      !is.na(meta_named[rownames(mat)[valid_rows]]),
-      meta_named[rownames(mat)[valid_rows]],
-      rownames(mat)[valid_rows]
-    )
-  }
+  heatmap_main <- sprintf("Heatmap (%s - top %d/%d %s)", subset_type, length(top_ids), heatmap_n, opt$label)
 
   pheatmap(mat,
-    annotation_col = annotation,
-    annotation_colors = annotation_colors,
-    clustering_distance_rows = "correlation",
-    clustering_distance_cols = "correlation",
-    clustering_method = "ward.D2",
-    color = colorRampPalette(c("green", "black", "red"))(100),
-    fontsize_row = 8,
-    fontsize_col = 9,
-    main = paste(title_prefix, heatmap_main, sep = "\n")
-  )
+           annotation_col = annotation,
+           annotation_colors = annotation_colors,
+           clustering_distance_rows = "correlation",
+           clustering_distance_cols = "correlation",
+           clustering_method = "ward.D2",
+           color = colorRampPalette(c("green", "black", "red"))(100),
+           fontsize_row = 8,
+           fontsize_col = 9,
+           main = paste(title_prefix, heatmap_main, sep = "\n"))
 }
 dev.off()
