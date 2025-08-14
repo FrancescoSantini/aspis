@@ -46,6 +46,12 @@ trimmomatic:
     - "SLIDINGWINDOW:4:15"
     - "MINLEN:36"
 
+# ---- Filters ----
+known_codes_strict: "=,j"
+known_codes_lenient: "=,j,c,o"
+gene_type_view: "strict"
+
+
 # ---- DESeq2 Analysis ----
 deseq2_gene:
   padj: 0.05
