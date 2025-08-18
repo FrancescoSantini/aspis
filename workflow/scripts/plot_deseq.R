@@ -213,43 +213,33 @@ subset_types <- if (has_gene_type_annotation) c("All", "Known", "Novel") else c(
 # ------------------------- Volcano -------------------------
 pdf(file.path(opt$outdir, paste0(basename_stub, "_volcano.pdf")))
 for (subset_type in subset_types) {
-  subres <- switch(
-    subset_type,
-    Known = res[res$GeneType == "Known", , drop = FALSE],
-    Novel = res[res$GeneType == "Novel", , drop = FALSE],
-    res
-  )
+  subres <- switch(subset_type,
+                   Known = res[res$GeneType == "Known", , drop = FALSE],
+                   Novel = res[res$GeneType == "Novel", , drop = FALSE],
+                   res)
 
   if (!nrow(subres)) {
-    plot.new(); title(paste(title_prefix, sprintf("Volcano Plot - %s subset\n(no features)", subset_type), sep = "\n"))
+    plot.new(); title(paste(title_prefix,
+                            sprintf("Volcano Plot - %s subset\n(no features)", subset_type),
+                            sep = "\n"))
     next
   }
 
-  # Ensure columns exist and are numeric
-  if (!("padj" %in% colnames(subres)) || !("log2FoldChange" %in% colnames(subres))) {
-    plot.new(); title(paste(title_prefix, sprintf("Volcano Plot - %s subset\n(missing padj/log2FoldChange)", subset_type), sep = "\n"))
-    next
-  }
-  suppressWarnings({
-    subres$padj <- as.numeric(subres$padj)
-    subres$log2FoldChange <- as.numeric(subres$log2FoldChange)
-  })
-
-  # Keep only rows plottable on volcano: finite padj>0 and finite log2FC
-  keep <- is.finite(subres$padj) & subres$padj > 0 & is.finite(subres$log2FoldChange)
+  # Ensure numeric + drop rows missing padj/log2FC
+  if ("padj" %in% colnames(subres)) subres$padj <- suppressWarnings(as.numeric(subres$padj))
+  if ("log2FoldChange" %in% colnames(subres)) subres$log2FoldChange <- suppressWarnings(as.numeric(subres$log2FoldChange))
+  keep <- !is.na(subres$padj) & !is.na(subres$log2FoldChange)
   subres <- subres[keep, , drop = FALSE]
 
   if (!nrow(subres)) {
-    plot.new(); title(paste(title_prefix, sprintf("Volcano Plot - %s subset\n(no plottable rows after filtering padj/log2FC)", subset_type), sep = "\n"))
+    plot.new(); title(paste(title_prefix,
+                            sprintf("Volcano Plot - %s subset\n(no valid rows after padj/log2FC filtering)", subset_type),
+                            sep = "\n"))
     next
   }
 
-  # Ensure GeneType exists for shape mapping
-  if (!("GeneType" %in% colnames(subres))) {
-    subres$GeneType <- factor("Known", levels = c("Known", "Novel"))
-  } else {
-    subres$GeneType <- factor(as.character(subres$GeneType), levels = c("Known", "Novel"))
-  }
+  # Protect against padj == 0 (Inf on -log10)
+  subres$padj_eps <- pmax(subres$padj, .Machine$double.xmin)
 
   # Significance categories
   subres$SigCategory <- "NS"
@@ -258,54 +248,53 @@ for (subset_type in subset_types) {
   subres$SigCategory[subres$padj < opt$padj & abs(subres$log2FoldChange) > opt$logfc] <- "FC_FDR"
   subres$SigCategory <- factor(subres$SigCategory, levels = c("NS", "FC", "FDR", "FC_FDR"))
 
-  # Labels (prefer FC_FDR; else smallest padj). Build pretty labels.
+  # Labels (prefer FC_FDR; else smallest padj)
   subres$label <- ""
-  pick <- if (any(subres$SigCategory == "FC_FDR")) which(subres$SigCategory == "FC_FDR") else order(subres$padj)
-  pick <- head(pick, opt$topn)
+  sel <- if (any(subres$SigCategory == "FC_FDR")) which(subres$SigCategory == "FC_FDR") else order(subres$padj)
+  sel <- head(sel, opt$topn)
 
   prettify <- function(id, gene_name) {
     if (!is.null(gene_name) && !is.na(gene_name) && gene_name != "") return(gene_name)
     if (grepl("\\|", id)) return(sub(".*\\|", "", id))
     id
   }
-  subres$label[pick] <- mapply(
+  subres$label[sel] <- mapply(
     prettify,
-    id = rownames(subres)[pick],
-    gene_name = if ("GeneName" %in% colnames(subres)) subres$GeneName[pick] else NA
+    id = rownames(subres)[sel],
+    gene_name = if ("GeneName" %in% colnames(subres)) subres$GeneName[sel] else NA
   )
   subres$label[is.na(subres$label)] <- ""
 
   plot_title <- sprintf("Volcano Plot - %s subset\n%d features\npadj < %.2f, |log2FC| > %.2f",
                         subset_type, nrow(subres), plot_padj, plot_logfc)
 
-  # Main points
-  p <- ggplot(subres, aes(x = log2FoldChange, y = -log10(padj), color = SigCategory, shape = GeneType)) +
-    geom_point(alpha = 0.6, size = 0.8) +
-    scale_color_manual(values = c(NS = "grey30", FC = "forestgreen", FDR = "royalblue", FC_FDR = "red2")) +
-    scale_shape_manual(values = c(Known = 16, Novel = 17)) +
-    theme_bw(base_size = 14) +
-    theme(legend.position = "top", legend.title = element_blank(), legend.direction = "vertical") +
-    labs(
-      title = paste(title_prefix, plot_title, sep = "\n"),
-      x = expression(log[2]~"fold change"),
-      y = expression(-log[10]~adjusted~italic(P))
-    ) +
-    geom_vline(xintercept = c(-opt$logfc, opt$logfc), linetype = "longdash", color = "black", linewidth = 0.4) +
-    geom_hline(yintercept = -log10(opt$padj), linetype = "longdash", color = "black", linewidth = 0.4)
-
-  # Labels (explicitly map x/y to avoid length-mismatch inheritance)
-  lab_df <- subset(subres, label != "" & is.finite(padj) & padj > 0 & is.finite(log2FoldChange))
-  if (nrow(lab_df)) {
-    p <- p + geom_text_repel(
-      data = lab_df,
-      aes(x = log2FoldChange, y = -log10(padj), label = label),
-      color = "black", size = 2.5,
-      segment.color = "grey60", segment.alpha = 0.5,
-      max.overlaps = Inf
-    )
-  }
-
-  print(p)
+  print(
+    ggplot(subres, aes(x = log2FoldChange, y = -log10(padj_eps),
+                       color = SigCategory, shape = GeneType)) +
+      geom_point(alpha = 0.6, size = 0.8) +
+      scale_color_manual(values = c(NS = "grey30", FC = "forestgreen",
+                                    FDR = "royalblue", FC_FDR = "red2")) +
+      scale_shape_manual(values = c(Known = 16, Novel = 17)) +
+      theme_bw(base_size = 14) +
+      theme(legend.position = "top", legend.title = element_blank(),
+            legend.direction = "vertical") +
+      labs(
+        title = paste(title_prefix, plot_title, sep = "\n"),
+        x = expression(log[2]~"fold change"),
+        y = expression(-log[10]~adjusted~italic(P))
+      ) +
+      geom_text_repel(
+        data = subset(subres, label != ""),
+        aes(label = label, y = -log10(padj_eps)),   # <-- fix
+        color = "black", size = 2.5,
+        segment.color = "grey60", segment.alpha = 0.5,
+        max.overlaps = Inf
+      ) +
+      geom_vline(xintercept = c(-opt$logfc, opt$logfc),
+                 linetype = "longdash", color = "black", linewidth = 0.4) +
+      geom_hline(yintercept = -log10(opt$padj),
+                 linetype = "longdash", color = "black", linewidth = 0.4)
+  )
 }
 dev.off()
 

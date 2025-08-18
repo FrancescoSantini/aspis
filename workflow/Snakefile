@@ -365,33 +365,64 @@ rule all:
             zip, bioproject=BIOPROJECTS_TRIPLE, condition=CONDITIONS_TRIPLE, covariate=COVARIATES_TRIPLE),
         expand("results/deg_tx/{bioproject}/{condition}_vs_control_{covariate}/deseq_results_vst.csv",
             zip, bioproject=BIOPROJECTS_TRIPLE, condition=CONDITIONS_TRIPLE, covariate=COVARIATES_TRIPLE),
-        expand("results/deg/{bioproject}/{condition}_vs_control_{covariate}/GO_enrichment.csv",
+        expand("results/deg/{bioproject}/ref_gene_biotype.tsv", bioproject=df.bioproject),
+        expand("results/deg/{bioproject}/pc_gene_ids.txt", bioproject=df.bioproject),
+        expand("results/deg/{bioproject}/ref_gene_biotype.summary.txt", bioproject=df.bioproject),
+        expand("results/deg/{bioproject}/{condition}_vs_control_{covariate}/ORA_GO_{ont}_{set}_enrichment.csv",
+            zip, bioproject=BIOPROJECTS_TRIPLE, condition=CONDITIONS_TRIPLE, covariate=COVARIATES_TRIPLE,
+            ont=["BP","CC","MF"], set=["ALL","UP","DOWN"]),
+        expand("results/deg/{bioproject}/{condition}_vs_control_{covariate}/ORA_GO_dotplot_ALL_UP_DOWN_BPCCMF.pdf",
             zip, bioproject=BIOPROJECTS_TRIPLE, condition=CONDITIONS_TRIPLE, covariate=COVARIATES_TRIPLE),
-        expand("results/deg/{bioproject}/{condition}_vs_control_{covariate}/GO_dotplot.pdf",
+        expand("results/deg/{bioproject}/{condition}_vs_control_{covariate}/ORA_KEGG_{set}_enrichment.csv",
+            zip, bioproject=BIOPROJECTS_TRIPLE, condition=CONDITIONS_TRIPLE, covariate=COVARIATES_TRIPLE,
+            set=["ALL","UP","DOWN"]),
+        expand("results/deg/{bioproject}/{condition}_vs_control_{covariate}/ORA_Reactome_{set}_enrichment.csv",
+            zip, bioproject=BIOPROJECTS_TRIPLE, condition=CONDITIONS_TRIPLE, covariate=COVARIATES_TRIPLE,
+            set=["ALL","UP","DOWN"]),
+        expand("results/deg/{bioproject}/{condition}_vs_control_{covariate}/ORA_KEGG_dotplot.pdf",
             zip, bioproject=BIOPROJECTS_TRIPLE, condition=CONDITIONS_TRIPLE, covariate=COVARIATES_TRIPLE),
-        expand("results/deg/{bioproject}/{condition}_vs_control_{covariate}/KEGG_enrichment.csv",
+        expand("results/deg/{bioproject}/{condition}_vs_control_{covariate}/ORA_Reactome_dotplot.pdf",
             zip, bioproject=BIOPROJECTS_TRIPLE, condition=CONDITIONS_TRIPLE, covariate=COVARIATES_TRIPLE),
-        expand("results/deg/{bioproject}/{condition}_vs_control_{covariate}/KEGG_dotplot.pdf",
+        expand("results/deg/{bioproject}/{condition}_vs_control_{covariate}/GSEA_GO_{ont}_ALL_enrichment.csv",
+            zip, bioproject=BIOPROJECTS_TRIPLE, condition=CONDITIONS_TRIPLE, covariate=COVARIATES_TRIPLE,
+            ont=["BP","CC","MF"]),
+        expand("results/deg/{bioproject}/{condition}_vs_control_{covariate}/GSEA_GO_dotplot_BPCMF.pdf",
             zip, bioproject=BIOPROJECTS_TRIPLE, condition=CONDITIONS_TRIPLE, covariate=COVARIATES_TRIPLE),
-        expand("results/deg/{bioproject}/{condition}_vs_control_{covariate}/Reactome_enrichment.csv",
+        expand("results/deg/{bioproject}/{condition}_vs_control_{covariate}/GSEA_KEGG_ALL_enrichment.csv",
             zip, bioproject=BIOPROJECTS_TRIPLE, condition=CONDITIONS_TRIPLE, covariate=COVARIATES_TRIPLE),
-        expand("results/deg/{bioproject}/{condition}_vs_control_{covariate}/Reactome_dotplot.pdf",
+        expand("results/deg/{bioproject}/{condition}_vs_control_{covariate}/GSEA_Reactome_ALL_enrichment.csv",
             zip, bioproject=BIOPROJECTS_TRIPLE, condition=CONDITIONS_TRIPLE, covariate=COVARIATES_TRIPLE),
-        expand("results/deg/{bioproject}/{condition}_vs_control_{covariate}/all_enrichments_summary.csv",
+        expand("results/deg/{bioproject}/{condition}_vs_control_{covariate}/GSEA_KEGG_dotplot.pdf",
             zip, bioproject=BIOPROJECTS_TRIPLE, condition=CONDITIONS_TRIPLE, covariate=COVARIATES_TRIPLE),
-        expand("results/deg_tx/{bioproject}/{condition}_vs_control_{covariate}/GO_enrichment.csv",
+        expand("results/deg/{bioproject}/{condition}_vs_control_{covariate}/GSEA_Reactome_dotplot.pdf",
             zip, bioproject=BIOPROJECTS_TRIPLE, condition=CONDITIONS_TRIPLE, covariate=COVARIATES_TRIPLE),
-        expand("results/deg_tx/{bioproject}/{condition}_vs_control_{covariate}/GO_dotplot.pdf",
+        expand("results/deg_tx/{bioproject}/{condition}_vs_control_{covariate}/ORA_GO_{ont}_{set}_enrichment.csv",
+            zip, bioproject=BIOPROJECTS_TRIPLE, condition=CONDITIONS_TRIPLE, covariate=COVARIATES_TRIPLE,
+            ont=["BP","CC","MF"], set=["ALL","UP","DOWN"]),
+        expand("results/deg_tx/{bioproject}/{condition}_vs_control_{covariate}/ORA_GO_dotplot_ALL_UP_DOWN_BPCCMF.pdf",
             zip, bioproject=BIOPROJECTS_TRIPLE, condition=CONDITIONS_TRIPLE, covariate=COVARIATES_TRIPLE),
-        expand("results/deg_tx/{bioproject}/{condition}_vs_control_{covariate}/KEGG_enrichment.csv",
+        expand("results/deg_tx/{bioproject}/{condition}_vs_control_{covariate}/ORA_KEGG_{set}_enrichment.csv",
+            zip, bioproject=BIOPROJECTS_TRIPLE, condition=CONDITIONS_TRIPLE, covariate=COVARIATES_TRIPLE,
+            set=["ALL","UP","DOWN"]),
+        expand("results/deg_tx/{bioproject}/{condition}_vs_control_{covariate}/ORA_Reactome_{set}_enrichment.csv",
+            zip, bioproject=BIOPROJECTS_TRIPLE, condition=CONDITIONS_TRIPLE, covariate=COVARIATES_TRIPLE,
+            set=["ALL","UP","DOWN"]),
+        expand("results/deg_tx/{bioproject}/{condition}_vs_control_{covariate}/ORA_KEGG_dotplot.pdf",
             zip, bioproject=BIOPROJECTS_TRIPLE, condition=CONDITIONS_TRIPLE, covariate=COVARIATES_TRIPLE),
-        expand("results/deg_tx/{bioproject}/{condition}_vs_control_{covariate}/KEGG_dotplot.pdf",
+        expand("results/deg_tx/{bioproject}/{condition}_vs_control_{covariate}/ORA_Reactome_dotplot.pdf",
             zip, bioproject=BIOPROJECTS_TRIPLE, condition=CONDITIONS_TRIPLE, covariate=COVARIATES_TRIPLE),
-        expand("results/deg_tx/{bioproject}/{condition}_vs_control_{covariate}/Reactome_enrichment.csv",
+        expand("results/deg_tx/{bioproject}/{condition}_vs_control_{covariate}/GSEA_GO_{ont}_ALL_enrichment.csv",
+            zip, bioproject=BIOPROJECTS_TRIPLE, condition=CONDITIONS_TRIPLE, covariate=COVARIATES_TRIPLE,
+            ont=["BP","CC","MF"]),
+        expand("results/deg_tx/{bioproject}/{condition}_vs_control_{covariate}/GSEA_GO_dotplot_BPCMF.pdf",
             zip, bioproject=BIOPROJECTS_TRIPLE, condition=CONDITIONS_TRIPLE, covariate=COVARIATES_TRIPLE),
-        expand("results/deg_tx/{bioproject}/{condition}_vs_control_{covariate}/Reactome_dotplot.pdf",
+        expand("results/deg_tx/{bioproject}/{condition}_vs_control_{covariate}/GSEA_KEGG_ALL_enrichment.csv",
             zip, bioproject=BIOPROJECTS_TRIPLE, condition=CONDITIONS_TRIPLE, covariate=COVARIATES_TRIPLE),
-        expand("results/deg_tx/{bioproject}/{condition}_vs_control_{covariate}/all_enrichments_summary.csv",
+        expand("results/deg_tx/{bioproject}/{condition}_vs_control_{covariate}/GSEA_Reactome_ALL_enrichment.csv",
+            zip, bioproject=BIOPROJECTS_TRIPLE, condition=CONDITIONS_TRIPLE, covariate=COVARIATES_TRIPLE),
+        expand("results/deg_tx/{bioproject}/{condition}_vs_control_{covariate}/GSEA_KEGG_dotplot.pdf",
+            zip, bioproject=BIOPROJECTS_TRIPLE, condition=CONDITIONS_TRIPLE, covariate=COVARIATES_TRIPLE),
+        expand("results/deg_tx/{bioproject}/{condition}_vs_control_{covariate}/GSEA_Reactome_dotplot.pdf",
             zip, bioproject=BIOPROJECTS_TRIPLE, condition=CONDITIONS_TRIPLE, covariate=COVARIATES_TRIPLE),
         expand("results/deg/{bioproject}/{condition}_vs_control_{covariate}/summary_report.html",
             zip, bioproject=BIOPROJECTS_TRIPLE, condition=CONDITIONS_TRIPLE, covariate=COVARIATES_TRIPLE),
@@ -988,17 +1019,59 @@ rule plot_deseq2_transcript:
             --label "transcripts" > {log} 2>&1
         """
 
+rule build_pc_gene_set:
+    input:
+        gtf = config["reference_annotation"]
+    output:
+        biotype_tsv = "results/deg/{bioproject}/ref_gene_biotype.tsv",
+        pc_list     = "results/deg/{bioproject}/pc_gene_ids.txt",
+        summary     = "results/deg/{bioproject}/ref_gene_biotype.summary.txt"
+    threads: config["resources"]["tiny"]["threads"]
+    resources:
+        mem_mb = config["resources"]["medium"]["mem_mb"]
+    log:
+        "logs/deg/{bioproject}/build_pc_gene_set.log"
+    shell:
+        """
+        Rscript workflow/scripts/build_pc_gene_set.R \
+          --gtf {input.gtf} \
+          --outdir results/deg/{wildcards.bioproject} \
+          > {log} 2>&1
+        """
+
 rule enrich_gene_targets:
     input:
-        filtered = "results/deg/{bioproject}/{condition}_vs_control_{covariate}/deseq_results_filtered.csv"
+        filtered = "results/deg/{bioproject}/{condition}_vs_control_{covariate}/deseq_results_filtered.csv",
+        raw      = "results/deg/{bioproject}/{condition}_vs_control_{covariate}/deseq_results.csv",
+        gene_meta = "results/deg/{bioproject}/gene_metadata.csv",
+        pc_list   = "results/deg/{bioproject}/pc_gene_ids.txt"
     output:
-        go = "results/deg/{bioproject}/{condition}_vs_control_{covariate}/GO_enrichment.csv",
-        go_dotplot = "results/deg/{bioproject}/{condition}_vs_control_{covariate}/GO_dotplot.pdf",
-        kegg = "results/deg/{bioproject}/{condition}_vs_control_{covariate}/KEGG_enrichment.csv",
-        kegg_dotplot = "results/deg/{bioproject}/{condition}_vs_control_{covariate}/KEGG_dotplot.pdf",
-        reactome = "results/deg/{bioproject}/{condition}_vs_control_{covariate}/Reactome_enrichment.csv",
-        reactome_dotplot = "results/deg/{bioproject}/{condition}_vs_control_{covariate}/Reactome_dotplot.pdf",
-        summary = "results/deg/{bioproject}/{condition}_vs_control_{covariate}/all_enrichments_summary.csv"
+        ora_go_bp_all_csv   = "results/deg/{bioproject}/{condition}_vs_control_{covariate}/ORA_GO_BP_ALL_enrichment.csv",
+        ora_go_bp_up_csv    = "results/deg/{bioproject}/{condition}_vs_control_{covariate}/ORA_GO_BP_UP_enrichment.csv",
+        ora_go_bp_down_csv  = "results/deg/{bioproject}/{condition}_vs_control_{covariate}/ORA_GO_BP_DOWN_enrichment.csv",
+        ora_go_cc_all_csv   = "results/deg/{bioproject}/{condition}_vs_control_{covariate}/ORA_GO_CC_ALL_enrichment.csv",
+        ora_go_cc_up_csv    = "results/deg/{bioproject}/{condition}_vs_control_{covariate}/ORA_GO_CC_UP_enrichment.csv",
+        ora_go_cc_down_csv  = "results/deg/{bioproject}/{condition}_vs_control_{covariate}/ORA_GO_CC_DOWN_enrichment.csv",
+        ora_go_mf_all_csv   = "results/deg/{bioproject}/{condition}_vs_control_{covariate}/ORA_GO_MF_ALL_enrichment.csv",
+        ora_go_mf_up_csv    = "results/deg/{bioproject}/{condition}_vs_control_{covariate}/ORA_GO_MF_UP_enrichment.csv",
+        ora_go_mf_down_csv  = "results/deg/{bioproject}/{condition}_vs_control_{covariate}/ORA_GO_MF_DOWN_enrichment.csv",
+        ora_kegg_all_csv    = "results/deg/{bioproject}/{condition}_vs_control_{covariate}/ORA_KEGG_ALL_enrichment.csv",
+        ora_kegg_up_csv     = "results/deg/{bioproject}/{condition}_vs_control_{covariate}/ORA_KEGG_UP_enrichment.csv",
+        ora_kegg_down_csv   = "results/deg/{bioproject}/{condition}_vs_control_{covariate}/ORA_KEGG_DOWN_enrichment.csv",
+        ora_react_all_csv   = "results/deg/{bioproject}/{condition}_vs_control_{covariate}/ORA_Reactome_ALL_enrichment.csv",
+        ora_react_up_csv    = "results/deg/{bioproject}/{condition}_vs_control_{covariate}/ORA_Reactome_UP_enrichment.csv",
+        ora_react_down_csv  = "results/deg/{bioproject}/{condition}_vs_control_{covariate}/ORA_Reactome_DOWN_enrichment.csv",
+        ora_go_pdf          = "results/deg/{bioproject}/{condition}_vs_control_{covariate}/ORA_GO_dotplot_ALL_UP_DOWN_BPCCMF.pdf",
+        ora_kegg_pdf        = "results/deg/{bioproject}/{condition}_vs_control_{covariate}/ORA_KEGG_dotplot.pdf",
+        ora_react_pdf       = "results/deg/{bioproject}/{condition}_vs_control_{covariate}/ORA_Reactome_dotplot.pdf",
+        gsea_go_bp_csv      = "results/deg/{bioproject}/{condition}_vs_control_{covariate}/GSEA_GO_BP_ALL_enrichment.csv",
+        gsea_go_cc_csv      = "results/deg/{bioproject}/{condition}_vs_control_{covariate}/GSEA_GO_CC_ALL_enrichment.csv",
+        gsea_go_mf_csv      = "results/deg/{bioproject}/{condition}_vs_control_{covariate}/GSEA_GO_MF_ALL_enrichment.csv",
+        gsea_kegg_csv       = "results/deg/{bioproject}/{condition}_vs_control_{covariate}/GSEA_KEGG_ALL_enrichment.csv",
+        gsea_react_csv      = "results/deg/{bioproject}/{condition}_vs_control_{covariate}/GSEA_Reactome_ALL_enrichment.csv",
+        gsea_go_pdf         = "results/deg/{bioproject}/{condition}_vs_control_{covariate}/GSEA_GO_dotplot_BPCMF.pdf",
+        gsea_kegg_pdf       = "results/deg/{bioproject}/{condition}_vs_control_{covariate}/GSEA_KEGG_dotplot.pdf",
+        gsea_react_pdf      = "results/deg/{bioproject}/{condition}_vs_control_{covariate}/GSEA_Reactome_dotplot.pdf",
     params:
         padj = config["enrichment"]["padj"],
         logfc = config["enrichment"]["logfc"]
@@ -1009,40 +1082,75 @@ rule enrich_gene_targets:
         "logs/deg/{bioproject}/{condition}_vs_control_{covariate}_enrich.log"
     shell:
         """
-        Rscript workflow/scripts/enrich_gene_targets.R \
-            -i {input.filtered} \
-            -o results/deg/{wildcards.bioproject}/{wildcards.condition}_vs_control_{wildcards.covariate} \
-            --padj-threshold {params.padj} \
-            --logfc-threshold {params.logfc} > {log} 2>&1
+        Rscript workflow/scripts/enrich_targets.R \
+          -i {input.filtered} \
+          -r {input.raw} \
+          -o results/deg/{wildcards.bioproject}/{wildcards.condition}_vs_control_{wildcards.covariate} \
+          --gene-meta {input.gene_meta} \
+          --padj-threshold {params.padj} \
+          --logfc-threshold {params.logfc} \
+          --pc-list {input.pc_list} \
+          --do-gsea > {log} 2>&1
         """
 
 rule enrich_transcript_targets:
     input:
-        filtered = "results/deg_tx/{bioproject}/{condition}_vs_control_{covariate}/deseq_results_filtered.csv"
+        filtered = "results/deg_tx/{bioproject}/{condition}_vs_control_{covariate}/deseq_results_filtered.csv",
+        raw      = "results/deg_tx/{bioproject}/{condition}_vs_control_{covariate}/deseq_results.csv",
+        gene_meta = "results/deg/{bioproject}/gene_metadata.csv",
+        tx_meta   = "results/deg_tx/{bioproject}/transcript_metadata.csv",
+        pc_list   = "results/deg/{bioproject}/pc_gene_ids.txt"
     output:
-        go = "results/deg_tx/{bioproject}/{condition}_vs_control_{covariate}/GO_enrichment.csv",
-        go_dotplot = "results/deg_tx/{bioproject}/{condition}_vs_control_{covariate}/GO_dotplot.pdf",
-        kegg = "results/deg_tx/{bioproject}/{condition}_vs_control_{covariate}/KEGG_enrichment.csv",
-        kegg_dotplot = "results/deg_tx/{bioproject}/{condition}_vs_control_{covariate}/KEGG_dotplot.pdf",
-        reactome = "results/deg_tx/{bioproject}/{condition}_vs_control_{covariate}/Reactome_enrichment.csv",
-        reactome_dotplot = "results/deg_tx/{bioproject}/{condition}_vs_control_{covariate}/Reactome_dotplot.pdf",
-        summary = "results/deg_tx/{bioproject}/{condition}_vs_control_{covariate}/all_enrichments_summary.csv"
+        ora_go_bp_all_csv   = "results/deg_tx/{bioproject}/{condition}_vs_control_{covariate}/ORA_GO_BP_ALL_enrichment.csv",
+        ora_go_bp_up_csv    = "results/deg_tx/{bioproject}/{condition}_vs_control_{covariate}/ORA_GO_BP_UP_enrichment.csv",
+        ora_go_bp_down_csv  = "results/deg_tx/{bioproject}/{condition}_vs_control_{covariate}/ORA_GO_BP_DOWN_enrichment.csv",
+        ora_go_cc_all_csv   = "results/deg_tx/{bioproject}/{condition}_vs_control_{covariate}/ORA_GO_CC_ALL_enrichment.csv",
+        ora_go_cc_up_csv    = "results/deg_tx/{bioproject}/{condition}_vs_control_{covariate}/ORA_GO_CC_UP_enrichment.csv",
+        ora_go_cc_down_csv  = "results/deg_tx/{bioproject}/{condition}_vs_control_{covariate}/ORA_GO_CC_DOWN_enrichment.csv",
+        ora_go_mf_all_csv   = "results/deg_tx/{bioproject}/{condition}_vs_control_{covariate}/ORA_GO_MF_ALL_enrichment.csv",
+        ora_go_mf_up_csv    = "results/deg_tx/{bioproject}/{condition}_vs_control_{covariate}/ORA_GO_MF_UP_enrichment.csv",
+        ora_go_mf_down_csv  = "results/deg_tx/{bioproject}/{condition}_vs_control_{covariate}/ORA_GO_MF_DOWN_enrichment.csv",
+        ora_kegg_all_csv    = "results/deg_tx/{bioproject}/{condition}_vs_control_{covariate}/ORA_KEGG_ALL_enrichment.csv",
+        ora_kegg_up_csv     = "results/deg_tx/{bioproject}/{condition}_vs_control_{covariate}/ORA_KEGG_UP_enrichment.csv",
+        ora_kegg_down_csv   = "results/deg_tx/{bioproject}/{condition}_vs_control_{covariate}/ORA_KEGG_DOWN_enrichment.csv",
+        ora_react_all_csv   = "results/deg_tx/{bioproject}/{condition}_vs_control_{covariate}/ORA_Reactome_ALL_enrichment.csv",
+        ora_react_up_csv    = "results/deg_tx/{bioproject}/{condition}_vs_control_{covariate}/ORA_Reactome_UP_enrichment.csv",
+        ora_react_down_csv  = "results/deg_tx/{bioproject}/{condition}_vs_control_{covariate}/ORA_Reactome_DOWN_enrichment.csv",
+        ora_go_pdf          = "results/deg_tx/{bioproject}/{condition}_vs_control_{covariate}/ORA_GO_dotplot_ALL_UP_DOWN_BPCCMF.pdf",
+        ora_kegg_pdf        = "results/deg_tx/{bioproject}/{condition}_vs_control_{covariate}/ORA_KEGG_dotplot.pdf",
+        ora_react_pdf       = "results/deg_tx/{bioproject}/{condition}_vs_control_{covariate}/ORA_Reactome_dotplot.pdf",
+        gsea_go_bp_csv      = "results/deg_tx/{bioproject}/{condition}_vs_control_{covariate}/GSEA_GO_BP_ALL_enrichment.csv",
+        gsea_go_cc_csv      = "results/deg_tx/{bioproject}/{condition}_vs_control_{covariate}/GSEA_GO_CC_ALL_enrichment.csv",
+        gsea_go_mf_csv      = "results/deg_tx/{bioproject}/{condition}_vs_control_{covariate}/GSEA_GO_MF_ALL_enrichment.csv",
+        gsea_kegg_csv       = "results/deg_tx/{bioproject}/{condition}_vs_control_{covariate}/GSEA_KEGG_ALL_enrichment.csv",
+        gsea_react_csv      = "results/deg_tx/{bioproject}/{condition}_vs_control_{covariate}/GSEA_Reactome_ALL_enrichment.csv",
+        gsea_go_pdf         = "results/deg_tx/{bioproject}/{condition}_vs_control_{covariate}/GSEA_GO_dotplot_BPCMF.pdf",
+        gsea_kegg_pdf       = "results/deg_tx/{bioproject}/{condition}_vs_control_{covariate}/GSEA_KEGG_dotplot.pdf",
+        gsea_react_pdf      = "results/deg_tx/{bioproject}/{condition}_vs_control_{covariate}/GSEA_Reactome_dotplot.pdf",
     params:
         padj = config["enrichment"]["padj"],
         logfc = config["enrichment"]["logfc"]
     threads: config["resources"]["medium"]["threads"]
     resources:
-        mem_mb = config["resources"]["medium"]["mem_mb"]
+        mem_mb = config["resources"]["xheavy"]["mem_mb"]
     log:
         "logs/deg_tx/{bioproject}/{condition}_vs_control_{covariate}_enrich.log"
     shell:
         """
-        Rscript workflow/scripts/enrich_gene_targets.R \
-            -i {input.filtered} \
-            -o results/deg_tx/{wildcards.bioproject}/{wildcards.condition}_vs_control_{wildcards.covariate} \
-            --padj-threshold {params.padj} \
-            --logfc-threshold {params.logfc} > {log} 2>&1
+        Rscript workflow/scripts/enrich_targets.R \
+          -i {input.filtered} \
+          -r {input.raw} \
+          -o results/deg_tx/{wildcards.bioproject}/{wildcards.condition}_vs_control_{wildcards.covariate} \
+          --gene-meta {input.gene_meta} \
+          --tx-meta {input.tx_meta} \
+          --padj-threshold {params.padj} \
+          --logfc-threshold {params.logfc} \
+          --pc-list {input.pc_list} \
+          --do-gsea > {log} 2>&1
         """
+        # export R_MAX_VSIZE=28GB
+        # export OMP_NUM_THREADS=1
+        # export MKL_NUM_THREADS=1
 
 rule deseq_summary_report_gene:
     input:
