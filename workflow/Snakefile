@@ -424,10 +424,8 @@ rule all:
             zip, bioproject=BIOPROJECTS_TRIPLE, condition=CONDITIONS_TRIPLE, covariate=COVARIATES_TRIPLE),
         expand("results/deg_tx/{bioproject}/{condition}_vs_control_{covariate}/GSEA_Reactome_dotplot.pdf",
             zip, bioproject=BIOPROJECTS_TRIPLE, condition=CONDITIONS_TRIPLE, covariate=COVARIATES_TRIPLE),
-        expand("results/deg/{bioproject}/{condition}_vs_control_{covariate}/summary_report.html",
-            zip, bioproject=BIOPROJECTS_TRIPLE, condition=CONDITIONS_TRIPLE, covariate=COVARIATES_TRIPLE),
-        expand("results/deg_tx/{bioproject}/{condition}_vs_control_{covariate}/summary_report.html",
-            zip, bioproject=BIOPROJECTS_TRIPLE, condition=CONDITIONS_TRIPLE, covariate=COVARIATES_TRIPLE),
+        expand("results/summary/{bioproject}/{condition}_vs_control_{covariate}/summary_report.html",
+            zip, bioproject=BIOPROJECTS_TRIPLE, condition=CONDITIONS_TRIPLE, covariate=COVARIATES_TRIPLE)
 
 
 rule fasterq_dump_pe:
@@ -1152,54 +1150,65 @@ rule enrich_transcript_targets:
         # export OMP_NUM_THREADS=1
         # export MKL_NUM_THREADS=1
 
-rule deseq_summary_report_gene:
+rule summary_report:
     input:
-        filtered = "results/deg/{bioproject}/{condition}_vs_control_{covariate}/deseq_results_filtered.csv",
-        volcano = "results/deg/{bioproject}/{condition}_vs_control_{covariate}/deseq_results_volcano.pdf",
-        pca = "results/deg/{bioproject}/{condition}_vs_control_{covariate}/deseq_results_PCA.pdf",
-        heatmap = "results/deg/{bioproject}/{condition}_vs_control_{covariate}/deseq_results_heatmap.pdf",
-        go_dotplot = "results/deg/{bioproject}/{condition}_vs_control_{covariate}/GO_dotplot.pdf",
-        kegg_dotplot = "results/deg/{bioproject}/{condition}_vs_control_{covariate}/KEGG_dotplot.pdf",
-        reactome_dotplot = "results/deg/{bioproject}/{condition}_vs_control_{covariate}/Reactome_dotplot.pdf"
+        gene_meta = "results/deg/{bioproject}/gene_metadata.csv",
+        tx_meta = "results/deg_tx/{bioproject}/transcript_metadata.csv",
+        gene_filtered = "results/deg/{bioproject}/{condition}_vs_control_{covariate}/deseq_results_filtered.csv",
+        gene_pca      = "results/deg/{bioproject}/{condition}_vs_control_{covariate}/deseq_results_PCA.pdf",
+        gene_volcano  = "results/deg/{bioproject}/{condition}_vs_control_{covariate}/deseq_results_volcano.pdf",
+        gene_heatmap  = "results/deg/{bioproject}/{condition}_vs_control_{covariate}/deseq_results_heatmap.pdf",
+        gene_go       = "results/deg/{bioproject}/{condition}_vs_control_{covariate}/ORA_GO_dotplot_ALL_UP_DOWN_BPCCMF.pdf",
+        gene_kegg     = "results/deg/{bioproject}/{condition}_vs_control_{covariate}/ORA_KEGG_dotplot.pdf",
+        gene_reactome = "results/deg/{bioproject}/{condition}_vs_control_{covariate}/ORA_Reactome_dotplot.pdf",
+        gene_gsea_go       = "results/deg/{bioproject}/{condition}_vs_control_{covariate}/GSEA_GO_dotplot_BPCMF.pdf",
+        gene_gsea_kegg     = "results/deg/{bioproject}/{condition}_vs_control_{covariate}/GSEA_KEGG_dotplot.pdf",
+        gene_gsea_reactome = "results/deg/{bioproject}/{condition}_vs_control_{covariate}/GSEA_Reactome_dotplot.pdf",
+        tx_filtered = "results/deg_tx/{bioproject}/{condition}_vs_control_{covariate}/deseq_results_filtered.csv",
+        tx_pca      = "results/deg_tx/{bioproject}/{condition}_vs_control_{covariate}/deseq_results_PCA.pdf",
+        tx_volcano  = "results/deg_tx/{bioproject}/{condition}_vs_control_{covariate}/deseq_results_volcano.pdf",
+        tx_heatmap  = "results/deg_tx/{bioproject}/{condition}_vs_control_{covariate}/deseq_results_heatmap.pdf",
+        tx_go       = "results/deg_tx/{bioproject}/{condition}_vs_control_{covariate}/ORA_GO_dotplot_ALL_UP_DOWN_BPCCMF.pdf",
+        tx_kegg     = "results/deg_tx/{bioproject}/{condition}_vs_control_{covariate}/ORA_KEGG_dotplot.pdf",
+        tx_reactome = "results/deg_tx/{bioproject}/{condition}_vs_control_{covariate}/ORA_Reactome_dotplot.pdf",
+        tx_gsea_go       = "results/deg_tx/{bioproject}/{condition}_vs_control_{covariate}/GSEA_GO_dotplot_BPCMF.pdf",
+        tx_gsea_kegg     = "results/deg_tx/{bioproject}/{condition}_vs_control_{covariate}/GSEA_KEGG_dotplot.pdf",
+        tx_gsea_reactome = "results/deg_tx/{bioproject}/{condition}_vs_control_{covariate}/GSEA_Reactome_dotplot.pdf",
+        switch_qc   = "results/isoform_switches/{bioproject}/{condition}_vs_control_{covariate}/isoform_switch_qc.pdf"
     output:
-        html = "results/deg/{bioproject}/{condition}_vs_control_{covariate}/summary_report.html"
+        html = "results/summary/{bioproject}/{condition}_vs_control_{covariate}/summary_report.html"
     threads: config["resources"]["tiny"]["threads"]
     resources:
         mem_mb = config["resources"]["tiny"]["mem_mb"]
     log:
-        "logs/deg/{bioproject}/{condition}_vs_control_{covariate}_summary_report.log"
+        "logs/summary/{bioproject}/{condition}_vs_control_{covariate}_summary_report.log"
     shell:
         """
         Rscript workflow/scripts/summary_report.R \
-            -i {input.filtered} \
-            -o {output.html} \
-            --label gene > {log} 2>&1
+          --output {output.html} \
+          --title "{wildcards.bioproject}: {wildcards.condition}_vs_control_{wildcards.covariate}" \
+          --gene-meta {input.gene_meta} \
+          --tx-meta  {input.tx_meta} \
+          --gene-filtered      {input.gene_filtered} \
+          --gene-pca-pdf       {input.gene_pca} \
+          --gene-volcano-pdf   {input.gene_volcano} \
+          --gene-heatmap-pdf   {input.gene_heatmap} \
+          --gene-go-pdf        {input.gene_go} \
+          --gene-kegg-pdf      {input.gene_kegg} \
+          --gene-reactome-pdf  {input.gene_reactome} \
+          --gene-gsea-go-pdf       {input.gene_gsea_go} \
+          --gene-gsea-kegg-pdf     {input.gene_gsea_kegg} \
+          --gene-gsea-reactome-pdf {input.gene_gsea_reactome} \
+          --tx-filtered        {input.tx_filtered} \
+          --tx-pca-pdf         {input.tx_pca} \
+          --tx-volcano-pdf     {input.tx_volcano} \
+          --tx-heatmap-pdf     {input.tx_heatmap} \
+          --tx-go-pdf          {input.tx_go} \
+          --tx-kegg-pdf        {input.tx_kegg} \
+          --tx-reactome-pdf    {input.tx_reactome} \
+          --tx-gsea-go-pdf       {input.tx_gsea_go} \
+          --tx-gsea-kegg-pdf     {input.tx_gsea_kegg} \
+          --tx-gsea-reactome-pdf {input.tx_gsea_reactome} \
+          --switch-qc-pdf      {input.switch_qc} \
+          > {log} 2>&1
         """
-
-rule deseq_summary_report_transcript:
-    input:
-        filtered = "results/deg_tx/{bioproject}/{condition}_vs_control_{covariate}/deseq_results_filtered.csv",
-        volcano = "results/deg_tx/{bioproject}/{condition}_vs_control_{covariate}/deseq_results_volcano.pdf",
-        pca = "results/deg_tx/{bioproject}/{condition}_vs_control_{covariate}/deseq_results_PCA.pdf",
-        heatmap = "results/deg_tx/{bioproject}/{condition}_vs_control_{covariate}/deseq_results_heatmap.pdf",
-        go_dotplot = "results/deg_tx/{bioproject}/{condition}_vs_control_{covariate}/GO_dotplot.pdf",
-        kegg_dotplot = "results/deg_tx/{bioproject}/{condition}_vs_control_{covariate}/KEGG_dotplot.pdf",
-        reactome_dotplot = "results/deg_tx/{bioproject}/{condition}_vs_control_{covariate}/Reactome_dotplot.pdf"
-    output:
-        html = "results/deg_tx/{bioproject}/{condition}_vs_control_{covariate}/summary_report.html"
-    threads: config["resources"]["tiny"]["threads"]
-    resources:
-        mem_mb = config["resources"]["tiny"]["mem_mb"]
-    log:
-        "logs/deg_tx/{bioproject}/{condition}_vs_control_{covariate}_summary_report.log"
-    shell:
-        """
-        Rscript workflow/scripts/summary_report.R \
-            -i {input.filtered} \
-            -o {output.html} \
-            --label transcript > {log} 2>&1
-        """
-#         """
-##        module load autoload profile/bioinf &&
-##        module load autoload r/4.1.0--gcc--10.2.0-python--3.8.6 &&
-##        """
