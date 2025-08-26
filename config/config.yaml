@@ -63,10 +63,10 @@ deseq2_transcript:
 
 deseq2_smallrna:
   padj:
-    BEAS_2B_short: 0.02
-    HEP_G2_short: 0.02
+    BEAS_2B_short: 0.01
+    HEP_G2_short: 0.01
     default: 0.05
-  logfc: 0.2
+  logfc: 0.3
 
 # ---- Isoform Switch Analysis ----
 isoform_switch:
@@ -84,8 +84,12 @@ enrichment:
   logfc: 0.5
 
 enrichment_mirna:
-  padj: 0.05
-
+  padj:
+    BEAS_2B_short: 0.01
+    HEP_G2_short: 0.01
+    default: 0.05
+  logfc: 0.3
+  
 # ---- Plotting ----
 plotting:
   topn: 60
