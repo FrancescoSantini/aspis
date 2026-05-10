@@ -15,8 +15,9 @@ branch locally or on an HPC cluster.
 ## Current Status
 
 This codebase is not yet a polished general-purpose pipeline. It currently
-contains three main workflow entry points:
+contains a new first-stage entry point plus three legacy workflow entry points:
 
+- `Snakefile`: materializes intake rows into canonical FASTQs and a manifest.
 - `workflow/prefetchSRA`: downloads SRA accessions listed in the sample sheet.
 - `workflow/Snakefile`: legacy long RNA-seq workflow.
 - `workflow/SmallRNA`: legacy small RNA/miRNA workflow.
@@ -56,9 +57,17 @@ The legacy small RNA branch includes:
 
 ```text
 config/
+  aspis.yaml               First-stage materialization settings
+  intake.tsv               Minimal intake sheet for ASPIS materialization
   config.yaml              Workflow settings and thresholds
   sample_sheet.csv         Current working sample sheet
   sample_sheet_tests.csv   Small SRA/local test sample sheet
+
+schemas/
+  intake.schema.json
+  materialized_manifest.schema.json
+
+Snakefile                  New ASPIS materialization entry point
 
 workflow/
   Snakefile                Legacy long RNA-seq workflow
@@ -73,8 +82,21 @@ and DAG/rulegraph artifacts are intentionally ignored by Git.
 
 ## Current Input Model
 
-The current sample sheet is `config/sample_sheet.csv`. It uses these legacy
-columns:
+The new first-stage workflow reads `config/intake.tsv`. The minimal required
+columns are:
+
+```text
+library_id,input_1
+```
+
+Recommended additional columns include:
+
+```text
+biospecimen_id,project,input_2,assay_hint,condition,treatment,dose_uM,time_h,replicate,batch
+```
+
+The legacy analysis workflows still read `config/sample_sheet.csv`. It uses
+these legacy columns:
 
 ```text
 sample_name,run,biosample,bioproject,condition,covariate1,covariate2
@@ -125,6 +147,9 @@ than probing files or public accessions at Snakefile parse time.
 From the repository root:
 
 ```bash
+# Materialize local FASTQ files or public run accessions into a manifest
+snakemake --cores 1
+
 # Download SRA inputs from the current sample sheet
 snakemake -s workflow/prefetchSRA --cores 1
 
@@ -142,6 +167,13 @@ The SLURM profile currently uses an older custom submit-script style. A future
 cleanup should move toward a modern Snakemake workflow profile using the SLURM
 executor plugin, while keeping cluster policy out of the biological workflow
 configuration.
+
+The first-stage materialization workflow can also be run directly to build only
+the manifest:
+
+```bash
+snakemake --cores 1 meta/materialized_manifest.tsv
+```
 
 ## Major Dependencies
 

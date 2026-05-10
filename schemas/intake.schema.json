@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ASPIS intake row",
+  "type": "object",
+  "required": ["library_id", "input_1"],
+  "properties": {
+    "library_id": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[A-Za-z0-9_.-]+$"
+    },
+    "biospecimen_id": {
+      "type": "string"
+    },
+    "project": {
+      "type": "string"
+    },
+    "input_1": {
+      "type": "string",
+      "minLength": 1
+    },
+    "input_2": {
+      "type": "string"
+    },
+    "assay_hint": {
+      "type": "string",
+      "enum": ["", "longrna", "smallrna"]
+    }
+  },
+  "additionalProperties": {
+    "type": "string"
+  }
+}
+

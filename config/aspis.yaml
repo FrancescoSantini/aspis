@@ -1,0 +1,19 @@
+# ASPIS first-stage configuration.
+#
+# This file is intentionally separate from config/config.yaml, which still
+# belongs to the legacy long/small RNA workflows.
+
+intake: config/intake.tsv
+
+paths:
+  raw_dir: work/raw
+  metadata_dir: meta/materialized
+  manifest: meta/materialized_manifest.tsv
+  sra_cache_dir: cache/sra
+  scratch_dir: work/tmp
+
+materialization:
+  local_link_mode: symlink
+  sra_max_size: 40G
+  validate_sra: true
+

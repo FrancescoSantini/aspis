@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ASPIS materialized manifest row",
+  "type": "object",
+  "required": ["library_id", "source_type", "layout", "fastq_1"],
+  "properties": {
+    "library_id": {
+      "type": "string"
+    },
+    "biospecimen_id": {
+      "type": "string"
+    },
+    "project": {
+      "type": "string"
+    },
+    "source_type": {
+      "type": "string",
+      "enum": ["local_fastq", "insdc_run"]
+    },
+    "source_id": {
+      "type": "string"
+    },
+    "archive": {
+      "type": "string"
+    },
+    "assay": {
+      "type": "string"
+    },
+    "assay_confidence": {
+      "type": "string"
+    },
+    "layout": {
+      "type": "string",
+      "enum": ["single", "paired"]
+    },
+    "fastq_1": {
+      "type": "string"
+    },
+    "fastq_2": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": {
+    "type": "string"
+  }
+}
+
