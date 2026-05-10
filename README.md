@@ -67,6 +67,15 @@ schemas/
   intake.schema.json
   materialized_manifest.schema.json
 
+envs/
+  aspis-snakemake.yaml     Snakemake 9 orchestration environment
+
+profiles/
+  slurm/                   Snakemake 8/9 SLURM executor profile skeleton
+
+docs/
+  g100_quickstart.md       CINECA Galileo100 testing notes
+
 Snakefile                  New ASPIS materialization entry point
 
 workflow/
@@ -174,6 +183,9 @@ the manifest:
 ```bash
 snakemake --cores 1 meta/materialized_manifest.tsv
 ```
+
+On CINECA G100, see `docs/g100_quickstart.md` for environment creation and
+SLURM profile testing.
 
 ## Major Dependencies
 
