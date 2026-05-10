@@ -1,0 +1,13 @@
+name: aspis-smk9
+channels:
+  - conda-forge
+  - bioconda
+  - nodefaults
+dependencies:
+  - python=3.11
+  - snakemake>=9,<10
+  - snakemake-executor-plugin-slurm
+  - pandas
+  - pyyaml
+  - sra-tools
+

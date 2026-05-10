@@ -1,0 +1,39 @@
+# ASPIS workflow profile for Snakemake >=8 with the SLURM executor plugin.
+#
+# Use this for the refactored ASPIS workflow, not for the legacy
+# workflow/profiles/slurm cookiecutter profile.
+#
+# Before running on CINECA G100, verify that slurm_account and slurm_partition
+# match the active project allocation.
+
+executor: slurm
+jobs: 80
+local-cores: 1
+latency-wait: 60
+rerun-incomplete: true
+keep-going: true
+printshellcmds: true
+show-failed-logs: true
+software-deployment-method: conda
+
+default-resources:
+  slurm_account: "ELIX4_sturchio_0"
+  slurm_partition: "g100_usr_prod"
+  runtime: 60
+  mem_mb: 4000
+  disk_mb: 10000
+
+set-threads:
+  materialize_library: 1
+  build_materialized_manifest: 1
+
+set-resources:
+  materialize_library:
+    runtime: 360
+    mem_mb: 64000
+    disk_mb: 250000
+  build_materialized_manifest:
+    runtime: 15
+    mem_mb: 1000
+    disk_mb: 1000
+
