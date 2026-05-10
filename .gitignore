@@ -1,6 +1,12 @@
 .snakemake/
+__pycache__/
+*.py[cod]
 cache/
 genome/
 logs/
+meta/
 results/
 samples/
+work/
+*_dag.*
+*_rulegraph.*
