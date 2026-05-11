@@ -32,10 +32,14 @@ git pull
 
 ## 2. Create the ASPIS Snakemake Environment
 
-Use `mamba` from the existing conda installation:
+Use `mamba` from the existing conda installation, but create ASPIS as a
+top-level sibling environment. The explicit `-p` avoids accidentally nesting the
+new environment inside an already active conda environment.
 
 ```bash
-mamba env create -f envs/aspis-snakemake.yaml
+~/miniconda3/envs/snakemake/bin/mamba env create \
+  -p ~/miniconda3/envs/aspis-smk9 \
+  -f envs/aspis-snakemake.yaml
 conda activate aspis-smk9
 ```
 
@@ -44,7 +48,9 @@ a package cache on a work filesystem for this command only:
 
 ```bash
 mkdir -p "$WORK/conda/pkgs"
-CONDA_PKGS_DIRS="$WORK/conda/pkgs" mamba env create -f envs/aspis-snakemake.yaml
+CONDA_PKGS_DIRS="$WORK/conda/pkgs" ~/miniconda3/envs/snakemake/bin/mamba env create \
+  -p ~/miniconda3/envs/aspis-smk9 \
+  -f envs/aspis-snakemake.yaml
 ```
 
 Then activate and verify:
@@ -123,22 +129,40 @@ cd ~/aspis
 snakemake --workflow-profile profiles/slurm --dry-run
 ```
 
-Before real submission, verify `profiles/slurm/config.v8+.yaml`:
+The committed profile does not hardcode a project account because CINECA
+accounts are grant-specific. Before any real submission, identify the active
+account:
 
-```yaml
-default-resources:
-  slurm_account: "ELIX4_sturchio_0"
-  slurm_partition: "g100_usr_prod"
+```bash
+saldo -b "$USER"
 ```
 
-If the account or partition is no longer valid for the active CINECA project,
-edit the profile before submitting jobs.
+Then pass it at runtime:
+
+```bash
+snakemake --workflow-profile profiles/slurm \
+  --default-resources slurm_account=ELIX6_santini \
+  --dry-run
+```
+
+Use `sbatch --test-only` for account/partition validation when possible. It asks
+SLURM whether the submission is valid without starting a job:
+
+```bash
+sbatch --test-only -A ELIX6_santini -p g100_usr_prod \
+  -t 00:05:00 --mem=1000 --wrap="hostname"
+```
 
 For real SLURM execution:
 
 ```bash
-snakemake --workflow-profile profiles/slurm
+snakemake --workflow-profile profiles/slurm \
+  --default-resources slurm_account=ELIX6_santini
 ```
+
+Do not use real SLURM submissions for routine development. Keep development and
+fixture tests local with `--cores 1`; reserve SLURM for final dry-runs, account
+validation, and full analyses.
 
 ## 6. Public Accession Test
 
@@ -177,4 +201,3 @@ which snakemake
 which prefetch
 which fasterq-dump
 ```
-
