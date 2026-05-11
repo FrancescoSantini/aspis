@@ -3,8 +3,14 @@
 # Use this for the refactored ASPIS workflow, not for the legacy
 # workflow/profiles/slurm cookiecutter profile.
 #
-# Before running on CINECA G100, verify that slurm_account and slurm_partition
-# match the active project allocation.
+# This profile intentionally does not set slurm_account. Accounts are user- and
+# grant-specific, so pass the active account at runtime, for example:
+#
+#   snakemake --workflow-profile profiles/slurm \
+#     --default-resources slurm_account=your_slurm_account
+#
+# Keep development on local cores. Use this profile only for final dry-runs and
+# deliberate cluster submissions.
 
 executor: slurm
 jobs: 80
@@ -17,7 +23,6 @@ show-failed-logs: true
 software-deployment-method: conda
 
 default-resources:
-  slurm_account: "ELIX4_sturchio_0"
   slurm_partition: "g100_usr_prod"
   runtime: 60
   mem_mb: 4000
@@ -36,4 +41,3 @@ set-resources:
     runtime: 15
     mem_mb: 1000
     disk_mb: 1000
-
