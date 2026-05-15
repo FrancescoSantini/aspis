@@ -105,6 +105,7 @@ cat meta/environment_report.tsv
 cat results/branches/rnaseq/ASPIS_TEST/branch.ready
 cat results/branches/rnaseq/ASPIS_TEST/samples.tsv
 cat results/branches/rnaseq/ASPIS_TEST/materialized_manifest.tsv
+cat results/branches/rnaseq/ASPIS_TEST/fastq_inspection.tsv
 cat results/branches/rnaseq/ASPIS_TEST/design.tsv
 ```
 
@@ -122,12 +123,15 @@ meta/environment_report.tsv
 results/branches/rnaseq/ASPIS_TEST/branch.ready
 results/branches/rnaseq/ASPIS_TEST/samples.tsv
 results/branches/rnaseq/ASPIS_TEST/materialized_manifest.tsv
+results/branches/rnaseq/ASPIS_TEST/fastq_inspection.tsv
 results/branches/rnaseq/ASPIS_TEST/design.tsv
 ```
 
 Branch `samples.tsv` files are the normalized downstream sample sheets. Branch
 `materialized_manifest.tsv` files are the full audit subset, including
 source-specific metadata such as ENA fields when present.
+Branch `fastq_inspection.tsv` files contain lightweight R1/R2 FASTQ checks and
+sampled read-length/GC summaries.
 
 ## 4. Optional Snakemake 7 Compatibility Check
 
