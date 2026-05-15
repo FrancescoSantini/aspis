@@ -25,8 +25,8 @@ long-read RNA sequencing.
 This codebase is not yet a polished general-purpose pipeline. It currently
 contains a new first-stage entry point plus three legacy workflow entry points:
 
-- `Snakefile`: materializes intake rows into canonical FASTQs, a manifest, and
-  an assay-level analysis plan, and an environment report.
+- `Snakefile`: materializes intake rows into canonical FASTQs, a manifest, an
+  assay-level analysis plan, and an environment report.
 - `workflow/prefetchSRA`: downloads SRA accessions listed in the sample sheet.
 - `workflow/Snakefile`: legacy long RNA-seq workflow.
 - `workflow/SmallRNA`: legacy small RNA/miRNA workflow.
@@ -159,6 +159,7 @@ meta/materialized/{library_id}.json
 meta/materialized_manifest.tsv
 meta/analysis_plan.tsv
 meta/environment_report.tsv
+results/branches/{assay}/{project}/branch.ready
 ```
 
 Downstream analysis rules should consume manifest-derived contracts rather than
@@ -170,8 +171,11 @@ Snakemake dependency graph even when an old manifest file is already present.
 
 `meta/analysis_plan.tsv` is the first downstream planning layer. It groups
 materialized libraries by `project` and `assay`, checks that canonical FASTQ
-paths exist, and stops if a library still has an unknown assay. Later, this file
-will drive which RNA-seq or small RNA final outputs `rule all` requests.
+paths exist, and stops if a library still has an unknown assay. `rule all` reads
+this plan after it is built and requests one branch sentinel for each ready
+`project`/`assay` row. A project with only `rnaseq` inputs gets only the RNA-seq
+branch; a project with only `smallrna` inputs gets only the small RNA branch; a
+project with both assays gets both branch sentinels.
 
 `meta/environment_report.tsv` records command paths and versions for required
 and optional command-line tools. The conda environment YAML describes the
@@ -205,11 +209,12 @@ executor plugin, while keeping cluster policy out of the biological workflow
 configuration.
 
 The first-stage materialization workflow can also be run directly to build only
-the manifest or the downstream analysis plan:
+the manifest, the downstream analysis plan, or a branch sentinel:
 
 ```bash
 snakemake --cores 1 meta/materialized_manifest.tsv
 snakemake --cores 1 meta/analysis_plan.tsv
+snakemake --cores 1 results/branches/rnaseq/ASPIS_TEST/branch.ready
 ```
 
 On CINECA G100, see `docs/g100_quickstart.md` for environment creation and

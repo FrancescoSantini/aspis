@@ -12,6 +12,7 @@ paths:
   environment_report: meta/environment_report.tsv
   sra_cache_dir: cache/sra
   scratch_dir: work/tmp
+  branch_dir: results/branches
 
 materialization:
   local_link_mode: symlink

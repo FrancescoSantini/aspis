@@ -9,6 +9,7 @@ from pathlib import Path
 
 LIBRARY_ID_RE = re.compile(r"^[A-Za-z0-9_.-]+$")
 INSDC_RUN_RE = re.compile(r"^[SED]RR\d+$")
+PROJECT_ID_RE = re.compile(r"^[A-Za-z0-9_.-]+$")
 INTAKE = config.get("intake", "config/intake.tsv")
 PATHS = config.get("paths", {})
 MATERIALIZATION = config.get("materialization", {})
@@ -21,6 +22,7 @@ METADATA_DIR = PATHS.get("metadata_dir", "meta/materialized")
 MANIFEST = PATHS.get("manifest", "meta/materialized_manifest.tsv")
 ANALYSIS_PLAN = PATHS.get("analysis_plan", "meta/analysis_plan.tsv")
 ENVIRONMENT_REPORT = PATHS.get("environment_report", "meta/environment_report.tsv")
+BRANCH_DIR = PATHS.get("branch_dir", "results/branches")
 SRA_CACHE_DIR = PATHS.get("sra_cache_dir", "cache/sra")
 SCRATCH_DIR = PATHS.get("scratch_dir", "work/tmp")
 
@@ -79,12 +81,32 @@ def materialization_partition(wildcards):
     return EXECUTION.get("default_partition", "g100_usr_prod")
 
 
-localrules: all, check_environment
+def planned_branch_targets(wildcards):
+    plan_path = checkpoints.build_analysis_plan.get().output[0]
+    targets = []
+    with open(plan_path, newline="") as handle:
+        reader = csv.DictReader(handle, delimiter="\t")
+        for row in reader:
+            if row.get("status", "") != "ready":
+                continue
+            assay = row.get("assay", "")
+            project = row.get("project", "")
+            if assay not in {"rnaseq", "smallrna"}:
+                raise ValueError(f"Unsupported ready assay in analysis plan: {assay!r}")
+            if not PROJECT_ID_RE.match(project):
+                raise ValueError(
+                    f"Project {project!r} is not path-safe; use letters, numbers, '.', '_', or '-'."
+                )
+            targets.append(f"{BRANCH_DIR}/{assay}/{project}/branch.ready")
+    return targets
+
+
+localrules: all, check_environment, assay_branch_ready
 
 
 rule all:
     input:
-        ANALYSIS_PLAN,
+        planned_branch_targets,
         ENVIRONMENT_REPORT
 
 
@@ -160,7 +182,7 @@ rule build_materialized_manifest:
         """
 
 
-rule build_analysis_plan:
+checkpoint build_analysis_plan:
     input:
         manifest=MANIFEST,
         rawdirs=RAW_DIRS
@@ -179,5 +201,29 @@ rule build_analysis_plan:
           --manifest {input.manifest:q} \
           --output {output:q} \
           {params.allow_unclassified_flag} \
+          > {log:q} 2>&1
+        """
+
+
+wildcard_constraints:
+    assay="rnaseq|smallrna",
+    project="[A-Za-z0-9_.-]+"
+
+
+rule assay_branch_ready:
+    input:
+        plan=ANALYSIS_PLAN
+    output:
+        f"{BRANCH_DIR}" + "/{assay}/{project}/branch.ready"
+    log:
+        "logs/branches/{assay}/{project}.log"
+    shell:
+        r"""
+        mkdir -p logs/branches/{wildcards.assay}
+        python3 workflow/scripts/write_branch_ready.py \
+          --plan {input.plan:q} \
+          --assay {wildcards.assay:q} \
+          --project {wildcards.project:q} \
+          --output {output:q} \
           > {log:q} 2>&1
         """

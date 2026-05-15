@@ -102,6 +102,7 @@ Inspect the manifest:
 cat meta/materialized_manifest.tsv
 cat meta/analysis_plan.tsv
 cat meta/environment_report.tsv
+cat results/branches/rnaseq/ASPIS_TEST/branch.ready
 ```
 
 Expected outputs:
@@ -115,6 +116,7 @@ meta/materialized/example_pe.json
 meta/materialized_manifest.tsv
 meta/analysis_plan.tsv
 meta/environment_report.tsv
+results/branches/rnaseq/ASPIS_TEST/branch.ready
 ```
 
 ## 4. Optional Snakemake 7 Compatibility Check
