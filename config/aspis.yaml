@@ -45,6 +45,11 @@ multiqc:
   command: multiqc
   extra_args: ""
 
+rnaseq_preprocess:
+  command: fastp
+  threads: 2
+  extra_args: ""
+
 execution:
   default_partition: g100_usr_prod
   download_partition: g100_all_serial
@@ -55,6 +60,8 @@ environment:
     - snakemake
     - fastqc
     - multiqc
+  rnaseq_required_tools:
+    - fastp
   sra_required_tools:
     - prefetch
     - fasterq-dump

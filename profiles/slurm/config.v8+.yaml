@@ -33,6 +33,10 @@ set-threads:
   build_materialized_manifest: 1
   run_branch_fastqc: 2
   run_branch_multiqc: 1
+  check_rnaseq_preprocess_environment: 1
+  preprocess_rnaseq_branch: 2
+  run_preprocessed_rnaseq_fastqc: 2
+  run_preprocessed_rnaseq_multiqc: 1
 
 set-resources:
   materialize_library:
@@ -48,6 +52,22 @@ set-resources:
     mem_mb: 4000
     disk_mb: 10000
   run_branch_multiqc:
+    runtime: 15
+    mem_mb: 2000
+    disk_mb: 2000
+  check_rnaseq_preprocess_environment:
+    runtime: 5
+    mem_mb: 1000
+    disk_mb: 1000
+  preprocess_rnaseq_branch:
+    runtime: 120
+    mem_mb: 8000
+    disk_mb: 50000
+  run_preprocessed_rnaseq_fastqc:
+    runtime: 60
+    mem_mb: 4000
+    disk_mb: 10000
+  run_preprocessed_rnaseq_multiqc:
     runtime: 15
     mem_mb: 2000
     disk_mb: 2000

@@ -76,6 +76,8 @@ which fastqc
 fastqc --version
 which multiqc
 multiqc --version
+which fastp
+fastp --version
 ```
 
 Expected major version:
@@ -123,6 +125,12 @@ cat results/branches/rnaseq/ASPIS_TEST/fastqc/fastqc_manifest.tsv
 cat results/branches/rnaseq/ASPIS_TEST/fastqc/fastqc.done
 ls -lh results/branches/rnaseq/ASPIS_TEST/multiqc/multiqc_report.html
 cat results/branches/rnaseq/ASPIS_TEST/multiqc/multiqc.done
+cat results/branches/rnaseq/ASPIS_TEST/preprocess/environment_report.tsv
+cat results/branches/rnaseq/ASPIS_TEST/preprocess/preprocessed_samples.tsv
+cat results/branches/rnaseq/ASPIS_TEST/preprocess/preprocess.done
+cat results/branches/rnaseq/ASPIS_TEST/preprocess/fastq_inspection.tsv
+cat results/branches/rnaseq/ASPIS_TEST/preprocess/fastqc/fastqc_manifest.tsv
+ls -lh results/branches/rnaseq/ASPIS_TEST/preprocess/multiqc/multiqc_report.html
 cat results/branches/rnaseq/ASPIS_TEST/design.tsv
 ```
 
@@ -145,6 +153,14 @@ results/branches/rnaseq/ASPIS_TEST/fastqc/fastqc_manifest.tsv
 results/branches/rnaseq/ASPIS_TEST/fastqc/fastqc.done
 results/branches/rnaseq/ASPIS_TEST/multiqc/multiqc_report.html
 results/branches/rnaseq/ASPIS_TEST/multiqc/multiqc.done
+results/branches/rnaseq/ASPIS_TEST/preprocess/environment_report.tsv
+results/branches/rnaseq/ASPIS_TEST/preprocess/preprocessed_samples.tsv
+results/branches/rnaseq/ASPIS_TEST/preprocess/preprocess.done
+results/branches/rnaseq/ASPIS_TEST/preprocess/fastq_inspection.tsv
+results/branches/rnaseq/ASPIS_TEST/preprocess/fastqc/fastqc_manifest.tsv
+results/branches/rnaseq/ASPIS_TEST/preprocess/fastqc/fastqc.done
+results/branches/rnaseq/ASPIS_TEST/preprocess/multiqc/multiqc_report.html
+results/branches/rnaseq/ASPIS_TEST/preprocess/multiqc/multiqc.done
 results/branches/rnaseq/ASPIS_TEST/design.tsv
 ```
 
@@ -156,6 +172,9 @@ sampled read-length/GC summaries.
 Branch `fastqc/fastqc_manifest.tsv` files point to the FastQC HTML and ZIP
 outputs for each staged read file.
 Branch `multiqc/multiqc_report.html` files summarize those FastQC outputs.
+RNA-seq branch `preprocess/preprocessed_samples.tsv` files point downstream
+rules at fastp-preprocessed FASTQs and preserve the original paths as
+`raw_fastq_1` / `raw_fastq_2`.
 
 ## 4. Optional Snakemake 7 Compatibility Check
 

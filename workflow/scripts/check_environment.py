@@ -17,6 +17,7 @@ VERSION_COMMANDS = {
     "fasterq-dump": ["fasterq-dump", "--version"],
     "fastqc": ["fastqc", "--version"],
     "multiqc": ["multiqc", "--version"],
+    "fastp": ["fastp", "--version"],
     "vdb-validate": ["vdb-validate", "--version"],
 }
 

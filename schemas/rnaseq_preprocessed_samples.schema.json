@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ASPIS RNA-seq preprocessed sample row",
+  "type": "object",
+  "required": [
+    "library_id",
+    "project",
+    "assay",
+    "layout",
+    "fastq_1",
+    "raw_fastq_1",
+    "fastp_json",
+    "fastp_html",
+    "preprocessing_tool"
+  ],
+  "properties": {
+    "library_id": {
+      "type": "string"
+    },
+    "project": {
+      "type": "string"
+    },
+    "assay": {
+      "type": "string",
+      "enum": ["rnaseq"]
+    },
+    "layout": {
+      "type": "string",
+      "enum": ["single", "paired"]
+    },
+    "fastq_1": {
+      "type": "string"
+    },
+    "fastq_2": {
+      "type": "string"
+    },
+    "raw_fastq_1": {
+      "type": "string"
+    },
+    "raw_fastq_2": {
+      "type": "string"
+    },
+    "fastp_json": {
+      "type": "string"
+    },
+    "fastp_html": {
+      "type": "string"
+    },
+    "preprocessing_tool": {
+      "type": "string",
+      "enum": ["fastp"]
+    }
+  },
+  "additionalProperties": {
+    "type": "string"
+  }
+}
