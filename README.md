@@ -160,6 +160,7 @@ meta/materialized_manifest.tsv
 meta/analysis_plan.tsv
 meta/environment_report.tsv
 results/branches/{assay}/{project}/branch.ready
+results/branches/{assay}/{project}/samples.tsv
 ```
 
 Downstream analysis rules should consume manifest-derived contracts rather than
@@ -176,6 +177,10 @@ this plan after it is built and requests one branch sentinel for each ready
 `project`/`assay` row. A project with only `rnaseq` inputs gets only the RNA-seq
 branch; a project with only `smallrna` inputs gets only the small RNA branch; a
 project with both assays gets both branch sentinels.
+
+Each branch directory also gets a `samples.tsv` filtered from
+`meta/materialized_manifest.tsv`. Future RNA-seq and small RNA rules should read
+that branch-local sample sheet instead of reparsing the global manifest.
 
 `meta/environment_report.tsv` records command paths and versions for required
 and optional command-line tools. The conda environment YAML describes the

@@ -212,9 +212,11 @@ wildcard_constraints:
 
 rule assay_branch_ready:
     input:
-        plan=ANALYSIS_PLAN
+        plan=ANALYSIS_PLAN,
+        manifest=MANIFEST
     output:
-        f"{BRANCH_DIR}" + "/{assay}/{project}/branch.ready"
+        ready=f"{BRANCH_DIR}" + "/{assay}/{project}/branch.ready",
+        samples=f"{BRANCH_DIR}" + "/{assay}/{project}/samples.tsv"
     log:
         "logs/branches/{assay}/{project}.log"
     shell:
@@ -222,8 +224,10 @@ rule assay_branch_ready:
         mkdir -p logs/branches/{wildcards.assay}
         python3 workflow/scripts/write_branch_ready.py \
           --plan {input.plan:q} \
+          --manifest {input.manifest:q} \
           --assay {wildcards.assay:q} \
           --project {wildcards.project:q} \
-          --output {output:q} \
+          --output {output.ready:q} \
+          --samples {output.samples:q} \
           > {log:q} 2>&1
         """
