@@ -80,6 +80,10 @@ BASE_REQUIRED_TOOLS = ENVIRONMENT.get("required_tools", ["python3", "snakemake"]
 SRA_REQUIRED_TOOLS = ENVIRONMENT.get("sra_required_tools", ["prefetch", "fasterq-dump"])
 SRA_LIMITED_REQUIRED_TOOLS = ENVIRONMENT.get("sra_limited_required_tools", ["fastq-dump"])
 RNASEQ_REQUIRED_TOOLS = ENVIRONMENT.get("rnaseq_required_tools", ["fastp"])
+RNASEQ_ALIGNMENT_REQUIRED_TOOLS = ENVIRONMENT.get(
+    "rnaseq_alignment_required_tools",
+    ["hisat2", "samtools"],
+)
 OPTIONAL_TOOLS = ENVIRONMENT.get("optional_tools", ["vdb-validate"])
 ACTIVE_SRA_REQUIRED_TOOLS = (
     SRA_LIMITED_REQUIRED_TOOLS if USES_INSDC and USES_SRA_SPOT_LIMIT
@@ -152,6 +156,14 @@ def planned_branch_targets(wildcards):
                         f"{BRANCH_DIR}/{assay}/{project}/alignment/alignment_plan.tsv",
                     ]
                 )
+                if RNASEQ_ALIGNMENT.get("run", False):
+                    targets.extend(
+                        [
+                            f"{BRANCH_DIR}/{assay}/{project}/alignment/environment_report.tsv",
+                            f"{BRANCH_DIR}/{assay}/{project}/alignment/aligned_samples.tsv",
+                            f"{BRANCH_DIR}/{assay}/{project}/alignment/alignment.done",
+                        ]
+                    )
     return targets
 
 
@@ -583,5 +595,66 @@ rule plan_rnaseq_alignment:
           --project {wildcards.project:q} \
           {params.index_prefix_flag} \
           {params.annotation_gtf_flag} \
+          > {log:q} 2>&1
+        """
+
+
+rule check_rnaseq_alignment_environment:
+    input:
+        plan=f"{BRANCH_DIR}" + "/rnaseq/{project}/alignment/alignment_plan.tsv"
+    output:
+        f"{BRANCH_DIR}" + "/rnaseq/{project}/alignment/environment_report.tsv"
+    params:
+        required_tools=RNASEQ_ALIGNMENT_REQUIRED_TOOLS,
+        optional_tools=[]
+    log:
+        "logs/branches/rnaseq/{project}.alignment.environment.log"
+    shell:
+        r"""
+        mkdir -p logs/branches/rnaseq
+        python3 workflow/scripts/check_environment.py \
+          --output {output:q} \
+          --required-tools {params.required_tools:q} \
+          --optional-tools {params.optional_tools:q} \
+          > {log:q} 2>&1
+        """
+
+
+rule align_rnaseq_branch:
+    input:
+        samples=f"{BRANCH_DIR}" + "/rnaseq/{project}/preprocess/preprocessed_samples.tsv",
+        plan=f"{BRANCH_DIR}" + "/rnaseq/{project}/alignment/alignment_plan.tsv",
+        environment=f"{BRANCH_DIR}" + "/rnaseq/{project}/alignment/environment_report.tsv"
+    output:
+        samples=f"{BRANCH_DIR}" + "/rnaseq/{project}/alignment/aligned_samples.tsv",
+        done=f"{BRANCH_DIR}" + "/rnaseq/{project}/alignment/alignment.done"
+    params:
+        outdir=lambda wildcards: f"{BRANCH_DIR}/rnaseq/{wildcards.project}/alignment",
+        hisat2=RNASEQ_ALIGNMENT.get("hisat2_command", "hisat2"),
+        samtools=RNASEQ_ALIGNMENT.get("samtools_command", "samtools"),
+        strandness=RNASEQ_ALIGNMENT.get("strandness", ""),
+        extra_args_flag=(
+            "--extra-args " + shlex.quote(RNASEQ_ALIGNMENT.get("extra_args", ""))
+            if RNASEQ_ALIGNMENT.get("extra_args", "")
+            else ""
+        )
+    threads:
+        RNASEQ_ALIGNMENT.get("threads", 4)
+    log:
+        "logs/branches/rnaseq/{project}.alignment.log"
+    shell:
+        r"""
+        mkdir -p logs/branches/rnaseq
+        python3 workflow/scripts/align_rnaseq_branch.py \
+          --samples {input.samples:q} \
+          --plan {input.plan:q} \
+          --outdir {params.outdir:q} \
+          --output {output.samples:q} \
+          --done {output.done:q} \
+          --threads {threads:q} \
+          --hisat2 {params.hisat2:q} \
+          --samtools {params.samtools:q} \
+          --strandness {params.strandness:q} \
+          {params.extra_args_flag} \
           > {log:q} 2>&1
         """

@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ASPIS RNA-seq aligned sample row",
+  "type": "object",
+  "required": [
+    "library_id",
+    "project",
+    "assay",
+    "layout",
+    "fastq_1",
+    "bam",
+    "bai",
+    "hisat2_log",
+    "alignment_tool",
+    "alignment_index_prefix"
+  ],
+  "properties": {
+    "library_id": {
+      "type": "string"
+    },
+    "project": {
+      "type": "string"
+    },
+    "assay": {
+      "type": "string",
+      "enum": ["rnaseq"]
+    },
+    "layout": {
+      "type": "string",
+      "enum": ["single", "paired"]
+    },
+    "fastq_1": {
+      "type": "string"
+    },
+    "fastq_2": {
+      "type": "string"
+    },
+    "bam": {
+      "type": "string"
+    },
+    "bai": {
+      "type": "string"
+    },
+    "hisat2_log": {
+      "type": "string"
+    },
+    "alignment_tool": {
+      "type": "string",
+      "enum": ["hisat2"]
+    },
+    "alignment_index_prefix": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": {
+    "type": "string"
+  }
+}

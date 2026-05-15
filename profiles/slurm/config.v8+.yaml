@@ -38,6 +38,8 @@ set-threads:
   run_preprocessed_rnaseq_fastqc: 2
   run_preprocessed_rnaseq_multiqc: 1
   plan_rnaseq_alignment: 1
+  check_rnaseq_alignment_environment: 1
+  align_rnaseq_branch: 4
 
 set-resources:
   materialize_library:
@@ -76,3 +78,11 @@ set-resources:
     runtime: 5
     mem_mb: 1000
     disk_mb: 1000
+  check_rnaseq_alignment_environment:
+    runtime: 5
+    mem_mb: 1000
+    disk_mb: 1000
+  align_rnaseq_branch:
+    runtime: 240
+    mem_mb: 16000
+    disk_mb: 100000

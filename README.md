@@ -84,6 +84,7 @@ schemas/
   fastqc_manifest.schema.json
   rnaseq_preprocessed_samples.schema.json
   rnaseq_alignment_plan.schema.json
+  rnaseq_aligned_samples.schema.json
 
 envs/
   aspis-snakemake.yaml     Snakemake 9 orchestration environment
@@ -205,6 +206,9 @@ original paths as `raw_fastq_1` / `raw_fastq_2`.
 After preprocessing, ASPIS writes `alignment/alignment_plan.tsv`. This is a
 reference-readiness contract: it reports `blocked` until a HISAT2 index prefix
 is configured and the expected index files are present.
+Actual HISAT2 alignment is opt-in through `rnaseq_alignment.run: true`. When
+enabled and the plan is ready, ASPIS writes sorted BAMs plus
+`alignment/aligned_samples.tsv`.
 
 ## Planned Architecture
 
@@ -247,6 +251,9 @@ results/branches/rnaseq/{project}/preprocess/fastqc/fastqc.done
 results/branches/rnaseq/{project}/preprocess/multiqc/multiqc_report.html
 results/branches/rnaseq/{project}/preprocess/multiqc/multiqc.done
 results/branches/rnaseq/{project}/alignment/alignment_plan.tsv
+results/branches/rnaseq/{project}/alignment/environment_report.tsv      # if alignment is enabled
+results/branches/rnaseq/{project}/alignment/aligned_samples.tsv         # if alignment is enabled
+results/branches/rnaseq/{project}/alignment/alignment.done              # if alignment is enabled
 ```
 
 Downstream analysis rules should consume manifest-derived contracts rather than
@@ -348,6 +355,8 @@ The workflows currently expect several command-line tools to be available:
 - SRA Toolkit (`prefetch`, `fastq-dump`, `fasterq-dump`)
 - FastQC
 - fastp
+- HISAT2
+- samtools
 - Trimmomatic
 - cutadapt
 - HISAT2

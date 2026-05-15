@@ -13,3 +13,5 @@ dependencies:
   - fastqc
   - multiqc
   - fastp
+  - hisat2
+  - samtools
