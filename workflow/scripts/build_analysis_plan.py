@@ -5,11 +5,13 @@ from __future__ import annotations
 
 import argparse
 import csv
+import re
 from collections import defaultdict
 from pathlib import Path
 
 
 SUPPORTED_ASSAYS = {"rnaseq", "smallrna"}
+PROJECT_ID_RE = re.compile(r"^[A-Za-z0-9_.-]+$")
 ASSAY_ALIASES = {
     "rnaseq": "rnaseq",
     "rna-seq": "rnaseq",
@@ -111,6 +113,14 @@ def build_plan_rows(
         errors.extend(validate_library(row))
 
         assay = normalized_assay(row)
+        project = normalized_project(row)
+        if not PROJECT_ID_RE.match(project):
+            errors.append(
+                f"{library_id}: project {project!r} is not path-safe; use letters, "
+                "numbers, '.', '_', or '-'"
+            )
+            continue
+
         if assay in UNCLASSIFIED_ASSAYS:
             if allow_unclassified:
                 assay = "unknown"
@@ -126,7 +136,7 @@ def build_plan_rows(
             )
             continue
 
-        groups[(normalized_project(row), assay)].append(row)
+        groups[(project, assay)].append(row)
 
     if errors:
         raise ValueError("Analysis plan cannot be built:\n- " + "\n- ".join(errors))
