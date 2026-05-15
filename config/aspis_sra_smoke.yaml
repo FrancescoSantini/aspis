@@ -52,9 +52,15 @@ rnaseq_preprocess:
   extra_args: ""
 
 rnaseq_alignment:
+  run: false
   aligner: hisat2
+  hisat2_command: hisat2
+  samtools_command: samtools
   hisat2_index_prefix: ""
   annotation_gtf: ""
+  strandness: ""
+  threads: 2
+  extra_args: ""
 
 execution:
   default_partition: g100_usr_prod
@@ -68,6 +74,9 @@ environment:
     - multiqc
   rnaseq_required_tools:
     - fastp
+  rnaseq_alignment_required_tools:
+    - hisat2
+    - samtools
   sra_required_tools:
     - prefetch
     - fasterq-dump

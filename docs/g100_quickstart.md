@@ -78,6 +78,10 @@ which multiqc
 multiqc --version
 which fastp
 fastp --version
+which hisat2
+hisat2 --version
+which samtools
+samtools --version
 ```
 
 Expected major version:
@@ -179,6 +183,23 @@ rules at fastp-preprocessed FASTQs and preserve the original paths as
 `raw_fastq_1` / `raw_fastq_2`.
 RNA-seq `alignment/alignment_plan.tsv` is expected to say `blocked` in the
 default toy test, because no HISAT2 reference index is configured yet.
+
+To run real RNA-seq alignment later, configure a reference and opt in:
+
+```yaml
+rnaseq_alignment:
+  run: true
+  hisat2_index_prefix: /path/to/hisat2/index/prefix
+  annotation_gtf: /path/to/annotation.gtf
+```
+
+Then ASPIS will also request:
+
+```text
+results/branches/rnaseq/<PROJECT>/alignment/environment_report.tsv
+results/branches/rnaseq/<PROJECT>/alignment/aligned_samples.tsv
+results/branches/rnaseq/<PROJECT>/alignment/alignment.done
+```
 
 ## 4. Optional Snakemake 7 Compatibility Check
 
