@@ -109,7 +109,13 @@ def planned_branch_targets(wildcards):
                 raise ValueError(
                     f"Project {project!r} is not path-safe; use letters, numbers, '.', '_', or '-'."
                 )
-            targets.append(f"{BRANCH_DIR}/{assay}/{project}/design.tsv")
+            targets.extend(
+                [
+                    f"{BRANCH_DIR}/{assay}/{project}/samples.tsv",
+                    f"{BRANCH_DIR}/{assay}/{project}/materialized_manifest.tsv",
+                    f"{BRANCH_DIR}/{assay}/{project}/design.tsv",
+                ]
+            )
     return targets
 
 
@@ -239,7 +245,8 @@ rule assay_branch_ready:
         manifest=MANIFEST
     output:
         ready=f"{BRANCH_DIR}" + "/{assay}/{project}/branch.ready",
-        samples=f"{BRANCH_DIR}" + "/{assay}/{project}/samples.tsv"
+        samples=f"{BRANCH_DIR}" + "/{assay}/{project}/samples.tsv",
+        manifest=f"{BRANCH_DIR}" + "/{assay}/{project}/materialized_manifest.tsv"
     log:
         "logs/branches/{assay}/{project}.log"
     shell:
@@ -252,6 +259,7 @@ rule assay_branch_ready:
           --project {wildcards.project:q} \
           --output {output.ready:q} \
           --samples {output.samples:q} \
+          --audit-manifest {output.manifest:q} \
           > {log:q} 2>&1
         """
 

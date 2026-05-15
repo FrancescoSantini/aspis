@@ -78,6 +78,7 @@ schemas/
   intake.schema.json
   materialized_manifest.schema.json
   analysis_plan.schema.json
+  branch_samples.schema.json
   branch_design.schema.json
 
 envs/
@@ -174,6 +175,11 @@ If a public run cannot be classified after this step, ASPIS stops before
 download/conversion.
 
 ASPIS does not infer `rnaseq` versus `smallrna` from filenames.
+
+`meta/materialized_manifest.tsv` is the full audit table. It can be wide because
+public accessions contribute archive-specific fields. Branch-local
+`samples.tsv` files are normalized to a smaller downstream contract, while
+branch-local `materialized_manifest.tsv` files keep the full selected audit rows.
 
 ## Planned Architecture
 

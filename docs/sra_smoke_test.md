@@ -54,8 +54,12 @@ cat meta/sra_smoke/materialized_manifest.tsv
 cat meta/sra_smoke/analysis_plan.tsv
 cat meta/sra_smoke/environment_report.tsv
 cat results/sra_smoke/branches/rnaseq/ASPIS_SRA_SMOKE/samples.tsv
+cat results/sra_smoke/branches/rnaseq/ASPIS_SRA_SMOKE/materialized_manifest.tsv
 cat results/sra_smoke/branches/rnaseq/ASPIS_SRA_SMOKE/design.tsv
 ```
+
+The branch `samples.tsv` file is normalized for downstream rules. The branch
+`materialized_manifest.tsv` file keeps the full SRA/ENA audit fields.
 
 The design summary is expected to mark differential testing as blocked because
 the smoke test contains one control library only. That is correct; the test is

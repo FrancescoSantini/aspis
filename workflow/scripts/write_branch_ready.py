@@ -8,6 +8,60 @@ import csv
 from pathlib import Path
 
 
+BRANCH_SAMPLE_COLUMNS = [
+    "library_id",
+    "biospecimen_id",
+    "project",
+    "assay",
+    "source_type",
+    "source_id",
+    "archive",
+    "layout",
+    "fastq_1",
+    "fastq_2",
+    "condition",
+    "treatment",
+    "dose",
+    "dose_unit",
+    "time_h",
+    "replicate",
+    "batch",
+    "assay_confidence",
+    "assay_reason",
+]
+AUDIT_ONLY_COLUMNS = {
+    "input_1",
+    "input_2",
+    "public_metadata_source",
+    "public_metadata_status",
+    "public_metadata_error",
+    "run_accession",
+    "experiment_accession",
+    "sample_accession",
+    "secondary_sample_accession",
+    "study_accession",
+    "secondary_study_accession",
+    "tax_id",
+    "scientific_name",
+    "instrument_platform",
+    "instrument_model",
+    "library_name",
+    "library_layout",
+    "library_strategy",
+    "library_source",
+    "library_selection",
+    "nominal_length",
+    "read_count",
+    "base_count",
+    "experiment_title",
+    "study_title",
+    "fastq_ftp",
+    "fastq_md5",
+    "fastq_bytes",
+    "materialized_at",
+}
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--plan", required=True, help="Analysis plan TSV")
@@ -16,6 +70,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--project", required=True, help="Project ID")
     parser.add_argument("--output", required=True, help="Branch sentinel output")
     parser.add_argument("--samples", required=True, help="Branch sample sheet TSV")
+    parser.add_argument(
+        "--audit-manifest",
+        required=True,
+        help="Branch-specific full materialized manifest TSV",
+    )
     return parser.parse_args()
 
 
@@ -52,8 +111,39 @@ def planned_libraries(row: dict[str, str]) -> list[str]:
     return libraries
 
 
-def write_samples(
+def branch_sample_columns(manifest_columns: list[str]) -> list[str]:
+    observed = set(manifest_columns)
+    core = [column for column in BRANCH_SAMPLE_COLUMNS if column in observed]
+    extras = sorted(observed - set(core) - AUDIT_ONLY_COLUMNS)
+    return core + extras
+
+
+def selected_manifest_rows(
+    manifest_rows: dict[str, dict[str, str]],
+    libraries: list[str],
+    plan_row: dict[str, str],
+) -> list[dict[str, str]]:
+    rows = []
+    for library_id in libraries:
+        row = dict(manifest_rows[library_id])
+        row["project"] = plan_row.get("project", row.get("project", ""))
+        row["assay"] = plan_row.get("assay", row.get("assay", ""))
+        rows.append(row)
+    return rows
+
+
+def write_table(path: Path, columns: list[str], rows: list[dict[str, str]]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=columns, delimiter="\t", lineterminator="\n")
+        writer.writeheader()
+        for row in rows:
+            writer.writerow({column: row.get(column, "") for column in columns})
+
+
+def write_branch_tables(
     path: Path,
+    audit_path: Path,
     manifest_path: Path,
     plan_row: dict[str, str],
 ) -> None:
@@ -63,15 +153,9 @@ def write_samples(
     if missing:
         raise ValueError(f"Analysis plan references libraries missing from manifest: {missing}")
 
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(handle, fieldnames=columns, delimiter="\t", lineterminator="\n")
-        writer.writeheader()
-        for library_id in libraries:
-            row = dict(manifest_rows[library_id])
-            row["project"] = plan_row.get("project", row.get("project", ""))
-            row["assay"] = plan_row.get("assay", row.get("assay", ""))
-            writer.writerow({column: row.get(column, "") for column in columns})
+    rows = selected_manifest_rows(manifest_rows, libraries, plan_row)
+    write_table(audit_path, columns, rows)
+    write_table(path, branch_sample_columns(columns), rows)
 
 
 def main() -> int:
@@ -94,7 +178,12 @@ def main() -> int:
         handle.write(f"n_paired\t{row.get('n_paired', '')}\n")
         handle.write(f"libraries\t{row.get('libraries', '')}\n")
         handle.write(f"reason\t{row.get('reason', '')}\n")
-    write_samples(Path(args.samples), Path(args.manifest), row)
+    write_branch_tables(
+        Path(args.samples),
+        Path(args.audit_manifest),
+        Path(args.manifest),
+        row,
+    )
     return 0
 
 
