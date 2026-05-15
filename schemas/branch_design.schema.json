@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ASPIS branch design row",
+  "type": "object",
+  "required": [
+    "project",
+    "assay",
+    "condition_col",
+    "condition",
+    "n_libraries",
+    "libraries",
+    "differential_status"
+  ],
+  "properties": {
+    "project": {
+      "type": "string"
+    },
+    "assay": {
+      "type": "string",
+      "enum": ["rnaseq", "smallrna"]
+    },
+    "condition_col": {
+      "type": "string"
+    },
+    "condition": {
+      "type": "string"
+    },
+    "n_libraries": {
+      "type": "string"
+    },
+    "libraries": {
+      "type": "string"
+    },
+    "differential_status": {
+      "type": "string",
+      "enum": ["ready", "blocked"]
+    },
+    "control_label": {
+      "type": "string"
+    },
+    "control_present": {
+      "type": "string",
+      "enum": ["true", "false"]
+    },
+    "covariates": {
+      "type": "string"
+    },
+    "reason": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": {
+    "type": "string"
+  }
+}

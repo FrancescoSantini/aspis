@@ -14,6 +14,7 @@ INTAKE = config.get("intake", "config/intake.tsv")
 PATHS = config.get("paths", {})
 MATERIALIZATION = config.get("materialization", {})
 PLANNING = config.get("planning", {})
+DESIGN = config.get("design", {})
 EXECUTION = config.get("execution", {})
 ENVIRONMENT = config.get("environment", {})
 
@@ -97,11 +98,11 @@ def planned_branch_targets(wildcards):
                 raise ValueError(
                     f"Project {project!r} is not path-safe; use letters, numbers, '.', '_', or '-'."
                 )
-            targets.append(f"{BRANCH_DIR}/{assay}/{project}/branch.ready")
+            targets.append(f"{BRANCH_DIR}/{assay}/{project}/design.tsv")
     return targets
 
 
-localrules: all, check_environment, assay_branch_ready
+localrules: all, check_environment, assay_branch_ready, build_branch_design
 
 
 rule all:
@@ -229,5 +230,34 @@ rule assay_branch_ready:
           --project {wildcards.project:q} \
           --output {output.ready:q} \
           --samples {output.samples:q} \
+          > {log:q} 2>&1
+        """
+
+
+rule build_branch_design:
+    input:
+        ready=f"{BRANCH_DIR}" + "/{assay}/{project}/branch.ready",
+        samples=f"{BRANCH_DIR}" + "/{assay}/{project}/samples.tsv"
+    output:
+        f"{BRANCH_DIR}" + "/{assay}/{project}/design.tsv"
+    params:
+        condition_col=DESIGN.get("condition_col", "condition"),
+        control_label=DESIGN.get("control_label", "control"),
+        covariates=" ".join(DESIGN.get("covariates", [])),
+        min_condition_groups=DESIGN.get("min_condition_groups", 2)
+    log:
+        "logs/branches/{assay}/{project}.design.log"
+    shell:
+        r"""
+        mkdir -p logs/branches/{wildcards.assay}
+        python3 workflow/scripts/build_branch_design.py \
+          --samples {input.samples:q} \
+          --output {output:q} \
+          --assay {wildcards.assay:q} \
+          --project {wildcards.project:q} \
+          --condition-col {params.condition_col:q} \
+          --control-label {params.control_label:q} \
+          --min-condition-groups {params.min_condition_groups:q} \
+          --covariates {params.covariates} \
           > {log:q} 2>&1
         """
