@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ASPIS analysis plan row",
+  "type": "object",
+  "required": [
+    "project",
+    "assay",
+    "status",
+    "n_libraries",
+    "n_single",
+    "n_paired",
+    "libraries"
+  ],
+  "properties": {
+    "project": {
+      "type": "string"
+    },
+    "assay": {
+      "type": "string",
+      "enum": ["longrna", "smallrna", "unknown"]
+    },
+    "status": {
+      "type": "string",
+      "enum": ["ready", "blocked"]
+    },
+    "n_libraries": {
+      "type": "string"
+    },
+    "n_single": {
+      "type": "string"
+    },
+    "n_paired": {
+      "type": "string"
+    },
+    "libraries": {
+      "type": "string"
+    },
+    "reason": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": {
+    "type": "string"
+  }
+}
