@@ -81,6 +81,7 @@ schemas/
   branch_samples.schema.json
   branch_design.schema.json
   fastq_inspection.schema.json
+  fastqc_manifest.schema.json
 
 envs/
   aspis-snakemake.yaml     Snakemake 9 orchestration environment
@@ -187,6 +188,12 @@ inspection table. It checks canonical R1/R2 files, validates sampled FASTQ
 records, and reports read-length and GC summaries before heavier assay-specific
 tools are introduced.
 
+After structural inspection, each branch runs FastQC on the same canonical
+FASTQs and writes `fastqc/fastqc_manifest.tsv` plus `fastqc/fastqc.done`.
+ASPIS stages files with unique `{library_id}_{read}.fastq.gz` names before
+running FastQC, because every materialized library uses canonical `R1`/`R2`
+filenames and those would otherwise collide in one output directory.
+
 ## Planned Architecture
 
 The next major refactor should make the first stage of ASPIS a raw-data
@@ -214,6 +221,9 @@ meta/environment_report.tsv
 results/branches/{assay}/{project}/branch.ready
 results/branches/{assay}/{project}/samples.tsv
 results/branches/{assay}/{project}/design.tsv
+results/branches/{assay}/{project}/fastq_inspection.tsv
+results/branches/{assay}/{project}/fastqc/fastqc_manifest.tsv
+results/branches/{assay}/{project}/fastqc/fastqc.done
 ```
 
 Downstream analysis rules should consume manifest-derived contracts rather than
@@ -277,6 +287,7 @@ the manifest, the downstream analysis plan, or a branch sentinel:
 snakemake --cores 1 meta/materialized_manifest.tsv
 snakemake --cores 1 meta/analysis_plan.tsv
 snakemake --cores 1 results/branches/rnaseq/ASPIS_TEST/branch.ready
+snakemake --cores 1 results/branches/rnaseq/ASPIS_TEST/fastqc/fastqc.done
 snakemake --cores 1 results/branches/rnaseq/ASPIS_TEST/design.tsv
 ```
 

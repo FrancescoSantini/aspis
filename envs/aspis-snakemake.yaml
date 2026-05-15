@@ -10,4 +10,4 @@ dependencies:
   - pandas
   - pyyaml
   - sra-tools
-
+  - fastqc

@@ -1,0 +1,61 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ASPIS branch FastQC manifest row",
+  "type": "object",
+  "required": [
+    "library_id",
+    "assay",
+    "project",
+    "layout",
+    "read",
+    "fastq",
+    "fastqc_html",
+    "fastqc_zip",
+    "status"
+  ],
+  "properties": {
+    "library_id": {
+      "type": "string"
+    },
+    "assay": {
+      "type": "string"
+    },
+    "project": {
+      "type": "string"
+    },
+    "layout": {
+      "type": "string",
+      "enum": ["single", "paired"]
+    },
+    "read": {
+      "type": "string",
+      "enum": ["R1", "R2"]
+    },
+    "fastq": {
+      "type": "string"
+    },
+    "staged_fastq": {
+      "type": "string"
+    },
+    "stage_action": {
+      "type": "string",
+      "enum": ["symlink", "hardlink", "copy"]
+    },
+    "fastqc_html": {
+      "type": "string"
+    },
+    "fastqc_zip": {
+      "type": "string"
+    },
+    "status": {
+      "type": "string",
+      "enum": ["ok", "failed"]
+    },
+    "message": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": {
+    "type": "string"
+  }
+}
