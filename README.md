@@ -155,6 +155,10 @@ meta/analysis_plan.tsv
 Downstream analysis rules should consume manifest-derived contracts rather than
 probing files or public accessions at Snakefile parse time.
 
+The manifest rule depends on both the per-library JSON files and the
+`work/raw/{library_id}` directories. This keeps ignored/generated FASTQs in the
+Snakemake dependency graph even when an old manifest file is already present.
+
 `meta/analysis_plan.tsv` is the first downstream planning layer. It groups
 materialized libraries by `project` and `assay`, checks that canonical FASTQ
 paths exist, and stops if a library still has an unknown assay. Later, this file
@@ -196,6 +200,23 @@ snakemake --cores 1 meta/analysis_plan.tsv
 
 On CINECA G100, see `docs/g100_quickstart.md` for environment creation and
 SLURM profile testing.
+
+## Legacy Files
+
+The new ASPIS entry point does not use these legacy workflow files:
+
+- `workflow/prefetchSRA`
+- `workflow/Snakefile`
+- `workflow/SmallRNA`
+- `workflow/profiles/slurm/`
+- `config/config.yaml`
+- `config/sample_sheet.csv`
+- `config/sample_sheet_tests.csv`
+
+They are intentionally still present for reference while the refactor proceeds.
+Do not add new behavior to those files; new development should happen through
+the root `Snakefile`, `config/aspis.yaml`, `config/intake.tsv`, and scripts
+called by that Snakefile.
 
 ## Major Dependencies
 

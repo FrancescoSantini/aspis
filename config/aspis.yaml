@@ -19,3 +19,7 @@ materialization:
 
 planning:
   allow_unclassified: false
+
+execution:
+  default_partition: g100_usr_prod
+  download_partition: g100_all_serial

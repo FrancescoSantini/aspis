@@ -8,10 +8,12 @@ from pathlib import Path
 
 
 LIBRARY_ID_RE = re.compile(r"^[A-Za-z0-9_.-]+$")
+INSDC_RUN_RE = re.compile(r"^[SED]RR\d+$")
 INTAKE = config.get("intake", "config/intake.tsv")
 PATHS = config.get("paths", {})
 MATERIALIZATION = config.get("materialization", {})
 PLANNING = config.get("planning", {})
+EXECUTION = config.get("execution", {})
 
 RAW_DIR = PATHS.get("raw_dir", "work/raw")
 METADATA_DIR = PATHS.get("metadata_dir", "meta/materialized")
@@ -57,7 +59,16 @@ def read_intake(path):
 
 INTAKE_ROWS = read_intake(INTAKE)
 LIBRARIES = [row["library_id"] for row in INTAKE_ROWS]
+INTAKE_BY_LIBRARY = {row["library_id"]: row for row in INTAKE_ROWS}
 METADATA_JSON = expand(f"{METADATA_DIR}" + "/{library_id}.json", library_id=LIBRARIES)
+RAW_DIRS = expand(f"{RAW_DIR}" + "/{library_id}", library_id=LIBRARIES)
+
+
+def materialization_partition(wildcards):
+    input_1 = INTAKE_BY_LIBRARY[wildcards.library_id].get("input_1", "")
+    if INSDC_RUN_RE.match(input_1):
+        return EXECUTION.get("download_partition", "g100_all_serial")
+    return EXECUTION.get("default_partition", "g100_usr_prod")
 
 
 rule all:
@@ -79,6 +90,8 @@ rule materialize_library:
         validate_sra_flag=(
             "" if MATERIALIZATION.get("validate_sra", True) else "--no-validate-sra"
         )
+    resources:
+        slurm_partition=materialization_partition
     log:
         "logs/materialize/{library_id}.log"
     shell:
@@ -100,7 +113,8 @@ rule materialize_library:
 
 rule build_materialized_manifest:
     input:
-        METADATA_JSON
+        metadata=METADATA_JSON,
+        rawdirs=RAW_DIRS
     output:
         MANIFEST
     log:
@@ -110,14 +124,15 @@ rule build_materialized_manifest:
         mkdir -p logs
         python3 workflow/scripts/build_materialized_manifest.py \
           --output {output:q} \
-          {input:q} \
+          {input.metadata:q} \
           > {log:q} 2>&1
         """
 
 
 rule build_analysis_plan:
     input:
-        manifest=MANIFEST
+        manifest=MANIFEST,
+        rawdirs=RAW_DIRS
     output:
         ANALYSIS_PLAN
     params:
