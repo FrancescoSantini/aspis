@@ -26,7 +26,8 @@ PREFERRED_COLUMNS = [
     "input_2",
     "condition",
     "treatment",
-    "dose_uM",
+    "dose",
+    "dose_unit",
     "time_h",
     "replicate",
     "batch",
@@ -101,4 +102,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-
