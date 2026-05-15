@@ -23,6 +23,40 @@
     "archive": {
       "type": "string"
     },
+    "public_metadata_source": {
+      "type": "string"
+    },
+    "public_metadata_status": {
+      "type": "string",
+      "enum": ["not_applicable", "resolved", "failed"]
+    },
+    "public_metadata_error": {
+      "type": "string"
+    },
+    "run_accession": {
+      "type": "string"
+    },
+    "experiment_accession": {
+      "type": "string"
+    },
+    "sample_accession": {
+      "type": "string"
+    },
+    "study_accession": {
+      "type": "string"
+    },
+    "library_layout": {
+      "type": "string"
+    },
+    "library_strategy": {
+      "type": "string"
+    },
+    "library_source": {
+      "type": "string"
+    },
+    "library_selection": {
+      "type": "string"
+    },
     "assay": {
       "type": "string"
     },

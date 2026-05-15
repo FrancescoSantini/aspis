@@ -6,18 +6,48 @@ from __future__ import annotations
 import argparse
 import csv
 import gzip
+import io
 import json
 import os
 import re
 import shutil
 import subprocess
 import sys
+import urllib.error
+import urllib.parse
+import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterable
 
 
 INSDC_RUN_RE = re.compile(r"^[SED]RR\d+$")
+ENA_API_URL = "https://www.ebi.ac.uk/ena/portal/api/filereport"
+ENA_READ_RUN_FIELDS = [
+    "run_accession",
+    "experiment_accession",
+    "sample_accession",
+    "secondary_sample_accession",
+    "study_accession",
+    "secondary_study_accession",
+    "tax_id",
+    "scientific_name",
+    "instrument_platform",
+    "instrument_model",
+    "library_name",
+    "library_layout",
+    "library_strategy",
+    "library_source",
+    "library_selection",
+    "nominal_length",
+    "read_count",
+    "base_count",
+    "experiment_title",
+    "study_title",
+    "fastq_ftp",
+    "fastq_md5",
+    "fastq_bytes",
+]
 ASSAY_ALIASES = {
     "rnaseq": "rnaseq",
     "rna-seq": "rnaseq",
@@ -92,6 +122,23 @@ def parse_args() -> argparse.Namespace:
         "--no-validate-sra",
         action="store_true",
         help="Skip vdb-validate even if available",
+    )
+    parser.add_argument(
+        "--public-metadata-mode",
+        choices=("auto", "off", "required"),
+        default="auto",
+        help="Resolve INSDC run metadata through ENA before materialization",
+    )
+    parser.add_argument(
+        "--ena-api-url",
+        default=ENA_API_URL,
+        help="ENA filereport API endpoint",
+    )
+    parser.add_argument(
+        "--public-metadata-timeout",
+        type=int,
+        default=60,
+        help="Seconds to wait for public metadata resolution",
     )
     return parser.parse_args()
 
@@ -238,6 +285,121 @@ def require_command(name: str) -> str:
 def run_command(command: list[str]) -> None:
     print("[CMD]", " ".join(command), flush=True)
     subprocess.run(command, check=True)
+
+
+def read_url_text(url: str, timeout: int) -> str:
+    request = urllib.request.Request(
+        url,
+        headers={"User-Agent": "aspis-materializer/0"},
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=timeout) as response:
+            charset = response.headers.get_content_charset() or "utf-8"
+            return response.read().decode(charset)
+    except urllib.error.URLError as exc:
+        raise RuntimeError(f"could not query public metadata endpoint: {exc}") from exc
+
+
+def fetch_ena_read_run_metadata(
+    accession: str,
+    api_url: str,
+    timeout: int,
+) -> dict[str, str]:
+    query = urllib.parse.urlencode(
+        {
+            "accession": accession,
+            "result": "read_run",
+            "fields": ",".join(ENA_READ_RUN_FIELDS),
+            "format": "tsv",
+            "download": "false",
+        }
+    )
+    text = read_url_text(f"{api_url}?{query}", timeout=timeout)
+    if not text.strip():
+        raise RuntimeError(f"ENA returned no metadata for {accession}")
+
+    reader = csv.DictReader(io.StringIO(text), delimiter="\t")
+    if reader.fieldnames is None:
+        raise RuntimeError(f"ENA returned an empty metadata table for {accession}")
+
+    rows = [
+        {key: (value or "").strip() for key, value in row.items()}
+        for row in reader
+    ]
+    if not rows:
+        raise RuntimeError(f"ENA returned no read_run rows for {accession}")
+
+    exact = [row for row in rows if row.get("run_accession") == accession]
+    if len(exact) == 1:
+        selected = exact[0]
+    elif len(rows) == 1:
+        selected = rows[0]
+    else:
+        observed = sorted(row.get("run_accession", "") for row in rows)
+        raise RuntimeError(
+            f"ENA returned multiple read_run rows for {accession}: {observed}"
+        )
+
+    return {key: value for key, value in selected.items() if value}
+
+
+def merge_missing_values(
+    row: dict[str, str],
+    values: dict[str, str],
+) -> tuple[dict[str, str], list[str]]:
+    merged = dict(row)
+    added = []
+    for key, value in values.items():
+        if value and not merged.get(key, ""):
+            merged[key] = value
+            added.append(key)
+    return merged, sorted(added)
+
+
+def resolve_public_metadata(
+    row: dict[str, str],
+    mode: str,
+    api_url: str,
+    timeout: int,
+) -> tuple[dict[str, str], dict[str, str], list[str]]:
+    input_1 = row.get("input_1", "")
+    status = {
+        "public_metadata_source": "",
+        "public_metadata_status": "not_applicable",
+        "public_metadata_error": "",
+    }
+    operations: list[str] = []
+
+    if mode == "off" or not INSDC_RUN_RE.match(input_1):
+        return row, status, operations
+
+    try:
+        metadata = fetch_ena_read_run_metadata(input_1, api_url=api_url, timeout=timeout)
+    except Exception as exc:  # noqa: BLE001 - preserve user hint fallback if present.
+        if mode == "required":
+            raise RuntimeError(f"Public metadata resolution failed for {input_1}: {exc}") from exc
+        status.update(
+            {
+                "public_metadata_source": "ena",
+                "public_metadata_status": "failed",
+                "public_metadata_error": str(exc),
+            }
+        )
+        operations.append(f"resolve-metadata:ena:{input_1}:failed")
+        return row, status, operations
+
+    merged, added_keys = merge_missing_values(row, metadata)
+    status.update(
+        {
+            "public_metadata_source": "ena",
+            "public_metadata_status": "resolved",
+            "public_metadata_error": "",
+        }
+    )
+    operations.append(
+        f"resolve-metadata:ena:{input_1}:added={','.join(added_keys) or 'none'}"
+    )
+    return merged, status, operations
 
 
 def first_existing(paths: Iterable[Path]) -> Path | None:
@@ -451,11 +613,28 @@ def main() -> int:
 
     outdir = Path(args.outdir)
     metadata_path = Path(args.metadata)
-    clean_dir(outdir)
 
+    row, public_metadata_status, metadata_operations = resolve_public_metadata(
+        row,
+        mode=args.public_metadata_mode,
+        api_url=args.ena_api_url,
+        timeout=args.public_metadata_timeout,
+    )
     assay, assay_confidence, assay_reason = assay_from_row(row)
     input_1 = row["input_1"]
     input_2 = row.get("input_2", "")
+
+    if INSDC_RUN_RE.match(input_1) and assay == "unknown":
+        detail = assay_reason
+        if public_metadata_status["public_metadata_error"]:
+            detail = public_metadata_status["public_metadata_error"]
+        raise RuntimeError(
+            f"Public run assay could not be classified before downloading {input_1}. "
+            "Provide assay_hint/assay, or provide/resolve recognized library metadata. "
+            f"Reason: {detail}"
+        )
+
+    clean_dir(outdir)
 
     if resolve_path(input_1, intake_path).exists():
         source_type = "local_fastq"
@@ -492,11 +671,13 @@ def main() -> int:
         for key, value in row.items()
         if key not in RESERVED_METADATA_KEYS and value != ""
     }
+    operations = metadata_operations + operations
     payload: dict[str, object] = {
         "library_id": args.library_id,
         "source_type": source_type,
         "source_id": source_id,
         "archive": archive,
+        **public_metadata_status,
         "assay": assay,
         "assay_confidence": assay_confidence,
         "assay_reason": assay_reason,

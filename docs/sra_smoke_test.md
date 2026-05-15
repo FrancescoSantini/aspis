@@ -15,6 +15,11 @@ extract only a small number of spots. Production SRA materialization keeps
 `sra_spot_limit: 0` and uses the full-accession `prefetch` + `fasterq-dump`
 path.
 
+Public metadata resolution remains enabled in this smoke config. Before the
+partial extraction, ASPIS queries ENA `read_run` metadata and uses fields such
+as `library_strategy` and `library_selection` for assay routing when no explicit
+`assay_hint` is provided.
+
 The smoke test is opt-in and uses separate output folders so it does not
 overwrite the default local FASTQ fixture outputs:
 

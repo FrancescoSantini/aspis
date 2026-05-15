@@ -153,6 +153,12 @@ rule materialize_library:
         local_link_mode=MATERIALIZATION.get("local_link_mode", "symlink"),
         sra_max_size=MATERIALIZATION.get("sra_max_size", "40G"),
         sra_spot_limit=SRA_SPOT_LIMIT,
+        public_metadata_mode=MATERIALIZATION.get("public_metadata_mode", "auto"),
+        ena_api_url=MATERIALIZATION.get(
+            "ena_api_url",
+            "https://www.ebi.ac.uk/ena/portal/api/filereport",
+        ),
+        public_metadata_timeout=MATERIALIZATION.get("public_metadata_timeout", 60),
         validate_sra_flag=(
             "" if MATERIALIZATION.get("validate_sra", True) else "--no-validate-sra"
         )
@@ -173,6 +179,9 @@ rule materialize_library:
           --local-link-mode {params.local_link_mode:q} \
           --sra-max-size {params.sra_max_size:q} \
           --sra-spot-limit {params.sra_spot_limit:q} \
+          --public-metadata-mode {params.public_metadata_mode:q} \
+          --ena-api-url {params.ena_api_url:q} \
+          --public-metadata-timeout {params.public_metadata_timeout:q} \
           {params.validate_sra_flag} \
           > {log:q} 2>&1
         """

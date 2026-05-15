@@ -19,6 +19,9 @@ materialization:
   sra_max_size: 40G
   sra_spot_limit: 0
   validate_sra: true
+  public_metadata_mode: auto
+  ena_api_url: https://www.ebi.ac.uk/ena/portal/api/filereport
+  public_metadata_timeout: 60
 
 planning:
   allow_unclassified: false
