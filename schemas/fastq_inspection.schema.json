@@ -1,0 +1,77 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ASPIS FASTQ inspection row",
+  "type": "object",
+  "required": [
+    "library_id",
+    "assay",
+    "project",
+    "layout",
+    "read",
+    "fastq",
+    "records_checked",
+    "status"
+  ],
+  "properties": {
+    "library_id": {
+      "type": "string"
+    },
+    "assay": {
+      "type": "string"
+    },
+    "project": {
+      "type": "string"
+    },
+    "layout": {
+      "type": "string",
+      "enum": ["single", "paired"]
+    },
+    "read": {
+      "type": "string",
+      "enum": ["R1", "R2", "layout"]
+    },
+    "fastq": {
+      "type": "string"
+    },
+    "exists": {
+      "type": "string",
+      "enum": ["true", "false"]
+    },
+    "compressed": {
+      "type": "string",
+      "enum": ["true", "false"]
+    },
+    "file_size_bytes": {
+      "type": "string"
+    },
+    "records_checked": {
+      "type": "string"
+    },
+    "limit_reached": {
+      "type": "string",
+      "enum": ["true", "false"]
+    },
+    "min_read_length": {
+      "type": "string"
+    },
+    "max_read_length": {
+      "type": "string"
+    },
+    "mean_read_length": {
+      "type": "string"
+    },
+    "gc_fraction": {
+      "type": "string"
+    },
+    "status": {
+      "type": "string",
+      "enum": ["ok", "failed"]
+    },
+    "message": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": {
+    "type": "string"
+  }
+}

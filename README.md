@@ -80,6 +80,7 @@ schemas/
   analysis_plan.schema.json
   branch_samples.schema.json
   branch_design.schema.json
+  fastq_inspection.schema.json
 
 envs/
   aspis-snakemake.yaml     Snakemake 9 orchestration environment
@@ -180,6 +181,11 @@ ASPIS does not infer `rnaseq` versus `smallrna` from filenames.
 public accessions contribute archive-specific fields. Branch-local
 `samples.tsv` files are normalized to a smaller downstream contract, while
 branch-local `materialized_manifest.tsv` files keep the full selected audit rows.
+
+Each branch also writes `fastq_inspection.tsv`, a lightweight Python FASTQ
+inspection table. It checks canonical R1/R2 files, validates sampled FASTQ
+records, and reports read-length and GC summaries before heavier assay-specific
+tools are introduced.
 
 ## Planned Architecture
 

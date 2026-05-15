@@ -15,6 +15,7 @@ PATHS = config.get("paths", {})
 MATERIALIZATION = config.get("materialization", {})
 PLANNING = config.get("planning", {})
 DESIGN = config.get("design", {})
+FASTQ_INSPECTION = config.get("fastq_inspection", {})
 EXECUTION = config.get("execution", {})
 ENVIRONMENT = config.get("environment", {})
 
@@ -113,6 +114,7 @@ def planned_branch_targets(wildcards):
                 [
                     f"{BRANCH_DIR}/{assay}/{project}/samples.tsv",
                     f"{BRANCH_DIR}/{assay}/{project}/materialized_manifest.tsv",
+                    f"{BRANCH_DIR}/{assay}/{project}/fastq_inspection.tsv",
                     f"{BRANCH_DIR}/{assay}/{project}/design.tsv",
                 ]
             )
@@ -289,5 +291,25 @@ rule build_branch_design:
           --control-label {params.control_label:q} \
           --min-condition-groups {params.min_condition_groups:q} \
           --covariates {params.covariates} \
+          > {log:q} 2>&1
+        """
+
+
+rule inspect_branch_fastqs:
+    input:
+        samples=f"{BRANCH_DIR}" + "/{assay}/{project}/samples.tsv"
+    output:
+        f"{BRANCH_DIR}" + "/{assay}/{project}/fastq_inspection.tsv"
+    params:
+        max_records=FASTQ_INSPECTION.get("max_records", 100000)
+    log:
+        "logs/branches/{assay}/{project}.fastq_inspection.log"
+    shell:
+        r"""
+        mkdir -p logs/branches/{wildcards.assay}
+        python3 workflow/scripts/inspect_fastqs.py \
+          --samples {input.samples:q} \
+          --output {output:q} \
+          --max-records {params.max_records:q} \
           > {log:q} 2>&1
         """
