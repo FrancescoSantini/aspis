@@ -196,15 +196,22 @@ validation, and full analyses.
 
 ## 6. Public Accession Test
 
-After local FASTQ materialization works, test one small public run accession by
-editing `config/intake.tsv` so `input_1` contains an `SRR`, `ERR`, or `DRR`
-accession.
-
-Then run:
+After local FASTQ materialization works, use the isolated smoke-test config to
+test one public `SRR`, `ERR`, or `DRR` accession without overwriting the default
+fixture outputs:
 
 ```bash
-snakemake --cores 1 --rerun-incomplete
+snakemake -n --cores 1 --configfile config/aspis_sra_smoke.yaml --printshellcmds
 ```
+
+Run the real smoke test locally only when a short public download/conversion is
+acceptable on the current node:
+
+```bash
+snakemake --cores 1 --configfile config/aspis_sra_smoke.yaml --printshellcmds
+```
+
+See `docs/sra_smoke_test.md` for expected outputs.
 
 If SRA Toolkit fails, record:
 
