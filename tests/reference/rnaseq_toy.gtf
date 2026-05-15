@@ -1,0 +1,3 @@
+toy_chr1	ASPIS	gene	1	170	.	+	.	gene_id "toy_gene"; gene_name "toy_gene";
+toy_chr1	ASPIS	transcript	1	170	.	+	.	gene_id "toy_gene"; transcript_id "toy_tx";
+toy_chr1	ASPIS	exon	1	170	.	+	.	gene_id "toy_gene"; transcript_id "toy_tx"; exon_number "1";
