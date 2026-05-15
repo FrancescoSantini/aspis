@@ -67,7 +67,9 @@ The legacy small RNA branch includes:
 ```text
 config/
   aspis.yaml               First-stage materialization settings
+  aspis_sra_smoke.yaml     Isolated public SRA smoke-test settings
   intake.tsv               Minimal intake sheet for ASPIS materialization
+  intake_sra_smoke.tsv     Optional SRA smoke-test intake sheet
   config.yaml              Workflow settings and thresholds
   sample_sheet.csv         Current working sample sheet
   sample_sheet_tests.csv   Small SRA/local test sample sheet
@@ -86,6 +88,7 @@ profiles/
 
 docs/
   g100_quickstart.md       CINECA Galileo100 testing notes
+  sra_smoke_test.md        Public SRA materialization smoke-test notes
 
 Snakefile                  New ASPIS materialization entry point
 
@@ -230,7 +233,8 @@ snakemake --cores 1 results/branches/rnaseq/ASPIS_TEST/design.tsv
 ```
 
 On CINECA G100, see `docs/g100_quickstart.md` for environment creation and
-SLURM profile testing.
+SLURM profile testing. For opt-in public SRA materialization testing, see
+`docs/sra_smoke_test.md`.
 
 ## Legacy Files
 

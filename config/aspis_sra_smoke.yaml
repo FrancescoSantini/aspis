@@ -1,0 +1,45 @@
+# ASPIS SRA smoke-test configuration.
+#
+# This config is intentionally separate from config/aspis.yaml so public SRA
+# download/conversion tests do not overwrite the default local fixture outputs.
+
+intake: config/intake_sra_smoke.tsv
+
+paths:
+  raw_dir: work/sra_smoke/raw
+  metadata_dir: meta/sra_smoke/materialized
+  manifest: meta/sra_smoke/materialized_manifest.tsv
+  analysis_plan: meta/sra_smoke/analysis_plan.tsv
+  environment_report: meta/sra_smoke/environment_report.tsv
+  sra_cache_dir: cache/sra_smoke
+  scratch_dir: work/sra_smoke/tmp
+  branch_dir: results/sra_smoke/branches
+
+materialization:
+  local_link_mode: symlink
+  sra_max_size: 1G
+  validate_sra: true
+
+planning:
+  allow_unclassified: false
+
+design:
+  condition_col: condition
+  control_label: control
+  covariates:
+    - time_h
+  min_condition_groups: 2
+
+execution:
+  default_partition: g100_usr_prod
+  download_partition: g100_all_serial
+
+environment:
+  required_tools:
+    - python3
+    - snakemake
+  sra_required_tools:
+    - prefetch
+    - fasterq-dump
+  optional_tools:
+    - vdb-validate
