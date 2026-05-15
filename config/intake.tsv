@@ -1,4 +1,3 @@
 library_id	biospecimen_id	project	input_1	input_2	assay_hint	condition	treatment	dose_uM	time_h	replicate	batch
-example_se	specimen_01	ASPIS_TEST	tests/data/example_se.fastq		longrna	control	vehicle	0	24	1	test
-example_pe	specimen_02	ASPIS_TEST	tests/data/example_R1.fastq	tests/data/example_R2.fastq	longrna	treated	compound	10	24	2	test
-
+example_se	specimen_01	ASPIS_TEST	tests/data/example_se.fastq		rnaseq	control	vehicle	0	24	1	test
+example_pe	specimen_02	ASPIS_TEST	tests/data/example_R1.fastq	tests/data/example_R2.fastq	rnaseq	treated	compound	10	24	2	test

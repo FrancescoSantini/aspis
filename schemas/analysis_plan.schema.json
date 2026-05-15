@@ -17,7 +17,7 @@
     },
     "assay": {
       "type": "string",
-      "enum": ["longrna", "smallrna", "unknown"]
+      "enum": ["rnaseq", "smallrna", "unknown"]
     },
     "status": {
       "type": "string",

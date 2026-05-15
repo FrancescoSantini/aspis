@@ -12,13 +12,21 @@ FASTQ files, normalize them into a common manifest, identify technical layout
 and assay information where possible, and then run the appropriate analysis
 branch locally or on an HPC cluster.
 
+ASPIS uses canonical assay codes in tables:
+
+- `rnaseq`: conventional short-read RNA-seq/mRNA-seq style analysis.
+- `smallrna`: small RNA/miRNA style analysis.
+
+The code avoids `longRNA-seq` terminology because it can be confused with
+long-read RNA sequencing.
+
 ## Current Status
 
 This codebase is not yet a polished general-purpose pipeline. It currently
 contains a new first-stage entry point plus three legacy workflow entry points:
 
 - `Snakefile`: materializes intake rows into canonical FASTQs, a manifest, and
-  an assay-level analysis plan.
+  an assay-level analysis plan, and an environment report.
 - `workflow/prefetchSRA`: downloads SRA accessions listed in the sample sheet.
 - `workflow/Snakefile`: legacy long RNA-seq workflow.
 - `workflow/SmallRNA`: legacy small RNA/miRNA workflow.
@@ -122,7 +130,7 @@ The planned intake model will separate these concepts:
 - `library_id`: unique analysis unit.
 - `biospecimen_id`: biological source material.
 - `project`: internal project or cohort.
-- `assay`: `longrna`, `smallrna`, or another supported assay.
+- `assay`: `rnaseq`, `smallrna`, or another supported assay.
 - `input_1` / `input_2`: accession or FASTQ path inputs.
 - named experimental metadata such as `condition`, `time_h`, `dose_uM`,
   `replicate`, and `batch`.
@@ -150,6 +158,7 @@ work/raw/{library_id}/R2.fastq.gz        # optional
 meta/materialized/{library_id}.json
 meta/materialized_manifest.tsv
 meta/analysis_plan.tsv
+meta/environment_report.tsv
 ```
 
 Downstream analysis rules should consume manifest-derived contracts rather than
@@ -162,7 +171,12 @@ Snakemake dependency graph even when an old manifest file is already present.
 `meta/analysis_plan.tsv` is the first downstream planning layer. It groups
 materialized libraries by `project` and `assay`, checks that canonical FASTQ
 paths exist, and stops if a library still has an unknown assay. Later, this file
-will drive which longRNA or smallRNA final outputs `rule all` requests.
+will drive which RNA-seq or small RNA final outputs `rule all` requests.
+
+`meta/environment_report.tsv` records command paths and versions for required
+and optional command-line tools. The conda environment YAML describes the
+intended software environment; this report records what was actually visible on
+`PATH` at runtime.
 
 ## Running the Legacy Workflows
 
