@@ -4,6 +4,7 @@ configfile: "config/aspis.yaml"
 
 import csv
 import re
+import shlex
 from pathlib import Path
 
 
@@ -329,7 +330,11 @@ rule run_branch_fastqc:
     params:
         outdir=lambda wildcards: f"{BRANCH_DIR}/{wildcards.assay}/{wildcards.project}/fastqc",
         fastqc=FASTQC.get("command", "fastqc"),
-        extra_args=FASTQC.get("extra_args", "")
+        extra_args_flag=(
+            "--extra-args " + shlex.quote(FASTQC.get("extra_args", ""))
+            if FASTQC.get("extra_args", "")
+            else ""
+        )
     threads:
         FASTQC.get("threads", 2)
     log:
@@ -344,6 +349,6 @@ rule run_branch_fastqc:
           --done {output.done:q} \
           --threads {threads:q} \
           --fastqc {params.fastqc:q} \
-          --extra-args {params.extra_args:q} \
+          {params.extra_args_flag} \
           > {log:q} 2>&1
         """
