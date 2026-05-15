@@ -22,25 +22,48 @@ ASSAY_ALIASES = {
     "rnaseq": "rnaseq",
     "rna-seq": "rnaseq",
     "rna_seq": "rnaseq",
+    "rna seq": "rnaseq",
     "mrna": "rnaseq",
     "mrnaseq": "rnaseq",
     "mrna-seq": "rnaseq",
     "mrna_seq": "rnaseq",
+    "mrna seq": "rnaseq",
     "longrna": "rnaseq",
     "longrna-seq": "rnaseq",
+    "longrna seq": "rnaseq",
     "smallrna": "smallrna",
     "smallrna-seq": "smallrna",
     "small-rna": "smallrna",
     "small-rna-seq": "smallrna",
+    "small rna": "smallrna",
+    "small rna seq": "smallrna",
     "mirna": "smallrna",
     "mirnaseq": "smallrna",
     "mirna-seq": "smallrna",
+    "mirna seq": "smallrna",
+}
+NORMALIZED_ASSAY_ALIASES = {
+    re.sub(r"[^a-z0-9]+", "", key.lower()): value
+    for key, value in ASSAY_ALIASES.items()
+}
+ASSAY_DECLARATION_FIELDS = ("assay_hint", "assay")
+ASSAY_METADATA_FIELDS = ("library_strategy", "library_selection")
+LIBRARY_STRATEGY_ASSAYS = {
+    "rnaseq": "rnaseq",
+    "mrnaseq": "rnaseq",
+    "mirnaseq": "smallrna",
+    "smallrnaseq": "smallrna",
+}
+LIBRARY_SELECTION_ASSAYS = {
+    "mirna": "smallrna",
+    "mirnasizefractionation": "smallrna",
 }
 RESERVED_METADATA_KEYS = {
     "library_id",
     "input_1",
     "input_2",
     "assay_hint",
+    "assay",
 }
 
 
@@ -346,15 +369,69 @@ def materialize_insdc_run(
     return result
 
 
-def assay_from_hint(row: dict[str, str]) -> tuple[str, str]:
-    hint = row.get("assay_hint", "").strip().lower()
-    if not hint:
-        return "unknown", "unclassified"
-    if hint not in ASSAY_ALIASES:
-        raise ValueError(
-            f"Unsupported assay_hint {hint!r}. Use rnaseq, smallrna, or leave blank."
-        )
-    return ASSAY_ALIASES[hint], "user_hint"
+def normalize_metadata_value(value: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "", value.strip().lower())
+
+
+def canonical_assay_value(value: str) -> str | None:
+    normalized = normalize_metadata_value(value)
+    if not normalized:
+        return None
+    return NORMALIZED_ASSAY_ALIASES.get(normalized)
+
+
+def assay_from_metadata_field(field: str, value: str) -> str | None:
+    normalized = normalize_metadata_value(value)
+    if field == "library_strategy":
+        return LIBRARY_STRATEGY_ASSAYS.get(normalized)
+    if field == "library_selection":
+        return LIBRARY_SELECTION_ASSAYS.get(normalized)
+    return None
+
+
+def assay_from_row(row: dict[str, str]) -> tuple[str, str, str]:
+    declared = []
+    for field in ASSAY_DECLARATION_FIELDS:
+        value = row.get(field, "").strip()
+        if not value:
+            continue
+        assay = canonical_assay_value(value)
+        if assay is None:
+            allowed = ", ".join(sorted(set(ASSAY_ALIASES.values())))
+            raise ValueError(
+                f"Unsupported {field} {value!r}. Use one of: {allowed}; or leave blank."
+            )
+        declared.append((field, value, assay))
+
+    if declared:
+        assays = {assay for _, _, assay in declared}
+        if len(assays) > 1:
+            details = ", ".join(f"{field}={value!r}" for field, value, _ in declared)
+            raise ValueError(f"Conflicting assay declarations: {details}")
+        field, value, assay = declared[0]
+        return assay, "user_hint", f"{field}={value}"
+
+    metadata_hits = []
+    for field in ASSAY_METADATA_FIELDS:
+        value = row.get(field, "").strip()
+        if not value:
+            continue
+        assay = assay_from_metadata_field(field, value)
+        if assay is not None:
+            metadata_hits.append((field, value, assay))
+
+    if metadata_hits:
+        assays = {assay for _, _, assay in metadata_hits}
+        details = ", ".join(f"{field}={value!r}" for field, value, _ in metadata_hits)
+        if len(assays) == 1:
+            return metadata_hits[0][2], "metadata", details
+        return "unknown", "ambiguous_metadata", f"conflicting metadata: {details}"
+
+    return (
+        "unknown",
+        "unclassified",
+        "no assay_hint, assay, or recognized library_strategy/library_selection metadata",
+    )
 
 
 def write_metadata(path: Path, payload: dict[str, object]) -> None:
@@ -376,7 +453,7 @@ def main() -> int:
     metadata_path = Path(args.metadata)
     clean_dir(outdir)
 
-    assay, assay_confidence = assay_from_hint(row)
+    assay, assay_confidence, assay_reason = assay_from_row(row)
     input_1 = row["input_1"]
     input_2 = row.get("input_2", "")
 
@@ -422,6 +499,7 @@ def main() -> int:
         "archive": archive,
         "assay": assay,
         "assay_confidence": assay_confidence,
+        "assay_reason": assay_reason,
         "layout": layout,
         "fastq_1": fastq_1,
         "fastq_2": fastq_2 or "",

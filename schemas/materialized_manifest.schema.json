@@ -27,6 +27,10 @@
       "type": "string"
     },
     "assay_confidence": {
+      "type": "string",
+      "enum": ["user_hint", "metadata", "ambiguous_metadata", "unclassified"]
+    },
+    "assay_reason": {
       "type": "string"
     },
     "layout": {
@@ -44,4 +48,3 @@
     "type": "string"
   }
 }
-
