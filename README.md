@@ -118,6 +118,9 @@ Recommended additional columns include:
 biospecimen_id,project,input_2,assay_hint,condition,treatment,dose,dose_unit,time_h,replicate,batch
 ```
 
+`assay_hint` is an explicit user override. ASPIS also accepts an `assay`
+column with the same values for imported sheets that already use that name.
+
 The legacy analysis workflows still read `config/sample_sheet.csv`. It uses
 these legacy columns:
 
@@ -152,8 +155,17 @@ ASPIS currently resolves each intake row as one library analysis unit:
 - public run rows are classified as single-end or paired-end after conversion
   by checking whether a second read file was produced.
 
-Source type and read layout are therefore materialized from the inputs, while
-assay routing still comes from `assay_hint` at this stage.
+Source type and read layout are therefore materialized from the inputs. Assay
+routing is resolved in this order:
+
+1. explicit `assay_hint` or `assay`;
+2. recognized library metadata, currently `library_strategy=RNA-Seq`,
+   `library_strategy=mRNA-Seq`, `library_strategy=miRNA-Seq`, or strong
+   `library_selection` values such as `miRNA`;
+3. `unknown`, which blocks branch planning unless unclassified assays are
+   explicitly allowed.
+
+ASPIS does not infer `rnaseq` versus `smallrna` from filenames.
 
 ## Planned Architecture
 

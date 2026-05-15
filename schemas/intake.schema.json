@@ -24,7 +24,17 @@
     },
     "assay_hint": {
       "type": "string",
-      "enum": ["", "rnaseq", "smallrna"]
+      "enum": ["", "rnaseq", "rna-seq", "rna_seq", "mrna", "mrnaseq", "mrna-seq", "mrna_seq", "longrna", "longrna-seq", "smallrna", "smallrna-seq", "small-rna", "small-rna-seq", "mirna", "mirnaseq", "mirna-seq"]
+    },
+    "assay": {
+      "type": "string",
+      "enum": ["", "rnaseq", "rna-seq", "rna_seq", "mrna", "mrnaseq", "mrna-seq", "mrna_seq", "longrna", "longrna-seq", "smallrna", "smallrna-seq", "small-rna", "small-rna-seq", "mirna", "mirnaseq", "mirna-seq"]
+    },
+    "library_strategy": {
+      "type": "string"
+    },
+    "library_selection": {
+      "type": "string"
     }
   },
   "additionalProperties": {

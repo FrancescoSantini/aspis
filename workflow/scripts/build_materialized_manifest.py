@@ -19,6 +19,7 @@ PREFERRED_COLUMNS = [
     "archive",
     "assay",
     "assay_confidence",
+    "assay_reason",
     "layout",
     "fastq_1",
     "fastq_2",

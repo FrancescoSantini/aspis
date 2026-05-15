@@ -125,8 +125,11 @@ def build_plan_rows(
             if allow_unclassified:
                 assay = "unknown"
             else:
+                reason = row.get("assay_reason", "")
+                suffix = f"; {reason}" if reason else ""
                 errors.append(
-                    f"{library_id}: assay is unclassified; set assay_hint in the intake sheet"
+                    f"{library_id}: assay is unclassified{suffix}. Set assay_hint/assay "
+                    "or provide recognized library_strategy metadata."
                 )
                 continue
         elif assay not in SUPPORTED_ASSAYS:
