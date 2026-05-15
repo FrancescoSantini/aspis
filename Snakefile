@@ -659,7 +659,11 @@ rule align_rnaseq_branch:
         outdir=lambda wildcards: f"{BRANCH_DIR}/rnaseq/{wildcards.project}/alignment",
         hisat2=RNASEQ_ALIGNMENT.get("hisat2_command", "hisat2"),
         samtools=RNASEQ_ALIGNMENT.get("samtools_command", "samtools"),
-        strandness=RNASEQ_ALIGNMENT.get("strandness", ""),
+        strandness_flag=(
+            "--strandness " + shlex.quote(RNASEQ_ALIGNMENT.get("strandness", ""))
+            if RNASEQ_ALIGNMENT.get("strandness", "")
+            else ""
+        ),
         extra_args_flag=(
             "--extra-args " + shlex.quote(RNASEQ_ALIGNMENT.get("extra_args", ""))
             if RNASEQ_ALIGNMENT.get("extra_args", "")
@@ -681,7 +685,7 @@ rule align_rnaseq_branch:
           --threads {threads:q} \
           --hisat2 {params.hisat2:q} \
           --samtools {params.samtools:q} \
-          --strandness {params.strandness:q} \
+          {params.strandness_flag} \
           {params.extra_args_flag} \
           > {log:q} 2>&1
         """
