@@ -562,8 +562,16 @@ rule plan_rnaseq_alignment:
     output:
         f"{BRANCH_DIR}" + "/rnaseq/{project}/alignment/alignment_plan.tsv"
     params:
-        index_prefix=RNASEQ_ALIGNMENT.get("hisat2_index_prefix", ""),
-        annotation_gtf=RNASEQ_ALIGNMENT.get("annotation_gtf", "")
+        index_prefix_flag=(
+            "--index-prefix " + shlex.quote(RNASEQ_ALIGNMENT.get("hisat2_index_prefix", ""))
+            if RNASEQ_ALIGNMENT.get("hisat2_index_prefix", "")
+            else ""
+        ),
+        annotation_gtf_flag=(
+            "--annotation-gtf " + shlex.quote(RNASEQ_ALIGNMENT.get("annotation_gtf", ""))
+            if RNASEQ_ALIGNMENT.get("annotation_gtf", "")
+            else ""
+        )
     log:
         "logs/branches/rnaseq/{project}.alignment_plan.log"
     shell:
@@ -573,7 +581,7 @@ rule plan_rnaseq_alignment:
           --samples {input.samples:q} \
           --output {output:q} \
           --project {wildcards.project:q} \
-          --index-prefix {params.index_prefix:q} \
-          --annotation-gtf {params.annotation_gtf:q} \
+          {params.index_prefix_flag} \
+          {params.annotation_gtf_flag} \
           > {log:q} 2>&1
         """
