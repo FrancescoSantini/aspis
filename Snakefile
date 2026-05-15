@@ -11,10 +11,12 @@ LIBRARY_ID_RE = re.compile(r"^[A-Za-z0-9_.-]+$")
 INTAKE = config.get("intake", "config/intake.tsv")
 PATHS = config.get("paths", {})
 MATERIALIZATION = config.get("materialization", {})
+PLANNING = config.get("planning", {})
 
 RAW_DIR = PATHS.get("raw_dir", "work/raw")
 METADATA_DIR = PATHS.get("metadata_dir", "meta/materialized")
 MANIFEST = PATHS.get("manifest", "meta/materialized_manifest.tsv")
+ANALYSIS_PLAN = PATHS.get("analysis_plan", "meta/analysis_plan.tsv")
 SRA_CACHE_DIR = PATHS.get("sra_cache_dir", "cache/sra")
 SCRATCH_DIR = PATHS.get("scratch_dir", "work/tmp")
 
@@ -60,7 +62,7 @@ METADATA_JSON = expand(f"{METADATA_DIR}" + "/{library_id}.json", library_id=LIBR
 
 rule all:
     input:
-        MANIFEST
+        ANALYSIS_PLAN
 
 
 rule materialize_library:
@@ -112,3 +114,24 @@ rule build_materialized_manifest:
           > {log:q} 2>&1
         """
 
+
+rule build_analysis_plan:
+    input:
+        manifest=MANIFEST
+    output:
+        ANALYSIS_PLAN
+    params:
+        allow_unclassified_flag=(
+            "--allow-unclassified" if PLANNING.get("allow_unclassified", False) else ""
+        )
+    log:
+        "logs/analysis_plan.log"
+    shell:
+        r"""
+        mkdir -p logs
+        python3 workflow/scripts/build_analysis_plan.py \
+          --manifest {input.manifest:q} \
+          --output {output:q} \
+          {params.allow_unclassified_flag} \
+          > {log:q} 2>&1
+        """

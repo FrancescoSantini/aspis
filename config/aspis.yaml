@@ -17,3 +17,5 @@ materialization:
   sra_max_size: 40G
   validate_sra: true
 
+planning:
+  allow_unclassified: false

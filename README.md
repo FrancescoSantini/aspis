@@ -17,7 +17,8 @@ branch locally or on an HPC cluster.
 This codebase is not yet a polished general-purpose pipeline. It currently
 contains a new first-stage entry point plus three legacy workflow entry points:
 
-- `Snakefile`: materializes intake rows into canonical FASTQs and a manifest.
+- `Snakefile`: materializes intake rows into canonical FASTQs, a manifest, and
+  an assay-level analysis plan.
 - `workflow/prefetchSRA`: downloads SRA accessions listed in the sample sheet.
 - `workflow/Snakefile`: legacy long RNA-seq workflow.
 - `workflow/SmallRNA`: legacy small RNA/miRNA workflow.
@@ -66,6 +67,7 @@ config/
 schemas/
   intake.schema.json
   materialized_manifest.schema.json
+  analysis_plan.schema.json
 
 envs/
   aspis-snakemake.yaml     Snakemake 9 orchestration environment
@@ -135,6 +137,7 @@ intake sheet
   -> input resolution
   -> canonical FASTQ materialization
   -> materialized manifest
+  -> analysis plan
   -> assay-specific analysis branches
   -> final reports
 ```
@@ -146,17 +149,23 @@ work/raw/{library_id}/R1.fastq.gz
 work/raw/{library_id}/R2.fastq.gz        # optional
 meta/materialized/{library_id}.json
 meta/materialized_manifest.tsv
+meta/analysis_plan.tsv
 ```
 
-Downstream analysis rules should consume only the materialized manifest rather
-than probing files or public accessions at Snakefile parse time.
+Downstream analysis rules should consume manifest-derived contracts rather than
+probing files or public accessions at Snakefile parse time.
+
+`meta/analysis_plan.tsv` is the first downstream planning layer. It groups
+materialized libraries by `project` and `assay`, checks that canonical FASTQ
+paths exist, and stops if a library still has an unknown assay. Later, this file
+will drive which longRNA or smallRNA final outputs `rule all` requests.
 
 ## Running the Legacy Workflows
 
 From the repository root:
 
 ```bash
-# Materialize local FASTQ files or public run accessions into a manifest
+# Materialize local FASTQ files or public run accessions into a manifest and plan
 snakemake --cores 1
 
 # Download SRA inputs from the current sample sheet
@@ -178,10 +187,11 @@ executor plugin, while keeping cluster policy out of the biological workflow
 configuration.
 
 The first-stage materialization workflow can also be run directly to build only
-the manifest:
+the manifest or the downstream analysis plan:
 
 ```bash
 snakemake --cores 1 meta/materialized_manifest.tsv
+snakemake --cores 1 meta/analysis_plan.tsv
 ```
 
 On CINECA G100, see `docs/g100_quickstart.md` for environment creation and
@@ -214,13 +224,14 @@ org.Hs.eg.db, multiMiR, and plotting/reporting packages.
 
 1. Replace `workflow/prefetchSRA` with a materialization workflow that supports
    local FASTQ files and public run accessions.
-2. Generate `meta/materialized_manifest.tsv` as the only downstream input
-   contract.
-3. Rewrite the main Snakefile around `library_id`, `project`, `assay`, and
+2. Generate `meta/materialized_manifest.tsv` as the raw-data contract.
+3. Build `meta/analysis_plan.tsv` from the manifest to define assay/project
+   branch groups.
+4. Rewrite the main Snakefile around `library_id`, `project`, `assay`, and
    named metadata columns instead of `bioproject` and generic covariates.
-4. Bring the long RNA-seq branch onto the manifest contract first.
-5. Add the small RNA/miRNA branch second.
-6. Replace the legacy SLURM profile with a workflow profile based on the modern
+5. Bring the long RNA-seq branch onto the manifest contract first.
+6. Add the small RNA/miRNA branch second.
+7. Replace the legacy SLURM profile with a workflow profile based on the modern
    Snakemake SLURM executor.
-7. Move human-specific assumptions into config before extending ASPIS to other
+8. Move human-specific assumptions into config before extending ASPIS to other
    organisms or sequencing assays.

@@ -92,6 +92,7 @@ Inspect the manifest:
 
 ```bash
 cat meta/materialized_manifest.tsv
+cat meta/analysis_plan.tsv
 ```
 
 Expected outputs:
@@ -103,6 +104,7 @@ work/raw/example_pe/R2.fastq.gz
 meta/materialized/example_se.json
 meta/materialized/example_pe.json
 meta/materialized_manifest.tsv
+meta/analysis_plan.tsv
 ```
 
 ## 4. Optional Snakemake 7 Compatibility Check
