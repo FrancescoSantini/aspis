@@ -19,6 +19,7 @@ VERSION_COMMANDS = {
     "multiqc": ["multiqc", "--version"],
     "fastp": ["fastp", "--version"],
     "hisat2": ["hisat2", "--version"],
+    "hisat2-build": ["hisat2-build", "--version"],
     "samtools": ["samtools", "--version"],
     "vdb-validate": ["vdb-validate", "--version"],
 }

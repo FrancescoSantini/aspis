@@ -67,6 +67,8 @@ The legacy small RNA branch includes:
 ```text
 config/
   aspis.yaml               First-stage materialization settings
+  aspis_alignment_smoke.yaml
+                           Isolated local RNA-seq alignment smoke-test settings
   aspis_sra_smoke.yaml     Isolated partial public SRA smoke-test settings
   intake.tsv               Minimal intake sheet for ASPIS materialization
   intake_sra_smoke.tsv     Optional SRA smoke-test intake sheet
@@ -95,6 +97,10 @@ profiles/
 docs/
   g100_quickstart.md       CINECA Galileo100 testing notes
   sra_smoke_test.md        Public SRA materialization smoke-test notes
+
+tests/
+  data/                    Tiny local FASTQ fixtures
+  reference/               Tiny synthetic reference for alignment smoke tests
 
 Snakefile                  New ASPIS materialization entry point
 
@@ -210,6 +216,11 @@ Actual HISAT2 alignment is opt-in through `rnaseq_alignment.run: true`. When
 enabled and the plan is ready, ASPIS writes sorted BAMs plus
 `alignment/aligned_samples.tsv`.
 
+`config/aspis_alignment_smoke.yaml` enables that opt-in path with a tiny
+synthetic FASTA/GTF under `tests/reference/`. It is a technical test that builds
+a miniature HISAT2 index and checks that the RNA-seq alignment rules run; it is
+not a biological reference.
+
 ## Planned Architecture
 
 The next major refactor should make the first stage of ASPIS a raw-data
@@ -323,6 +334,9 @@ snakemake --cores 1 results/branches/rnaseq/ASPIS_TEST/preprocess/preprocessed_s
 snakemake --cores 1 results/branches/rnaseq/ASPIS_TEST/preprocess/multiqc/multiqc_report.html
 snakemake --cores 1 results/branches/rnaseq/ASPIS_TEST/alignment/alignment_plan.tsv
 snakemake --cores 1 results/branches/rnaseq/ASPIS_TEST/design.tsv
+
+# Run the isolated local alignment smoke test
+snakemake --cores 1 --configfile config/aspis_alignment_smoke.yaml --printshellcmds
 ```
 
 On CINECA G100, see `docs/g100_quickstart.md` for environment creation and

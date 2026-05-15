@@ -32,6 +32,13 @@ ENVIRONMENT_REPORT = PATHS.get("environment_report", "meta/environment_report.ts
 BRANCH_DIR = PATHS.get("branch_dir", "results/branches")
 SRA_CACHE_DIR = PATHS.get("sra_cache_dir", "cache/sra")
 SCRATCH_DIR = PATHS.get("scratch_dir", "work/tmp")
+RNASEQ_ALIGNMENT_INDEX_PREFIX = RNASEQ_ALIGNMENT.get("hisat2_index_prefix", "")
+RNASEQ_ALIGNMENT_REFERENCE_FASTA = RNASEQ_ALIGNMENT.get("reference_fasta", "")
+RNASEQ_ALIGNMENT_INDEX_FILES = (
+    expand(RNASEQ_ALIGNMENT_INDEX_PREFIX + ".{n}.ht2", n=range(1, 9))
+    if RNASEQ_ALIGNMENT_INDEX_PREFIX and RNASEQ_ALIGNMENT_REFERENCE_FASTA
+    else []
+)
 
 
 def read_intake(path):
@@ -82,7 +89,7 @@ SRA_LIMITED_REQUIRED_TOOLS = ENVIRONMENT.get("sra_limited_required_tools", ["fas
 RNASEQ_REQUIRED_TOOLS = ENVIRONMENT.get("rnaseq_required_tools", ["fastp"])
 RNASEQ_ALIGNMENT_REQUIRED_TOOLS = ENVIRONMENT.get(
     "rnaseq_alignment_required_tools",
-    ["hisat2", "samtools"],
+    ["hisat2", "hisat2-build", "samtools"],
 )
 OPTIONAL_TOOLS = ENVIRONMENT.get("optional_tools", ["vdb-validate"])
 ACTIVE_SRA_REQUIRED_TOOLS = (
@@ -193,6 +200,25 @@ rule check_environment:
           --optional-tools {params.optional_tools:q} \
           > {log:q} 2>&1
         """
+
+
+if RNASEQ_ALIGNMENT_INDEX_FILES:
+    rule build_rnaseq_hisat2_index:
+        input:
+            fasta=RNASEQ_ALIGNMENT_REFERENCE_FASTA
+        output:
+            RNASEQ_ALIGNMENT_INDEX_FILES
+        params:
+            prefix=RNASEQ_ALIGNMENT_INDEX_PREFIX,
+            index_dir=str(Path(RNASEQ_ALIGNMENT_INDEX_PREFIX).parent),
+            hisat2_build=RNASEQ_ALIGNMENT.get("hisat2_build_command", "hisat2-build")
+        log:
+            "logs/references/rnaseq_hisat2_index.log"
+        shell:
+            r"""
+            mkdir -p logs/references {params.index_dir:q}
+            {params.hisat2_build:q} {input.fasta:q} {params.prefix:q} > {log:q} 2>&1
+            """
 
 
 rule materialize_library:
@@ -570,7 +596,8 @@ rule plan_rnaseq_alignment:
     input:
         samples=f"{BRANCH_DIR}" + "/rnaseq/{project}/preprocess/preprocessed_samples.tsv",
         preprocess_done=f"{BRANCH_DIR}" + "/rnaseq/{project}/preprocess/preprocess.done",
-        qc_done=f"{BRANCH_DIR}" + "/rnaseq/{project}/preprocess/multiqc/multiqc.done"
+        qc_done=f"{BRANCH_DIR}" + "/rnaseq/{project}/preprocess/multiqc/multiqc.done",
+        index_files=RNASEQ_ALIGNMENT_INDEX_FILES
     output:
         f"{BRANCH_DIR}" + "/rnaseq/{project}/alignment/alignment_plan.tsv"
     params:

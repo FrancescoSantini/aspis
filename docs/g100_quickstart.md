@@ -80,6 +80,8 @@ which fastp
 fastp --version
 which hisat2
 hisat2 --version
+which hisat2-build
+hisat2-build --version
 which samtools
 samtools --version
 ```
@@ -201,7 +203,44 @@ results/branches/rnaseq/<PROJECT>/alignment/aligned_samples.tsv
 results/branches/rnaseq/<PROJECT>/alignment/alignment.done
 ```
 
-## 4. Optional Snakemake 7 Compatibility Check
+## 4. Local RNA-seq Alignment Smoke Test
+
+ASPIS includes an isolated alignment smoke-test config. It builds a tiny
+synthetic HISAT2 index from `tests/reference/rnaseq_toy.fa`, uses the same local
+FASTQ fixtures as the default test, and writes all outputs under isolated
+`alignment_smoke` paths.
+
+Run it locally with one core:
+
+```bash
+snakemake --cores 1 --configfile config/aspis_alignment_smoke.yaml --printshellcmds
+```
+
+Inspect the key outputs:
+
+```bash
+cat results/alignment_smoke/branches/rnaseq/ASPIS_TEST/alignment/alignment_plan.tsv
+cat results/alignment_smoke/branches/rnaseq/ASPIS_TEST/alignment/aligned_samples.tsv
+cat results/alignment_smoke/branches/rnaseq/ASPIS_TEST/alignment/alignment.done
+ls -lh results/alignment_smoke/branches/rnaseq/ASPIS_TEST/alignment/example_se
+ls -lh results/alignment_smoke/branches/rnaseq/ASPIS_TEST/alignment/example_pe
+```
+
+Expected additional outputs include:
+
+```text
+work/alignment_smoke/reference/rnaseq_toy.1.ht2
+results/alignment_smoke/branches/rnaseq/ASPIS_TEST/alignment/alignment_plan.tsv
+results/alignment_smoke/branches/rnaseq/ASPIS_TEST/alignment/aligned_samples.tsv
+results/alignment_smoke/branches/rnaseq/ASPIS_TEST/alignment/alignment.done
+results/alignment_smoke/branches/rnaseq/ASPIS_TEST/alignment/example_se/aligned.sorted.bam
+results/alignment_smoke/branches/rnaseq/ASPIS_TEST/alignment/example_pe/aligned.sorted.bam
+```
+
+This test validates the workflow mechanics only. It should not be interpreted as
+a biologically meaningful mapping result.
+
+## 5. Optional Snakemake 7 Compatibility Check
 
 The new materialization Snakefile only uses basic Snakemake features, so it may
 also run with the existing Snakemake 7.25.3 environment:
@@ -215,7 +254,7 @@ snakemake --cores 1 --dry-run
 This is only a short-term compatibility check. The refactored ASPIS SLURM
 profile targets Snakemake 9.
 
-## 5. SLURM Profile Dry Run
+## 6. SLURM Profile Dry Run
 
 After the local test works with `aspis-smk9`, check the modern SLURM profile:
 
@@ -272,7 +311,7 @@ Do not use real SLURM submissions for routine development. Keep development and
 fixture tests local with `--cores 1`; reserve SLURM for final dry-runs, account
 validation, and full analyses.
 
-## 6. Public Accession Test
+## 7. Public Accession Test
 
 After local FASTQ materialization works, use the isolated smoke-test config to
 test one public `SRR`, `ERR`, or `DRR` accession without overwriting the default
@@ -308,7 +347,7 @@ cat logs/materialize/<library_id>.log
 
 Those lines are useful for a CINECA support ticket.
 
-## 7. Useful Diagnostics for CINECA Tickets
+## 8. Useful Diagnostics for CINECA Tickets
 
 ```bash
 hostname

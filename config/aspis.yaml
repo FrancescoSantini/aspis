@@ -54,7 +54,9 @@ rnaseq_alignment:
   run: false
   aligner: hisat2
   hisat2_command: hisat2
+  hisat2_build_command: hisat2-build
   samtools_command: samtools
+  reference_fasta: ""
   hisat2_index_prefix: ""
   annotation_gtf: ""
   strandness: ""
@@ -75,6 +77,7 @@ environment:
     - fastp
   rnaseq_alignment_required_tools:
     - hisat2
+    - hisat2-build
     - samtools
   sra_required_tools:
     - prefetch
