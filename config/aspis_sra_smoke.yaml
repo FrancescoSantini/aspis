@@ -51,6 +51,11 @@ rnaseq_preprocess:
   threads: 1
   extra_args: ""
 
+rnaseq_alignment:
+  aligner: hisat2
+  hisat2_index_prefix: ""
+  annotation_gtf: ""
+
 execution:
   default_partition: g100_usr_prod
   download_partition: g100_all_serial

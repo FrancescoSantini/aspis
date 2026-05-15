@@ -20,6 +20,7 @@ FASTQ_INSPECTION = config.get("fastq_inspection", {})
 FASTQC = config.get("fastqc", {})
 MULTIQC = config.get("multiqc", {})
 RNASEQ_PREPROCESS = config.get("rnaseq_preprocess", {})
+RNASEQ_ALIGNMENT = config.get("rnaseq_alignment", {})
 EXECUTION = config.get("execution", {})
 ENVIRONMENT = config.get("environment", {})
 
@@ -148,6 +149,7 @@ def planned_branch_targets(wildcards):
                         f"{BRANCH_DIR}/{assay}/{project}/preprocess/fastqc/fastqc.done",
                         f"{BRANCH_DIR}/{assay}/{project}/preprocess/multiqc/multiqc_report.html",
                         f"{BRANCH_DIR}/{assay}/{project}/preprocess/multiqc/multiqc.done",
+                        f"{BRANCH_DIR}/{assay}/{project}/alignment/alignment_plan.tsv",
                     ]
                 )
     return targets
@@ -549,4 +551,29 @@ rule run_preprocessed_rnaseq_multiqc:
           > {log:q} 2>&1
         test -s {output.report:q}
         printf "status\treport\nok\t%s\n" {output.report:q} > {output.done:q}
+        """
+
+
+rule plan_rnaseq_alignment:
+    input:
+        samples=f"{BRANCH_DIR}" + "/rnaseq/{project}/preprocess/preprocessed_samples.tsv",
+        preprocess_done=f"{BRANCH_DIR}" + "/rnaseq/{project}/preprocess/preprocess.done",
+        qc_done=f"{BRANCH_DIR}" + "/rnaseq/{project}/preprocess/multiqc/multiqc.done"
+    output:
+        f"{BRANCH_DIR}" + "/rnaseq/{project}/alignment/alignment_plan.tsv"
+    params:
+        index_prefix=RNASEQ_ALIGNMENT.get("hisat2_index_prefix", ""),
+        annotation_gtf=RNASEQ_ALIGNMENT.get("annotation_gtf", "")
+    log:
+        "logs/branches/rnaseq/{project}.alignment_plan.log"
+    shell:
+        r"""
+        mkdir -p logs/branches/rnaseq
+        python3 workflow/scripts/plan_rnaseq_alignment.py \
+          --samples {input.samples:q} \
+          --output {output:q} \
+          --project {wildcards.project:q} \
+          --index-prefix {params.index_prefix:q} \
+          --annotation-gtf {params.annotation_gtf:q} \
+          > {log:q} 2>&1
         """

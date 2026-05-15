@@ -83,6 +83,7 @@ schemas/
   fastq_inspection.schema.json
   fastqc_manifest.schema.json
   rnaseq_preprocessed_samples.schema.json
+  rnaseq_alignment_plan.schema.json
 
 envs/
   aspis-snakemake.yaml     Snakemake 9 orchestration environment
@@ -201,6 +202,9 @@ For `rnaseq` branches, ASPIS also runs a first preprocessing pass with fastp.
 The output `preprocess/preprocessed_samples.tsv` keeps the same sample metadata
 but points `fastq_1` / `fastq_2` at the preprocessed FASTQs and records the
 original paths as `raw_fastq_1` / `raw_fastq_2`.
+After preprocessing, ASPIS writes `alignment/alignment_plan.tsv`. This is a
+reference-readiness contract: it reports `blocked` until a HISAT2 index prefix
+is configured and the expected index files are present.
 
 ## Planned Architecture
 
@@ -242,6 +246,7 @@ results/branches/rnaseq/{project}/preprocess/fastqc/fastqc_manifest.tsv
 results/branches/rnaseq/{project}/preprocess/fastqc/fastqc.done
 results/branches/rnaseq/{project}/preprocess/multiqc/multiqc_report.html
 results/branches/rnaseq/{project}/preprocess/multiqc/multiqc.done
+results/branches/rnaseq/{project}/alignment/alignment_plan.tsv
 ```
 
 Downstream analysis rules should consume manifest-derived contracts rather than
@@ -309,6 +314,7 @@ snakemake --cores 1 results/branches/rnaseq/ASPIS_TEST/fastqc/fastqc.done
 snakemake --cores 1 results/branches/rnaseq/ASPIS_TEST/multiqc/multiqc_report.html
 snakemake --cores 1 results/branches/rnaseq/ASPIS_TEST/preprocess/preprocessed_samples.tsv
 snakemake --cores 1 results/branches/rnaseq/ASPIS_TEST/preprocess/multiqc/multiqc_report.html
+snakemake --cores 1 results/branches/rnaseq/ASPIS_TEST/alignment/alignment_plan.tsv
 snakemake --cores 1 results/branches/rnaseq/ASPIS_TEST/design.tsv
 ```
 

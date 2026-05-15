@@ -66,6 +66,7 @@ cat results/sra_smoke/branches/rnaseq/ASPIS_SRA_SMOKE/preprocess/preprocess.done
 cat results/sra_smoke/branches/rnaseq/ASPIS_SRA_SMOKE/preprocess/fastq_inspection.tsv
 cat results/sra_smoke/branches/rnaseq/ASPIS_SRA_SMOKE/preprocess/fastqc/fastqc_manifest.tsv
 ls -lh results/sra_smoke/branches/rnaseq/ASPIS_SRA_SMOKE/preprocess/multiqc/multiqc_report.html
+cat results/sra_smoke/branches/rnaseq/ASPIS_SRA_SMOKE/alignment/alignment_plan.tsv
 cat results/sra_smoke/branches/rnaseq/ASPIS_SRA_SMOKE/design.tsv
 ```
 
@@ -77,6 +78,8 @@ outputs produced from those bounded FASTQs.
 The branch `multiqc/multiqc_report.html` file summarizes the FastQC outputs.
 The RNA-seq `preprocess/` directory records bounded fastp outputs and post-fastp
 FastQC/MultiQC reports.
+The RNA-seq `alignment/alignment_plan.tsv` file is expected to be `blocked`
+until a HISAT2 index prefix is configured for a real reference.
 
 The design summary is expected to mark differential testing as blocked because
 the smoke test contains one control library only. That is correct; the test is
