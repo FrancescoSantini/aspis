@@ -18,6 +18,7 @@ PLANNING = config.get("planning", {})
 DESIGN = config.get("design", {})
 FASTQ_INSPECTION = config.get("fastq_inspection", {})
 FASTQC = config.get("fastqc", {})
+MULTIQC = config.get("multiqc", {})
 EXECUTION = config.get("execution", {})
 ENVIRONMENT = config.get("environment", {})
 
@@ -119,6 +120,8 @@ def planned_branch_targets(wildcards):
                     f"{BRANCH_DIR}/{assay}/{project}/fastq_inspection.tsv",
                     f"{BRANCH_DIR}/{assay}/{project}/fastqc/fastqc_manifest.tsv",
                     f"{BRANCH_DIR}/{assay}/{project}/fastqc/fastqc.done",
+                    f"{BRANCH_DIR}/{assay}/{project}/multiqc/multiqc_report.html",
+                    f"{BRANCH_DIR}/{assay}/{project}/multiqc/multiqc.done",
                     f"{BRANCH_DIR}/{assay}/{project}/design.tsv",
                 ]
             )
@@ -351,4 +354,33 @@ rule run_branch_fastqc:
           --fastqc {params.fastqc:q} \
           {params.extra_args_flag} \
           > {log:q} 2>&1
+        """
+
+
+rule run_branch_multiqc:
+    input:
+        fastqc_manifest=f"{BRANCH_DIR}" + "/{assay}/{project}/fastqc/fastqc_manifest.tsv",
+        fastqc_done=f"{BRANCH_DIR}" + "/{assay}/{project}/fastqc/fastqc.done",
+        environment=ENVIRONMENT_REPORT
+    output:
+        report=f"{BRANCH_DIR}" + "/{assay}/{project}/multiqc/multiqc_report.html",
+        done=f"{BRANCH_DIR}" + "/{assay}/{project}/multiqc/multiqc.done"
+    params:
+        fastqc_dir=lambda wildcards: f"{BRANCH_DIR}/{wildcards.assay}/{wildcards.project}/fastqc/files",
+        outdir=lambda wildcards: f"{BRANCH_DIR}/{wildcards.assay}/{wildcards.project}/multiqc",
+        multiqc=MULTIQC.get("command", "multiqc"),
+        extra_args=MULTIQC.get("extra_args", "")
+    log:
+        "logs/branches/{assay}/{project}.multiqc.log"
+    shell:
+        r"""
+        mkdir -p logs/branches/{wildcards.assay}
+        {params.multiqc:q} {params.fastqc_dir:q} \
+          --outdir {params.outdir:q} \
+          --filename multiqc_report.html \
+          --force \
+          {params.extra_args} \
+          > {log:q} 2>&1
+        test -s {output.report:q}
+        printf "status\treport\nok\t%s\n" {output.report:q} > {output.done:q}
         """

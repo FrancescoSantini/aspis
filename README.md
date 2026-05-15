@@ -193,6 +193,8 @@ FASTQs and writes `fastqc/fastqc_manifest.tsv` plus `fastqc/fastqc.done`.
 ASPIS stages files with unique `{library_id}_{read}.fastq.gz` names before
 running FastQC, because every materialized library uses canonical `R1`/`R2`
 filenames and those would otherwise collide in one output directory.
+Each branch then runs MultiQC over the branch FastQC outputs and writes
+`multiqc/multiqc_report.html`.
 
 ## Planned Architecture
 
@@ -224,6 +226,8 @@ results/branches/{assay}/{project}/design.tsv
 results/branches/{assay}/{project}/fastq_inspection.tsv
 results/branches/{assay}/{project}/fastqc/fastqc_manifest.tsv
 results/branches/{assay}/{project}/fastqc/fastqc.done
+results/branches/{assay}/{project}/multiqc/multiqc_report.html
+results/branches/{assay}/{project}/multiqc/multiqc.done
 ```
 
 Downstream analysis rules should consume manifest-derived contracts rather than
@@ -288,6 +292,7 @@ snakemake --cores 1 meta/materialized_manifest.tsv
 snakemake --cores 1 meta/analysis_plan.tsv
 snakemake --cores 1 results/branches/rnaseq/ASPIS_TEST/branch.ready
 snakemake --cores 1 results/branches/rnaseq/ASPIS_TEST/fastqc/fastqc.done
+snakemake --cores 1 results/branches/rnaseq/ASPIS_TEST/multiqc/multiqc_report.html
 snakemake --cores 1 results/branches/rnaseq/ASPIS_TEST/design.tsv
 ```
 

@@ -41,6 +41,10 @@ fastqc:
   threads: 2
   extra_args: ""
 
+multiqc:
+  command: multiqc
+  extra_args: ""
+
 execution:
   default_partition: g100_usr_prod
   download_partition: g100_all_serial
@@ -50,6 +54,7 @@ environment:
     - python3
     - snakemake
     - fastqc
+    - multiqc
   sra_required_tools:
     - prefetch
     - fasterq-dump
