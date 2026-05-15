@@ -115,7 +115,7 @@ library_id,input_1
 Recommended additional columns include:
 
 ```text
-biospecimen_id,project,input_2,assay_hint,condition,treatment,dose_uM,time_h,replicate,batch
+biospecimen_id,project,input_2,assay_hint,condition,treatment,dose,dose_unit,time_h,replicate,batch
 ```
 
 The legacy analysis workflows still read `config/sample_sheet.csv`. It uses
@@ -136,8 +136,24 @@ The planned intake model will separate these concepts:
 - `project`: internal project or cohort.
 - `assay`: `rnaseq`, `smallrna`, or another supported assay.
 - `input_1` / `input_2`: accession or FASTQ path inputs.
-- named experimental metadata such as `condition`, `time_h`, `dose_uM`,
+- named experimental metadata such as `condition`, `time_h`, `dose`,
+  `dose_unit`,
   `replicate`, and `batch`.
+
+## Input Resolution
+
+ASPIS currently resolves each intake row as one library analysis unit:
+
+- if `input_1` is an existing FASTQ path, the row is treated as local data;
+- if `input_1` is an `SRR`, `ERR`, or `DRR` run accession, the row is treated
+  as a public INSDC/SRA-family run;
+- local rows are single-end when `input_2` is empty and paired-end when
+  `input_2` contains a second FASTQ path;
+- public run rows are classified as single-end or paired-end after conversion
+  by checking whether a second read file was produced.
+
+Source type and read layout are therefore materialized from the inputs, while
+assay routing still comes from `assay_hint` at this stage.
 
 ## Planned Architecture
 
