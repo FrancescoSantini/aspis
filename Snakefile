@@ -68,11 +68,22 @@ INTAKE_BY_LIBRARY = {row["library_id"]: row for row in INTAKE_ROWS}
 METADATA_JSON = expand(f"{METADATA_DIR}" + "/{library_id}.json", library_id=LIBRARIES)
 RAW_DIRS = expand(f"{RAW_DIR}" + "/{library_id}", library_id=LIBRARIES)
 USES_INSDC = any(INSDC_RUN_RE.match(row.get("input_1", "")) for row in INTAKE_ROWS)
+SRA_SPOT_LIMIT = MATERIALIZATION.get("sra_spot_limit", 0)
+USES_SRA_SPOT_LIMIT = str(SRA_SPOT_LIMIT).strip().lower() not in {"", "0", "false", "none"}
 BASE_REQUIRED_TOOLS = ENVIRONMENT.get("required_tools", ["python3", "snakemake"])
 SRA_REQUIRED_TOOLS = ENVIRONMENT.get("sra_required_tools", ["prefetch", "fasterq-dump"])
+SRA_LIMITED_REQUIRED_TOOLS = ENVIRONMENT.get("sra_limited_required_tools", ["fastq-dump"])
 OPTIONAL_TOOLS = ENVIRONMENT.get("optional_tools", ["vdb-validate"])
-REQUIRED_TOOLS = BASE_REQUIRED_TOOLS + (SRA_REQUIRED_TOOLS if USES_INSDC else [])
-REPORTED_OPTIONAL_TOOLS = OPTIONAL_TOOLS + ([] if USES_INSDC else SRA_REQUIRED_TOOLS)
+ACTIVE_SRA_REQUIRED_TOOLS = (
+    SRA_LIMITED_REQUIRED_TOOLS if USES_INSDC and USES_SRA_SPOT_LIMIT
+    else SRA_REQUIRED_TOOLS if USES_INSDC
+    else []
+)
+ALL_SRA_TOOLS = SRA_REQUIRED_TOOLS + SRA_LIMITED_REQUIRED_TOOLS
+REQUIRED_TOOLS = BASE_REQUIRED_TOOLS + ACTIVE_SRA_REQUIRED_TOOLS
+REPORTED_OPTIONAL_TOOLS = OPTIONAL_TOOLS + [
+    tool for tool in ALL_SRA_TOOLS if tool not in ACTIVE_SRA_REQUIRED_TOOLS
+]
 
 
 def materialization_partition(wildcards):
@@ -141,6 +152,7 @@ rule materialize_library:
         scratch_dir=SCRATCH_DIR,
         local_link_mode=MATERIALIZATION.get("local_link_mode", "symlink"),
         sra_max_size=MATERIALIZATION.get("sra_max_size", "40G"),
+        sra_spot_limit=SRA_SPOT_LIMIT,
         validate_sra_flag=(
             "" if MATERIALIZATION.get("validate_sra", True) else "--no-validate-sra"
         )
@@ -160,6 +172,7 @@ rule materialize_library:
           --scratch-dir {params.scratch_dir:q} \
           --local-link-mode {params.local_link_mode:q} \
           --sra-max-size {params.sra_max_size:q} \
+          --sra-spot-limit {params.sra_spot_limit:q} \
           {params.validate_sra_flag} \
           > {log:q} 2>&1
         """

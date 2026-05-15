@@ -198,7 +198,8 @@ validation, and full analyses.
 
 After local FASTQ materialization works, use the isolated smoke-test config to
 test one public `SRR`, `ERR`, or `DRR` accession without overwriting the default
-fixture outputs:
+fixture outputs. The smoke-test config uses a partial `fastq-dump -X` extraction
+so it does not convert the full accession:
 
 ```bash
 snakemake -n --cores 1 --configfile config/aspis_sra_smoke.yaml --printshellcmds

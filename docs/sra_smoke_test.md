@@ -1,7 +1,19 @@
 # SRA Smoke Test
 
-This test exercises the public-run materialization path with a small SRA Toolkit
-example accession. It is not a biological validation dataset.
+This test exercises public-run materialization with a bounded SRA Toolkit
+example extraction. It is not a biological validation dataset.
+
+The smoke-test config sets:
+
+```yaml
+materialization:
+  sra_spot_limit: 10000
+```
+
+When `sra_spot_limit` is greater than zero, ASPIS uses `fastq-dump -X` to
+extract only a small number of spots. Production SRA materialization keeps
+`sra_spot_limit: 0` and uses the full-accession `prefetch` + `fasterq-dump`
+path.
 
 The smoke test is opt-in and uses separate output folders so it does not
 overwrite the default local FASTQ fixture outputs:
@@ -42,7 +54,16 @@ cat results/sra_smoke/branches/rnaseq/ASPIS_SRA_SMOKE/design.tsv
 
 The design summary is expected to mark differential testing as blocked because
 the smoke test contains one control library only. That is correct; the test is
-only checking SRA download/conversion and branch handoff.
+only checking SRA access, partial conversion, and branch handoff.
+
+If a previous full-accession smoke test was interrupted, inspect disk use:
+
+```bash
+du -sh cache/sra_smoke work/sra_smoke meta/sra_smoke results/sra_smoke 2>/dev/null
+```
+
+Remove those smoke-test folders only if you want to free space and rerun the
+smoke test from scratch.
 
 Do not use the SLURM profile for routine smoke-test development. If a later
 cluster dry-run is needed, keep it as a dry run:

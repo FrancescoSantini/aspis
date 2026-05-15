@@ -17,6 +17,7 @@ paths:
 materialization:
   local_link_mode: symlink
   sra_max_size: 40G
+  sra_spot_limit: 0
   validate_sra: true
 
 planning:
@@ -40,5 +41,7 @@ environment:
   sra_required_tools:
     - prefetch
     - fasterq-dump
+  sra_limited_required_tools:
+    - fastq-dump
   optional_tools:
     - vdb-validate
