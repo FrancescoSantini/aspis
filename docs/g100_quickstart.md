@@ -74,6 +74,8 @@ which prefetch
 which fasterq-dump
 which fastqc
 fastqc --version
+which multiqc
+multiqc --version
 ```
 
 Expected major version:
@@ -119,6 +121,8 @@ cat results/branches/rnaseq/ASPIS_TEST/materialized_manifest.tsv
 cat results/branches/rnaseq/ASPIS_TEST/fastq_inspection.tsv
 cat results/branches/rnaseq/ASPIS_TEST/fastqc/fastqc_manifest.tsv
 cat results/branches/rnaseq/ASPIS_TEST/fastqc/fastqc.done
+ls -lh results/branches/rnaseq/ASPIS_TEST/multiqc/multiqc_report.html
+cat results/branches/rnaseq/ASPIS_TEST/multiqc/multiqc.done
 cat results/branches/rnaseq/ASPIS_TEST/design.tsv
 ```
 
@@ -139,6 +143,8 @@ results/branches/rnaseq/ASPIS_TEST/materialized_manifest.tsv
 results/branches/rnaseq/ASPIS_TEST/fastq_inspection.tsv
 results/branches/rnaseq/ASPIS_TEST/fastqc/fastqc_manifest.tsv
 results/branches/rnaseq/ASPIS_TEST/fastqc/fastqc.done
+results/branches/rnaseq/ASPIS_TEST/multiqc/multiqc_report.html
+results/branches/rnaseq/ASPIS_TEST/multiqc/multiqc.done
 results/branches/rnaseq/ASPIS_TEST/design.tsv
 ```
 
@@ -149,6 +155,7 @@ Branch `fastq_inspection.tsv` files contain lightweight R1/R2 FASTQ checks and
 sampled read-length/GC summaries.
 Branch `fastqc/fastqc_manifest.tsv` files point to the FastQC HTML and ZIP
 outputs for each staged read file.
+Branch `multiqc/multiqc_report.html` files summarize those FastQC outputs.
 
 ## 4. Optional Snakemake 7 Compatibility Check
 

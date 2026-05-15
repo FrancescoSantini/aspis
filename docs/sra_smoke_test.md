@@ -58,6 +58,8 @@ cat results/sra_smoke/branches/rnaseq/ASPIS_SRA_SMOKE/materialized_manifest.tsv
 cat results/sra_smoke/branches/rnaseq/ASPIS_SRA_SMOKE/fastq_inspection.tsv
 cat results/sra_smoke/branches/rnaseq/ASPIS_SRA_SMOKE/fastqc/fastqc_manifest.tsv
 cat results/sra_smoke/branches/rnaseq/ASPIS_SRA_SMOKE/fastqc/fastqc.done
+ls -lh results/sra_smoke/branches/rnaseq/ASPIS_SRA_SMOKE/multiqc/multiqc_report.html
+cat results/sra_smoke/branches/rnaseq/ASPIS_SRA_SMOKE/multiqc/multiqc.done
 cat results/sra_smoke/branches/rnaseq/ASPIS_SRA_SMOKE/design.tsv
 ```
 
@@ -66,6 +68,7 @@ The branch `samples.tsv` file is normalized for downstream rules. The branch
 The branch `fastq_inspection.tsv` file checks the bounded R1/R2 FASTQ outputs.
 The branch `fastqc/fastqc_manifest.tsv` file records the FastQC HTML and ZIP
 outputs produced from those bounded FASTQs.
+The branch `multiqc/multiqc_report.html` file summarizes the FastQC outputs.
 
 The design summary is expected to mark differential testing as blocked because
 the smoke test contains one control library only. That is correct; the test is

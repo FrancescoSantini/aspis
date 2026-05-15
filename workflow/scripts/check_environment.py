@@ -16,6 +16,7 @@ VERSION_COMMANDS = {
     "prefetch": ["prefetch", "--version"],
     "fasterq-dump": ["fasterq-dump", "--version"],
     "fastqc": ["fastqc", "--version"],
+    "multiqc": ["multiqc", "--version"],
     "vdb-validate": ["vdb-validate", "--version"],
 }
 
