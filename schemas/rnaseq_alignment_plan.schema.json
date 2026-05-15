@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ASPIS RNA-seq alignment plan row",
+  "type": "object",
+  "required": [
+    "project",
+    "assay",
+    "status",
+    "n_libraries",
+    "aligner",
+    "hisat2_index_prefix",
+    "annotation_status"
+  ],
+  "properties": {
+    "project": {
+      "type": "string"
+    },
+    "assay": {
+      "type": "string",
+      "enum": ["rnaseq"]
+    },
+    "status": {
+      "type": "string",
+      "enum": ["ready", "blocked"]
+    },
+    "reason": {
+      "type": "string"
+    },
+    "n_libraries": {
+      "type": "string"
+    },
+    "n_single": {
+      "type": "string"
+    },
+    "n_paired": {
+      "type": "string"
+    },
+    "libraries": {
+      "type": "string"
+    },
+    "aligner": {
+      "type": "string",
+      "enum": ["hisat2"]
+    },
+    "hisat2_index_prefix": {
+      "type": "string"
+    },
+    "hisat2_index_files": {
+      "type": "string"
+    },
+    "annotation_gtf": {
+      "type": "string"
+    },
+    "annotation_status": {
+      "type": "string",
+      "enum": ["present", "missing", "not_configured"]
+    }
+  },
+  "additionalProperties": {
+    "type": "string"
+  }
+}

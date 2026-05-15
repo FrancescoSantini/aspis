@@ -131,6 +131,7 @@ cat results/branches/rnaseq/ASPIS_TEST/preprocess/preprocess.done
 cat results/branches/rnaseq/ASPIS_TEST/preprocess/fastq_inspection.tsv
 cat results/branches/rnaseq/ASPIS_TEST/preprocess/fastqc/fastqc_manifest.tsv
 ls -lh results/branches/rnaseq/ASPIS_TEST/preprocess/multiqc/multiqc_report.html
+cat results/branches/rnaseq/ASPIS_TEST/alignment/alignment_plan.tsv
 cat results/branches/rnaseq/ASPIS_TEST/design.tsv
 ```
 
@@ -161,6 +162,7 @@ results/branches/rnaseq/ASPIS_TEST/preprocess/fastqc/fastqc_manifest.tsv
 results/branches/rnaseq/ASPIS_TEST/preprocess/fastqc/fastqc.done
 results/branches/rnaseq/ASPIS_TEST/preprocess/multiqc/multiqc_report.html
 results/branches/rnaseq/ASPIS_TEST/preprocess/multiqc/multiqc.done
+results/branches/rnaseq/ASPIS_TEST/alignment/alignment_plan.tsv
 results/branches/rnaseq/ASPIS_TEST/design.tsv
 ```
 
@@ -175,6 +177,8 @@ Branch `multiqc/multiqc_report.html` files summarize those FastQC outputs.
 RNA-seq branch `preprocess/preprocessed_samples.tsv` files point downstream
 rules at fastp-preprocessed FASTQs and preserve the original paths as
 `raw_fastq_1` / `raw_fastq_2`.
+RNA-seq `alignment/alignment_plan.tsv` is expected to say `blocked` in the
+default toy test, because no HISAT2 reference index is configured yet.
 
 ## 4. Optional Snakemake 7 Compatibility Check
 
