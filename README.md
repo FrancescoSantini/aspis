@@ -82,6 +82,7 @@ schemas/
   branch_design.schema.json
   fastq_inspection.schema.json
   fastqc_manifest.schema.json
+  rnaseq_preprocessed_samples.schema.json
 
 envs/
   aspis-snakemake.yaml     Snakemake 9 orchestration environment
@@ -196,6 +197,11 @@ filenames and those would otherwise collide in one output directory.
 Each branch then runs MultiQC over the branch FastQC outputs and writes
 `multiqc/multiqc_report.html`.
 
+For `rnaseq` branches, ASPIS also runs a first preprocessing pass with fastp.
+The output `preprocess/preprocessed_samples.tsv` keeps the same sample metadata
+but points `fastq_1` / `fastq_2` at the preprocessed FASTQs and records the
+original paths as `raw_fastq_1` / `raw_fastq_2`.
+
 ## Planned Architecture
 
 The next major refactor should make the first stage of ASPIS a raw-data
@@ -228,6 +234,14 @@ results/branches/{assay}/{project}/fastqc/fastqc_manifest.tsv
 results/branches/{assay}/{project}/fastqc/fastqc.done
 results/branches/{assay}/{project}/multiqc/multiqc_report.html
 results/branches/{assay}/{project}/multiqc/multiqc.done
+results/branches/rnaseq/{project}/preprocess/environment_report.tsv
+results/branches/rnaseq/{project}/preprocess/preprocessed_samples.tsv
+results/branches/rnaseq/{project}/preprocess/preprocess.done
+results/branches/rnaseq/{project}/preprocess/fastq_inspection.tsv
+results/branches/rnaseq/{project}/preprocess/fastqc/fastqc_manifest.tsv
+results/branches/rnaseq/{project}/preprocess/fastqc/fastqc.done
+results/branches/rnaseq/{project}/preprocess/multiqc/multiqc_report.html
+results/branches/rnaseq/{project}/preprocess/multiqc/multiqc.done
 ```
 
 Downstream analysis rules should consume manifest-derived contracts rather than
@@ -293,6 +307,8 @@ snakemake --cores 1 meta/analysis_plan.tsv
 snakemake --cores 1 results/branches/rnaseq/ASPIS_TEST/branch.ready
 snakemake --cores 1 results/branches/rnaseq/ASPIS_TEST/fastqc/fastqc.done
 snakemake --cores 1 results/branches/rnaseq/ASPIS_TEST/multiqc/multiqc_report.html
+snakemake --cores 1 results/branches/rnaseq/ASPIS_TEST/preprocess/preprocessed_samples.tsv
+snakemake --cores 1 results/branches/rnaseq/ASPIS_TEST/preprocess/multiqc/multiqc_report.html
 snakemake --cores 1 results/branches/rnaseq/ASPIS_TEST/design.tsv
 ```
 
@@ -325,6 +341,7 @@ The workflows currently expect several command-line tools to be available:
 - Python with pandas
 - SRA Toolkit (`prefetch`, `fastq-dump`, `fasterq-dump`)
 - FastQC
+- fastp
 - Trimmomatic
 - cutadapt
 - HISAT2

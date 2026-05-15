@@ -19,6 +19,7 @@ DESIGN = config.get("design", {})
 FASTQ_INSPECTION = config.get("fastq_inspection", {})
 FASTQC = config.get("fastqc", {})
 MULTIQC = config.get("multiqc", {})
+RNASEQ_PREPROCESS = config.get("rnaseq_preprocess", {})
 EXECUTION = config.get("execution", {})
 ENVIRONMENT = config.get("environment", {})
 
@@ -77,6 +78,7 @@ USES_SRA_SPOT_LIMIT = str(SRA_SPOT_LIMIT).strip().lower() not in {"", "0", "fals
 BASE_REQUIRED_TOOLS = ENVIRONMENT.get("required_tools", ["python3", "snakemake"])
 SRA_REQUIRED_TOOLS = ENVIRONMENT.get("sra_required_tools", ["prefetch", "fasterq-dump"])
 SRA_LIMITED_REQUIRED_TOOLS = ENVIRONMENT.get("sra_limited_required_tools", ["fastq-dump"])
+RNASEQ_REQUIRED_TOOLS = ENVIRONMENT.get("rnaseq_required_tools", ["fastp"])
 OPTIONAL_TOOLS = ENVIRONMENT.get("optional_tools", ["vdb-validate"])
 ACTIVE_SRA_REQUIRED_TOOLS = (
     SRA_LIMITED_REQUIRED_TOOLS if USES_INSDC and USES_SRA_SPOT_LIMIT
@@ -95,6 +97,16 @@ def materialization_partition(wildcards):
     if INSDC_RUN_RE.match(input_1):
         return EXECUTION.get("download_partition", "g100_all_serial")
     return EXECUTION.get("default_partition", "g100_usr_prod")
+
+
+def local_fastq_inputs(wildcards):
+    row = INTAKE_BY_LIBRARY[wildcards.library_id]
+    files = []
+    for key in ("input_1", "input_2"):
+        value = row.get(key, "")
+        if value and not INSDC_RUN_RE.match(value):
+            files.append(value)
+    return files
 
 
 def planned_branch_targets(wildcards):
@@ -125,6 +137,19 @@ def planned_branch_targets(wildcards):
                     f"{BRANCH_DIR}/{assay}/{project}/design.tsv",
                 ]
             )
+            if assay == "rnaseq":
+                targets.extend(
+                    [
+                        f"{BRANCH_DIR}/{assay}/{project}/preprocess/environment_report.tsv",
+                        f"{BRANCH_DIR}/{assay}/{project}/preprocess/preprocessed_samples.tsv",
+                        f"{BRANCH_DIR}/{assay}/{project}/preprocess/preprocess.done",
+                        f"{BRANCH_DIR}/{assay}/{project}/preprocess/fastq_inspection.tsv",
+                        f"{BRANCH_DIR}/{assay}/{project}/preprocess/fastqc/fastqc_manifest.tsv",
+                        f"{BRANCH_DIR}/{assay}/{project}/preprocess/fastqc/fastqc.done",
+                        f"{BRANCH_DIR}/{assay}/{project}/preprocess/multiqc/multiqc_report.html",
+                        f"{BRANCH_DIR}/{assay}/{project}/preprocess/multiqc/multiqc.done",
+                    ]
+                )
     return targets
 
 
@@ -158,7 +183,8 @@ rule check_environment:
 
 rule materialize_library:
     input:
-        intake=INTAKE
+        intake=INTAKE,
+        local_fastqs=local_fastq_inputs
     output:
         rawdir=directory(f"{RAW_DIR}" + "/{library_id}"),
         metadata=f"{METADATA_DIR}" + "/{library_id}.json"
@@ -375,6 +401,146 @@ rule run_branch_multiqc:
     shell:
         r"""
         mkdir -p logs/branches/{wildcards.assay}
+        {params.multiqc:q} {params.fastqc_dir:q} \
+          --outdir {params.outdir:q} \
+          --filename multiqc_report.html \
+          --force \
+          {params.extra_args} \
+          > {log:q} 2>&1
+        test -s {output.report:q}
+        printf "status\treport\nok\t%s\n" {output.report:q} > {output.done:q}
+        """
+
+
+rule check_rnaseq_preprocess_environment:
+    input:
+        samples=f"{BRANCH_DIR}" + "/rnaseq/{project}/samples.tsv"
+    output:
+        f"{BRANCH_DIR}" + "/rnaseq/{project}/preprocess/environment_report.tsv"
+    params:
+        required_tools=RNASEQ_REQUIRED_TOOLS,
+        optional_tools=[]
+    log:
+        "logs/branches/rnaseq/{project}.preprocess.environment.log"
+    shell:
+        r"""
+        mkdir -p logs/branches/rnaseq
+        python3 workflow/scripts/check_environment.py \
+          --output {output:q} \
+          --required-tools {params.required_tools:q} \
+          --optional-tools {params.optional_tools:q} \
+          > {log:q} 2>&1
+        """
+
+
+rule preprocess_rnaseq_branch:
+    input:
+        samples=f"{BRANCH_DIR}" + "/rnaseq/{project}/samples.tsv",
+        inspection=f"{BRANCH_DIR}" + "/rnaseq/{project}/fastq_inspection.tsv",
+        environment=f"{BRANCH_DIR}" + "/rnaseq/{project}/preprocess/environment_report.tsv"
+    output:
+        samples=f"{BRANCH_DIR}" + "/rnaseq/{project}/preprocess/preprocessed_samples.tsv",
+        done=f"{BRANCH_DIR}" + "/rnaseq/{project}/preprocess/preprocess.done"
+    params:
+        outdir=lambda wildcards: f"{BRANCH_DIR}/rnaseq/{wildcards.project}/preprocess",
+        fastp=RNASEQ_PREPROCESS.get("command", "fastp"),
+        extra_args_flag=(
+            "--extra-args " + shlex.quote(RNASEQ_PREPROCESS.get("extra_args", ""))
+            if RNASEQ_PREPROCESS.get("extra_args", "")
+            else ""
+        )
+    threads:
+        RNASEQ_PREPROCESS.get("threads", 2)
+    log:
+        "logs/branches/rnaseq/{project}.preprocess.log"
+    shell:
+        r"""
+        mkdir -p logs/branches/rnaseq
+        python3 workflow/scripts/preprocess_rnaseq_branch.py \
+          --samples {input.samples:q} \
+          --outdir {params.outdir:q} \
+          --output {output.samples:q} \
+          --done {output.done:q} \
+          --threads {threads:q} \
+          --fastp {params.fastp:q} \
+          {params.extra_args_flag} \
+          > {log:q} 2>&1
+        """
+
+
+rule inspect_preprocessed_rnaseq_fastqs:
+    input:
+        samples=f"{BRANCH_DIR}" + "/rnaseq/{project}/preprocess/preprocessed_samples.tsv"
+    output:
+        f"{BRANCH_DIR}" + "/rnaseq/{project}/preprocess/fastq_inspection.tsv"
+    params:
+        max_records=FASTQ_INSPECTION.get("max_records", 100000)
+    log:
+        "logs/branches/rnaseq/{project}.preprocess.fastq_inspection.log"
+    shell:
+        r"""
+        mkdir -p logs/branches/rnaseq
+        python3 workflow/scripts/inspect_fastqs.py \
+          --samples {input.samples:q} \
+          --output {output:q} \
+          --max-records {params.max_records:q} \
+          > {log:q} 2>&1
+        """
+
+
+rule run_preprocessed_rnaseq_fastqc:
+    input:
+        samples=f"{BRANCH_DIR}" + "/rnaseq/{project}/preprocess/preprocessed_samples.tsv",
+        inspection=f"{BRANCH_DIR}" + "/rnaseq/{project}/preprocess/fastq_inspection.tsv",
+        environment=ENVIRONMENT_REPORT
+    output:
+        manifest=f"{BRANCH_DIR}" + "/rnaseq/{project}/preprocess/fastqc/fastqc_manifest.tsv",
+        done=f"{BRANCH_DIR}" + "/rnaseq/{project}/preprocess/fastqc/fastqc.done"
+    params:
+        outdir=lambda wildcards: f"{BRANCH_DIR}/rnaseq/{wildcards.project}/preprocess/fastqc",
+        fastqc=FASTQC.get("command", "fastqc"),
+        extra_args_flag=(
+            "--extra-args " + shlex.quote(FASTQC.get("extra_args", ""))
+            if FASTQC.get("extra_args", "")
+            else ""
+        )
+    threads:
+        FASTQC.get("threads", 2)
+    log:
+        "logs/branches/rnaseq/{project}.preprocess.fastqc.log"
+    shell:
+        r"""
+        mkdir -p logs/branches/rnaseq
+        python3 workflow/scripts/run_fastqc_branch.py \
+          --samples {input.samples:q} \
+          --outdir {params.outdir:q} \
+          --manifest {output.manifest:q} \
+          --done {output.done:q} \
+          --threads {threads:q} \
+          --fastqc {params.fastqc:q} \
+          {params.extra_args_flag} \
+          > {log:q} 2>&1
+        """
+
+
+rule run_preprocessed_rnaseq_multiqc:
+    input:
+        fastqc_manifest=f"{BRANCH_DIR}" + "/rnaseq/{project}/preprocess/fastqc/fastqc_manifest.tsv",
+        fastqc_done=f"{BRANCH_DIR}" + "/rnaseq/{project}/preprocess/fastqc/fastqc.done",
+        environment=ENVIRONMENT_REPORT
+    output:
+        report=f"{BRANCH_DIR}" + "/rnaseq/{project}/preprocess/multiqc/multiqc_report.html",
+        done=f"{BRANCH_DIR}" + "/rnaseq/{project}/preprocess/multiqc/multiqc.done"
+    params:
+        fastqc_dir=lambda wildcards: f"{BRANCH_DIR}/rnaseq/{wildcards.project}/preprocess/fastqc/files",
+        outdir=lambda wildcards: f"{BRANCH_DIR}/rnaseq/{wildcards.project}/preprocess/multiqc",
+        multiqc=MULTIQC.get("command", "multiqc"),
+        extra_args=MULTIQC.get("extra_args", "")
+    log:
+        "logs/branches/rnaseq/{project}.preprocess.multiqc.log"
+    shell:
+        r"""
+        mkdir -p logs/branches/rnaseq
         {params.multiqc:q} {params.fastqc_dir:q} \
           --outdir {params.outdir:q} \
           --filename multiqc_report.html \
