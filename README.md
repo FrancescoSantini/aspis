@@ -165,6 +165,14 @@ routing is resolved in this order:
 3. `unknown`, which blocks branch planning unless unclassified assays are
    explicitly allowed.
 
+For public `SRR`, `ERR`, or `DRR` rows, ASPIS queries the ENA Portal
+`read_run` file report before materialization and merges missing archive fields
+such as `run_accession`, `experiment_accession`, `sample_accession`,
+`study_accession`, `library_layout`, `library_strategy`, `library_source`,
+`library_selection`, `instrument_platform`, and `instrument_model`.
+If a public run cannot be classified after this step, ASPIS stops before
+download/conversion.
+
 ASPIS does not infer `rnaseq` versus `smallrna` from filenames.
 
 ## Planned Architecture

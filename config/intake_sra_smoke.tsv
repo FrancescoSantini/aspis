@@ -1,2 +1,2 @@
 library_id	biospecimen_id	project	input_1	input_2	assay_hint	condition	treatment	dose	dose_unit	time_h	replicate	batch
-sra_smoke_srr390728	sra_smoke_specimen	ASPIS_SRA_SMOKE	SRR390728		rnaseq	control	vehicle	0	none	0	1	smoke
+sra_smoke_srr390728	sra_smoke_specimen	ASPIS_SRA_SMOKE	SRR390728			control	vehicle	0	none	0	1	smoke

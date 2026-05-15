@@ -35,6 +35,18 @@
     },
     "library_selection": {
       "type": "string"
+    },
+    "library_layout": {
+      "type": "string"
+    },
+    "library_source": {
+      "type": "string"
+    },
+    "instrument_platform": {
+      "type": "string"
+    },
+    "instrument_model": {
+      "type": "string"
     }
   },
   "additionalProperties": {

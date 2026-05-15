@@ -214,6 +214,10 @@ snakemake --cores 1 --configfile config/aspis_sra_smoke.yaml --printshellcmds
 
 See `docs/sra_smoke_test.md` for expected outputs.
 
+For public runs, ASPIS first tries to resolve ENA `read_run` metadata. If that
+works, the resulting manifest should include fields such as `library_strategy`,
+`library_layout`, `instrument_model`, and `public_metadata_status=resolved`.
+
 If SRA Toolkit fails, record:
 
 ```bash
