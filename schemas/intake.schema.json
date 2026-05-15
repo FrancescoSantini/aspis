@@ -24,11 +24,10 @@
     },
     "assay_hint": {
       "type": "string",
-      "enum": ["", "longrna", "smallrna"]
+      "enum": ["", "rnaseq", "smallrna"]
     }
   },
   "additionalProperties": {
     "type": "string"
   }
 }
-

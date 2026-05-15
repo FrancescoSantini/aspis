@@ -9,6 +9,7 @@ paths:
   raw_dir: work/raw
   metadata_dir: meta/materialized
   manifest: meta/materialized_manifest.tsv
+  environment_report: meta/environment_report.tsv
   sra_cache_dir: cache/sra
   scratch_dir: work/tmp
 
@@ -23,3 +24,13 @@ planning:
 execution:
   default_partition: g100_usr_prod
   download_partition: g100_all_serial
+
+environment:
+  required_tools:
+    - python3
+    - snakemake
+  sra_required_tools:
+    - prefetch
+    - fasterq-dump
+  optional_tools:
+    - vdb-validate

@@ -18,7 +18,24 @@ from typing import Iterable
 
 
 INSDC_RUN_RE = re.compile(r"^[SED]RR\d+$")
-SUPPORTED_ASSAYS = {"", "longrna", "smallrna"}
+ASSAY_ALIASES = {
+    "rnaseq": "rnaseq",
+    "rna-seq": "rnaseq",
+    "rna_seq": "rnaseq",
+    "mrna": "rnaseq",
+    "mrnaseq": "rnaseq",
+    "mrna-seq": "rnaseq",
+    "mrna_seq": "rnaseq",
+    "longrna": "rnaseq",
+    "longrna-seq": "rnaseq",
+    "smallrna": "smallrna",
+    "smallrna-seq": "smallrna",
+    "small-rna": "smallrna",
+    "small-rna-seq": "smallrna",
+    "mirna": "smallrna",
+    "mirnaseq": "smallrna",
+    "mirna-seq": "smallrna",
+}
 RESERVED_METADATA_KEYS = {
     "library_id",
     "input_1",
@@ -274,13 +291,13 @@ def materialize_insdc_run(
 
 def assay_from_hint(row: dict[str, str]) -> tuple[str, str]:
     hint = row.get("assay_hint", "").strip().lower()
-    if hint not in SUPPORTED_ASSAYS:
+    if not hint:
+        return "unknown", "unclassified"
+    if hint not in ASSAY_ALIASES:
         raise ValueError(
-            f"Unsupported assay_hint {hint!r}. Supported values: longrna, smallrna, or blank."
+            f"Unsupported assay_hint {hint!r}. Use rnaseq, smallrna, or leave blank."
         )
-    if hint:
-        return hint, "user_hint"
-    return "unknown", "unclassified"
+    return ASSAY_ALIASES[hint], "user_hint"
 
 
 def write_metadata(path: Path, payload: dict[str, object]) -> None:
@@ -367,4 +384,3 @@ if __name__ == "__main__":
     except Exception as exc:
         print(f"[ERROR] {exc}", file=sys.stderr)
         raise
-

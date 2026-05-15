@@ -9,7 +9,25 @@ from collections import defaultdict
 from pathlib import Path
 
 
-SUPPORTED_ASSAYS = {"longrna", "smallrna"}
+SUPPORTED_ASSAYS = {"rnaseq", "smallrna"}
+ASSAY_ALIASES = {
+    "rnaseq": "rnaseq",
+    "rna-seq": "rnaseq",
+    "rna_seq": "rnaseq",
+    "mrna": "rnaseq",
+    "mrnaseq": "rnaseq",
+    "mrna-seq": "rnaseq",
+    "mrna_seq": "rnaseq",
+    "longrna": "rnaseq",
+    "longrna-seq": "rnaseq",
+    "smallrna": "smallrna",
+    "smallrna-seq": "smallrna",
+    "small-rna": "smallrna",
+    "small-rna-seq": "smallrna",
+    "mirna": "smallrna",
+    "mirnaseq": "smallrna",
+    "mirna-seq": "smallrna",
+}
 UNCLASSIFIED_ASSAYS = {"", "unknown", "unclassified"}
 VALID_LAYOUTS = {"single", "paired"}
 REQUIRED_COLUMNS = {"library_id", "assay", "layout", "fastq_1"}
@@ -45,7 +63,8 @@ def normalized_project(row: dict[str, str]) -> str:
 
 
 def normalized_assay(row: dict[str, str]) -> str:
-    return row.get("assay", "").strip().lower()
+    assay = row.get("assay", "").strip().lower()
+    return ASSAY_ALIASES.get(assay, assay)
 
 
 def validate_library(row: dict[str, str]) -> list[str]:

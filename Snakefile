@@ -14,11 +14,13 @@ PATHS = config.get("paths", {})
 MATERIALIZATION = config.get("materialization", {})
 PLANNING = config.get("planning", {})
 EXECUTION = config.get("execution", {})
+ENVIRONMENT = config.get("environment", {})
 
 RAW_DIR = PATHS.get("raw_dir", "work/raw")
 METADATA_DIR = PATHS.get("metadata_dir", "meta/materialized")
 MANIFEST = PATHS.get("manifest", "meta/materialized_manifest.tsv")
 ANALYSIS_PLAN = PATHS.get("analysis_plan", "meta/analysis_plan.tsv")
+ENVIRONMENT_REPORT = PATHS.get("environment_report", "meta/environment_report.tsv")
 SRA_CACHE_DIR = PATHS.get("sra_cache_dir", "cache/sra")
 SCRATCH_DIR = PATHS.get("scratch_dir", "work/tmp")
 
@@ -62,6 +64,12 @@ LIBRARIES = [row["library_id"] for row in INTAKE_ROWS]
 INTAKE_BY_LIBRARY = {row["library_id"]: row for row in INTAKE_ROWS}
 METADATA_JSON = expand(f"{METADATA_DIR}" + "/{library_id}.json", library_id=LIBRARIES)
 RAW_DIRS = expand(f"{RAW_DIR}" + "/{library_id}", library_id=LIBRARIES)
+USES_INSDC = any(INSDC_RUN_RE.match(row.get("input_1", "")) for row in INTAKE_ROWS)
+BASE_REQUIRED_TOOLS = ENVIRONMENT.get("required_tools", ["python3", "snakemake"])
+SRA_REQUIRED_TOOLS = ENVIRONMENT.get("sra_required_tools", ["prefetch", "fasterq-dump"])
+OPTIONAL_TOOLS = ENVIRONMENT.get("optional_tools", ["vdb-validate"])
+REQUIRED_TOOLS = BASE_REQUIRED_TOOLS + (SRA_REQUIRED_TOOLS if USES_INSDC else [])
+REPORTED_OPTIONAL_TOOLS = OPTIONAL_TOOLS + ([] if USES_INSDC else SRA_REQUIRED_TOOLS)
 
 
 def materialization_partition(wildcards):
@@ -71,9 +79,32 @@ def materialization_partition(wildcards):
     return EXECUTION.get("default_partition", "g100_usr_prod")
 
 
+localrules: all, check_environment
+
+
 rule all:
     input:
-        ANALYSIS_PLAN
+        ANALYSIS_PLAN,
+        ENVIRONMENT_REPORT
+
+
+rule check_environment:
+    output:
+        ENVIRONMENT_REPORT
+    params:
+        required_tools=REQUIRED_TOOLS,
+        optional_tools=REPORTED_OPTIONAL_TOOLS
+    log:
+        "logs/environment_report.log"
+    shell:
+        r"""
+        mkdir -p logs
+        python3 workflow/scripts/check_environment.py \
+          --output {output:q} \
+          --required-tools {params.required_tools:q} \
+          --optional-tools {params.optional_tools:q} \
+          > {log:q} 2>&1
+        """
 
 
 rule materialize_library:

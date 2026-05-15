@@ -101,6 +101,7 @@ Inspect the manifest:
 ```bash
 cat meta/materialized_manifest.tsv
 cat meta/analysis_plan.tsv
+cat meta/environment_report.tsv
 ```
 
 Expected outputs:
@@ -113,6 +114,7 @@ meta/materialized/example_se.json
 meta/materialized/example_pe.json
 meta/materialized_manifest.tsv
 meta/analysis_plan.tsv
+meta/environment_report.tsv
 ```
 
 ## 4. Optional Snakemake 7 Compatibility Check
