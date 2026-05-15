@@ -76,6 +76,7 @@ schemas/
   intake.schema.json
   materialized_manifest.schema.json
   analysis_plan.schema.json
+  branch_design.schema.json
 
 envs/
   aspis-snakemake.yaml     Snakemake 9 orchestration environment
@@ -161,6 +162,7 @@ meta/analysis_plan.tsv
 meta/environment_report.tsv
 results/branches/{assay}/{project}/branch.ready
 results/branches/{assay}/{project}/samples.tsv
+results/branches/{assay}/{project}/design.tsv
 ```
 
 Downstream analysis rules should consume manifest-derived contracts rather than
@@ -181,6 +183,10 @@ project with both assays gets both branch sentinels.
 Each branch directory also gets a `samples.tsv` filtered from
 `meta/materialized_manifest.tsv`. Future RNA-seq and small RNA rules should read
 that branch-local sample sheet instead of reparsing the global manifest.
+
+`design.tsv` summarizes the branch sample sheet by condition. It records whether
+there are enough condition groups for differential testing while still allowing
+single-condition branches to continue toward QC or quantification.
 
 `meta/environment_report.tsv` records command paths and versions for required
 and optional command-line tools. The conda environment YAML describes the
@@ -220,6 +226,7 @@ the manifest, the downstream analysis plan, or a branch sentinel:
 snakemake --cores 1 meta/materialized_manifest.tsv
 snakemake --cores 1 meta/analysis_plan.tsv
 snakemake --cores 1 results/branches/rnaseq/ASPIS_TEST/branch.ready
+snakemake --cores 1 results/branches/rnaseq/ASPIS_TEST/design.tsv
 ```
 
 On CINECA G100, see `docs/g100_quickstart.md` for environment creation and

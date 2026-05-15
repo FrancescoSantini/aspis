@@ -22,6 +22,13 @@ materialization:
 planning:
   allow_unclassified: false
 
+design:
+  condition_col: condition
+  control_label: control
+  covariates:
+    - time_h
+  min_condition_groups: 2
+
 execution:
   default_partition: g100_usr_prod
   download_partition: g100_all_serial
