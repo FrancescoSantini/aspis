@@ -67,7 +67,7 @@ The legacy small RNA branch includes:
 ```text
 config/
   aspis.yaml               First-stage materialization settings
-  aspis_sra_smoke.yaml     Isolated public SRA smoke-test settings
+  aspis_sra_smoke.yaml     Isolated partial public SRA smoke-test settings
   intake.tsv               Minimal intake sheet for ASPIS materialization
   intake_sra_smoke.tsv     Optional SRA smoke-test intake sheet
   config.yaml              Workflow settings and thresholds

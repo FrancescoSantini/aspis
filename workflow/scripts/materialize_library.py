@@ -60,6 +60,12 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--sra-max-size", default="40G", help="prefetch -X value")
     parser.add_argument(
+        "--sra-spot-limit",
+        type=int,
+        default=0,
+        help="If >0, run a partial SRA smoke extraction with fastq-dump -X",
+    )
+    parser.add_argument(
         "--no-validate-sra",
         action="store_true",
         help="Skip vdb-validate even if available",
@@ -220,8 +226,73 @@ def first_existing(paths: Iterable[Path]) -> Path | None:
 
 def gzip_sra_fastq(src: Path, dest: Path) -> None:
     if not src.exists():
-        raise FileNotFoundError(f"Expected fasterq-dump output does not exist: {src}")
+        raise FileNotFoundError(f"Expected SRA conversion output does not exist: {src}")
     gzip_copy(src, dest)
+
+
+def canonicalize_dumped_fastqs(
+    accession: str,
+    outdir: Path,
+    dump_dir: Path,
+    operations: list[str],
+) -> tuple[str, str | None, str, list[str]]:
+    r1_source = first_existing(
+        [
+            dump_dir / f"{accession}_1.fastq",
+            dump_dir / f"{accession}.fastq",
+        ]
+    )
+    r2_source = first_existing([dump_dir / f"{accession}_2.fastq"])
+
+    if r1_source is None:
+        observed = sorted(path.name for path in dump_dir.glob("*.fastq"))
+        raise RuntimeError(
+            f"Could not find FASTQ output for {accession}. Observed: {observed}"
+        )
+
+    r1 = outdir / "R1.fastq.gz"
+    gzip_sra_fastq(r1_source, r1)
+    operations.append(f"gzip:{r1_source}->{r1}")
+
+    r2_value = None
+    layout = "single"
+    if r2_source is not None:
+        r2 = outdir / "R2.fastq.gz"
+        gzip_sra_fastq(r2_source, r2)
+        operations.append(f"gzip:{r2_source}->{r2}")
+        r2_value = str(r2)
+        layout = "paired"
+
+    return str(r1), r2_value, layout, operations
+
+
+def materialize_limited_insdc_run(
+    accession: str,
+    outdir: Path,
+    scratch_dir: Path,
+    spot_limit: int,
+) -> tuple[str, str | None, str, list[str]]:
+    require_command("fastq-dump")
+
+    scratch_dir.mkdir(parents=True, exist_ok=True)
+    dump_dir = scratch_dir / "fastq-dump" / accession
+    clean_dir(dump_dir)
+
+    run_command(
+        [
+            "fastq-dump",
+            "--split-files",
+            "-X",
+            str(spot_limit),
+            "-O",
+            str(dump_dir),
+            accession,
+        ]
+    )
+    operations = [f"fastq-dump:{accession}:max_spots={spot_limit}"]
+    result = canonicalize_dumped_fastqs(accession, outdir, dump_dir, operations)
+    shutil.rmtree(dump_dir, ignore_errors=True)
+    return result
 
 
 def materialize_insdc_run(
@@ -231,7 +302,18 @@ def materialize_insdc_run(
     scratch_dir: Path,
     max_size: str,
     validate_sra: bool,
+    spot_limit: int,
 ) -> tuple[str, str | None, str, list[str]]:
+    if spot_limit < 0:
+        raise ValueError("--sra-spot-limit cannot be negative")
+    if spot_limit > 0:
+        return materialize_limited_insdc_run(
+            accession=accession,
+            outdir=outdir,
+            scratch_dir=scratch_dir,
+            spot_limit=spot_limit,
+        )
+
     require_command("prefetch")
     require_command("fasterq-dump")
 
@@ -258,35 +340,10 @@ def materialize_insdc_run(
         ]
     )
 
-    r1_source = first_existing(
-        [
-            dump_dir / f"{accession}_1.fastq",
-            dump_dir / f"{accession}.fastq",
-        ]
-    )
-    r2_source = first_existing([dump_dir / f"{accession}_2.fastq"])
-
-    if r1_source is None:
-        observed = sorted(path.name for path in dump_dir.glob("*.fastq"))
-        raise RuntimeError(
-            f"Could not find FASTQ output for {accession}. Observed: {observed}"
-        )
-
-    r1 = outdir / "R1.fastq.gz"
-    gzip_sra_fastq(r1_source, r1)
-    operations = [f"prefetch:{accession}", f"fasterq-dump:{accession}", f"gzip:{r1_source}->{r1}"]
-
-    r2_value = None
-    layout = "single"
-    if r2_source is not None:
-        r2 = outdir / "R2.fastq.gz"
-        gzip_sra_fastq(r2_source, r2)
-        operations.append(f"gzip:{r2_source}->{r2}")
-        r2_value = str(r2)
-        layout = "paired"
-
+    operations = [f"prefetch:{accession}", f"fasterq-dump:{accession}"]
+    result = canonicalize_dumped_fastqs(accession, outdir, dump_dir, operations)
     shutil.rmtree(dump_dir, ignore_errors=True)
-    return str(r1), r2_value, layout, operations
+    return result
 
 
 def assay_from_hint(row: dict[str, str]) -> tuple[str, str]:
@@ -346,6 +403,7 @@ def main() -> int:
             scratch_dir=Path(args.scratch_dir),
             max_size=args.sra_max_size,
             validate_sra=not args.no_validate_sra,
+            spot_limit=args.sra_spot_limit,
         )
     else:
         raise ValueError(
