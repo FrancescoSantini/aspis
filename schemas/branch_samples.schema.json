@@ -1,0 +1,78 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ASPIS branch sample row",
+  "type": "object",
+  "required": [
+    "library_id",
+    "project",
+    "assay",
+    "source_type",
+    "layout",
+    "fastq_1"
+  ],
+  "properties": {
+    "library_id": {
+      "type": "string"
+    },
+    "biospecimen_id": {
+      "type": "string"
+    },
+    "project": {
+      "type": "string"
+    },
+    "assay": {
+      "type": "string",
+      "enum": ["rnaseq", "smallrna"]
+    },
+    "source_type": {
+      "type": "string",
+      "enum": ["local_fastq", "insdc_run"]
+    },
+    "source_id": {
+      "type": "string"
+    },
+    "archive": {
+      "type": "string"
+    },
+    "layout": {
+      "type": "string",
+      "enum": ["single", "paired"]
+    },
+    "fastq_1": {
+      "type": "string"
+    },
+    "fastq_2": {
+      "type": "string"
+    },
+    "condition": {
+      "type": "string"
+    },
+    "treatment": {
+      "type": "string"
+    },
+    "dose": {
+      "type": "string"
+    },
+    "dose_unit": {
+      "type": "string"
+    },
+    "time_h": {
+      "type": "string"
+    },
+    "replicate": {
+      "type": "string"
+    },
+    "batch": {
+      "type": "string"
+    },
+    "assay_confidence": {
+      "type": "string"
+    },
+    "assay_reason": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": {
+    "type": "string"
+  }
+}
