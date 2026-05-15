@@ -88,6 +88,14 @@ Run the materialization:
 snakemake --cores 1
 ```
 
+If `meta/materialized_manifest.tsv` exists but `work/raw/` is missing, recreate
+the canonical FASTQ fixture outputs explicitly:
+
+```bash
+snakemake --cores 1 work/raw/example_se work/raw/example_pe
+snakemake --cores 1
+```
+
 Inspect the manifest:
 
 ```bash
@@ -146,6 +154,18 @@ snakemake --workflow-profile profiles/slurm \
   --default-resources slurm_account=your_slurm_account \
   --dry-run
 ```
+
+ASPIS routes materialization jobs whose `input_1` is an `SRR`, `ERR`, or `DRR`
+accession to the download partition configured in `config/aspis.yaml`:
+
+```yaml
+execution:
+  default_partition: g100_usr_prod
+  download_partition: g100_all_serial
+```
+
+Local FASTQ materialization and manifest/report planning stay on the default
+partition. Routine development should still use local `--cores 1` runs.
 
 Use `sbatch --test-only` for account/partition validation when possible. It asks
 SLURM whether the submission is valid without starting a job:
