@@ -43,6 +43,15 @@ new environment inside an already active conda environment.
 conda activate aspis-smk9
 ```
 
+If `aspis-smk9` already exists, update it instead of recreating it:
+
+```bash
+~/miniconda3/envs/snakemake/bin/mamba env update \
+  -p ~/miniconda3/envs/aspis-smk9 \
+  -f envs/aspis-snakemake.yaml
+conda activate aspis-smk9
+```
+
 If conda/mamba is slow or fails because of G100 filesystem pressure, try using
 a package cache on a work filesystem for this command only:
 
@@ -63,6 +72,8 @@ which python
 python --version
 which prefetch
 which fasterq-dump
+which fastqc
+fastqc --version
 ```
 
 Expected major version:
@@ -106,6 +117,8 @@ cat results/branches/rnaseq/ASPIS_TEST/branch.ready
 cat results/branches/rnaseq/ASPIS_TEST/samples.tsv
 cat results/branches/rnaseq/ASPIS_TEST/materialized_manifest.tsv
 cat results/branches/rnaseq/ASPIS_TEST/fastq_inspection.tsv
+cat results/branches/rnaseq/ASPIS_TEST/fastqc/fastqc_manifest.tsv
+cat results/branches/rnaseq/ASPIS_TEST/fastqc/fastqc.done
 cat results/branches/rnaseq/ASPIS_TEST/design.tsv
 ```
 
@@ -124,6 +137,8 @@ results/branches/rnaseq/ASPIS_TEST/branch.ready
 results/branches/rnaseq/ASPIS_TEST/samples.tsv
 results/branches/rnaseq/ASPIS_TEST/materialized_manifest.tsv
 results/branches/rnaseq/ASPIS_TEST/fastq_inspection.tsv
+results/branches/rnaseq/ASPIS_TEST/fastqc/fastqc_manifest.tsv
+results/branches/rnaseq/ASPIS_TEST/fastqc/fastqc.done
 results/branches/rnaseq/ASPIS_TEST/design.tsv
 ```
 
@@ -132,6 +147,8 @@ Branch `samples.tsv` files are the normalized downstream sample sheets. Branch
 source-specific metadata such as ENA fields when present.
 Branch `fastq_inspection.tsv` files contain lightweight R1/R2 FASTQ checks and
 sampled read-length/GC summaries.
+Branch `fastqc/fastqc_manifest.tsv` files point to the FastQC HTML and ZIP
+outputs for each staged read file.
 
 ## 4. Optional Snakemake 7 Compatibility Check
 

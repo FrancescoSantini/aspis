@@ -15,6 +15,7 @@ VERSION_COMMANDS = {
     "snakemake": ["snakemake", "--version"],
     "prefetch": ["prefetch", "--version"],
     "fasterq-dump": ["fasterq-dump", "--version"],
+    "fastqc": ["fastqc", "--version"],
     "vdb-validate": ["vdb-validate", "--version"],
 }
 

@@ -31,6 +31,7 @@ default-resources:
 set-threads:
   materialize_library: 1
   build_materialized_manifest: 1
+  run_branch_fastqc: 2
 
 set-resources:
   materialize_library:
@@ -41,3 +42,7 @@ set-resources:
     runtime: 15
     mem_mb: 1000
     disk_mb: 1000
+  run_branch_fastqc:
+    runtime: 60
+    mem_mb: 4000
+    disk_mb: 10000

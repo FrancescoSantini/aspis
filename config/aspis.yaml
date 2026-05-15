@@ -36,6 +36,11 @@ design:
 fastq_inspection:
   max_records: 100000
 
+fastqc:
+  command: fastqc
+  threads: 2
+  extra_args: ""
+
 execution:
   default_partition: g100_usr_prod
   download_partition: g100_all_serial
@@ -44,6 +49,7 @@ environment:
   required_tools:
     - python3
     - snakemake
+    - fastqc
   sra_required_tools:
     - prefetch
     - fasterq-dump

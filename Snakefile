@@ -16,6 +16,7 @@ MATERIALIZATION = config.get("materialization", {})
 PLANNING = config.get("planning", {})
 DESIGN = config.get("design", {})
 FASTQ_INSPECTION = config.get("fastq_inspection", {})
+FASTQC = config.get("fastqc", {})
 EXECUTION = config.get("execution", {})
 ENVIRONMENT = config.get("environment", {})
 
@@ -115,6 +116,8 @@ def planned_branch_targets(wildcards):
                     f"{BRANCH_DIR}/{assay}/{project}/samples.tsv",
                     f"{BRANCH_DIR}/{assay}/{project}/materialized_manifest.tsv",
                     f"{BRANCH_DIR}/{assay}/{project}/fastq_inspection.tsv",
+                    f"{BRANCH_DIR}/{assay}/{project}/fastqc/fastqc_manifest.tsv",
+                    f"{BRANCH_DIR}/{assay}/{project}/fastqc/fastqc.done",
                     f"{BRANCH_DIR}/{assay}/{project}/design.tsv",
                 ]
             )
@@ -311,5 +314,36 @@ rule inspect_branch_fastqs:
           --samples {input.samples:q} \
           --output {output:q} \
           --max-records {params.max_records:q} \
+          > {log:q} 2>&1
+        """
+
+
+rule run_branch_fastqc:
+    input:
+        samples=f"{BRANCH_DIR}" + "/{assay}/{project}/samples.tsv",
+        inspection=f"{BRANCH_DIR}" + "/{assay}/{project}/fastq_inspection.tsv",
+        environment=ENVIRONMENT_REPORT
+    output:
+        manifest=f"{BRANCH_DIR}" + "/{assay}/{project}/fastqc/fastqc_manifest.tsv",
+        done=f"{BRANCH_DIR}" + "/{assay}/{project}/fastqc/fastqc.done"
+    params:
+        outdir=lambda wildcards: f"{BRANCH_DIR}/{wildcards.assay}/{wildcards.project}/fastqc",
+        fastqc=FASTQC.get("command", "fastqc"),
+        extra_args=FASTQC.get("extra_args", "")
+    threads:
+        FASTQC.get("threads", 2)
+    log:
+        "logs/branches/{assay}/{project}.fastqc.log"
+    shell:
+        r"""
+        mkdir -p logs/branches/{wildcards.assay}
+        python3 workflow/scripts/run_fastqc_branch.py \
+          --samples {input.samples:q} \
+          --outdir {params.outdir:q} \
+          --manifest {output.manifest:q} \
+          --done {output.done:q} \
+          --threads {threads:q} \
+          --fastqc {params.fastqc:q} \
+          --extra-args {params.extra_args:q} \
           > {log:q} 2>&1
         """
