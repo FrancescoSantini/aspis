@@ -100,8 +100,7 @@ rnaseq_differential:
   deseq2_script: workflow/scripts/run_deseq2_gene.R
   condition_col: condition
   control_label: control
-  contrast_by:
-    - time_h
+  contrast_by: []
   min_replicates_per_group: 2
   min_count: 10
   padj: 0.1
