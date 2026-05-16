@@ -71,6 +71,30 @@ rnaseq_alignment:
   star_genome_sa_index_nbases: ""
   star_extra_index_args: ""
 
+rnaseq_quantification:
+  run: false
+  transcriptome_mode: reference_guided_novel
+  gene_counter: featurecounts
+  featurecounts_command: featureCounts
+  stringtie_command: stringtie
+  gffcompare_command: gffcompare
+  reference_fasta: tests/reference/rnaseq_toy.fa
+  annotation_gtf: tests/reference/rnaseq_toy.gtf
+  read_length: 12
+  threads: 1
+  featurecounts_threads: 1
+  stringtie_threads: 1
+  featurecounts_single_extra_args: ""
+  featurecounts_paired_extra_args: "-p --countReadPairs"
+  featurecounts_extra_args: ""
+  stringtie_strandness: ""
+  stringtie_assembly_extra_args: "-m 20 -c 0.001"
+  stringtie_merge_extra_args: "-m 20 -c 0.001"
+  stringtie_quant_extra_args: ""
+  known_codes_strict: "=,j"
+  known_codes_lenient: "=,j,c,o"
+  gene_type_view: strict
+
 execution:
   default_partition: g100_usr_prod
   download_partition: g100_all_serial
@@ -87,6 +111,10 @@ environment:
     - hisat2
     - hisat2-build
     - samtools
+  rnaseq_quantification_required_tools:
+    - featureCounts
+    - stringtie
+    - gffcompare
   sra_required_tools:
     - prefetch
     - fasterq-dump

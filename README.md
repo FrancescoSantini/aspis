@@ -71,6 +71,8 @@ config/
                            Isolated local HISAT2 alignment smoke-test settings
   aspis_star_alignment_smoke.yaml
                            Isolated local STAR alignment smoke-test settings
+  aspis_quantification_smoke.yaml
+                           Isolated local quantification smoke-test settings
   aspis_sra_smoke.yaml     Isolated partial public SRA smoke-test settings
   intake.tsv               Minimal intake sheet for ASPIS materialization
   intake_sra_smoke.tsv     Optional SRA smoke-test intake sheet
@@ -90,6 +92,9 @@ schemas/
   rnaseq_alignment_plan.schema.json
   rnaseq_aligned_samples.schema.json
   rnaseq_alignment_qc_manifest.schema.json
+  rnaseq_quantification_plan.schema.json
+  rnaseq_featurecounts_manifest.schema.json
+  rnaseq_stringtie_manifest.schema.json
 
 envs/
   aspis-snakemake.yaml     Snakemake 9 orchestration environment
@@ -228,6 +233,14 @@ summarizes those alignment QC files with MultiQC.
 synthetic FASTA/GTF under `tests/reference/`. They are technical tests that
 check the RNA-seq alignment rules run; they are not biological references.
 
+RNA-seq quantification is also opt-in through `rnaseq_quantification.run: true`.
+The current quantification path runs featureCounts for gene-level counts, then
+uses StringTie for reference-guided transcript assembly, StringTie merge,
+gffcompare annotation, StringTie re-quantification, and transcript matrix
+generation. This keeps gene-level DE inputs independent from transcript
+assembly while preserving a transcriptome contract for transcript-level and
+isoform-switch analysis.
+
 ## Planned Architecture
 
 The next major refactor should make the first stage of ASPIS a raw-data
@@ -276,6 +289,15 @@ results/branches/rnaseq/{project}/alignment/qc/alignment_qc_manifest.tsv # if al
 results/branches/rnaseq/{project}/alignment/qc/alignment_qc.done         # if alignment is enabled
 results/branches/rnaseq/{project}/alignment/qc/multiqc/multiqc_report.html # if alignment is enabled
 results/branches/rnaseq/{project}/alignment/qc/multiqc/multiqc.done      # if alignment is enabled
+results/branches/rnaseq/{project}/quantification/quantification_plan.tsv # if quantification is enabled
+results/branches/rnaseq/{project}/quantification/featurecounts/gene_counts.tsv # if quantification is enabled
+results/branches/rnaseq/{project}/quantification/featurecounts/gene_metadata.tsv # if quantification is enabled
+results/branches/rnaseq/{project}/quantification/stringtie/merge/merged.gtf # if quantification is enabled
+results/branches/rnaseq/{project}/quantification/gffcompare/annotated.gtf # if quantification is enabled
+results/branches/rnaseq/{project}/quantification/gffcompare/merged.tmap # if quantification is enabled
+results/branches/rnaseq/{project}/quantification/counts/transcript_counts.tsv # if quantification is enabled
+results/branches/rnaseq/{project}/quantification/counts/transcript_metadata.tsv # if quantification is enabled
+results/branches/rnaseq/{project}/quantification/counts/quantification.done # if quantification is enabled
 ```
 
 Downstream analysis rules should consume manifest-derived contracts rather than
@@ -345,11 +367,13 @@ snakemake --cores 1 results/branches/rnaseq/ASPIS_TEST/preprocess/preprocessed_s
 snakemake --cores 1 results/branches/rnaseq/ASPIS_TEST/preprocess/multiqc/multiqc_report.html
 snakemake --cores 1 results/branches/rnaseq/ASPIS_TEST/alignment/alignment_plan.tsv
 snakemake --cores 1 results/branches/rnaseq/ASPIS_TEST/alignment/qc/multiqc/multiqc_report.html
+snakemake --cores 1 results/branches/rnaseq/ASPIS_TEST/quantification/counts/quantification.done
 snakemake --cores 1 results/branches/rnaseq/ASPIS_TEST/design.tsv
 
 # Run the isolated local alignment smoke test
 snakemake --cores 1 --configfile config/aspis_alignment_smoke.yaml --printshellcmds
 snakemake --cores 1 --configfile config/aspis_star_alignment_smoke.yaml --printshellcmds
+snakemake --cores 1 --configfile config/aspis_quantification_smoke.yaml --printshellcmds
 ```
 
 On CINECA G100, see `docs/g100_quickstart.md` for environment creation and
@@ -407,9 +431,12 @@ org.Hs.eg.db, multiMiR, and plotting/reporting packages.
    branch groups.
 4. Rewrite the main Snakefile around `library_id`, `project`, `assay`, and
    named metadata columns instead of `bioproject` and generic covariates.
-5. Bring the long RNA-seq branch onto the manifest contract first.
-6. Add the small RNA/miRNA branch second.
-7. Replace the legacy SLURM profile with a workflow profile based on the modern
+5. Bring RNA-seq preprocessing, alignment, QC, and quantification onto the
+   manifest contract first.
+6. Add DESeq2 gene/transcript analysis and isoform-switch analysis on top of
+   the new quantification contract.
+7. Add the small RNA/miRNA branch second.
+8. Replace the legacy SLURM profile with a workflow profile based on the modern
    Snakemake SLURM executor.
-8. Move human-specific assumptions into config before extending ASPIS to other
+9. Move human-specific assumptions into config before extending ASPIS to other
    organisms or sequencing assays.

@@ -44,6 +44,15 @@ set-threads:
   align_rnaseq_branch: 4
   qc_rnaseq_alignment: 1
   run_rnaseq_alignment_multiqc: 1
+  plan_rnaseq_quantification: 1
+  check_rnaseq_quantification_environment: 1
+  featurecounts_gene_counts: 4
+  stringtie_assemble_branch: 4
+  merge_stringtie_assemblies: 4
+  gffcompare_stringtie_merge: 1
+  stringtie_quantify_branch: 4
+  build_stringtie_transcript_matrix: 1
+  finalize_rnaseq_quantification: 1
 
 set-resources:
   materialize_library:
@@ -106,3 +115,39 @@ set-resources:
     runtime: 15
     mem_mb: 2000
     disk_mb: 2000
+  plan_rnaseq_quantification:
+    runtime: 5
+    mem_mb: 1000
+    disk_mb: 1000
+  check_rnaseq_quantification_environment:
+    runtime: 5
+    mem_mb: 1000
+    disk_mb: 1000
+  featurecounts_gene_counts:
+    runtime: 120
+    mem_mb: 16000
+    disk_mb: 50000
+  stringtie_assemble_branch:
+    runtime: 240
+    mem_mb: 32000
+    disk_mb: 100000
+  merge_stringtie_assemblies:
+    runtime: 180
+    mem_mb: 32000
+    disk_mb: 50000
+  gffcompare_stringtie_merge:
+    runtime: 120
+    mem_mb: 16000
+    disk_mb: 50000
+  stringtie_quantify_branch:
+    runtime: 240
+    mem_mb: 32000
+    disk_mb: 100000
+  build_stringtie_transcript_matrix:
+    runtime: 60
+    mem_mb: 8000
+    disk_mb: 10000
+  finalize_rnaseq_quantification:
+    runtime: 5
+    mem_mb: 1000
+    disk_mb: 1000

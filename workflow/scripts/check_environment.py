@@ -22,6 +22,9 @@ VERSION_COMMANDS = {
     "hisat2": ["hisat2", "--version"],
     "hisat2-build": ["hisat2-build", "--version"],
     "samtools": ["samtools", "--version"],
+    "featureCounts": ["featureCounts", "-v"],
+    "stringtie": ["stringtie", "--version"],
+    "gffcompare": ["gffcompare", "--version"],
     "vdb-validate": ["vdb-validate", "--version"],
 }
 

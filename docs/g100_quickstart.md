@@ -86,6 +86,12 @@ which hisat2-build
 hisat2-build --version
 which samtools
 samtools --version
+which featureCounts
+featureCounts -v
+which stringtie
+stringtie --version
+which gffcompare
+gffcompare --version
 ```
 
 Expected major version:
@@ -295,7 +301,51 @@ results/star_alignment_smoke/branches/rnaseq/ASPIS_TEST/alignment/qc/multiqc/mul
 This test validates the workflow mechanics only. It should not be interpreted as
 a biologically meaningful mapping result.
 
-## 6. Optional Snakemake 7 Compatibility Check
+## 6. Local RNA-seq Quantification Smoke Test
+
+ASPIS includes an isolated quantification smoke-test config. It builds a tiny
+STAR index, aligns the same local FASTQ fixtures, then exercises featureCounts,
+StringTie assembly/merge/re-quantification, gffcompare, and transcript matrix
+generation under isolated `quantification_smoke` paths.
+
+Run it locally with one core:
+
+```bash
+snakemake --cores 1 --configfile config/aspis_quantification_smoke.yaml --printshellcmds
+```
+
+Inspect the key outputs:
+
+```bash
+cat results/quantification_smoke/branches/rnaseq/ASPIS_TEST/quantification/quantification_plan.tsv
+cat results/quantification_smoke/branches/rnaseq/ASPIS_TEST/quantification/featurecounts/featurecounts.done
+cat results/quantification_smoke/branches/rnaseq/ASPIS_TEST/quantification/stringtie/assembly.done
+cat results/quantification_smoke/branches/rnaseq/ASPIS_TEST/quantification/stringtie/merge/merge.done
+cat results/quantification_smoke/branches/rnaseq/ASPIS_TEST/quantification/gffcompare/gffcompare.done
+cat results/quantification_smoke/branches/rnaseq/ASPIS_TEST/quantification/stringtie/quantification.done
+cat results/quantification_smoke/branches/rnaseq/ASPIS_TEST/quantification/counts/transcript_counts.done
+cat results/quantification_smoke/branches/rnaseq/ASPIS_TEST/quantification/counts/quantification.done
+column -t -s $'\t' results/quantification_smoke/branches/rnaseq/ASPIS_TEST/quantification/featurecounts/gene_counts.tsv
+column -t -s $'\t' results/quantification_smoke/branches/rnaseq/ASPIS_TEST/quantification/counts/transcript_counts.tsv
+column -t -s $'\t' results/quantification_smoke/branches/rnaseq/ASPIS_TEST/quantification/counts/transcript_metadata.tsv
+```
+
+Expected additional outputs include:
+
+```text
+results/quantification_smoke/branches/rnaseq/ASPIS_TEST/quantification/featurecounts/gene_counts.tsv
+results/quantification_smoke/branches/rnaseq/ASPIS_TEST/quantification/featurecounts/gene_metadata.tsv
+results/quantification_smoke/branches/rnaseq/ASPIS_TEST/quantification/stringtie/merge/merged.gtf
+results/quantification_smoke/branches/rnaseq/ASPIS_TEST/quantification/gffcompare/annotated.gtf
+results/quantification_smoke/branches/rnaseq/ASPIS_TEST/quantification/gffcompare/merged.tmap
+results/quantification_smoke/branches/rnaseq/ASPIS_TEST/quantification/counts/transcript_counts.tsv
+results/quantification_smoke/branches/rnaseq/ASPIS_TEST/quantification/counts/transcript_metadata.tsv
+```
+
+This test validates workflow mechanics and file contracts only. It should not
+be interpreted as a biologically meaningful quantification result.
+
+## 7. Optional Snakemake 7 Compatibility Check
 
 The new materialization Snakefile only uses basic Snakemake features, so it may
 also run with the existing Snakemake 7.25.3 environment:
@@ -309,7 +359,7 @@ snakemake --cores 1 --dry-run
 This is only a short-term compatibility check. The refactored ASPIS SLURM
 profile targets Snakemake 9.
 
-## 7. SLURM Profile Dry Run
+## 8. SLURM Profile Dry Run
 
 After the local test works with `aspis-smk9`, check the modern SLURM profile:
 
@@ -366,7 +416,7 @@ Do not use real SLURM submissions for routine development. Keep development and
 fixture tests local with `--cores 1`; reserve SLURM for final dry-runs, account
 validation, and full analyses.
 
-## 8. Public Accession Test
+## 9. Public Accession Test
 
 After local FASTQ materialization works, use the isolated smoke-test config to
 test one public `SRR`, `ERR`, or `DRR` accession without overwriting the default
@@ -402,7 +452,7 @@ cat logs/materialize/<library_id>.log
 
 Those lines are useful for a CINECA support ticket.
 
-## 9. Useful Diagnostics for CINECA Tickets
+## 10. Useful Diagnostics for CINECA Tickets
 
 ```bash
 hostname

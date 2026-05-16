@@ -1,22 +1,24 @@
-# ASPIS first-stage configuration.
+# ASPIS local RNA-seq quantification smoke-test configuration.
 #
-# This file is intentionally separate from config/config.yaml, which still
-# belongs to the legacy long/small RNA workflows.
+# This config builds a tiny STAR index, aligns the default local FASTQ fixtures,
+# and exercises featureCounts, StringTie, gffcompare, and transcript matrix
+# generation. It is only a technical smoke test, not a biological reference.
 
 intake: config/intake.tsv
 
 paths:
-  raw_dir: work/raw
-  metadata_dir: meta/materialized
-  manifest: meta/materialized_manifest.tsv
-  environment_report: meta/environment_report.tsv
-  sra_cache_dir: cache/sra
-  scratch_dir: work/tmp
-  branch_dir: results/branches
+  raw_dir: work/quantification_smoke/raw
+  metadata_dir: meta/quantification_smoke/materialized
+  manifest: meta/quantification_smoke/materialized_manifest.tsv
+  analysis_plan: meta/quantification_smoke/analysis_plan.tsv
+  environment_report: meta/quantification_smoke/environment_report.tsv
+  sra_cache_dir: cache/quantification_smoke/sra
+  scratch_dir: work/quantification_smoke/tmp
+  branch_dir: results/quantification_smoke/branches
 
 materialization:
   local_link_mode: symlink
-  sra_max_size: 40G
+  sra_max_size: 1G
   sra_spot_limit: 0
   validate_sra: true
   public_metadata_mode: auto
@@ -34,11 +36,11 @@ design:
   min_condition_groups: 2
 
 fastq_inspection:
-  max_records: 100000
+  max_records: 10000
 
 fastqc:
   command: fastqc
-  threads: 2
+  threads: 1
   extra_args: ""
 
 multiqc:
@@ -47,47 +49,47 @@ multiqc:
 
 rnaseq_preprocess:
   command: fastp
-  threads: 2
+  threads: 1
   extra_args: ""
 
 rnaseq_alignment:
-  run: false
+  run: true
   aligner: star
   hisat2_command: hisat2
   hisat2_build_command: hisat2-build
   star_command: STAR
   samtools_command: samtools
-  reference_fasta: ""
+  reference_fasta: tests/reference/rnaseq_toy.fa
   hisat2_index_prefix: ""
-  star_genome_dir: ""
-  annotation_gtf: ""
+  star_genome_dir: work/quantification_smoke/reference/star
+  annotation_gtf: tests/reference/rnaseq_toy.gtf
   strandness: ""
-  threads: 4
-  index_threads: 8
+  threads: 2
+  index_threads: 2
   extra_args: ""
-  star_sjdb_overhang: ""
-  star_genome_sa_index_nbases: ""
-  star_extra_index_args: ""
+  star_sjdb_overhang: 11
+  star_genome_sa_index_nbases: 2
+  star_extra_index_args: "--genomeChrBinNbits 4"
 
 rnaseq_quantification:
-  run: false
+  run: true
   transcriptome_mode: reference_guided_novel
   gene_counter: featurecounts
   featurecounts_command: featureCounts
   stringtie_command: stringtie
   gffcompare_command: gffcompare
-  reference_fasta: ""
-  annotation_gtf: ""
-  read_length: 75
-  threads: 4
-  featurecounts_threads: 4
-  stringtie_threads: 4
+  reference_fasta: tests/reference/rnaseq_toy.fa
+  annotation_gtf: tests/reference/rnaseq_toy.gtf
+  read_length: 12
+  threads: 1
+  featurecounts_threads: 1
+  stringtie_threads: 1
   featurecounts_single_extra_args: ""
   featurecounts_paired_extra_args: "-p --countReadPairs"
   featurecounts_extra_args: ""
   stringtie_strandness: ""
-  stringtie_assembly_extra_args: ""
-  stringtie_merge_extra_args: ""
+  stringtie_assembly_extra_args: "-m 20 -c 0.001"
+  stringtie_merge_extra_args: "-m 20 -c 0.001"
   stringtie_quant_extra_args: ""
   known_codes_strict: "=,j"
   known_codes_lenient: "=,j,c,o"
