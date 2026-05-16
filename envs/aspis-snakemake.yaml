@@ -13,5 +13,6 @@ dependencies:
   - fastqc
   - multiqc
   - fastp
+  - star
   - hisat2
   - samtools

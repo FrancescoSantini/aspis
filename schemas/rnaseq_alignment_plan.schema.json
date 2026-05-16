@@ -8,7 +8,6 @@
     "status",
     "n_libraries",
     "aligner",
-    "hisat2_index_prefix",
     "annotation_status"
   ],
   "properties": {
@@ -40,12 +39,18 @@
     },
     "aligner": {
       "type": "string",
-      "enum": ["hisat2"]
+      "enum": ["hisat2", "star"]
     },
     "hisat2_index_prefix": {
       "type": "string"
     },
     "hisat2_index_files": {
+      "type": "string"
+    },
+    "star_genome_dir": {
+      "type": "string"
+    },
+    "star_index_files": {
       "type": "string"
     },
     "annotation_gtf": {

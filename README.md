@@ -68,7 +68,9 @@ The legacy small RNA branch includes:
 config/
   aspis.yaml               First-stage materialization settings
   aspis_alignment_smoke.yaml
-                           Isolated local RNA-seq alignment smoke-test settings
+                           Isolated local HISAT2 alignment smoke-test settings
+  aspis_star_alignment_smoke.yaml
+                           Isolated local STAR alignment smoke-test settings
   aspis_sra_smoke.yaml     Isolated partial public SRA smoke-test settings
   intake.tsv               Minimal intake sheet for ASPIS materialization
   intake_sra_smoke.tsv     Optional SRA smoke-test intake sheet
@@ -211,18 +213,20 @@ The output `preprocess/preprocessed_samples.tsv` keeps the same sample metadata
 but points `fastq_1` / `fastq_2` at the preprocessed FASTQs and records the
 original paths as `raw_fastq_1` / `raw_fastq_2`.
 After preprocessing, ASPIS writes `alignment/alignment_plan.tsv`. This is a
-reference-readiness contract: it reports `blocked` until a HISAT2 index prefix
-is configured and the expected index files are present.
-Actual HISAT2 alignment is opt-in through `rnaseq_alignment.run: true`. When
-enabled and the plan is ready, ASPIS writes sorted BAMs plus
+reference-readiness contract: it reports `blocked` until the selected aligner
+has a configured, present index. `rnaseq_alignment.aligner` can be `star` or
+`hisat2`; STAR is the recommended default for full RNA-seq runs, while HISAT2
+remains available as a lighter option and compatibility backend.
+Actual alignment is opt-in through `rnaseq_alignment.run: true`. When enabled
+and the plan is ready, ASPIS writes sorted BAMs plus
 `alignment/aligned_samples.tsv`.
 ASPIS then runs samtools `flagstat`, `stats`, and `idxstats` for each BAM and
 summarizes those alignment QC files with MultiQC.
 
-`config/aspis_alignment_smoke.yaml` enables that opt-in path with a tiny
-synthetic FASTA/GTF under `tests/reference/`. It is a technical test that builds
-a miniature HISAT2 index and checks that the RNA-seq alignment rules run; it is
-not a biological reference.
+`config/aspis_alignment_smoke.yaml` and
+`config/aspis_star_alignment_smoke.yaml` enable those opt-in paths with a tiny
+synthetic FASTA/GTF under `tests/reference/`. They are technical tests that
+check the RNA-seq alignment rules run; they are not biological references.
 
 ## Planned Architecture
 
@@ -345,6 +349,7 @@ snakemake --cores 1 results/branches/rnaseq/ASPIS_TEST/design.tsv
 
 # Run the isolated local alignment smoke test
 snakemake --cores 1 --configfile config/aspis_alignment_smoke.yaml --printshellcmds
+snakemake --cores 1 --configfile config/aspis_star_alignment_smoke.yaml --printshellcmds
 ```
 
 On CINECA G100, see `docs/g100_quickstart.md` for environment creation and
@@ -377,13 +382,12 @@ The workflows currently expect several command-line tools to be available:
 - SRA Toolkit (`prefetch`, `fastq-dump`, `fasterq-dump`)
 - FastQC
 - fastp
+- STAR
 - HISAT2
 - samtools
 - Trimmomatic
 - cutadapt
-- HISAT2
 - Bowtie
-- samtools
 - StringTie
 - gffcompare
 - Subread/featureCounts

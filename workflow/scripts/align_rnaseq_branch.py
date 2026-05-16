@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Align an RNA-seq branch with HISAT2 and samtools."""
+"""Align an RNA-seq branch with HISAT2 or STAR."""
 
 from __future__ import annotations
 
@@ -12,13 +12,17 @@ from pathlib import Path
 
 
 REQUIRED_SAMPLE_COLUMNS = {"library_id", "assay", "project", "layout", "fastq_1"}
-REQUIRED_PLAN_COLUMNS = {"project", "assay", "status", "aligner", "hisat2_index_prefix"}
+REQUIRED_PLAN_COLUMNS = {"project", "assay", "status", "aligner"}
 ADDED_COLUMNS = [
     "bam",
     "bai",
+    "alignment_log",
     "hisat2_log",
+    "star_log_final",
+    "star_sj_out_tab",
     "alignment_tool",
     "alignment_index_prefix",
+    "alignment_index",
 ]
 
 
@@ -31,12 +35,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--done", required=True, help="Completion sentinel")
     parser.add_argument("--threads", type=int, default=1, help="Threads per sample")
     parser.add_argument("--hisat2", default="hisat2", help="hisat2 executable")
+    parser.add_argument("--star", default="STAR", help="STAR executable")
     parser.add_argument("--samtools", default="samtools", help="samtools executable")
     parser.add_argument("--strandness", default="", help="Optional HISAT2 --rna-strandness value")
     parser.add_argument(
         "--extra-args",
         default="",
-        help="Additional HISAT2 arguments, parsed with shell-like quoting",
+        help="Additional aligner arguments, parsed with shell-like quoting",
     )
     return parser.parse_args()
 
@@ -60,13 +65,16 @@ def read_alignment_plan(path: Path) -> dict[str, str]:
     row = rows[0]
     if row.get("assay") != "rnaseq":
         raise ValueError(f"Alignment plan assay must be 'rnaseq': {row.get('assay')!r}")
-    if row.get("aligner") != "hisat2":
-        raise ValueError(f"Only HISAT2 alignment plans are supported: {row.get('aligner')!r}")
     if row.get("status") != "ready":
         reason = row.get("reason", "")
         raise ValueError(f"Alignment plan is not ready: {reason}")
-    if not row.get("hisat2_index_prefix", ""):
+    aligner = row.get("aligner", "")
+    if aligner == "hisat2" and not row.get("hisat2_index_prefix", ""):
         raise ValueError("Alignment plan is ready but hisat2_index_prefix is empty")
+    if aligner == "star" and not row.get("star_genome_dir", ""):
+        raise ValueError("Alignment plan is ready but star_genome_dir is empty")
+    if aligner not in {"hisat2", "star"}:
+        raise ValueError(f"Unsupported alignment backend: {aligner!r}")
     return row
 
 
@@ -116,6 +124,8 @@ def output_paths(row: dict[str, str], outdir: Path) -> dict[str, Path]:
         "bam": bam,
         "bai": Path(str(bam) + ".bai"),
         "hisat2_log": sample_dir / "hisat2.log",
+        "star_log_final": sample_dir / "star_Log.final.out",
+        "star_sj_out_tab": sample_dir / "star_SJ.out.tab",
     }
 
 
@@ -138,7 +148,38 @@ def run_command(command: list[str], log_path: Path) -> None:
         raise RuntimeError(f"Command failed with status {completed.returncode}: {shlex.join(command)}")
 
 
-def run_alignment(
+def index_bam(samtools: str, bam: Path, bai: Path, log_path: Path, threads: int) -> None:
+    index_command = [
+        samtools,
+        "index",
+        "-@",
+        str(max(1, threads)),
+        str(bam),
+        str(bai),
+    ]
+    run_command(index_command, log_path)
+
+
+def base_alignment_result(
+    paths: dict[str, Path],
+    tool: str,
+    index: str,
+    alignment_log: Path,
+) -> dict[str, str]:
+    return {
+        "bam": str(paths["bam"]),
+        "bai": str(paths["bai"]),
+        "alignment_log": str(alignment_log),
+        "hisat2_log": str(paths["hisat2_log"]) if tool == "hisat2" else "",
+        "star_log_final": str(paths["star_log_final"]) if tool == "star" else "",
+        "star_sj_out_tab": str(paths["star_sj_out_tab"]) if tool == "star" else "",
+        "alignment_tool": tool,
+        "alignment_index_prefix": index,
+        "alignment_index": index,
+    }
+
+
+def run_hisat2_alignment(
     row: dict[str, str],
     plan: dict[str, str],
     outdir: Path,
@@ -216,27 +257,148 @@ def run_alignment(
     if sort_proc.returncode != 0:
         raise RuntimeError(f"{row['library_id']}: samtools sort exited with status {sort_proc.returncode}")
 
-    index_command = [
-        samtools_exe,
-        "index",
-        "-@",
-        str(sort_threads),
-        str(paths["bam"]),
-        str(paths["bai"]),
-    ]
-    run_command(index_command, paths["hisat2_log"])
+    index_bam(samtools_exe, paths["bam"], paths["bai"], paths["hisat2_log"], sort_threads)
 
     missing = [str(paths[key]) for key in ("bam", "bai") if not paths[key].exists()]
     if missing:
         raise RuntimeError(f"{row['library_id']}: missing alignment outputs: {missing}")
 
-    return {
-        "bam": str(paths["bam"]),
-        "bai": str(paths["bai"]),
-        "hisat2_log": str(paths["hisat2_log"]),
-        "alignment_tool": "hisat2",
-        "alignment_index_prefix": plan["hisat2_index_prefix"],
-    }
+    return base_alignment_result(
+        paths,
+        "hisat2",
+        plan["hisat2_index_prefix"],
+        paths["hisat2_log"],
+    )
+
+
+def fastqs_are_gzipped(row: dict[str, str]) -> bool:
+    paths = [row["fastq_1"]]
+    if row["layout"] == "paired":
+        paths.append(row["fastq_2"])
+    suffixes = [Path(path).suffix == ".gz" for path in paths]
+    if any(suffixes) and not all(suffixes):
+        raise ValueError(f"{row['library_id']}: STAR cannot mix gzip and plain FASTQ inputs")
+    return all(suffixes)
+
+
+def run_star_alignment(
+    row: dict[str, str],
+    plan: dict[str, str],
+    outdir: Path,
+    star: str,
+    samtools: str,
+    threads: int,
+    extra_args: str,
+) -> dict[str, str]:
+    if threads < 1:
+        raise ValueError("--threads must be >= 1")
+
+    star_exe = executable_path(star)
+    samtools_exe = executable_path(samtools)
+    paths = output_paths(row, outdir)
+    paths["sample_dir"].mkdir(parents=True, exist_ok=True)
+
+    prefix = paths["sample_dir"] / "star_"
+    star_bam = paths["sample_dir"] / "star_Aligned.sortedByCoord.out.bam"
+    star_log = paths["sample_dir"] / "star_Log.out"
+    star_progress = paths["sample_dir"] / "star_Log.progress.out"
+    star_tmp = paths["sample_dir"] / "star__STARtmp"
+    for path in (
+        paths["bam"],
+        paths["bai"],
+        paths["star_log_final"],
+        paths["star_sj_out_tab"],
+        star_bam,
+        star_log,
+        star_progress,
+    ):
+        if path.exists():
+            path.unlink()
+    if star_tmp.exists():
+        shutil.rmtree(star_tmp)
+
+    read_files = [row["fastq_1"]]
+    if row["layout"] == "paired":
+        read_files.append(row["fastq_2"])
+
+    star_command = [
+        star_exe,
+        "--runThreadN",
+        str(threads),
+        "--genomeDir",
+        plan["star_genome_dir"],
+        "--readFilesIn",
+        *read_files,
+        "--outFileNamePrefix",
+        str(prefix),
+        "--outSAMtype",
+        "BAM",
+        "SortedByCoordinate",
+    ]
+    if fastqs_are_gzipped(row):
+        star_command.extend(["--readFilesCommand", "zcat"])
+    star_command.extend(shlex.split(extra_args))
+
+    print("[CMD] " + shlex.join(star_command))
+    completed = subprocess.run(star_command, check=False, capture_output=True, text=True)
+    with star_log.open("a", encoding="utf-8") as handle:
+        if completed.stdout:
+            handle.write(completed.stdout)
+        if completed.stderr:
+            handle.write(completed.stderr)
+    if completed.returncode != 0:
+        raise RuntimeError(f"{row['library_id']}: STAR exited with status {completed.returncode}")
+    if not star_bam.exists():
+        raise RuntimeError(f"{row['library_id']}: STAR did not produce {star_bam}")
+
+    star_bam.replace(paths["bam"])
+    index_bam(samtools_exe, paths["bam"], paths["bai"], star_log, max(1, threads // 2))
+
+    missing = [str(paths[key]) for key in ("bam", "bai", "star_log_final") if not paths[key].exists()]
+    if missing:
+        raise RuntimeError(f"{row['library_id']}: missing STAR alignment outputs: {missing}")
+
+    return base_alignment_result(
+        paths,
+        "star",
+        plan["star_genome_dir"],
+        paths["star_log_final"],
+    )
+
+
+def run_alignment(
+    row: dict[str, str],
+    plan: dict[str, str],
+    outdir: Path,
+    hisat2: str,
+    star: str,
+    samtools: str,
+    threads: int,
+    strandness: str,
+    extra_args: str,
+) -> dict[str, str]:
+    if plan["aligner"] == "hisat2":
+        return run_hisat2_alignment(
+            row,
+            plan,
+            outdir,
+            hisat2,
+            samtools,
+            threads,
+            strandness,
+            extra_args,
+        )
+    if plan["aligner"] == "star":
+        return run_star_alignment(
+            row,
+            plan,
+            outdir,
+            star,
+            samtools,
+            threads,
+            extra_args,
+        )
+    raise ValueError(f"Unsupported alignment backend: {plan['aligner']!r}")
 
 
 def output_columns(input_columns: list[str]) -> list[str]:
@@ -286,6 +448,7 @@ def main() -> int:
                 plan=plan,
                 outdir=outdir,
                 hisat2=args.hisat2,
+                star=args.star,
                 samtools=args.samtools,
                 threads=args.threads,
                 strandness=args.strandness,

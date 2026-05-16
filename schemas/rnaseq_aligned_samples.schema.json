@@ -10,9 +10,8 @@
     "fastq_1",
     "bam",
     "bai",
-    "hisat2_log",
     "alignment_tool",
-    "alignment_index_prefix"
+    "alignment_index"
   ],
   "properties": {
     "library_id": {
@@ -44,11 +43,23 @@
     "hisat2_log": {
       "type": "string"
     },
+    "alignment_log": {
+      "type": "string"
+    },
+    "star_log_final": {
+      "type": "string"
+    },
+    "star_sj_out_tab": {
+      "type": "string"
+    },
     "alignment_tool": {
       "type": "string",
-      "enum": ["hisat2"]
+      "enum": ["hisat2", "star"]
     },
     "alignment_index_prefix": {
+      "type": "string"
+    },
+    "alignment_index": {
       "type": "string"
     }
   },

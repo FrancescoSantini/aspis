@@ -1,22 +1,24 @@
-# ASPIS first-stage configuration.
+# ASPIS local RNA-seq STAR alignment smoke-test configuration.
 #
-# This file is intentionally separate from config/config.yaml, which still
-# belongs to the legacy long/small RNA workflows.
+# This config builds a tiny synthetic STAR genome index and runs the default
+# local FASTQ fixtures through RNA-seq preprocessing and alignment. It is only a
+# technical smoke test, not a biological reference.
 
 intake: config/intake.tsv
 
 paths:
-  raw_dir: work/raw
-  metadata_dir: meta/materialized
-  manifest: meta/materialized_manifest.tsv
-  environment_report: meta/environment_report.tsv
-  sra_cache_dir: cache/sra
-  scratch_dir: work/tmp
-  branch_dir: results/branches
+  raw_dir: work/star_alignment_smoke/raw
+  metadata_dir: meta/star_alignment_smoke/materialized
+  manifest: meta/star_alignment_smoke/materialized_manifest.tsv
+  analysis_plan: meta/star_alignment_smoke/analysis_plan.tsv
+  environment_report: meta/star_alignment_smoke/environment_report.tsv
+  sra_cache_dir: cache/star_alignment_smoke/sra
+  scratch_dir: work/star_alignment_smoke/tmp
+  branch_dir: results/star_alignment_smoke/branches
 
 materialization:
   local_link_mode: symlink
-  sra_max_size: 40G
+  sra_max_size: 1G
   sra_spot_limit: 0
   validate_sra: true
   public_metadata_mode: auto
@@ -34,11 +36,11 @@ design:
   min_condition_groups: 2
 
 fastq_inspection:
-  max_records: 100000
+  max_records: 10000
 
 fastqc:
   command: fastqc
-  threads: 2
+  threads: 1
   extra_args: ""
 
 multiqc:
@@ -47,27 +49,27 @@ multiqc:
 
 rnaseq_preprocess:
   command: fastp
-  threads: 2
+  threads: 1
   extra_args: ""
 
 rnaseq_alignment:
-  run: false
+  run: true
   aligner: star
   hisat2_command: hisat2
   hisat2_build_command: hisat2-build
   star_command: STAR
   samtools_command: samtools
-  reference_fasta: ""
+  reference_fasta: tests/reference/rnaseq_toy.fa
   hisat2_index_prefix: ""
-  star_genome_dir: ""
-  annotation_gtf: ""
+  star_genome_dir: work/star_alignment_smoke/reference/star
+  annotation_gtf: tests/reference/rnaseq_toy.gtf
   strandness: ""
-  threads: 4
-  index_threads: 8
+  threads: 2
+  index_threads: 2
   extra_args: ""
-  star_sjdb_overhang: ""
-  star_genome_sa_index_nbases: ""
-  star_extra_index_args: ""
+  star_sjdb_overhang: 11
+  star_genome_sa_index_nbases: 2
+  star_extra_index_args: "--genomeChrBinNbits 4"
 
 execution:
   default_partition: g100_usr_prod
