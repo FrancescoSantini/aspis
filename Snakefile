@@ -139,6 +139,12 @@ def materialization_partition(wildcards):
     return EXECUTION.get("default_partition", "g100_usr_prod")
 
 
+def shell_arg(flag, value):
+    """Return a shell-safe CLI flag/value pair, preserving empty strings."""
+    text = "" if value is None else str(value)
+    return f"{flag} {shlex.quote(text)}"
+
+
 def local_fastq_inputs(wildcards):
     row = INTAKE_BY_LIBRARY[wildcards.library_id]
     files = []
@@ -860,13 +866,19 @@ rule plan_rnaseq_quantification:
     params:
         transcriptome_mode=RNASEQ_QUANTIFICATION.get("transcriptome_mode", "reference_guided_novel"),
         gene_counter=RNASEQ_QUANTIFICATION.get("gene_counter", "featurecounts"),
-        reference_fasta=RNASEQ_QUANTIFICATION.get(
-            "reference_fasta",
-            RNASEQ_ALIGNMENT.get("reference_fasta", ""),
+        reference_fasta_flag=shell_arg(
+            "--reference-fasta",
+            RNASEQ_QUANTIFICATION.get(
+                "reference_fasta",
+                RNASEQ_ALIGNMENT.get("reference_fasta", ""),
+            ),
         ),
-        annotation_gtf=RNASEQ_QUANTIFICATION.get(
-            "annotation_gtf",
-            RNASEQ_ALIGNMENT.get("annotation_gtf", ""),
+        annotation_gtf_flag=shell_arg(
+            "--annotation-gtf",
+            RNASEQ_QUANTIFICATION.get(
+                "annotation_gtf",
+                RNASEQ_ALIGNMENT.get("annotation_gtf", ""),
+            ),
         ),
         read_length=RNASEQ_QUANTIFICATION.get("read_length", 75)
     log:
@@ -881,8 +893,8 @@ rule plan_rnaseq_quantification:
           --project {wildcards.project:q} \
           --transcriptome-mode {params.transcriptome_mode:q} \
           --gene-counter {params.gene_counter:q} \
-          --reference-fasta {params.reference_fasta:q} \
-          --annotation-gtf {params.annotation_gtf:q} \
+          {params.reference_fasta_flag} \
+          {params.annotation_gtf_flag} \
           --read-length {params.read_length:q} \
           > {log:q} 2>&1
         """
@@ -922,12 +934,21 @@ rule featurecounts_gene_counts:
     params:
         outdir=lambda wildcards: f"{BRANCH_DIR}/rnaseq/{wildcards.project}/quantification/featurecounts/files",
         featurecounts=RNASEQ_QUANTIFICATION.get("featurecounts_command", "featureCounts"),
-        single_extra_args=RNASEQ_QUANTIFICATION.get("featurecounts_single_extra_args", ""),
-        paired_extra_args=RNASEQ_QUANTIFICATION.get(
-            "featurecounts_paired_extra_args",
-            "-p --countReadPairs",
+        single_extra_args_flag=shell_arg(
+            "--single-extra-args",
+            RNASEQ_QUANTIFICATION.get("featurecounts_single_extra_args", ""),
         ),
-        extra_args=RNASEQ_QUANTIFICATION.get("featurecounts_extra_args", "")
+        paired_extra_args_flag=shell_arg(
+            "--paired-extra-args",
+            RNASEQ_QUANTIFICATION.get(
+                "featurecounts_paired_extra_args",
+                "-p --countReadPairs",
+            ),
+        ),
+        extra_args_flag=shell_arg(
+            "--extra-args",
+            RNASEQ_QUANTIFICATION.get("featurecounts_extra_args", ""),
+        )
     threads:
         RNASEQ_QUANTIFICATION.get("featurecounts_threads", RNASEQ_QUANTIFICATION.get("threads", 4))
     log:
@@ -945,9 +966,9 @@ rule featurecounts_gene_counts:
           --done {output.done:q} \
           --featurecounts {params.featurecounts:q} \
           --threads {threads:q} \
-          --single-extra-args {params.single_extra_args:q} \
-          --paired-extra-args {params.paired_extra_args:q} \
-          --extra-args {params.extra_args:q} \
+          {params.single_extra_args_flag} \
+          {params.paired_extra_args_flag} \
+          {params.extra_args_flag} \
           > {log:q} 2>&1
         """
 
@@ -963,8 +984,14 @@ rule stringtie_assemble_branch:
     params:
         outdir=lambda wildcards: f"{BRANCH_DIR}/rnaseq/{wildcards.project}/quantification/stringtie/assembly",
         stringtie=RNASEQ_QUANTIFICATION.get("stringtie_command", "stringtie"),
-        strandness=RNASEQ_QUANTIFICATION.get("stringtie_strandness", ""),
-        extra_args=RNASEQ_QUANTIFICATION.get("stringtie_assembly_extra_args", "")
+        strandness_flag=shell_arg(
+            "--strandness",
+            RNASEQ_QUANTIFICATION.get("stringtie_strandness", ""),
+        ),
+        extra_args_flag=shell_arg(
+            "--extra-args",
+            RNASEQ_QUANTIFICATION.get("stringtie_assembly_extra_args", ""),
+        )
     threads:
         RNASEQ_QUANTIFICATION.get("stringtie_threads", RNASEQ_QUANTIFICATION.get("threads", 4))
     log:
@@ -980,8 +1007,8 @@ rule stringtie_assemble_branch:
           --done {output.done:q} \
           --stringtie {params.stringtie:q} \
           --threads {threads:q} \
-          --strandness {params.strandness:q} \
-          --extra-args {params.extra_args:q} \
+          {params.strandness_flag} \
+          {params.extra_args_flag} \
           > {log:q} 2>&1
         """
 
@@ -997,7 +1024,10 @@ rule merge_stringtie_assemblies:
         done=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/stringtie/merge/merge.done"
     params:
         stringtie=RNASEQ_QUANTIFICATION.get("stringtie_command", "stringtie"),
-        extra_args=RNASEQ_QUANTIFICATION.get("stringtie_merge_extra_args", "")
+        extra_args_flag=shell_arg(
+            "--extra-args",
+            RNASEQ_QUANTIFICATION.get("stringtie_merge_extra_args", ""),
+        )
     log:
         "logs/branches/rnaseq/{project}.stringtie_merge.log"
     shell:
@@ -1010,7 +1040,7 @@ rule merge_stringtie_assemblies:
           --merged-gtf {output.merged:q} \
           --done {output.done:q} \
           --stringtie {params.stringtie:q} \
-          --extra-args {params.extra_args:q} \
+          {params.extra_args_flag} \
           > {log:q} 2>&1
         """
 
@@ -1063,8 +1093,14 @@ rule stringtie_quantify_branch:
     params:
         outdir=lambda wildcards: f"{BRANCH_DIR}/rnaseq/{wildcards.project}/quantification/stringtie/quant",
         stringtie=RNASEQ_QUANTIFICATION.get("stringtie_command", "stringtie"),
-        strandness=RNASEQ_QUANTIFICATION.get("stringtie_strandness", ""),
-        extra_args=RNASEQ_QUANTIFICATION.get("stringtie_quant_extra_args", "")
+        strandness_flag=shell_arg(
+            "--strandness",
+            RNASEQ_QUANTIFICATION.get("stringtie_strandness", ""),
+        ),
+        extra_args_flag=shell_arg(
+            "--extra-args",
+            RNASEQ_QUANTIFICATION.get("stringtie_quant_extra_args", ""),
+        )
     threads:
         RNASEQ_QUANTIFICATION.get("stringtie_threads", RNASEQ_QUANTIFICATION.get("threads", 4))
     log:
@@ -1081,8 +1117,8 @@ rule stringtie_quantify_branch:
           --done {output.done:q} \
           --stringtie {params.stringtie:q} \
           --threads {threads:q} \
-          --strandness {params.strandness:q} \
-          --extra-args {params.extra_args:q} \
+          {params.strandness_flag} \
+          {params.extra_args_flag} \
           > {log:q} 2>&1
         """
 
