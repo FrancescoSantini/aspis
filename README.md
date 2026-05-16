@@ -247,6 +247,9 @@ Gene-level differential expression is opt-in through
 `differential/gene_deseq2/contrast_plan.tsv`, and runs DESeq2 only for
 contrasts that satisfy `min_replicates_per_group`. Blocked contrasts are kept in
 the manifest with explicit reasons instead of failing with an opaque R error.
+By default contrasts are built across all samples for each non-control
+condition. Set `contrast_by`, for example to `[time_h]`, only when contrasts
+should be stratified by a metadata column.
 `config/aspis_deseq2_smoke.yaml` is a differential-only smoke test that bypasses
 FASTQ, alignment, and quantification and exercises the DESeq2 layer from tiny
 synthetic TSV fixtures under `tests/differential/`.

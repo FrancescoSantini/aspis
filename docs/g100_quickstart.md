@@ -356,10 +356,13 @@ replicates per group:
 ```yaml
 rnaseq_differential:
   run: true
-  contrast_by:
-    - time_h
+  contrast_by: []
   min_replicates_per_group: 2
 ```
+
+Use `contrast_by: [time_h]` only when each time point should be tested as a
+separate control-vs-treated contrast. Leave it empty for a one-timepoint
+experiment or for a simple global control-vs-treated comparison.
 
 The stage writes a contrast plan before running DESeq2:
 
