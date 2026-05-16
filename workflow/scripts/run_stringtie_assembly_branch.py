@@ -84,6 +84,13 @@ def executable_path(command: str) -> str:
     return resolved
 
 
+def log_tail(path: Path, max_lines: int = 20) -> str:
+    if not path.exists() or path.stat().st_size == 0:
+        return ""
+    lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+    return "\n".join(lines[-max_lines:])
+
+
 def run_stringtie(
     row: dict[str, str],
     plan: dict[str, str],
@@ -126,9 +133,15 @@ def run_stringtie(
         if completed.stderr:
             handle.write(completed.stderr)
     if completed.returncode != 0:
-        raise RuntimeError(f"{row['library_id']}: StringTie exited with status {completed.returncode}")
+        tail = log_tail(log)
+        detail = f"\nLast lines from {log}:\n{tail}" if tail else f"\nLog file: {log}"
+        raise RuntimeError(
+            f"{row['library_id']}: StringTie exited with status {completed.returncode}{detail}"
+        )
     if not gtf.exists() or gtf.stat().st_size == 0:
-        raise RuntimeError(f"{row['library_id']}: StringTie produced an empty GTF: {gtf}")
+        tail = log_tail(log)
+        detail = f"\nLast lines from {log}:\n{tail}" if tail else f"\nLog file: {log}"
+        raise RuntimeError(f"{row['library_id']}: StringTie produced an empty GTF: {gtf}{detail}")
 
     return {
         "library_id": row["library_id"],
