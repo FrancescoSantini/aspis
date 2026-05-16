@@ -40,6 +40,8 @@ set-threads:
   plan_rnaseq_alignment: 1
   check_rnaseq_alignment_environment: 1
   align_rnaseq_branch: 4
+  qc_rnaseq_alignment: 1
+  run_rnaseq_alignment_multiqc: 1
 
 set-resources:
   materialize_library:
@@ -86,3 +88,11 @@ set-resources:
     runtime: 240
     mem_mb: 16000
     disk_mb: 100000
+  qc_rnaseq_alignment:
+    runtime: 60
+    mem_mb: 4000
+    disk_mb: 10000
+  run_rnaseq_alignment_multiqc:
+    runtime: 15
+    mem_mb: 2000
+    disk_mb: 2000

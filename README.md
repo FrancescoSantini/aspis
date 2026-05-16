@@ -87,6 +87,7 @@ schemas/
   rnaseq_preprocessed_samples.schema.json
   rnaseq_alignment_plan.schema.json
   rnaseq_aligned_samples.schema.json
+  rnaseq_alignment_qc_manifest.schema.json
 
 envs/
   aspis-snakemake.yaml     Snakemake 9 orchestration environment
@@ -215,6 +216,8 @@ is configured and the expected index files are present.
 Actual HISAT2 alignment is opt-in through `rnaseq_alignment.run: true`. When
 enabled and the plan is ready, ASPIS writes sorted BAMs plus
 `alignment/aligned_samples.tsv`.
+ASPIS then runs samtools `flagstat`, `stats`, and `idxstats` for each BAM and
+summarizes those alignment QC files with MultiQC.
 
 `config/aspis_alignment_smoke.yaml` enables that opt-in path with a tiny
 synthetic FASTA/GTF under `tests/reference/`. It is a technical test that builds
@@ -265,6 +268,10 @@ results/branches/rnaseq/{project}/alignment/alignment_plan.tsv
 results/branches/rnaseq/{project}/alignment/environment_report.tsv      # if alignment is enabled
 results/branches/rnaseq/{project}/alignment/aligned_samples.tsv         # if alignment is enabled
 results/branches/rnaseq/{project}/alignment/alignment.done              # if alignment is enabled
+results/branches/rnaseq/{project}/alignment/qc/alignment_qc_manifest.tsv # if alignment is enabled
+results/branches/rnaseq/{project}/alignment/qc/alignment_qc.done         # if alignment is enabled
+results/branches/rnaseq/{project}/alignment/qc/multiqc/multiqc_report.html # if alignment is enabled
+results/branches/rnaseq/{project}/alignment/qc/multiqc/multiqc.done      # if alignment is enabled
 ```
 
 Downstream analysis rules should consume manifest-derived contracts rather than
@@ -333,6 +340,7 @@ snakemake --cores 1 results/branches/rnaseq/ASPIS_TEST/multiqc/multiqc_report.ht
 snakemake --cores 1 results/branches/rnaseq/ASPIS_TEST/preprocess/preprocessed_samples.tsv
 snakemake --cores 1 results/branches/rnaseq/ASPIS_TEST/preprocess/multiqc/multiqc_report.html
 snakemake --cores 1 results/branches/rnaseq/ASPIS_TEST/alignment/alignment_plan.tsv
+snakemake --cores 1 results/branches/rnaseq/ASPIS_TEST/alignment/qc/multiqc/multiqc_report.html
 snakemake --cores 1 results/branches/rnaseq/ASPIS_TEST/design.tsv
 
 # Run the isolated local alignment smoke test

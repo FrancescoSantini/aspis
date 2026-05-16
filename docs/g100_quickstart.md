@@ -201,6 +201,10 @@ Then ASPIS will also request:
 results/branches/rnaseq/<PROJECT>/alignment/environment_report.tsv
 results/branches/rnaseq/<PROJECT>/alignment/aligned_samples.tsv
 results/branches/rnaseq/<PROJECT>/alignment/alignment.done
+results/branches/rnaseq/<PROJECT>/alignment/qc/alignment_qc_manifest.tsv
+results/branches/rnaseq/<PROJECT>/alignment/qc/alignment_qc.done
+results/branches/rnaseq/<PROJECT>/alignment/qc/multiqc/multiqc_report.html
+results/branches/rnaseq/<PROJECT>/alignment/qc/multiqc/multiqc.done
 ```
 
 ## 4. Local RNA-seq Alignment Smoke Test
@@ -222,6 +226,9 @@ Inspect the key outputs:
 cat results/alignment_smoke/branches/rnaseq/ASPIS_TEST/alignment/alignment_plan.tsv
 cat results/alignment_smoke/branches/rnaseq/ASPIS_TEST/alignment/aligned_samples.tsv
 cat results/alignment_smoke/branches/rnaseq/ASPIS_TEST/alignment/alignment.done
+cat results/alignment_smoke/branches/rnaseq/ASPIS_TEST/alignment/qc/alignment_qc_manifest.tsv
+cat results/alignment_smoke/branches/rnaseq/ASPIS_TEST/alignment/qc/alignment_qc.done
+ls -lh results/alignment_smoke/branches/rnaseq/ASPIS_TEST/alignment/qc/multiqc/multiqc_report.html
 ls -lh results/alignment_smoke/branches/rnaseq/ASPIS_TEST/alignment/example_se
 ls -lh results/alignment_smoke/branches/rnaseq/ASPIS_TEST/alignment/example_pe
 ```
@@ -235,6 +242,8 @@ results/alignment_smoke/branches/rnaseq/ASPIS_TEST/alignment/aligned_samples.tsv
 results/alignment_smoke/branches/rnaseq/ASPIS_TEST/alignment/alignment.done
 results/alignment_smoke/branches/rnaseq/ASPIS_TEST/alignment/example_se/aligned.sorted.bam
 results/alignment_smoke/branches/rnaseq/ASPIS_TEST/alignment/example_pe/aligned.sorted.bam
+results/alignment_smoke/branches/rnaseq/ASPIS_TEST/alignment/qc/alignment_qc_manifest.tsv
+results/alignment_smoke/branches/rnaseq/ASPIS_TEST/alignment/qc/multiqc/multiqc_report.html
 ```
 
 This test validates the workflow mechanics only. It should not be interpreted as
