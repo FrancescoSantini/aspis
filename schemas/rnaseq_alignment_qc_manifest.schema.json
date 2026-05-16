@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ASPIS RNA-seq alignment QC manifest row",
+  "type": "object",
+  "required": [
+    "library_id",
+    "project",
+    "assay",
+    "layout",
+    "bam",
+    "bai",
+    "flagstat",
+    "stats",
+    "idxstats",
+    "qc_log",
+    "status"
+  ],
+  "properties": {
+    "library_id": {
+      "type": "string"
+    },
+    "project": {
+      "type": "string"
+    },
+    "assay": {
+      "type": "string",
+      "enum": ["rnaseq"]
+    },
+    "layout": {
+      "type": "string",
+      "enum": ["single", "paired"]
+    },
+    "bam": {
+      "type": "string"
+    },
+    "bai": {
+      "type": "string"
+    },
+    "flagstat": {
+      "type": "string"
+    },
+    "stats": {
+      "type": "string"
+    },
+    "idxstats": {
+      "type": "string"
+    },
+    "qc_log": {
+      "type": "string"
+    },
+    "status": {
+      "type": "string",
+      "enum": ["ok"]
+    },
+    "message": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": {
+    "type": "string"
+  }
+}

@@ -169,6 +169,10 @@ def planned_branch_targets(wildcards):
                             f"{BRANCH_DIR}/{assay}/{project}/alignment/environment_report.tsv",
                             f"{BRANCH_DIR}/{assay}/{project}/alignment/aligned_samples.tsv",
                             f"{BRANCH_DIR}/{assay}/{project}/alignment/alignment.done",
+                            f"{BRANCH_DIR}/{assay}/{project}/alignment/qc/alignment_qc_manifest.tsv",
+                            f"{BRANCH_DIR}/{assay}/{project}/alignment/qc/alignment_qc.done",
+                            f"{BRANCH_DIR}/{assay}/{project}/alignment/qc/multiqc/multiqc_report.html",
+                            f"{BRANCH_DIR}/{assay}/{project}/alignment/qc/multiqc/multiqc.done",
                         ]
                     )
     return targets
@@ -688,4 +692,60 @@ rule align_rnaseq_branch:
           {params.strandness_flag} \
           {params.extra_args_flag} \
           > {log:q} 2>&1
+        """
+
+
+rule qc_rnaseq_alignment:
+    input:
+        samples=f"{BRANCH_DIR}" + "/rnaseq/{project}/alignment/aligned_samples.tsv",
+        done=f"{BRANCH_DIR}" + "/rnaseq/{project}/alignment/alignment.done",
+        environment=f"{BRANCH_DIR}" + "/rnaseq/{project}/alignment/environment_report.tsv"
+    output:
+        manifest=f"{BRANCH_DIR}" + "/rnaseq/{project}/alignment/qc/alignment_qc_manifest.tsv",
+        done=f"{BRANCH_DIR}" + "/rnaseq/{project}/alignment/qc/alignment_qc.done"
+    params:
+        outdir=lambda wildcards: f"{BRANCH_DIR}/rnaseq/{wildcards.project}/alignment/qc/files",
+        samtools=RNASEQ_ALIGNMENT.get("samtools_command", "samtools")
+    log:
+        "logs/branches/rnaseq/{project}.alignment.qc.log"
+    shell:
+        r"""
+        mkdir -p logs/branches/rnaseq
+        python3 workflow/scripts/qc_rnaseq_alignment.py \
+          --samples {input.samples:q} \
+          --outdir {params.outdir:q} \
+          --manifest {output.manifest:q} \
+          --done {output.done:q} \
+          --samtools {params.samtools:q} \
+          > {log:q} 2>&1
+        """
+
+
+rule run_rnaseq_alignment_multiqc:
+    input:
+        qc_manifest=f"{BRANCH_DIR}" + "/rnaseq/{project}/alignment/qc/alignment_qc_manifest.tsv",
+        qc_done=f"{BRANCH_DIR}" + "/rnaseq/{project}/alignment/qc/alignment_qc.done",
+        alignment_environment=f"{BRANCH_DIR}" + "/rnaseq/{project}/alignment/environment_report.tsv",
+        workflow_environment=ENVIRONMENT_REPORT
+    output:
+        report=f"{BRANCH_DIR}" + "/rnaseq/{project}/alignment/qc/multiqc/multiqc_report.html",
+        done=f"{BRANCH_DIR}" + "/rnaseq/{project}/alignment/qc/multiqc/multiqc.done"
+    params:
+        qc_dir=lambda wildcards: f"{BRANCH_DIR}/rnaseq/{wildcards.project}/alignment/qc/files",
+        outdir=lambda wildcards: f"{BRANCH_DIR}/rnaseq/{wildcards.project}/alignment/qc/multiqc",
+        multiqc=MULTIQC.get("command", "multiqc"),
+        extra_args=MULTIQC.get("extra_args", "")
+    log:
+        "logs/branches/rnaseq/{project}.alignment.qc.multiqc.log"
+    shell:
+        r"""
+        mkdir -p logs/branches/rnaseq
+        {params.multiqc:q} {params.qc_dir:q} \
+          --outdir {params.outdir:q} \
+          --filename multiqc_report.html \
+          --force \
+          {params.extra_args} \
+          > {log:q} 2>&1
+        test -s {output.report:q}
+        printf "status\treport\nok\t%s\n" {output.report:q} > {output.done:q}
         """
