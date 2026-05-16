@@ -23,6 +23,7 @@ RNASEQ_PREPROCESS = config.get("rnaseq_preprocess", {})
 RNASEQ_ALIGNMENT = config.get("rnaseq_alignment", {})
 RNASEQ_QUANTIFICATION = config.get("rnaseq_quantification", {})
 RNASEQ_DIFFERENTIAL = config.get("rnaseq_differential", {})
+DESEQ2_SMOKE = config.get("deseq2_smoke", {})
 EXECUTION = config.get("execution", {})
 ENVIRONMENT = config.get("environment", {})
 
@@ -34,6 +35,7 @@ ENVIRONMENT_REPORT = PATHS.get("environment_report", "meta/environment_report.ts
 BRANCH_DIR = PATHS.get("branch_dir", "results/branches")
 SRA_CACHE_DIR = PATHS.get("sra_cache_dir", "cache/sra")
 SCRATCH_DIR = PATHS.get("scratch_dir", "work/tmp")
+DESEQ2_SMOKE_DIR = DESEQ2_SMOKE.get("outdir", "results/deseq2_smoke/gene_deseq2")
 RNASEQ_ALIGNER = RNASEQ_ALIGNMENT.get("aligner", "star").strip().lower()
 RNASEQ_ALIGNMENT_REFERENCE_FASTA = RNASEQ_ALIGNMENT.get("reference_fasta", "")
 RNASEQ_HISAT2_INDEX_PREFIX = RNASEQ_ALIGNMENT.get("hisat2_index_prefix", "")
@@ -254,13 +256,32 @@ def planned_branch_targets(wildcards):
     return targets
 
 
+def deseq2_smoke_targets():
+    if not DESEQ2_SMOKE.get("run", False):
+        return []
+    return [
+        f"{DESEQ2_SMOKE_DIR}/environment_report.tsv",
+        f"{DESEQ2_SMOKE_DIR}/contrast_plan.tsv",
+        f"{DESEQ2_SMOKE_DIR}/deseq2_manifest.tsv",
+        f"{DESEQ2_SMOKE_DIR}/deseq2.done",
+    ]
+
+
+def workflow_targets(wildcards):
+    targets = []
+    if not DESEQ2_SMOKE.get("only", False):
+        targets.extend(planned_branch_targets(wildcards))
+        targets.append(ENVIRONMENT_REPORT)
+    targets.extend(deseq2_smoke_targets())
+    return targets
+
+
 localrules: all, check_environment, assay_branch_ready, build_branch_design
 
 
 rule all:
     input:
-        planned_branch_targets,
-        ENVIRONMENT_REPORT
+        workflow_targets
 
 
 rule check_environment:
@@ -1282,6 +1303,94 @@ rule run_gene_deseq2:
     shell:
         r"""
         mkdir -p logs/branches/rnaseq
+        python3 workflow/scripts/run_gene_differential_branch.py \
+          --plan {input.plan:q} \
+          --samples {input.samples:q} \
+          --gene-counts {input.gene_counts:q} \
+          --gene-metadata {input.gene_metadata:q} \
+          --manifest {output.manifest:q} \
+          --done {output.done:q} \
+          --rscript {params.rscript:q} \
+          --deseq2-script {params.deseq2_script:q} \
+          --padj {params.padj:q} \
+          --log2fc {params.log2fc:q} \
+          --min-count {params.min_count:q} \
+          > {log:q} 2>&1
+        """
+
+
+rule plan_deseq2_smoke:
+    input:
+        samples=DESEQ2_SMOKE.get("samples", "tests/differential/gene_samples.tsv"),
+        gene_counts=DESEQ2_SMOKE.get("gene_counts", "tests/differential/gene_counts.tsv")
+    output:
+        f"{DESEQ2_SMOKE_DIR}/contrast_plan.tsv"
+    params:
+        outdir=DESEQ2_SMOKE_DIR,
+        project=DESEQ2_SMOKE.get("project", "ASPIS_DESEQ2_SMOKE"),
+        condition_col=DESEQ2_SMOKE.get("condition_col", "condition"),
+        control_label=DESEQ2_SMOKE.get("control_label", "control"),
+        contrast_by=DESEQ2_SMOKE.get("contrast_by", ["time_h"]),
+        min_replicates=DESEQ2_SMOKE.get("min_replicates_per_group", 2)
+    log:
+        f"{DESEQ2_SMOKE_DIR}/logs/contrast_plan.log"
+    shell:
+        r"""
+        mkdir -p {DESEQ2_SMOKE_DIR:q}/logs
+        python3 workflow/scripts/plan_gene_differential.py \
+          --samples {input.samples:q} \
+          --gene-counts {input.gene_counts:q} \
+          --output {output:q} \
+          --outdir {params.outdir:q} \
+          --project {params.project:q} \
+          --condition-col {params.condition_col:q} \
+          --control-label {params.control_label:q} \
+          --contrast-by {params.contrast_by:q} \
+          --min-replicates {params.min_replicates:q} \
+          > {log:q} 2>&1
+        """
+
+
+rule check_deseq2_smoke_environment:
+    output:
+        f"{DESEQ2_SMOKE_DIR}/environment_report.tsv"
+    params:
+        required_tools=DESEQ2_SMOKE.get("required_tools", RNASEQ_DIFFERENTIAL_REQUIRED_TOOLS),
+        optional_tools=[]
+    log:
+        f"{DESEQ2_SMOKE_DIR}/logs/environment_report.log"
+    shell:
+        r"""
+        mkdir -p {DESEQ2_SMOKE_DIR:q}/logs
+        python3 workflow/scripts/check_environment.py \
+          --output {output:q} \
+          --required-tools {params.required_tools:q} \
+          --optional-tools {params.optional_tools:q} \
+          > {log:q} 2>&1
+        """
+
+
+rule run_deseq2_smoke:
+    input:
+        plan=f"{DESEQ2_SMOKE_DIR}/contrast_plan.tsv",
+        samples=DESEQ2_SMOKE.get("samples", "tests/differential/gene_samples.tsv"),
+        gene_counts=DESEQ2_SMOKE.get("gene_counts", "tests/differential/gene_counts.tsv"),
+        gene_metadata=DESEQ2_SMOKE.get("gene_metadata", "tests/differential/gene_metadata.tsv"),
+        environment=f"{DESEQ2_SMOKE_DIR}/environment_report.tsv"
+    output:
+        manifest=f"{DESEQ2_SMOKE_DIR}/deseq2_manifest.tsv",
+        done=f"{DESEQ2_SMOKE_DIR}/deseq2.done"
+    params:
+        rscript=DESEQ2_SMOKE.get("rscript_command", "Rscript"),
+        deseq2_script=DESEQ2_SMOKE.get("deseq2_script", "workflow/scripts/run_deseq2_gene.R"),
+        padj=DESEQ2_SMOKE.get("padj", 0.1),
+        log2fc=DESEQ2_SMOKE.get("log2fc", 1.0),
+        min_count=DESEQ2_SMOKE.get("min_count", 10)
+    log:
+        f"{DESEQ2_SMOKE_DIR}/logs/deseq2.log"
+    shell:
+        r"""
+        mkdir -p {DESEQ2_SMOKE_DIR:q}/logs
         python3 workflow/scripts/run_gene_differential_branch.py \
           --plan {input.plan:q} \
           --samples {input.samples:q} \

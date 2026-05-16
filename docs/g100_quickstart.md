@@ -374,7 +374,29 @@ contrasts produce per-contrast DESeq2 result tables and normalized counts under:
 results/branches/rnaseq/<PROJECT>/differential/gene_deseq2/contrasts/
 ```
 
-## 8. Optional Snakemake 7 Compatibility Check
+## 8. Differential-Only DESeq2 Smoke Test
+
+ASPIS also includes a DESeq2-only smoke test with synthetic count tables. It
+bypasses materialization, FASTQ QC, alignment, and quantification, so it is the
+cheapest way to confirm that Rscript and DESeq2 work in the environment:
+
+```bash
+snakemake --cores 1 --configfile config/aspis_deseq2_smoke.yaml --printshellcmds
+```
+
+Inspect the key outputs:
+
+```bash
+cat results/deseq2_smoke/gene_deseq2/deseq2.done
+column -t -s $'\t' results/deseq2_smoke/gene_deseq2/contrast_plan.tsv
+column -t -s $'\t' results/deseq2_smoke/gene_deseq2/deseq2_manifest.tsv
+column -t -s $'\t' results/deseq2_smoke/gene_deseq2/contrasts/treated_vs_control__time_h_24/summary.tsv
+```
+
+Expected status is `ok` with one successful contrast and no failed contrasts.
+This is only a software and file-contract test; the counts are synthetic.
+
+## 9. Optional Snakemake 7 Compatibility Check
 
 The new materialization Snakefile only uses basic Snakemake features, so it may
 also run with the existing Snakemake 7.25.3 environment:
