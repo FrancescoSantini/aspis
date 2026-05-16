@@ -57,13 +57,19 @@ rnaseq_alignment:
   aligner: hisat2
   hisat2_command: hisat2
   hisat2_build_command: hisat2-build
+  star_command: STAR
   samtools_command: samtools
   reference_fasta: tests/reference/rnaseq_toy.fa
   hisat2_index_prefix: work/alignment_smoke/reference/rnaseq_toy
+  star_genome_dir: ""
   annotation_gtf: tests/reference/rnaseq_toy.gtf
   strandness: ""
   threads: 2
+  index_threads: 2
   extra_args: ""
+  star_sjdb_overhang: ""
+  star_genome_sa_index_nbases: ""
+  star_extra_index_args: ""
 
 execution:
   default_partition: g100_usr_prod

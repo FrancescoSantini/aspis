@@ -11,6 +11,15 @@ from pathlib import Path
 REQUIRED_COLUMNS = {"library_id", "assay", "project", "layout", "fastq_1"}
 HT2_SUFFIXES = [f".{i}.ht2" for i in range(1, 9)]
 HT2L_SUFFIXES = [f".{i}.ht2l" for i in range(1, 9)]
+STAR_INDEX_FILES = [
+    "Genome",
+    "SA",
+    "SAindex",
+    "chrLength.txt",
+    "chrName.txt",
+    "chrStart.txt",
+    "genomeParameters.txt",
+]
 
 
 def parse_args() -> argparse.Namespace:
@@ -18,7 +27,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--samples", required=True, help="RNA-seq preprocessed samples TSV")
     parser.add_argument("--output", required=True, help="Alignment plan TSV")
     parser.add_argument("--project", required=True, help="Project ID")
+    parser.add_argument("--aligner", default="hisat2", help="Alignment backend: hisat2 or star")
     parser.add_argument("--index-prefix", default="", help="HISAT2 index prefix")
+    parser.add_argument("--star-genome-dir", default="", help="STAR genome index directory")
     parser.add_argument("--annotation-gtf", default="", help="Optional annotation GTF path")
     return parser.parse_args()
 
@@ -81,26 +92,51 @@ def index_files(prefix: str) -> tuple[list[Path], list[Path]]:
     return [], missing
 
 
+def star_index_files(genome_dir: str) -> tuple[list[Path], list[Path]]:
+    files = [Path(genome_dir) / filename for filename in STAR_INDEX_FILES]
+    missing = [path for path in files if not path.exists()]
+    return ([] if missing else files), missing
+
+
 def build_plan(
     rows: list[dict[str, str]],
     project: str,
+    aligner: str,
     index_prefix: str,
+    star_genome_dir: str,
     annotation_gtf: str,
 ) -> dict[str, str]:
     reasons = validate_samples(rows, project)
+    aligner = aligner.strip().lower()
     index_prefix = index_prefix.strip()
+    star_genome_dir = star_genome_dir.strip()
     annotation_gtf = annotation_gtf.strip()
 
-    files = []
-    if not index_prefix:
-        reasons.append("rnaseq_alignment.hisat2_index_prefix is not configured")
-    else:
-        files, missing = index_files(index_prefix)
-        if missing:
-            reasons.append(
-                "HISAT2 index files are missing for prefix "
-                f"{index_prefix!r}: " + ", ".join(str(path) for path in missing)
-            )
+    if aligner not in {"hisat2", "star"}:
+        reasons.append(f"unsupported rnaseq_alignment.aligner: {aligner!r}")
+
+    hisat2_files = []
+    star_files = []
+    if aligner == "hisat2":
+        if not index_prefix:
+            reasons.append("rnaseq_alignment.hisat2_index_prefix is not configured")
+        else:
+            hisat2_files, missing = index_files(index_prefix)
+            if missing:
+                reasons.append(
+                    "HISAT2 index files are missing for prefix "
+                    f"{index_prefix!r}: " + ", ".join(str(path) for path in missing)
+                )
+    elif aligner == "star":
+        if not star_genome_dir:
+            reasons.append("rnaseq_alignment.star_genome_dir is not configured")
+        else:
+            star_files, missing = star_index_files(star_genome_dir)
+            if missing:
+                reasons.append(
+                    "STAR index files are missing from genome directory "
+                    f"{star_genome_dir!r}: " + ", ".join(str(path) for path in missing)
+                )
 
     annotation_status = "not_configured"
     if annotation_gtf:
@@ -120,9 +156,11 @@ def build_plan(
         "n_single": str(sum(1 for row in rows if row.get("layout") == "single")),
         "n_paired": str(sum(1 for row in rows if row.get("layout") == "paired")),
         "libraries": ",".join(row.get("library_id", "") for row in rows),
-        "aligner": "hisat2",
+        "aligner": aligner,
         "hisat2_index_prefix": index_prefix,
-        "hisat2_index_files": ",".join(str(path) for path in files),
+        "hisat2_index_files": ",".join(str(path) for path in hisat2_files),
+        "star_genome_dir": star_genome_dir,
+        "star_index_files": ",".join(str(path) for path in star_files),
         "annotation_gtf": annotation_gtf,
         "annotation_status": annotation_status,
     }
@@ -141,6 +179,8 @@ def write_plan(path: Path, row: dict[str, str]) -> None:
         "aligner",
         "hisat2_index_prefix",
         "hisat2_index_files",
+        "star_genome_dir",
+        "star_index_files",
         "annotation_gtf",
         "annotation_status",
     ]
@@ -154,7 +194,14 @@ def write_plan(path: Path, row: dict[str, str]) -> None:
 def main() -> int:
     args = parse_args()
     rows = read_samples(Path(args.samples))
-    plan = build_plan(rows, args.project, args.index_prefix, args.annotation_gtf)
+    plan = build_plan(
+        rows,
+        args.project,
+        args.aligner,
+        args.index_prefix,
+        args.star_genome_dir,
+        args.annotation_gtf,
+    )
     write_plan(Path(args.output), plan)
     return 0
 

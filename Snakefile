@@ -32,12 +32,28 @@ ENVIRONMENT_REPORT = PATHS.get("environment_report", "meta/environment_report.ts
 BRANCH_DIR = PATHS.get("branch_dir", "results/branches")
 SRA_CACHE_DIR = PATHS.get("sra_cache_dir", "cache/sra")
 SCRATCH_DIR = PATHS.get("scratch_dir", "work/tmp")
-RNASEQ_ALIGNMENT_INDEX_PREFIX = RNASEQ_ALIGNMENT.get("hisat2_index_prefix", "")
+RNASEQ_ALIGNER = RNASEQ_ALIGNMENT.get("aligner", "star").strip().lower()
 RNASEQ_ALIGNMENT_REFERENCE_FASTA = RNASEQ_ALIGNMENT.get("reference_fasta", "")
-RNASEQ_ALIGNMENT_INDEX_FILES = (
-    expand(RNASEQ_ALIGNMENT_INDEX_PREFIX + ".{n}.ht2", n=range(1, 9))
-    if RNASEQ_ALIGNMENT_INDEX_PREFIX and RNASEQ_ALIGNMENT_REFERENCE_FASTA
+RNASEQ_HISAT2_INDEX_PREFIX = RNASEQ_ALIGNMENT.get("hisat2_index_prefix", "")
+RNASEQ_HISAT2_INDEX_FILES = (
+    expand(RNASEQ_HISAT2_INDEX_PREFIX + ".{n}.ht2", n=range(1, 9))
+    if RNASEQ_ALIGNMENT.get("run", False)
+    and RNASEQ_ALIGNER == "hisat2"
+    and RNASEQ_HISAT2_INDEX_PREFIX
+    and RNASEQ_ALIGNMENT_REFERENCE_FASTA
     else []
+)
+RNASEQ_STAR_GENOME_DIR = RNASEQ_ALIGNMENT.get("star_genome_dir", "")
+RNASEQ_STAR_INDEX_DONE = (
+    f"{RNASEQ_STAR_GENOME_DIR}/.aspis_star_index.done"
+    if RNASEQ_ALIGNMENT.get("run", False)
+    and RNASEQ_ALIGNER == "star"
+    and RNASEQ_STAR_GENOME_DIR
+    and RNASEQ_ALIGNMENT_REFERENCE_FASTA
+    else ""
+)
+RNASEQ_ALIGNMENT_INDEX_INPUTS = RNASEQ_HISAT2_INDEX_FILES + (
+    [RNASEQ_STAR_INDEX_DONE] if RNASEQ_STAR_INDEX_DONE else []
 )
 
 
@@ -87,9 +103,14 @@ BASE_REQUIRED_TOOLS = ENVIRONMENT.get("required_tools", ["python3", "snakemake"]
 SRA_REQUIRED_TOOLS = ENVIRONMENT.get("sra_required_tools", ["prefetch", "fasterq-dump"])
 SRA_LIMITED_REQUIRED_TOOLS = ENVIRONMENT.get("sra_limited_required_tools", ["fastq-dump"])
 RNASEQ_REQUIRED_TOOLS = ENVIRONMENT.get("rnaseq_required_tools", ["fastp"])
+DEFAULT_RNASEQ_ALIGNMENT_TOOLS = (
+    ["STAR", "samtools"]
+    if RNASEQ_ALIGNER == "star"
+    else ["hisat2", "hisat2-build", "samtools"]
+)
 RNASEQ_ALIGNMENT_REQUIRED_TOOLS = ENVIRONMENT.get(
     "rnaseq_alignment_required_tools",
-    ["hisat2", "hisat2-build", "samtools"],
+    DEFAULT_RNASEQ_ALIGNMENT_TOOLS,
 )
 OPTIONAL_TOOLS = ENVIRONMENT.get("optional_tools", ["vdb-validate"])
 ACTIVE_SRA_REQUIRED_TOOLS = (
@@ -206,15 +227,15 @@ rule check_environment:
         """
 
 
-if RNASEQ_ALIGNMENT_INDEX_FILES:
+if RNASEQ_HISAT2_INDEX_FILES:
     rule build_rnaseq_hisat2_index:
         input:
             fasta=RNASEQ_ALIGNMENT_REFERENCE_FASTA
         output:
-            RNASEQ_ALIGNMENT_INDEX_FILES
+            RNASEQ_HISAT2_INDEX_FILES
         params:
-            prefix=RNASEQ_ALIGNMENT_INDEX_PREFIX,
-            index_dir=str(Path(RNASEQ_ALIGNMENT_INDEX_PREFIX).parent),
+            prefix=RNASEQ_HISAT2_INDEX_PREFIX,
+            index_dir=str(Path(RNASEQ_HISAT2_INDEX_PREFIX).parent),
             hisat2_build=RNASEQ_ALIGNMENT.get("hisat2_build_command", "hisat2-build")
         log:
             "logs/references/rnaseq_hisat2_index.log"
@@ -222,6 +243,40 @@ if RNASEQ_ALIGNMENT_INDEX_FILES:
             r"""
             mkdir -p logs/references {params.index_dir:q}
             {params.hisat2_build:q} {input.fasta:q} {params.prefix:q} > {log:q} 2>&1
+            """
+
+
+if RNASEQ_STAR_INDEX_DONE:
+    rule build_rnaseq_star_index:
+        input:
+            fasta=RNASEQ_ALIGNMENT_REFERENCE_FASTA
+        output:
+            RNASEQ_STAR_INDEX_DONE
+        params:
+            genome_dir=RNASEQ_STAR_GENOME_DIR,
+            star=RNASEQ_ALIGNMENT.get("star_command", "STAR"),
+            annotation_gtf=RNASEQ_ALIGNMENT.get("annotation_gtf", ""),
+            sjdb_overhang=RNASEQ_ALIGNMENT.get("star_sjdb_overhang", ""),
+            genome_sa_index_nbases=RNASEQ_ALIGNMENT.get("star_genome_sa_index_nbases", ""),
+            extra_args=RNASEQ_ALIGNMENT.get("star_extra_index_args", "")
+        threads:
+            RNASEQ_ALIGNMENT.get("index_threads", RNASEQ_ALIGNMENT.get("threads", 4))
+        log:
+            "logs/references/rnaseq_star_index.log"
+        shell:
+            r"""
+            mkdir -p logs/references
+            python3 workflow/scripts/build_star_index.py \
+              --fasta {input.fasta:q} \
+              --genome-dir {params.genome_dir:q} \
+              --done {output:q} \
+              --star {params.star:q} \
+              --threads {threads:q} \
+              --annotation-gtf {params.annotation_gtf:q} \
+              --sjdb-overhang {params.sjdb_overhang:q} \
+              --genome-sa-index-nbases {params.genome_sa_index_nbases:q} \
+              --extra-args {params.extra_args:q} \
+              > {log:q} 2>&1
             """
 
 
@@ -601,13 +656,19 @@ rule plan_rnaseq_alignment:
         samples=f"{BRANCH_DIR}" + "/rnaseq/{project}/preprocess/preprocessed_samples.tsv",
         preprocess_done=f"{BRANCH_DIR}" + "/rnaseq/{project}/preprocess/preprocess.done",
         qc_done=f"{BRANCH_DIR}" + "/rnaseq/{project}/preprocess/multiqc/multiqc.done",
-        index_files=RNASEQ_ALIGNMENT_INDEX_FILES
+        index_files=RNASEQ_ALIGNMENT_INDEX_INPUTS
     output:
         f"{BRANCH_DIR}" + "/rnaseq/{project}/alignment/alignment_plan.tsv"
     params:
+        aligner=RNASEQ_ALIGNER,
         index_prefix_flag=(
-            "--index-prefix " + shlex.quote(RNASEQ_ALIGNMENT.get("hisat2_index_prefix", ""))
-            if RNASEQ_ALIGNMENT.get("hisat2_index_prefix", "")
+            "--index-prefix " + shlex.quote(RNASEQ_HISAT2_INDEX_PREFIX)
+            if RNASEQ_HISAT2_INDEX_PREFIX
+            else ""
+        ),
+        star_genome_dir_flag=(
+            "--star-genome-dir " + shlex.quote(RNASEQ_STAR_GENOME_DIR)
+            if RNASEQ_STAR_GENOME_DIR
             else ""
         ),
         annotation_gtf_flag=(
@@ -624,7 +685,9 @@ rule plan_rnaseq_alignment:
           --samples {input.samples:q} \
           --output {output:q} \
           --project {wildcards.project:q} \
+          --aligner {params.aligner:q} \
           {params.index_prefix_flag} \
+          {params.star_genome_dir_flag} \
           {params.annotation_gtf_flag} \
           > {log:q} 2>&1
         """
@@ -662,6 +725,7 @@ rule align_rnaseq_branch:
     params:
         outdir=lambda wildcards: f"{BRANCH_DIR}/rnaseq/{wildcards.project}/alignment",
         hisat2=RNASEQ_ALIGNMENT.get("hisat2_command", "hisat2"),
+        star=RNASEQ_ALIGNMENT.get("star_command", "STAR"),
         samtools=RNASEQ_ALIGNMENT.get("samtools_command", "samtools"),
         strandness_flag=(
             "--strandness " + shlex.quote(RNASEQ_ALIGNMENT.get("strandness", ""))
@@ -688,6 +752,7 @@ rule align_rnaseq_branch:
           --done {output.done:q} \
           --threads {threads:q} \
           --hisat2 {params.hisat2:q} \
+          --star {params.star:q} \
           --samtools {params.samtools:q} \
           {params.strandness_flag} \
           {params.extra_args_flag} \

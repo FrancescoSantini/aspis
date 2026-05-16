@@ -78,6 +78,8 @@ which multiqc
 multiqc --version
 which fastp
 fastp --version
+which STAR
+STAR --version
 which hisat2
 hisat2 --version
 which hisat2-build
@@ -184,14 +186,16 @@ RNA-seq branch `preprocess/preprocessed_samples.tsv` files point downstream
 rules at fastp-preprocessed FASTQs and preserve the original paths as
 `raw_fastq_1` / `raw_fastq_2`.
 RNA-seq `alignment/alignment_plan.tsv` is expected to say `blocked` in the
-default toy test, because no HISAT2 reference index is configured yet.
+default toy test, because no reference index is configured yet.
 
 To run real RNA-seq alignment later, configure a reference and opt in:
 
 ```yaml
 rnaseq_alignment:
   run: true
-  hisat2_index_prefix: /path/to/hisat2/index/prefix
+  aligner: star
+  reference_fasta: /path/to/genome.fa
+  star_genome_dir: /path/to/star/genomeDir
   annotation_gtf: /path/to/annotation.gtf
 ```
 
@@ -207,9 +211,9 @@ results/branches/rnaseq/<PROJECT>/alignment/qc/multiqc/multiqc_report.html
 results/branches/rnaseq/<PROJECT>/alignment/qc/multiqc/multiqc.done
 ```
 
-## 4. Local RNA-seq Alignment Smoke Test
+## 4. Local HISAT2 RNA-seq Alignment Smoke Test
 
-ASPIS includes an isolated alignment smoke-test config. It builds a tiny
+ASPIS includes an isolated HISAT2 alignment smoke-test config. It builds a tiny
 synthetic HISAT2 index from `tests/reference/rnaseq_toy.fa`, uses the same local
 FASTQ fixtures as the default test, and writes all outputs under isolated
 `alignment_smoke` paths.
@@ -249,7 +253,49 @@ results/alignment_smoke/branches/rnaseq/ASPIS_TEST/alignment/qc/multiqc/multiqc_
 This test validates the workflow mechanics only. It should not be interpreted as
 a biologically meaningful mapping result.
 
-## 5. Optional Snakemake 7 Compatibility Check
+## 5. Local STAR RNA-seq Alignment Smoke Test
+
+STAR is the recommended RNA-seq aligner for full runs. ASPIS also includes an
+isolated STAR smoke-test config that builds a tiny STAR index from the same
+synthetic reference and writes outputs under isolated `star_alignment_smoke`
+paths.
+
+Run it locally with one core:
+
+```bash
+snakemake --cores 1 --configfile config/aspis_star_alignment_smoke.yaml --printshellcmds
+```
+
+Inspect the key outputs:
+
+```bash
+cat results/star_alignment_smoke/branches/rnaseq/ASPIS_TEST/alignment/alignment_plan.tsv
+cat results/star_alignment_smoke/branches/rnaseq/ASPIS_TEST/alignment/aligned_samples.tsv
+cat results/star_alignment_smoke/branches/rnaseq/ASPIS_TEST/alignment/alignment.done
+cat results/star_alignment_smoke/branches/rnaseq/ASPIS_TEST/alignment/qc/alignment_qc_manifest.tsv
+cat results/star_alignment_smoke/branches/rnaseq/ASPIS_TEST/alignment/qc/alignment_qc.done
+ls -lh results/star_alignment_smoke/branches/rnaseq/ASPIS_TEST/alignment/qc/multiqc/multiqc_report.html
+ls -lh results/star_alignment_smoke/branches/rnaseq/ASPIS_TEST/alignment/example_se
+ls -lh results/star_alignment_smoke/branches/rnaseq/ASPIS_TEST/alignment/example_pe
+```
+
+Expected additional outputs include:
+
+```text
+work/star_alignment_smoke/reference/star/.aspis_star_index.done
+results/star_alignment_smoke/branches/rnaseq/ASPIS_TEST/alignment/alignment_plan.tsv
+results/star_alignment_smoke/branches/rnaseq/ASPIS_TEST/alignment/aligned_samples.tsv
+results/star_alignment_smoke/branches/rnaseq/ASPIS_TEST/alignment/alignment.done
+results/star_alignment_smoke/branches/rnaseq/ASPIS_TEST/alignment/example_se/aligned.sorted.bam
+results/star_alignment_smoke/branches/rnaseq/ASPIS_TEST/alignment/example_pe/aligned.sorted.bam
+results/star_alignment_smoke/branches/rnaseq/ASPIS_TEST/alignment/qc/alignment_qc_manifest.tsv
+results/star_alignment_smoke/branches/rnaseq/ASPIS_TEST/alignment/qc/multiqc/multiqc_report.html
+```
+
+This test validates the workflow mechanics only. It should not be interpreted as
+a biologically meaningful mapping result.
+
+## 6. Optional Snakemake 7 Compatibility Check
 
 The new materialization Snakefile only uses basic Snakemake features, so it may
 also run with the existing Snakemake 7.25.3 environment:
@@ -263,7 +309,7 @@ snakemake --cores 1 --dry-run
 This is only a short-term compatibility check. The refactored ASPIS SLURM
 profile targets Snakemake 9.
 
-## 6. SLURM Profile Dry Run
+## 7. SLURM Profile Dry Run
 
 After the local test works with `aspis-smk9`, check the modern SLURM profile:
 
@@ -320,7 +366,7 @@ Do not use real SLURM submissions for routine development. Keep development and
 fixture tests local with `--cores 1`; reserve SLURM for final dry-runs, account
 validation, and full analyses.
 
-## 7. Public Accession Test
+## 8. Public Accession Test
 
 After local FASTQ materialization works, use the isolated smoke-test config to
 test one public `SRR`, `ERR`, or `DRR` accession without overwriting the default
@@ -356,7 +402,7 @@ cat logs/materialize/<library_id>.log
 
 Those lines are useful for a CINECA support ticket.
 
-## 8. Useful Diagnostics for CINECA Tickets
+## 9. Useful Diagnostics for CINECA Tickets
 
 ```bash
 hostname
