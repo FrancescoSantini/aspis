@@ -7,6 +7,7 @@ import argparse
 import csv
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 
 
@@ -61,6 +62,13 @@ def require_nonempty(path: Path, label: str) -> None:
         raise RuntimeError(f"gffcompare did not produce {label}: {path}")
 
 
+def log_tail(path: Path, max_lines: int = 20) -> str:
+    if not path.exists() or path.stat().st_size == 0:
+        return ""
+    lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+    return "\n".join(lines[-max_lines:])
+
+
 def copy_first(paths: list[Path], output: Path, label: str, required: bool = True) -> None:
     for path in paths:
         if path.exists() and path.stat().st_size > 0:
@@ -71,6 +79,30 @@ def copy_first(paths: list[Path], output: Path, label: str, required: bool = Tru
         raise RuntimeError(f"Could not find gffcompare {label}: {', '.join(str(path) for path in paths)}")
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text("", encoding="utf-8")
+
+
+def gffcompare_map_candidates(outdir: Path, merged_gtf: Path, prefix: str, suffix: str) -> list[Path]:
+    """Return possible gffcompare per-query map files.
+
+    gffcompare writes .tmap/.refmap per input query, and those files can appear
+    next to the query GTF rather than next to the main output prefix.
+    """
+    candidates = [
+        outdir / f"{prefix}.{merged_gtf.name}.{suffix}",
+        merged_gtf.parent / f"{prefix}.{merged_gtf.name}.{suffix}",
+        Path(f"{prefix}.{merged_gtf.name}.{suffix}"),
+    ]
+    candidates.extend(sorted(outdir.glob(f"{prefix}.*.{suffix}")))
+    candidates.extend(sorted(merged_gtf.parent.glob(f"{prefix}.*.{suffix}")))
+
+    unique = []
+    seen = set()
+    for path in candidates:
+        key = str(path)
+        if key not in seen:
+            unique.append(path)
+            seen.add(key)
+    return unique
 
 
 def main() -> int:
@@ -84,6 +116,7 @@ def main() -> int:
     outdir = Path(args.outdir)
     outdir.mkdir(parents=True, exist_ok=True)
     prefix_path = outdir / args.prefix
+    stderr_log = outdir / f"{args.prefix}.stderr.log"
     command = [
         gffcompare,
         "-r",
@@ -95,12 +128,14 @@ def main() -> int:
 
     print("[CMD] " + " ".join(command))
     completed = subprocess.run(command, check=False, capture_output=True, text=True)
-    if completed.stdout:
-        print(completed.stdout, end="")
-    if completed.stderr:
-        print(completed.stderr, end="")
+    stderr_log.write_text(
+        (completed.stdout or "") + (completed.stderr or ""),
+        encoding="utf-8",
+    )
     if completed.returncode != 0:
-        raise RuntimeError(f"gffcompare failed with status {completed.returncode}")
+        tail = log_tail(stderr_log)
+        detail = f"\nLast lines from {stderr_log}:\n{tail}" if tail else f"\nLog file: {stderr_log}"
+        raise RuntimeError(f"gffcompare failed with status {completed.returncode}{detail}")
 
     raw_annotated = prefix_path.with_suffix(".annotated.gtf")
     raw_tracking = prefix_path.with_suffix(".tracking")
@@ -115,8 +150,8 @@ def main() -> int:
     shutil.copyfile(raw_annotated, annotated_gtf)
     shutil.copyfile(raw_tracking, tracking)
 
-    tmap_candidates = sorted(outdir.glob(f"{args.prefix}.*.tmap"))
-    refmap_candidates = sorted(outdir.glob(f"{args.prefix}.*.refmap"))
+    tmap_candidates = gffcompare_map_candidates(outdir, merged_gtf, args.prefix, "tmap")
+    refmap_candidates = gffcompare_map_candidates(outdir, merged_gtf, args.prefix, "refmap")
     copy_first(tmap_candidates, tmap, "tmap", required=True)
     copy_first(refmap_candidates, refmap, "refmap", required=False)
 
@@ -131,4 +166,8 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    try:
+        raise SystemExit(main())
+    except Exception as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        raise SystemExit(1)
