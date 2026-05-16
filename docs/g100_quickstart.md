@@ -92,6 +92,8 @@ which stringtie
 stringtie --version
 which gffcompare
 gffcompare --version
+which Rscript
+Rscript --version
 ```
 
 Expected major version:
@@ -345,7 +347,34 @@ results/quantification_smoke/branches/rnaseq/ASPIS_TEST/quantification/counts/tr
 This test validates workflow mechanics and file contracts only. It should not
 be interpreted as a biologically meaningful quantification result.
 
-## 7. Optional Snakemake 7 Compatibility Check
+## 7. Gene-Level DESeq2 Stage
+
+Gene-level differential expression is disabled by default. Enable it only after
+RNA-seq quantification is working and your design has enough biological
+replicates per group:
+
+```yaml
+rnaseq_differential:
+  run: true
+  contrast_by:
+    - time_h
+  min_replicates_per_group: 2
+```
+
+The stage writes a contrast plan before running DESeq2:
+
+```bash
+column -t -s $'\t' results/branches/rnaseq/<PROJECT>/differential/gene_deseq2/contrast_plan.tsv
+```
+
+Contrasts without enough samples are marked `blocked` with a reason. Ready
+contrasts produce per-contrast DESeq2 result tables and normalized counts under:
+
+```text
+results/branches/rnaseq/<PROJECT>/differential/gene_deseq2/contrasts/
+```
+
+## 8. Optional Snakemake 7 Compatibility Check
 
 The new materialization Snakefile only uses basic Snakemake features, so it may
 also run with the existing Snakemake 7.25.3 environment:

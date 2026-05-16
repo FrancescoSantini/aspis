@@ -93,6 +93,20 @@ rnaseq_quantification:
   known_codes_lenient: "=,j,c,o"
   gene_type_view: strict
 
+rnaseq_differential:
+  run: false
+  method: deseq2
+  rscript_command: Rscript
+  deseq2_script: workflow/scripts/run_deseq2_gene.R
+  condition_col: condition
+  control_label: control
+  contrast_by:
+    - time_h
+  min_replicates_per_group: 2
+  min_count: 10
+  padj: 0.1
+  log2fc: 1.0
+
 execution:
   default_partition: g100_usr_prod
   download_partition: g100_all_serial
@@ -112,6 +126,8 @@ environment:
     - featureCounts
     - stringtie
     - gffcompare
+  rnaseq_differential_required_tools:
+    - Rscript
   sra_required_tools:
     - prefetch
     - fasterq-dump

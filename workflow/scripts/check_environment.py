@@ -25,6 +25,7 @@ VERSION_COMMANDS = {
     "featureCounts": ["featureCounts", "-v"],
     "stringtie": ["stringtie", "--version"],
     "gffcompare": ["gffcompare", "--version"],
+    "Rscript": ["Rscript", "--version"],
     "vdb-validate": ["vdb-validate", "--version"],
 }
 
