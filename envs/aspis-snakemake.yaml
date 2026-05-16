@@ -16,3 +16,6 @@ dependencies:
   - star
   - hisat2
   - samtools
+  - subread
+  - stringtie
+  - gffcompare

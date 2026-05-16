@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ASPIS RNA-seq quantification plan row",
+  "type": "object",
+  "required": [
+    "project",
+    "assay",
+    "status",
+    "transcriptome_mode",
+    "gene_counter",
+    "annotation_gtf",
+    "read_length"
+  ],
+  "properties": {
+    "project": {
+      "type": "string"
+    },
+    "assay": {
+      "type": "string",
+      "enum": ["rnaseq"]
+    },
+    "status": {
+      "type": "string",
+      "enum": ["ready", "blocked"]
+    },
+    "reason": {
+      "type": "string"
+    },
+    "transcriptome_mode": {
+      "type": "string",
+      "enum": ["reference_guided_novel"]
+    },
+    "gene_counter": {
+      "type": "string",
+      "enum": ["featurecounts"]
+    },
+    "annotation_gtf": {
+      "type": "string"
+    },
+    "reference_fasta": {
+      "type": "string"
+    },
+    "read_length": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": {
+    "type": "string"
+  }
+}

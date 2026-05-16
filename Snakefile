@@ -21,6 +21,7 @@ FASTQC = config.get("fastqc", {})
 MULTIQC = config.get("multiqc", {})
 RNASEQ_PREPROCESS = config.get("rnaseq_preprocess", {})
 RNASEQ_ALIGNMENT = config.get("rnaseq_alignment", {})
+RNASEQ_QUANTIFICATION = config.get("rnaseq_quantification", {})
 EXECUTION = config.get("execution", {})
 ENVIRONMENT = config.get("environment", {})
 
@@ -55,6 +56,8 @@ RNASEQ_STAR_INDEX_DONE = (
 RNASEQ_ALIGNMENT_INDEX_INPUTS = RNASEQ_HISAT2_INDEX_FILES + (
     [RNASEQ_STAR_INDEX_DONE] if RNASEQ_STAR_INDEX_DONE else []
 )
+if RNASEQ_QUANTIFICATION.get("run", False) and not RNASEQ_ALIGNMENT.get("run", False):
+    raise ValueError("rnaseq_quantification.run requires rnaseq_alignment.run: true")
 
 
 def read_intake(path):
@@ -111,6 +114,10 @@ DEFAULT_RNASEQ_ALIGNMENT_TOOLS = (
 RNASEQ_ALIGNMENT_REQUIRED_TOOLS = ENVIRONMENT.get(
     "rnaseq_alignment_required_tools",
     DEFAULT_RNASEQ_ALIGNMENT_TOOLS,
+)
+RNASEQ_QUANTIFICATION_REQUIRED_TOOLS = ENVIRONMENT.get(
+    "rnaseq_quantification_required_tools",
+    ["featureCounts", "stringtie", "gffcompare"],
 )
 OPTIONAL_TOOLS = ENVIRONMENT.get("optional_tools", ["vdb-validate"])
 ACTIVE_SRA_REQUIRED_TOOLS = (
@@ -196,6 +203,32 @@ def planned_branch_targets(wildcards):
                             f"{BRANCH_DIR}/{assay}/{project}/alignment/qc/multiqc/multiqc.done",
                         ]
                     )
+                    if RNASEQ_QUANTIFICATION.get("run", False):
+                        targets.extend(
+                            [
+                                f"{BRANCH_DIR}/{assay}/{project}/quantification/environment_report.tsv",
+                                f"{BRANCH_DIR}/{assay}/{project}/quantification/quantification_plan.tsv",
+                                f"{BRANCH_DIR}/{assay}/{project}/quantification/featurecounts/gene_counts.tsv",
+                                f"{BRANCH_DIR}/{assay}/{project}/quantification/featurecounts/gene_metadata.tsv",
+                                f"{BRANCH_DIR}/{assay}/{project}/quantification/featurecounts/featurecounts_manifest.tsv",
+                                f"{BRANCH_DIR}/{assay}/{project}/quantification/featurecounts/featurecounts.done",
+                                f"{BRANCH_DIR}/{assay}/{project}/quantification/stringtie/assembly_manifest.tsv",
+                                f"{BRANCH_DIR}/{assay}/{project}/quantification/stringtie/assembly.done",
+                                f"{BRANCH_DIR}/{assay}/{project}/quantification/stringtie/merge/assemblies.txt",
+                                f"{BRANCH_DIR}/{assay}/{project}/quantification/stringtie/merge/merged.gtf",
+                                f"{BRANCH_DIR}/{assay}/{project}/quantification/stringtie/merge/merge.done",
+                                f"{BRANCH_DIR}/{assay}/{project}/quantification/gffcompare/annotated.gtf",
+                                f"{BRANCH_DIR}/{assay}/{project}/quantification/gffcompare/tracking.tsv",
+                                f"{BRANCH_DIR}/{assay}/{project}/quantification/gffcompare/merged.tmap",
+                                f"{BRANCH_DIR}/{assay}/{project}/quantification/gffcompare/gffcompare.done",
+                                f"{BRANCH_DIR}/{assay}/{project}/quantification/stringtie/quant_manifest.tsv",
+                                f"{BRANCH_DIR}/{assay}/{project}/quantification/stringtie/quantification.done",
+                                f"{BRANCH_DIR}/{assay}/{project}/quantification/counts/transcript_counts.tsv",
+                                f"{BRANCH_DIR}/{assay}/{project}/quantification/counts/transcript_metadata.tsv",
+                                f"{BRANCH_DIR}/{assay}/{project}/quantification/counts/transcript_counts.done",
+                                f"{BRANCH_DIR}/{assay}/{project}/quantification/counts/quantification.done",
+                            ]
+                        )
     return targets
 
 
@@ -813,4 +846,302 @@ rule run_rnaseq_alignment_multiqc:
           > {log:q} 2>&1
         test -s {output.report:q}
         printf "status\treport\nok\t%s\n" {output.report:q} > {output.done:q}
+        """
+
+
+rule plan_rnaseq_quantification:
+    input:
+        samples=f"{BRANCH_DIR}" + "/rnaseq/{project}/alignment/aligned_samples.tsv",
+        alignment_plan=f"{BRANCH_DIR}" + "/rnaseq/{project}/alignment/alignment_plan.tsv",
+        alignment_qc_done=f"{BRANCH_DIR}" + "/rnaseq/{project}/alignment/qc/alignment_qc.done",
+        alignment_multiqc_done=f"{BRANCH_DIR}" + "/rnaseq/{project}/alignment/qc/multiqc/multiqc.done"
+    output:
+        f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/quantification_plan.tsv"
+    params:
+        transcriptome_mode=RNASEQ_QUANTIFICATION.get("transcriptome_mode", "reference_guided_novel"),
+        gene_counter=RNASEQ_QUANTIFICATION.get("gene_counter", "featurecounts"),
+        reference_fasta=RNASEQ_QUANTIFICATION.get(
+            "reference_fasta",
+            RNASEQ_ALIGNMENT.get("reference_fasta", ""),
+        ),
+        annotation_gtf=RNASEQ_QUANTIFICATION.get(
+            "annotation_gtf",
+            RNASEQ_ALIGNMENT.get("annotation_gtf", ""),
+        ),
+        read_length=RNASEQ_QUANTIFICATION.get("read_length", 75)
+    log:
+        "logs/branches/rnaseq/{project}.quantification_plan.log"
+    shell:
+        r"""
+        mkdir -p logs/branches/rnaseq
+        python3 workflow/scripts/plan_rnaseq_quantification.py \
+          --aligned-samples {input.samples:q} \
+          --alignment-plan {input.alignment_plan:q} \
+          --output {output:q} \
+          --project {wildcards.project:q} \
+          --transcriptome-mode {params.transcriptome_mode:q} \
+          --gene-counter {params.gene_counter:q} \
+          --reference-fasta {params.reference_fasta:q} \
+          --annotation-gtf {params.annotation_gtf:q} \
+          --read-length {params.read_length:q} \
+          > {log:q} 2>&1
+        """
+
+
+rule check_rnaseq_quantification_environment:
+    input:
+        plan=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/quantification_plan.tsv"
+    output:
+        f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/environment_report.tsv"
+    params:
+        required_tools=RNASEQ_QUANTIFICATION_REQUIRED_TOOLS,
+        optional_tools=[]
+    log:
+        "logs/branches/rnaseq/{project}.quantification.environment.log"
+    shell:
+        r"""
+        mkdir -p logs/branches/rnaseq
+        python3 workflow/scripts/check_environment.py \
+          --output {output:q} \
+          --required-tools {params.required_tools:q} \
+          --optional-tools {params.optional_tools:q} \
+          > {log:q} 2>&1
+        """
+
+
+rule featurecounts_gene_counts:
+    input:
+        samples=f"{BRANCH_DIR}" + "/rnaseq/{project}/alignment/aligned_samples.tsv",
+        plan=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/quantification_plan.tsv",
+        environment=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/environment_report.tsv"
+    output:
+        counts=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/featurecounts/gene_counts.tsv",
+        metadata=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/featurecounts/gene_metadata.tsv",
+        manifest=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/featurecounts/featurecounts_manifest.tsv",
+        done=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/featurecounts/featurecounts.done"
+    params:
+        outdir=lambda wildcards: f"{BRANCH_DIR}/rnaseq/{wildcards.project}/quantification/featurecounts/files",
+        featurecounts=RNASEQ_QUANTIFICATION.get("featurecounts_command", "featureCounts"),
+        single_extra_args=RNASEQ_QUANTIFICATION.get("featurecounts_single_extra_args", ""),
+        paired_extra_args=RNASEQ_QUANTIFICATION.get(
+            "featurecounts_paired_extra_args",
+            "-p --countReadPairs",
+        ),
+        extra_args=RNASEQ_QUANTIFICATION.get("featurecounts_extra_args", "")
+    threads:
+        RNASEQ_QUANTIFICATION.get("featurecounts_threads", RNASEQ_QUANTIFICATION.get("threads", 4))
+    log:
+        "logs/branches/rnaseq/{project}.featurecounts.log"
+    shell:
+        r"""
+        mkdir -p logs/branches/rnaseq
+        python3 workflow/scripts/run_featurecounts_branch.py \
+          --samples {input.samples:q} \
+          --plan {input.plan:q} \
+          --outdir {params.outdir:q} \
+          --counts {output.counts:q} \
+          --metadata {output.metadata:q} \
+          --manifest {output.manifest:q} \
+          --done {output.done:q} \
+          --featurecounts {params.featurecounts:q} \
+          --threads {threads:q} \
+          --single-extra-args {params.single_extra_args:q} \
+          --paired-extra-args {params.paired_extra_args:q} \
+          --extra-args {params.extra_args:q} \
+          > {log:q} 2>&1
+        """
+
+
+rule stringtie_assemble_branch:
+    input:
+        samples=f"{BRANCH_DIR}" + "/rnaseq/{project}/alignment/aligned_samples.tsv",
+        plan=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/quantification_plan.tsv",
+        environment=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/environment_report.tsv"
+    output:
+        manifest=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/stringtie/assembly_manifest.tsv",
+        done=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/stringtie/assembly.done"
+    params:
+        outdir=lambda wildcards: f"{BRANCH_DIR}/rnaseq/{wildcards.project}/quantification/stringtie/assembly",
+        stringtie=RNASEQ_QUANTIFICATION.get("stringtie_command", "stringtie"),
+        strandness=RNASEQ_QUANTIFICATION.get("stringtie_strandness", ""),
+        extra_args=RNASEQ_QUANTIFICATION.get("stringtie_assembly_extra_args", "")
+    threads:
+        RNASEQ_QUANTIFICATION.get("stringtie_threads", RNASEQ_QUANTIFICATION.get("threads", 4))
+    log:
+        "logs/branches/rnaseq/{project}.stringtie_assembly.log"
+    shell:
+        r"""
+        mkdir -p logs/branches/rnaseq
+        python3 workflow/scripts/run_stringtie_assembly_branch.py \
+          --samples {input.samples:q} \
+          --plan {input.plan:q} \
+          --outdir {params.outdir:q} \
+          --manifest {output.manifest:q} \
+          --done {output.done:q} \
+          --stringtie {params.stringtie:q} \
+          --threads {threads:q} \
+          --strandness {params.strandness:q} \
+          --extra-args {params.extra_args:q} \
+          > {log:q} 2>&1
+        """
+
+
+rule merge_stringtie_assemblies:
+    input:
+        manifest=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/stringtie/assembly_manifest.tsv",
+        done=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/stringtie/assembly.done",
+        plan=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/quantification_plan.tsv"
+    output:
+        assemblies=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/stringtie/merge/assemblies.txt",
+        merged=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/stringtie/merge/merged.gtf",
+        done=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/stringtie/merge/merge.done"
+    params:
+        stringtie=RNASEQ_QUANTIFICATION.get("stringtie_command", "stringtie"),
+        extra_args=RNASEQ_QUANTIFICATION.get("stringtie_merge_extra_args", "")
+    log:
+        "logs/branches/rnaseq/{project}.stringtie_merge.log"
+    shell:
+        r"""
+        mkdir -p logs/branches/rnaseq
+        python3 workflow/scripts/merge_stringtie_assemblies.py \
+          --assembly-manifest {input.manifest:q} \
+          --plan {input.plan:q} \
+          --assemblies-list {output.assemblies:q} \
+          --merged-gtf {output.merged:q} \
+          --done {output.done:q} \
+          --stringtie {params.stringtie:q} \
+          --extra-args {params.extra_args:q} \
+          > {log:q} 2>&1
+        """
+
+
+rule gffcompare_stringtie_merge:
+    input:
+        merged=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/stringtie/merge/merged.gtf",
+        merge_done=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/stringtie/merge/merge.done",
+        plan=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/quantification_plan.tsv"
+    output:
+        annotated=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/gffcompare/annotated.gtf",
+        tracking=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/gffcompare/tracking.tsv",
+        tmap=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/gffcompare/merged.tmap",
+        refmap=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/gffcompare/merged.refmap",
+        done=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/gffcompare/gffcompare.done"
+    params:
+        outdir=lambda wildcards: f"{BRANCH_DIR}/rnaseq/{wildcards.project}/quantification/gffcompare/raw",
+        prefix=lambda wildcards: wildcards.project,
+        gffcompare=RNASEQ_QUANTIFICATION.get("gffcompare_command", "gffcompare")
+    log:
+        "logs/branches/rnaseq/{project}.gffcompare.log"
+    shell:
+        r"""
+        mkdir -p logs/branches/rnaseq
+        python3 workflow/scripts/run_gffcompare_branch.py \
+          --merged-gtf {input.merged:q} \
+          --plan {input.plan:q} \
+          --outdir {params.outdir:q} \
+          --prefix {params.prefix:q} \
+          --annotated-gtf {output.annotated:q} \
+          --tracking {output.tracking:q} \
+          --tmap {output.tmap:q} \
+          --refmap {output.refmap:q} \
+          --done {output.done:q} \
+          --gffcompare {params.gffcompare:q} \
+          > {log:q} 2>&1
+        """
+
+
+rule stringtie_quantify_branch:
+    input:
+        samples=f"{BRANCH_DIR}" + "/rnaseq/{project}/alignment/aligned_samples.tsv",
+        plan=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/quantification_plan.tsv",
+        merged=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/stringtie/merge/merged.gtf",
+        gffcompare_done=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/gffcompare/gffcompare.done",
+        environment=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/environment_report.tsv"
+    output:
+        manifest=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/stringtie/quant_manifest.tsv",
+        done=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/stringtie/quantification.done"
+    params:
+        outdir=lambda wildcards: f"{BRANCH_DIR}/rnaseq/{wildcards.project}/quantification/stringtie/quant",
+        stringtie=RNASEQ_QUANTIFICATION.get("stringtie_command", "stringtie"),
+        strandness=RNASEQ_QUANTIFICATION.get("stringtie_strandness", ""),
+        extra_args=RNASEQ_QUANTIFICATION.get("stringtie_quant_extra_args", "")
+    threads:
+        RNASEQ_QUANTIFICATION.get("stringtie_threads", RNASEQ_QUANTIFICATION.get("threads", 4))
+    log:
+        "logs/branches/rnaseq/{project}.stringtie_quantification.log"
+    shell:
+        r"""
+        mkdir -p logs/branches/rnaseq
+        python3 workflow/scripts/run_stringtie_quant_branch.py \
+          --samples {input.samples:q} \
+          --plan {input.plan:q} \
+          --merged-gtf {input.merged:q} \
+          --outdir {params.outdir:q} \
+          --manifest {output.manifest:q} \
+          --done {output.done:q} \
+          --stringtie {params.stringtie:q} \
+          --threads {threads:q} \
+          --strandness {params.strandness:q} \
+          --extra-args {params.extra_args:q} \
+          > {log:q} 2>&1
+        """
+
+
+rule build_stringtie_transcript_matrix:
+    input:
+        quant_manifest=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/stringtie/quant_manifest.tsv",
+        quant_done=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/stringtie/quantification.done",
+        plan=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/quantification_plan.tsv",
+        tmap=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/gffcompare/merged.tmap"
+    output:
+        counts=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/counts/transcript_counts.tsv",
+        metadata=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/counts/transcript_metadata.tsv",
+        done=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/counts/transcript_counts.done"
+    params:
+        known_strict=RNASEQ_QUANTIFICATION.get("known_codes_strict", "=,j"),
+        known_lenient=RNASEQ_QUANTIFICATION.get("known_codes_lenient", "=,j,c,o"),
+        gene_type_view=RNASEQ_QUANTIFICATION.get("gene_type_view", "strict")
+    log:
+        "logs/branches/rnaseq/{project}.transcript_matrix.log"
+    shell:
+        r"""
+        mkdir -p logs/branches/rnaseq
+        python3 workflow/scripts/build_stringtie_transcript_matrix.py \
+          --quant-manifest {input.quant_manifest:q} \
+          --plan {input.plan:q} \
+          --tmap {input.tmap:q} \
+          --counts {output.counts:q} \
+          --metadata {output.metadata:q} \
+          --done {output.done:q} \
+          --known-codes-strict {params.known_strict:q} \
+          --known-codes-lenient {params.known_lenient:q} \
+          --gene-type-view {params.gene_type_view:q} \
+          > {log:q} 2>&1
+        """
+
+
+rule finalize_rnaseq_quantification:
+    input:
+        gene_counts=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/featurecounts/gene_counts.tsv",
+        gene_metadata=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/featurecounts/gene_metadata.tsv",
+        featurecounts_done=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/featurecounts/featurecounts.done",
+        transcript_counts=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/counts/transcript_counts.tsv",
+        transcript_metadata=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/counts/transcript_metadata.tsv",
+        transcript_done=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/counts/transcript_counts.done",
+        annotated=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/gffcompare/annotated.gtf"
+    output:
+        f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/counts/quantification.done"
+    log:
+        "logs/branches/rnaseq/{project}.quantification_finalize.log"
+    shell:
+        r"""
+        mkdir -p logs/branches/rnaseq
+        python3 workflow/scripts/finalize_rnaseq_quantification.py \
+          --gene-counts {input.gene_counts:q} \
+          --gene-metadata {input.gene_metadata:q} \
+          --transcript-counts {input.transcript_counts:q} \
+          --transcript-metadata {input.transcript_metadata:q} \
+          --annotated-gtf {input.annotated:q} \
+          --done {output:q} \
+          > {log:q} 2>&1
         """

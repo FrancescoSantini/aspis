@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ASPIS RNA-seq featureCounts manifest row",
+  "type": "object",
+  "required": [
+    "library_id",
+    "layout",
+    "bam",
+    "featurecounts_output",
+    "featurecounts_log",
+    "status"
+  ],
+  "properties": {
+    "library_id": {
+      "type": "string"
+    },
+    "layout": {
+      "type": "string",
+      "enum": ["single", "paired"]
+    },
+    "bam": {
+      "type": "string"
+    },
+    "featurecounts_output": {
+      "type": "string"
+    },
+    "featurecounts_summary": {
+      "type": "string"
+    },
+    "featurecounts_log": {
+      "type": "string"
+    },
+    "status": {
+      "type": "string",
+      "enum": ["ok"]
+    },
+    "message": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": {
+    "type": "string"
+  }
+}

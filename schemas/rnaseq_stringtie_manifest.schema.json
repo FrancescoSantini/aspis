@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ASPIS RNA-seq StringTie manifest row",
+  "type": "object",
+  "required": [
+    "library_id",
+    "layout",
+    "bam",
+    "status"
+  ],
+  "properties": {
+    "library_id": {
+      "type": "string"
+    },
+    "layout": {
+      "type": "string",
+      "enum": ["single", "paired"]
+    },
+    "bam": {
+      "type": "string"
+    },
+    "assembly_gtf": {
+      "type": "string"
+    },
+    "quant_gtf": {
+      "type": "string"
+    },
+    "gene_abundances": {
+      "type": "string"
+    },
+    "ballgown_dir": {
+      "type": "string"
+    },
+    "assembly_log": {
+      "type": "string"
+    },
+    "quant_log": {
+      "type": "string"
+    },
+    "status": {
+      "type": "string",
+      "enum": ["ok"]
+    },
+    "message": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": {
+    "type": "string"
+  }
+}
