@@ -22,6 +22,7 @@ MULTIQC = config.get("multiqc", {})
 RNASEQ_PREPROCESS = config.get("rnaseq_preprocess", {})
 RNASEQ_ALIGNMENT = config.get("rnaseq_alignment", {})
 RNASEQ_QUANTIFICATION = config.get("rnaseq_quantification", {})
+RNASEQ_DIFFERENTIAL = config.get("rnaseq_differential", {})
 EXECUTION = config.get("execution", {})
 ENVIRONMENT = config.get("environment", {})
 
@@ -58,6 +59,8 @@ RNASEQ_ALIGNMENT_INDEX_INPUTS = RNASEQ_HISAT2_INDEX_FILES + (
 )
 if RNASEQ_QUANTIFICATION.get("run", False) and not RNASEQ_ALIGNMENT.get("run", False):
     raise ValueError("rnaseq_quantification.run requires rnaseq_alignment.run: true")
+if RNASEQ_DIFFERENTIAL.get("run", False) and not RNASEQ_QUANTIFICATION.get("run", False):
+    raise ValueError("rnaseq_differential.run requires rnaseq_quantification.run: true")
 
 
 def read_intake(path):
@@ -118,6 +121,10 @@ RNASEQ_ALIGNMENT_REQUIRED_TOOLS = ENVIRONMENT.get(
 RNASEQ_QUANTIFICATION_REQUIRED_TOOLS = ENVIRONMENT.get(
     "rnaseq_quantification_required_tools",
     ["featureCounts", "stringtie", "gffcompare"],
+)
+RNASEQ_DIFFERENTIAL_REQUIRED_TOOLS = ENVIRONMENT.get(
+    "rnaseq_differential_required_tools",
+    ["Rscript"],
 )
 OPTIONAL_TOOLS = ENVIRONMENT.get("optional_tools", ["vdb-validate"])
 ACTIVE_SRA_REQUIRED_TOOLS = (
@@ -235,6 +242,15 @@ def planned_branch_targets(wildcards):
                                 f"{BRANCH_DIR}/{assay}/{project}/quantification/counts/quantification.done",
                             ]
                         )
+                        if RNASEQ_DIFFERENTIAL.get("run", False):
+                            targets.extend(
+                                [
+                                    f"{BRANCH_DIR}/{assay}/{project}/differential/environment_report.tsv",
+                                    f"{BRANCH_DIR}/{assay}/{project}/differential/gene_deseq2/contrast_plan.tsv",
+                                    f"{BRANCH_DIR}/{assay}/{project}/differential/gene_deseq2/deseq2_manifest.tsv",
+                                    f"{BRANCH_DIR}/{assay}/{project}/differential/gene_deseq2/deseq2.done",
+                                ]
+                            )
     return targets
 
 
@@ -1179,5 +1195,104 @@ rule finalize_rnaseq_quantification:
           --transcript-metadata {input.transcript_metadata:q} \
           --annotated-gtf {input.annotated:q} \
           --done {output:q} \
+          > {log:q} 2>&1
+        """
+
+
+rule check_rnaseq_differential_environment:
+    input:
+        quantification_done=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/counts/quantification.done"
+    output:
+        f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/environment_report.tsv"
+    params:
+        required_tools=RNASEQ_DIFFERENTIAL_REQUIRED_TOOLS,
+        optional_tools=[]
+    log:
+        "logs/branches/rnaseq/{project}.differential.environment.log"
+    shell:
+        r"""
+        mkdir -p logs/branches/rnaseq
+        python3 workflow/scripts/check_environment.py \
+          --output {output:q} \
+          --required-tools {params.required_tools:q} \
+          --optional-tools {params.optional_tools:q} \
+          > {log:q} 2>&1
+        """
+
+
+rule plan_gene_differential:
+    input:
+        samples=f"{BRANCH_DIR}" + "/rnaseq/{project}/samples.tsv",
+        gene_counts=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/featurecounts/gene_counts.tsv",
+        quantification_done=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/counts/quantification.done"
+    output:
+        f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/gene_deseq2/contrast_plan.tsv"
+    params:
+        outdir=lambda wildcards: f"{BRANCH_DIR}/rnaseq/{wildcards.project}/differential/gene_deseq2",
+        condition_col=RNASEQ_DIFFERENTIAL.get(
+            "condition_col",
+            DESIGN.get("condition_col", "condition"),
+        ),
+        control_label=RNASEQ_DIFFERENTIAL.get(
+            "control_label",
+            DESIGN.get("control_label", "control"),
+        ),
+        contrast_by=RNASEQ_DIFFERENTIAL.get("contrast_by", DESIGN.get("covariates", [])),
+        min_replicates=RNASEQ_DIFFERENTIAL.get("min_replicates_per_group", 2)
+    log:
+        "logs/branches/rnaseq/{project}.gene_differential_plan.log"
+    shell:
+        r"""
+        mkdir -p logs/branches/rnaseq
+        python3 workflow/scripts/plan_gene_differential.py \
+          --samples {input.samples:q} \
+          --gene-counts {input.gene_counts:q} \
+          --output {output:q} \
+          --outdir {params.outdir:q} \
+          --project {wildcards.project:q} \
+          --condition-col {params.condition_col:q} \
+          --control-label {params.control_label:q} \
+          --contrast-by {params.contrast_by:q} \
+          --min-replicates {params.min_replicates:q} \
+          > {log:q} 2>&1
+        """
+
+
+rule run_gene_deseq2:
+    input:
+        plan=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/gene_deseq2/contrast_plan.tsv",
+        samples=f"{BRANCH_DIR}" + "/rnaseq/{project}/samples.tsv",
+        gene_counts=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/featurecounts/gene_counts.tsv",
+        gene_metadata=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/featurecounts/gene_metadata.tsv",
+        environment=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/environment_report.tsv"
+    output:
+        manifest=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/gene_deseq2/deseq2_manifest.tsv",
+        done=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/gene_deseq2/deseq2.done"
+    params:
+        rscript=RNASEQ_DIFFERENTIAL.get("rscript_command", "Rscript"),
+        deseq2_script=RNASEQ_DIFFERENTIAL.get(
+            "deseq2_script",
+            "workflow/scripts/run_deseq2_gene.R",
+        ),
+        padj=RNASEQ_DIFFERENTIAL.get("padj", 0.1),
+        log2fc=RNASEQ_DIFFERENTIAL.get("log2fc", 1.0),
+        min_count=RNASEQ_DIFFERENTIAL.get("min_count", 10)
+    log:
+        "logs/branches/rnaseq/{project}.gene_deseq2.log"
+    shell:
+        r"""
+        mkdir -p logs/branches/rnaseq
+        python3 workflow/scripts/run_gene_differential_branch.py \
+          --plan {input.plan:q} \
+          --samples {input.samples:q} \
+          --gene-counts {input.gene_counts:q} \
+          --gene-metadata {input.gene_metadata:q} \
+          --manifest {output.manifest:q} \
+          --done {output.done:q} \
+          --rscript {params.rscript:q} \
+          --deseq2-script {params.deseq2_script:q} \
+          --padj {params.padj:q} \
+          --log2fc {params.log2fc:q} \
+          --min-count {params.min_count:q} \
           > {log:q} 2>&1
         """

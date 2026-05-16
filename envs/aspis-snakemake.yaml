@@ -19,3 +19,6 @@ dependencies:
   - subread
   - stringtie
   - gffcompare
+  - r-base
+  - r-optparse
+  - bioconductor-deseq2

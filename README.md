@@ -241,6 +241,13 @@ generation. This keeps gene-level DE inputs independent from transcript
 assembly while preserving a transcriptome contract for transcript-level and
 isoform-switch analysis.
 
+Gene-level differential expression is opt-in through
+`rnaseq_differential.run: true`. It consumes branch `samples.tsv` plus
+`quantification/featurecounts/gene_counts.tsv`, builds a contrast plan under
+`differential/gene_deseq2/contrast_plan.tsv`, and runs DESeq2 only for
+contrasts that satisfy `min_replicates_per_group`. Blocked contrasts are kept in
+the manifest with explicit reasons instead of failing with an opaque R error.
+
 ## Planned Architecture
 
 The next major refactor should make the first stage of ASPIS a raw-data
@@ -298,6 +305,9 @@ results/branches/rnaseq/{project}/quantification/gffcompare/merged.tmap # if qua
 results/branches/rnaseq/{project}/quantification/counts/transcript_counts.tsv # if quantification is enabled
 results/branches/rnaseq/{project}/quantification/counts/transcript_metadata.tsv # if quantification is enabled
 results/branches/rnaseq/{project}/quantification/counts/quantification.done # if quantification is enabled
+results/branches/rnaseq/{project}/differential/gene_deseq2/contrast_plan.tsv # if differential is enabled
+results/branches/rnaseq/{project}/differential/gene_deseq2/deseq2_manifest.tsv # if differential is enabled
+results/branches/rnaseq/{project}/differential/gene_deseq2/deseq2.done # if differential is enabled
 ```
 
 Downstream analysis rules should consume manifest-derived contracts rather than
@@ -415,6 +425,7 @@ The workflows currently expect several command-line tools to be available:
 - StringTie
 - gffcompare
 - Subread/featureCounts
+- Rscript with DESeq2
 - MultiQC
 - R and Bioconductor packages used by `workflow/scripts/`
 
