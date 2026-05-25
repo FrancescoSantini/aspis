@@ -9,9 +9,13 @@ deseq2_smoke:
   only: true
   project: ASPIS_DESEQ2_SMOKE
   outdir: results/deseq2_smoke/gene_deseq2
+  transcript_run: true
+  transcript_outdir: results/deseq2_smoke/transcript_deseq2
   samples: tests/differential/gene_samples.tsv
   gene_counts: tests/differential/gene_counts.tsv
   gene_metadata: tests/differential/gene_metadata.tsv
+  transcript_counts: tests/differential/transcript_counts.tsv
+  transcript_metadata: tests/differential/transcript_metadata.tsv
   rscript_command: Rscript
   deseq2_script: workflow/scripts/run_deseq2_gene.R
   condition_col: condition
