@@ -241,12 +241,18 @@ generation. This keeps gene-level DE inputs independent from transcript
 assembly while preserving a transcriptome contract for transcript-level and
 isoform-switch analysis.
 
-Gene-level differential expression is opt-in through
-`rnaseq_differential.run: true`. It consumes branch `samples.tsv` plus
+RNA-seq differential analysis is opt-in through
+`rnaseq_differential.run: true`. ASPIS first writes
+`differential/differential_plan.tsv`, which records the requested downstream
+levels and the quantification artifacts they consume. Gene-level DESeq2 is the
+implemented runner today: it consumes branch `samples.tsv` plus
 `quantification/featurecounts/gene_counts.tsv`, builds a contrast plan under
 `differential/gene_deseq2/contrast_plan.tsv`, and runs DESeq2 only for
-contrasts that satisfy `min_replicates_per_group`. Blocked contrasts are kept in
-the manifest with explicit reasons instead of failing with an opaque R error.
+contrasts that satisfy `min_replicates_per_group`. Transcript-level DESeq2 and
+isoform-switch analysis are represented in the differential plan as planned
+layers until their runners are migrated onto the manifest contract. Blocked
+contrasts are kept in the manifest with explicit reasons instead of failing with
+an opaque R error.
 By default contrasts are built across all samples for each non-control
 condition. Set `contrast_by`, for example to `[time_h]`, only when contrasts
 should be stratified by a metadata column.
@@ -390,7 +396,15 @@ snakemake --cores 1 results/branches/rnaseq/ASPIS_TEST/design.tsv
 snakemake --cores 1 --configfile config/aspis_alignment_smoke.yaml --printshellcmds
 snakemake --cores 1 --configfile config/aspis_star_alignment_smoke.yaml --printshellcmds
 snakemake --cores 1 --configfile config/aspis_quantification_smoke.yaml --printshellcmds
+snakemake --cores 1 --configfile config/aspis_differential_smoke.yaml --printshellcmds
+
+# Run the local smoke-test ladder before opening a PR
+MODE=dry-run bash tests/run_local_smokes.sh
+bash tests/run_local_smokes.sh
 ```
+
+See `docs/local_smoke_tests.md` for the local validation ladder used to limit
+G100 testing to deliberate milestone checks.
 
 On CINECA G100, see `docs/g100_quickstart.md` for environment creation and
 SLURM profile testing. For opt-in public SRA materialization testing, see

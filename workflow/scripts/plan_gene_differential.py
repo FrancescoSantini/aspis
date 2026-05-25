@@ -18,6 +18,11 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--samples", required=True, help="Branch samples.tsv")
     parser.add_argument("--gene-counts", required=True, help="featureCounts gene_counts.tsv")
+    parser.add_argument(
+        "--differential-plan",
+        default="",
+        help="Optional differential layer plan TSV that must contain a ready gene/deseq2 row",
+    )
     parser.add_argument("--output", required=True, help="Contrast plan TSV")
     parser.add_argument("--outdir", required=True, help="Gene differential output directory")
     parser.add_argument("--project", required=True, help="Project ID")
@@ -118,6 +123,21 @@ def grouped_rows(
     return groups
 
 
+def validate_differential_plan(path: Path) -> list[str]:
+    if not path:
+        return []
+    _, rows = read_table(path, {"level", "method", "status"})
+    gene_rows = [
+        row for row in rows
+        if row.get("level") == "gene" and row.get("method") == "deseq2"
+    ]
+    if not gene_rows:
+        return [f"differential plan has no gene/deseq2 row: {path}"]
+    if gene_rows[0].get("status") != "ready":
+        return ["gene/deseq2 differential layer is not ready: " + gene_rows[0].get("reason", "")]
+    return []
+
+
 def build_plan_rows(args: argparse.Namespace) -> list[dict[str, str]]:
     sample_columns, samples = read_table(Path(args.samples), REQUIRED_SAMPLE_COLUMNS)
     if not samples:
@@ -132,6 +152,8 @@ def build_plan_rows(args: argparse.Namespace) -> list[dict[str, str]]:
         contrast_by,
         count_columns,
     )
+    if args.differential_plan:
+        errors.extend(validate_differential_plan(Path(args.differential_plan)))
     if args.min_replicates < 1:
         errors.append("--min-replicates must be >= 1")
     if errors:
