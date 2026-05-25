@@ -65,6 +65,37 @@ if RNASEQ_DIFFERENTIAL.get("run", False) and not RNASEQ_QUANTIFICATION.get("run"
     raise ValueError("rnaseq_differential.run requires rnaseq_quantification.run: true")
 
 
+def configured_tool_list(key, default):
+    value = ENVIRONMENT.get(key, None)
+    if value is None:
+        return default
+    if isinstance(value, str):
+        if value.strip().lower() in {"", "auto"}:
+            return default
+        return value.split()
+    return list(value)
+
+
+SUPPORTED_RNASEQ_DIFFERENTIAL_LEVELS = {"gene", "transcript", "isoform_switch"}
+_raw_rnaseq_differential_levels = RNASEQ_DIFFERENTIAL.get("levels", ["gene"])
+if isinstance(_raw_rnaseq_differential_levels, str):
+    _raw_rnaseq_differential_levels = [_raw_rnaseq_differential_levels]
+RNASEQ_DIFFERENTIAL_LEVELS = [
+    str(level).strip().lower()
+    for level in _raw_rnaseq_differential_levels
+    if str(level).strip()
+]
+invalid_differential_levels = sorted(
+    set(RNASEQ_DIFFERENTIAL_LEVELS) - SUPPORTED_RNASEQ_DIFFERENTIAL_LEVELS
+)
+if invalid_differential_levels:
+    raise ValueError(
+        "Unsupported rnaseq_differential.levels values: "
+        f"{invalid_differential_levels}. Supported values are "
+        f"{sorted(SUPPORTED_RNASEQ_DIFFERENTIAL_LEVELS)}"
+    )
+
+
 def read_intake(path):
     rows = []
     with open(path, newline="") as handle:
@@ -107,28 +138,25 @@ RAW_DIRS = expand(f"{RAW_DIR}" + "/{library_id}", library_id=LIBRARIES)
 USES_INSDC = any(INSDC_RUN_RE.match(row.get("input_1", "")) for row in INTAKE_ROWS)
 SRA_SPOT_LIMIT = MATERIALIZATION.get("sra_spot_limit", 0)
 USES_SRA_SPOT_LIMIT = str(SRA_SPOT_LIMIT).strip().lower() not in {"", "0", "false", "none"}
-BASE_REQUIRED_TOOLS = ENVIRONMENT.get("required_tools", ["python3", "snakemake"])
-SRA_REQUIRED_TOOLS = ENVIRONMENT.get("sra_required_tools", ["prefetch", "fasterq-dump"])
-SRA_LIMITED_REQUIRED_TOOLS = ENVIRONMENT.get("sra_limited_required_tools", ["fastq-dump"])
-RNASEQ_REQUIRED_TOOLS = ENVIRONMENT.get("rnaseq_required_tools", ["fastp"])
+BASE_REQUIRED_TOOLS = configured_tool_list("required_tools", ["python3", "snakemake"])
+SRA_REQUIRED_TOOLS = configured_tool_list("sra_required_tools", ["prefetch", "fasterq-dump"])
+SRA_LIMITED_REQUIRED_TOOLS = configured_tool_list("sra_limited_required_tools", ["fastq-dump"])
+RNASEQ_REQUIRED_TOOLS = configured_tool_list("rnaseq_required_tools", ["fastp"])
 DEFAULT_RNASEQ_ALIGNMENT_TOOLS = (
     ["STAR", "samtools"]
     if RNASEQ_ALIGNER == "star"
     else ["hisat2", "hisat2-build", "samtools"]
 )
-RNASEQ_ALIGNMENT_REQUIRED_TOOLS = ENVIRONMENT.get(
-    "rnaseq_alignment_required_tools",
-    DEFAULT_RNASEQ_ALIGNMENT_TOOLS,
+RNASEQ_ALIGNMENT_REQUIRED_TOOLS = configured_tool_list(
+    "rnaseq_alignment_required_tools", DEFAULT_RNASEQ_ALIGNMENT_TOOLS
 )
-RNASEQ_QUANTIFICATION_REQUIRED_TOOLS = ENVIRONMENT.get(
-    "rnaseq_quantification_required_tools",
-    ["featureCounts", "stringtie", "gffcompare"],
+RNASEQ_QUANTIFICATION_REQUIRED_TOOLS = configured_tool_list(
+    "rnaseq_quantification_required_tools", ["featureCounts", "stringtie", "gffcompare"]
 )
-RNASEQ_DIFFERENTIAL_REQUIRED_TOOLS = ENVIRONMENT.get(
-    "rnaseq_differential_required_tools",
-    ["Rscript"],
+RNASEQ_DIFFERENTIAL_REQUIRED_TOOLS = configured_tool_list(
+    "rnaseq_differential_required_tools", ["Rscript"]
 )
-OPTIONAL_TOOLS = ENVIRONMENT.get("optional_tools", ["vdb-validate"])
+OPTIONAL_TOOLS = configured_tool_list("optional_tools", ["vdb-validate"])
 ACTIVE_SRA_REQUIRED_TOOLS = (
     SRA_LIMITED_REQUIRED_TOOLS if USES_INSDC and USES_SRA_SPOT_LIMIT
     else SRA_REQUIRED_TOOLS if USES_INSDC
@@ -248,11 +276,17 @@ def planned_branch_targets(wildcards):
                             targets.extend(
                                 [
                                     f"{BRANCH_DIR}/{assay}/{project}/differential/environment_report.tsv",
-                                    f"{BRANCH_DIR}/{assay}/{project}/differential/gene_deseq2/contrast_plan.tsv",
-                                    f"{BRANCH_DIR}/{assay}/{project}/differential/gene_deseq2/deseq2_manifest.tsv",
-                                    f"{BRANCH_DIR}/{assay}/{project}/differential/gene_deseq2/deseq2.done",
+                                    f"{BRANCH_DIR}/{assay}/{project}/differential/differential_plan.tsv",
                                 ]
                             )
+                            if "gene" in RNASEQ_DIFFERENTIAL_LEVELS:
+                                targets.extend(
+                                    [
+                                        f"{BRANCH_DIR}/{assay}/{project}/differential/gene_deseq2/contrast_plan.tsv",
+                                        f"{BRANCH_DIR}/{assay}/{project}/differential/gene_deseq2/deseq2_manifest.tsv",
+                                        f"{BRANCH_DIR}/{assay}/{project}/differential/gene_deseq2/deseq2.done",
+                                    ]
+                                )
     return targets
 
 
@@ -803,6 +837,11 @@ rule align_rnaseq_branch:
         hisat2=RNASEQ_ALIGNMENT.get("hisat2_command", "hisat2"),
         star=RNASEQ_ALIGNMENT.get("star_command", "STAR"),
         samtools=RNASEQ_ALIGNMENT.get("samtools_command", "samtools"),
+        star_tmp_dir_flag=(
+            "--star-tmp-dir " + shlex.quote(RNASEQ_ALIGNMENT.get("star_tmp_dir", ""))
+            if RNASEQ_ALIGNMENT.get("star_tmp_dir", "")
+            else ""
+        ),
         strandness_flag=(
             "--strandness " + shlex.quote(RNASEQ_ALIGNMENT.get("strandness", ""))
             if RNASEQ_ALIGNMENT.get("strandness", "")
@@ -830,6 +869,7 @@ rule align_rnaseq_branch:
           --hisat2 {params.hisat2:q} \
           --star {params.star:q} \
           --samtools {params.samtools:q} \
+          {params.star_tmp_dir_flag} \
           {params.strandness_flag} \
           {params.extra_args_flag} \
           > {log:q} 2>&1
@@ -1220,6 +1260,39 @@ rule finalize_rnaseq_quantification:
         """
 
 
+rule plan_rnaseq_differential:
+    input:
+        samples=f"{BRANCH_DIR}" + "/rnaseq/{project}/samples.tsv",
+        gene_counts=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/featurecounts/gene_counts.tsv",
+        gene_metadata=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/featurecounts/gene_metadata.tsv",
+        transcript_counts=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/counts/transcript_counts.tsv",
+        transcript_metadata=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/counts/transcript_metadata.tsv",
+        annotated=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/gffcompare/annotated.gtf",
+        quantification_done=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/counts/quantification.done"
+    output:
+        f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/differential_plan.tsv"
+    params:
+        levels=" ".join(RNASEQ_DIFFERENTIAL_LEVELS)
+    log:
+        "logs/branches/rnaseq/{project}.differential_plan.log"
+    shell:
+        r"""
+        mkdir -p logs/branches/rnaseq
+        python3 workflow/scripts/plan_rnaseq_differential.py \
+          --samples {input.samples:q} \
+          --gene-counts {input.gene_counts:q} \
+          --gene-metadata {input.gene_metadata:q} \
+          --transcript-counts {input.transcript_counts:q} \
+          --transcript-metadata {input.transcript_metadata:q} \
+          --annotated-gtf {input.annotated:q} \
+          --quantification-done {input.quantification_done:q} \
+          --output {output:q} \
+          --project {wildcards.project:q} \
+          --levels {params.levels} \
+          > {log:q} 2>&1
+        """
+
+
 rule check_rnaseq_differential_environment:
     input:
         quantification_done=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/counts/quantification.done"
@@ -1245,7 +1318,8 @@ rule plan_gene_differential:
     input:
         samples=f"{BRANCH_DIR}" + "/rnaseq/{project}/samples.tsv",
         gene_counts=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/featurecounts/gene_counts.tsv",
-        quantification_done=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/counts/quantification.done"
+        quantification_done=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/counts/quantification.done",
+        differential_plan=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/differential_plan.tsv"
     output:
         f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/gene_deseq2/contrast_plan.tsv"
     params:
@@ -1268,6 +1342,7 @@ rule plan_gene_differential:
         python3 workflow/scripts/plan_gene_differential.py \
           --samples {input.samples:q} \
           --gene-counts {input.gene_counts:q} \
+          --differential-plan {input.differential_plan:q} \
           --output {output:q} \
           --outdir {params.outdir:q} \
           --project {wildcards.project:q} \

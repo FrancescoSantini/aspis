@@ -70,6 +70,7 @@ rnaseq_alignment:
   star_sjdb_overhang: 11
   star_genome_sa_index_nbases: 2
   star_extra_index_args: "--genomeChrBinNbits 4"
+  star_tmp_dir: "/tmp/aspis_star_alignment_smoke"
 
 rnaseq_quantification:
   run: false
@@ -107,9 +108,7 @@ environment:
     - multiqc
   rnaseq_required_tools:
     - fastp
-  rnaseq_alignment_required_tools:
-    - STAR
-    - samtools
+  rnaseq_alignment_required_tools: auto
   rnaseq_quantification_required_tools:
     - featureCounts
     - stringtie

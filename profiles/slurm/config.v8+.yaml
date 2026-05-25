@@ -53,6 +53,10 @@ set-threads:
   stringtie_quantify_branch: 4
   build_stringtie_transcript_matrix: 1
   finalize_rnaseq_quantification: 1
+  plan_rnaseq_differential: 1
+  check_rnaseq_differential_environment: 1
+  plan_gene_differential: 1
+  run_gene_deseq2: 1
 
 set-resources:
   materialize_library:
@@ -151,3 +155,19 @@ set-resources:
     runtime: 5
     mem_mb: 1000
     disk_mb: 1000
+  plan_rnaseq_differential:
+    runtime: 5
+    mem_mb: 1000
+    disk_mb: 1000
+  check_rnaseq_differential_environment:
+    runtime: 5
+    mem_mb: 1000
+    disk_mb: 1000
+  plan_gene_differential:
+    runtime: 5
+    mem_mb: 1000
+    disk_mb: 1000
+  run_gene_deseq2:
+    runtime: 120
+    mem_mb: 16000
+    disk_mb: 10000
