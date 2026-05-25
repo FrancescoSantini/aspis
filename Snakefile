@@ -36,6 +36,10 @@ BRANCH_DIR = PATHS.get("branch_dir", "results/branches")
 SRA_CACHE_DIR = PATHS.get("sra_cache_dir", "cache/sra")
 SCRATCH_DIR = PATHS.get("scratch_dir", "work/tmp")
 DESEQ2_SMOKE_DIR = DESEQ2_SMOKE.get("outdir", "results/deseq2_smoke/gene_deseq2")
+TRANSCRIPT_DESEQ2_SMOKE_DIR = DESEQ2_SMOKE.get(
+    "transcript_outdir",
+    "results/deseq2_smoke/transcript_deseq2",
+)
 RNASEQ_ALIGNER = RNASEQ_ALIGNMENT.get("aligner", "star").strip().lower()
 RNASEQ_ALIGNMENT_REFERENCE_FASTA = RNASEQ_ALIGNMENT.get("reference_fasta", "")
 RNASEQ_HISAT2_INDEX_PREFIX = RNASEQ_ALIGNMENT.get("hisat2_index_prefix", "")
@@ -288,8 +292,12 @@ def planned_branch_targets(wildcards):
                                     ]
                                 )
                             if "transcript" in RNASEQ_DIFFERENTIAL_LEVELS:
-                                targets.append(
-                                    f"{BRANCH_DIR}/{assay}/{project}/differential/transcript_deseq2/contrast_plan.tsv"
+                                targets.extend(
+                                    [
+                                        f"{BRANCH_DIR}/{assay}/{project}/differential/transcript_deseq2/contrast_plan.tsv",
+                                        f"{BRANCH_DIR}/{assay}/{project}/differential/transcript_deseq2/deseq2_manifest.tsv",
+                                        f"{BRANCH_DIR}/{assay}/{project}/differential/transcript_deseq2/deseq2.done",
+                                    ]
                                 )
                             if "isoform_switch" in RNASEQ_DIFFERENTIAL_LEVELS:
                                 targets.append(
@@ -301,12 +309,21 @@ def planned_branch_targets(wildcards):
 def deseq2_smoke_targets():
     if not DESEQ2_SMOKE.get("run", False):
         return []
-    return [
+    targets = [
         f"{DESEQ2_SMOKE_DIR}/environment_report.tsv",
         f"{DESEQ2_SMOKE_DIR}/contrast_plan.tsv",
         f"{DESEQ2_SMOKE_DIR}/deseq2_manifest.tsv",
         f"{DESEQ2_SMOKE_DIR}/deseq2.done",
     ]
+    if DESEQ2_SMOKE.get("transcript_run", False):
+        targets.extend(
+            [
+                f"{TRANSCRIPT_DESEQ2_SMOKE_DIR}/contrast_plan.tsv",
+                f"{TRANSCRIPT_DESEQ2_SMOKE_DIR}/deseq2_manifest.tsv",
+                f"{TRANSCRIPT_DESEQ2_SMOKE_DIR}/deseq2.done",
+            ]
+        )
+    return targets
 
 
 def workflow_targets(wildcards):
@@ -1402,6 +1419,46 @@ rule plan_transcript_differential:
         """
 
 
+rule run_transcript_deseq2:
+    input:
+        plan=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/transcript_deseq2/contrast_plan.tsv",
+        samples=f"{BRANCH_DIR}" + "/rnaseq/{project}/samples.tsv",
+        transcript_counts=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/counts/transcript_counts.tsv",
+        transcript_metadata=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/counts/transcript_metadata.tsv",
+        environment=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/environment_report.tsv"
+    output:
+        manifest=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/transcript_deseq2/deseq2_manifest.tsv",
+        done=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/transcript_deseq2/deseq2.done"
+    params:
+        rscript=RNASEQ_DIFFERENTIAL.get("rscript_command", "Rscript"),
+        deseq2_script=RNASEQ_DIFFERENTIAL.get(
+            "deseq2_script",
+            "workflow/scripts/run_deseq2_gene.R",
+        ),
+        padj=RNASEQ_DIFFERENTIAL.get("padj", 0.1),
+        log2fc=RNASEQ_DIFFERENTIAL.get("log2fc", 1.0),
+        min_count=RNASEQ_DIFFERENTIAL.get("min_count", 10)
+    log:
+        "logs/branches/rnaseq/{project}.transcript_deseq2.log"
+    shell:
+        r"""
+        mkdir -p logs/branches/rnaseq
+        python3 workflow/scripts/run_transcript_differential_branch.py \
+          --plan {input.plan:q} \
+          --samples {input.samples:q} \
+          --transcript-counts {input.transcript_counts:q} \
+          --transcript-metadata {input.transcript_metadata:q} \
+          --manifest {output.manifest:q} \
+          --done {output.done:q} \
+          --rscript {params.rscript:q} \
+          --deseq2-script {params.deseq2_script:q} \
+          --padj {params.padj:q} \
+          --log2fc {params.log2fc:q} \
+          --min-count {params.min_count:q} \
+          > {log:q} 2>&1
+        """
+
+
 rule plan_isoform_switch:
     input:
         samples=f"{BRANCH_DIR}" + "/rnaseq/{project}/samples.tsv",
@@ -1518,6 +1575,42 @@ rule plan_deseq2_smoke:
         """
 
 
+rule plan_transcript_deseq2_smoke:
+    input:
+        samples=DESEQ2_SMOKE.get("samples", "tests/differential/gene_samples.tsv"),
+        transcript_counts=DESEQ2_SMOKE.get(
+            "transcript_counts",
+            "tests/differential/transcript_counts.tsv",
+        )
+    output:
+        f"{TRANSCRIPT_DESEQ2_SMOKE_DIR}/contrast_plan.tsv"
+    params:
+        outdir=TRANSCRIPT_DESEQ2_SMOKE_DIR,
+        project=DESEQ2_SMOKE.get("project", "ASPIS_DESEQ2_SMOKE"),
+        condition_col=DESEQ2_SMOKE.get("condition_col", "condition"),
+        control_label=DESEQ2_SMOKE.get("control_label", "control"),
+        contrast_by=DESEQ2_SMOKE.get("contrast_by", ["time_h"]),
+        min_replicates=DESEQ2_SMOKE.get("min_replicates_per_group", 2)
+    log:
+        f"{TRANSCRIPT_DESEQ2_SMOKE_DIR}/logs/contrast_plan.log"
+    shell:
+        r"""
+        mkdir -p {TRANSCRIPT_DESEQ2_SMOKE_DIR:q}/logs
+        python3 workflow/scripts/plan_transcript_differential.py \
+          --samples {input.samples:q} \
+          --transcript-counts {input.transcript_counts:q} \
+          --output {output:q} \
+          --outdir {params.outdir:q} \
+          --project {params.project:q} \
+          --condition-col {params.condition_col:q} \
+          --control-label {params.control_label:q} \
+          --contrast-by {params.contrast_by:q} \
+          --min-replicates {params.min_replicates:q} \
+          > {log:q} 2>&1
+        """
+
+
+
 rule check_deseq2_smoke_environment:
     output:
         f"{DESEQ2_SMOKE_DIR}/environment_report.tsv"
@@ -1563,6 +1656,50 @@ rule run_deseq2_smoke:
           --samples {input.samples:q} \
           --gene-counts {input.gene_counts:q} \
           --gene-metadata {input.gene_metadata:q} \
+          --manifest {output.manifest:q} \
+          --done {output.done:q} \
+          --rscript {params.rscript:q} \
+          --deseq2-script {params.deseq2_script:q} \
+          --padj {params.padj:q} \
+          --log2fc {params.log2fc:q} \
+          --min-count {params.min_count:q} \
+          > {log:q} 2>&1
+        """
+
+
+
+rule run_transcript_deseq2_smoke:
+    input:
+        plan=f"{TRANSCRIPT_DESEQ2_SMOKE_DIR}/contrast_plan.tsv",
+        samples=DESEQ2_SMOKE.get("samples", "tests/differential/gene_samples.tsv"),
+        transcript_counts=DESEQ2_SMOKE.get(
+            "transcript_counts",
+            "tests/differential/transcript_counts.tsv",
+        ),
+        transcript_metadata=DESEQ2_SMOKE.get(
+            "transcript_metadata",
+            "tests/differential/transcript_metadata.tsv",
+        ),
+        environment=f"{DESEQ2_SMOKE_DIR}/environment_report.tsv"
+    output:
+        manifest=f"{TRANSCRIPT_DESEQ2_SMOKE_DIR}/deseq2_manifest.tsv",
+        done=f"{TRANSCRIPT_DESEQ2_SMOKE_DIR}/deseq2.done"
+    params:
+        rscript=DESEQ2_SMOKE.get("rscript_command", "Rscript"),
+        deseq2_script=DESEQ2_SMOKE.get("deseq2_script", "workflow/scripts/run_deseq2_gene.R"),
+        padj=DESEQ2_SMOKE.get("padj", 0.1),
+        log2fc=DESEQ2_SMOKE.get("log2fc", 1.0),
+        min_count=DESEQ2_SMOKE.get("min_count", 10)
+    log:
+        f"{TRANSCRIPT_DESEQ2_SMOKE_DIR}/logs/deseq2.log"
+    shell:
+        r"""
+        mkdir -p {TRANSCRIPT_DESEQ2_SMOKE_DIR:q}/logs
+        python3 workflow/scripts/run_transcript_differential_branch.py \
+          --plan {input.plan:q} \
+          --samples {input.samples:q} \
+          --transcript-counts {input.transcript_counts:q} \
+          --transcript-metadata {input.transcript_metadata:q} \
           --manifest {output.manifest:q} \
           --done {output.done:q} \
           --rscript {params.rscript:q} \

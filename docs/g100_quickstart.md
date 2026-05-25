@@ -504,6 +504,7 @@ Inspect the resulting differential contracts:
 ```bash
 column -t -s $'\t' results/differential_smoke/branches/rnaseq/ASPIS_TEST/differential/differential_plan.tsv
 column -t -s $'\t' results/differential_smoke/branches/rnaseq/ASPIS_TEST/differential/transcript_deseq2/contrast_plan.tsv
+cat results/differential_smoke/branches/rnaseq/ASPIS_TEST/differential/transcript_deseq2/deseq2.done
 column -t -s $'\t' results/differential_smoke/branches/rnaseq/ASPIS_TEST/differential/isoform_switch/contrast_plan.tsv
 ```
 
