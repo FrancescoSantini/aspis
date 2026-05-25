@@ -1,7 +1,7 @@
-# ASPIS gene-level DESeq2 smoke-test configuration.
+# ASPIS feature-level DESeq2 smoke-test configuration.
 #
 # This test bypasses materialization, FASTQ QC, alignment, and quantification.
-# It exercises only the gene-level DESeq2 planning and execution contract using
+# It exercises the gene- and transcript-level DESeq2 planning and execution contracts using
 # tiny synthetic count and sample tables under tests/differential/.
 
 deseq2_smoke:
@@ -17,7 +17,7 @@ deseq2_smoke:
   transcript_counts: tests/differential/transcript_counts.tsv
   transcript_metadata: tests/differential/transcript_metadata.tsv
   rscript_command: Rscript
-  deseq2_script: workflow/scripts/run_deseq2_gene.R
+  deseq2_script: workflow/scripts/run_deseq2_feature.R
   condition_col: condition
   control_label: control
   contrast_by:
