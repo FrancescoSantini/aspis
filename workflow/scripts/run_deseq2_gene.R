@@ -8,7 +8,14 @@ suppressPackageStartupMessages({
 option_list <- list(
   make_option("--counts", type = "character", help = "Contrast count matrix TSV"),
   make_option("--coldata", type = "character", help = "Contrast sample metadata TSV"),
-  make_option("--metadata", type = "character", default = "", help = "Gene metadata TSV"),
+  make_option("--metadata", type = "character", default = "", help = "Feature metadata TSV"),
+  make_option(
+    "--feature-id-column",
+    type = "character",
+    dest = "feature_id_column",
+    default = "Geneid",
+    help = "Feature identifier column in counts and metadata TSVs"
+  ),
   make_option("--results", type = "character", help = "Full DESeq2 result TSV"),
   make_option("--filtered", type = "character", help = "Significant result TSV"),
   make_option(
@@ -49,7 +56,7 @@ if (!(opt$condition_col %in% colnames(coldata))) {
 keep <- rowSums(counts) >= opt$min_count
 counts_filtered <- counts[keep, , drop = FALSE]
 if (nrow(counts_filtered) == 0) {
-  stop("No genes retained after min-count filtering")
+  stop("No features retained after min-count filtering")
 }
 
 coldata[[opt$condition_col]] <- factor(
@@ -66,13 +73,15 @@ dds <- DESeq(dds)
 
 res <- results(dds, contrast = c(opt$condition_col, opt$test_label, opt$control_label))
 res <- as.data.frame(res)
-res$Geneid <- rownames(res)
+feature_id_column <- opt$feature_id_column
+res[[feature_id_column]] <- rownames(res)
+res <- res[, c(feature_id_column, setdiff(colnames(res), feature_id_column)), drop = FALSE]
 res <- res[order(res$padj, na.last = TRUE), , drop = FALSE]
 
 if (opt$metadata != "" && file.exists(opt$metadata)) {
   metadata <- read.table(opt$metadata, header = TRUE, sep = "\t", check.names = FALSE)
-  if ("Geneid" %in% colnames(metadata)) {
-    res <- merge(metadata, res, by = "Geneid", all.y = TRUE, sort = FALSE)
+  if (feature_id_column %in% colnames(metadata)) {
+    res <- merge(metadata, res, by = feature_id_column, all.y = TRUE, sort = FALSE)
   }
 }
 
@@ -90,8 +99,8 @@ significant <- res[
 write.table(significant, opt$filtered, sep = "\t", quote = FALSE, row.names = FALSE)
 
 normalized <- as.data.frame(counts(dds, normalized = TRUE))
-normalized$Geneid <- rownames(normalized)
-normalized <- normalized[, c("Geneid", setdiff(colnames(normalized), "Geneid")), drop = FALSE]
+normalized[[feature_id_column]] <- rownames(normalized)
+normalized <- normalized[, c(feature_id_column, setdiff(colnames(normalized), feature_id_column)), drop = FALSE]
 write.table(normalized, opt$normalized_counts, sep = "\t", quote = FALSE, row.names = FALSE)
 
 summary_row <- data.frame(
@@ -99,7 +108,10 @@ summary_row <- data.frame(
   condition_col = opt$condition_col,
   control_label = opt$control_label,
   test_label = opt$test_label,
+  feature_id_column = feature_id_column,
   n_samples = ncol(counts),
+  n_features_input = nrow(counts),
+  n_features_tested = nrow(counts_filtered),
   n_genes_input = nrow(counts),
   n_genes_tested = nrow(counts_filtered),
   n_significant = nrow(significant),
