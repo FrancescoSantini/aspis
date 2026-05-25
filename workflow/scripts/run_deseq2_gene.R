@@ -7,4 +7,4 @@ if (length(file_arg) == 0) {
 }
 wrapper_path <- normalizePath(sub("^--file=", "", file_arg[[1]]), mustWork = TRUE)
 feature_script <- file.path(dirname(wrapper_path), "run_deseq2_feature.R")
-source(feature_script, chdir = TRUE)
+source(feature_script)
