@@ -401,6 +401,10 @@ snakemake --cores 1 --configfile config/aspis_differential_smoke.yaml --printshe
 # Run the local smoke-test ladder before opening a PR
 MODE=dry-run bash tests/run_local_smokes.sh
 bash tests/run_local_smokes.sh
+
+# Run the fixture-based G100 SLURM smoke after the local ladder passes
+MODE=dry-run bash tests/run_g100_smoke.sh your_slurm_account
+bash tests/run_g100_smoke.sh your_slurm_account
 ```
 
 See `docs/local_smoke_tests.md` for the local validation ladder used to limit
