@@ -69,6 +69,8 @@ set-threads:
   plan_rnaseq_differential: 1
   check_rnaseq_differential_environment: 1
   plan_gene_differential: 1
+  plan_transcript_differential: 1
+  plan_isoform_switch: 1
   run_gene_deseq2: 1
 
 set-resources:
@@ -177,6 +179,14 @@ set-resources:
     mem_mb: 1000
     disk_mb: 1000
   plan_gene_differential:
+    runtime: 5
+    mem_mb: 1000
+    disk_mb: 1000
+  plan_transcript_differential:
+    runtime: 5
+    mem_mb: 1000
+    disk_mb: 1000
+  plan_isoform_switch:
     runtime: 5
     mem_mb: 1000
     disk_mb: 1000
