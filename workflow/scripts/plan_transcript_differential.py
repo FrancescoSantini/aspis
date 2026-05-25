@@ -21,7 +21,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--samples", required=True, help="Branch samples.tsv")
     parser.add_argument("--transcript-counts", required=True, help="StringTie transcript count matrix")
-    parser.add_argument("--differential-plan", required=True, help="Differential layer plan TSV")
+    parser.add_argument("--differential-plan", default="", help="Optional differential layer plan TSV")
     parser.add_argument("--output", required=True, help="Transcript contrast plan TSV")
     parser.add_argument("--outdir", required=True, help="Transcript DESeq2 output directory")
     parser.add_argument("--project", required=True, help="Project ID")
@@ -71,7 +71,8 @@ def build_plan_rows(args: argparse.Namespace) -> list[dict[str, str]]:
         contrast_by,
         count_columns,
     )
-    errors.extend(validate_differential_plan(Path(args.differential_plan)))
+    if args.differential_plan:
+        errors.extend(validate_differential_plan(Path(args.differential_plan)))
     if args.min_replicates < 1:
         errors.append("--min-replicates must be >= 1")
     if errors:

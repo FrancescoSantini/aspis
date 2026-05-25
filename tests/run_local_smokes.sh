@@ -30,5 +30,5 @@ run_snakemake "RNA-seq quantification smoke" \
   --configfile config/aspis_quantification_smoke.yaml
 run_snakemake "RNA-seq differential contract smoke" \
   --configfile config/aspis_differential_smoke.yaml
-run_snakemake "gene-level DESeq2 smoke" \
+run_snakemake "gene/transcript DESeq2 smoke" \
   --configfile config/aspis_deseq2_smoke.yaml
