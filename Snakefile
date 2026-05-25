@@ -287,6 +287,14 @@ def planned_branch_targets(wildcards):
                                         f"{BRANCH_DIR}/{assay}/{project}/differential/gene_deseq2/deseq2.done",
                                     ]
                                 )
+                            if "transcript" in RNASEQ_DIFFERENTIAL_LEVELS:
+                                targets.append(
+                                    f"{BRANCH_DIR}/{assay}/{project}/differential/transcript_deseq2/contrast_plan.tsv"
+                                )
+                            if "isoform_switch" in RNASEQ_DIFFERENTIAL_LEVELS:
+                                targets.append(
+                                    f"{BRANCH_DIR}/{assay}/{project}/differential/isoform_switch/contrast_plan.tsv"
+                                )
     return targets
 
 
@@ -1342,6 +1350,90 @@ rule plan_gene_differential:
         python3 workflow/scripts/plan_gene_differential.py \
           --samples {input.samples:q} \
           --gene-counts {input.gene_counts:q} \
+          --differential-plan {input.differential_plan:q} \
+          --output {output:q} \
+          --outdir {params.outdir:q} \
+          --project {wildcards.project:q} \
+          --condition-col {params.condition_col:q} \
+          --control-label {params.control_label:q} \
+          --contrast-by {params.contrast_by:q} \
+          --min-replicates {params.min_replicates:q} \
+          > {log:q} 2>&1
+        """
+
+
+rule plan_transcript_differential:
+    input:
+        samples=f"{BRANCH_DIR}" + "/rnaseq/{project}/samples.tsv",
+        transcript_counts=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/counts/transcript_counts.tsv",
+        quantification_done=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/counts/quantification.done",
+        differential_plan=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/differential_plan.tsv"
+    output:
+        f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/transcript_deseq2/contrast_plan.tsv"
+    params:
+        outdir=lambda wildcards: f"{BRANCH_DIR}/rnaseq/{wildcards.project}/differential/transcript_deseq2",
+        condition_col=RNASEQ_DIFFERENTIAL.get(
+            "condition_col",
+            DESIGN.get("condition_col", "condition"),
+        ),
+        control_label=RNASEQ_DIFFERENTIAL.get(
+            "control_label",
+            DESIGN.get("control_label", "control"),
+        ),
+        contrast_by=RNASEQ_DIFFERENTIAL.get("contrast_by", DESIGN.get("covariates", [])),
+        min_replicates=RNASEQ_DIFFERENTIAL.get("min_replicates_per_group", 2)
+    log:
+        "logs/branches/rnaseq/{project}.transcript_differential_plan.log"
+    shell:
+        r"""
+        mkdir -p logs/branches/rnaseq
+        python3 workflow/scripts/plan_transcript_differential.py \
+          --samples {input.samples:q} \
+          --transcript-counts {input.transcript_counts:q} \
+          --differential-plan {input.differential_plan:q} \
+          --output {output:q} \
+          --outdir {params.outdir:q} \
+          --project {wildcards.project:q} \
+          --condition-col {params.condition_col:q} \
+          --control-label {params.control_label:q} \
+          --contrast-by {params.contrast_by:q} \
+          --min-replicates {params.min_replicates:q} \
+          > {log:q} 2>&1
+        """
+
+
+rule plan_isoform_switch:
+    input:
+        samples=f"{BRANCH_DIR}" + "/rnaseq/{project}/samples.tsv",
+        transcript_counts=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/counts/transcript_counts.tsv",
+        transcript_metadata=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/counts/transcript_metadata.tsv",
+        annotated=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/gffcompare/annotated.gtf",
+        quantification_done=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/counts/quantification.done",
+        differential_plan=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/differential_plan.tsv"
+    output:
+        f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/isoform_switch/contrast_plan.tsv"
+    params:
+        outdir=lambda wildcards: f"{BRANCH_DIR}/rnaseq/{wildcards.project}/differential/isoform_switch",
+        condition_col=RNASEQ_DIFFERENTIAL.get(
+            "condition_col",
+            DESIGN.get("condition_col", "condition"),
+        ),
+        control_label=RNASEQ_DIFFERENTIAL.get(
+            "control_label",
+            DESIGN.get("control_label", "control"),
+        ),
+        contrast_by=RNASEQ_DIFFERENTIAL.get("contrast_by", DESIGN.get("covariates", [])),
+        min_replicates=RNASEQ_DIFFERENTIAL.get("min_replicates_per_group", 2)
+    log:
+        "logs/branches/rnaseq/{project}.isoform_switch_plan.log"
+    shell:
+        r"""
+        mkdir -p logs/branches/rnaseq
+        python3 workflow/scripts/plan_isoform_switch.py \
+          --samples {input.samples:q} \
+          --transcript-counts {input.transcript_counts:q} \
+          --transcript-metadata {input.transcript_metadata:q} \
+          --annotated-gtf {input.annotated:q} \
           --differential-plan {input.differential_plan:q} \
           --output {output:q} \
           --outdir {params.outdir:q} \

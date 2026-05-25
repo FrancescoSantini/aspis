@@ -390,6 +390,9 @@ snakemake --cores 1 results/branches/rnaseq/ASPIS_TEST/preprocess/multiqc/multiq
 snakemake --cores 1 results/branches/rnaseq/ASPIS_TEST/alignment/alignment_plan.tsv
 snakemake --cores 1 results/branches/rnaseq/ASPIS_TEST/alignment/qc/multiqc/multiqc_report.html
 snakemake --cores 1 results/branches/rnaseq/ASPIS_TEST/quantification/counts/quantification.done
+snakemake --cores 1 results/branches/rnaseq/ASPIS_TEST/differential/differential_plan.tsv
+snakemake --cores 1 results/branches/rnaseq/ASPIS_TEST/differential/transcript_deseq2/contrast_plan.tsv
+snakemake --cores 1 results/branches/rnaseq/ASPIS_TEST/differential/isoform_switch/contrast_plan.tsv
 snakemake --cores 1 results/branches/rnaseq/ASPIS_TEST/design.tsv
 
 # Run the isolated local alignment smoke test
