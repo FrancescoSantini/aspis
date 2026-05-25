@@ -4,10 +4,23 @@
 # workflow/profiles/slurm cookiecutter profile.
 #
 # This profile intentionally does not set slurm_account. Accounts are user- and
-# grant-specific, so pass the active account at runtime, for example:
+# grant-specific, so pass the active account at runtime.
 #
-#   snakemake --workflow-profile profiles/slurm \
-#     --default-resources slurm_account=ELIX6_santini
+# Snakemake CLI --default-resources replaces the profile's full
+# default-resources list. If you add slurm_account on the CLI, repeat the
+# baseline partition/runtime/memory/disk defaults as well:
+#
+#   snakemake TARGET --workflow-profile profiles/slurm \
+#     --default-resources \
+#       slurm_account=ELIX6_santini \
+#       slurm_partition=g100_usr_prod \
+#       runtime=60 \
+#       mem_mb=4000 \
+#       disk_mb=10000
+#
+# For the tiny differential contract smoke on G100, prefer:
+#
+#   bash tests/run_g100_smoke.sh ELIX6_santini
 #
 # Keep development on local cores. Use this profile only for final dry-runs and
 # deliberate cluster submissions.
