@@ -418,7 +418,7 @@ snakemake --cores 1 --dry-run
 This is only a short-term compatibility check. The refactored ASPIS SLURM
 profile targets Snakemake 9.
 
-## 8. SLURM Profile Dry Run
+## 10. SLURM Profile Dry Run
 
 After the local test works with `aspis-smk9`, check the modern SLURM profile:
 
@@ -436,11 +436,18 @@ account:
 saldo -b "$USER"
 ```
 
-Then pass it at runtime:
+Then pass it at runtime. When using `--default-resources` on the command line,
+repeat the profile defaults as well as the account; otherwise Snakemake can
+replace the profile's partition/runtime/memory/disk defaults:
 
 ```bash
 snakemake --workflow-profile profiles/slurm \
-  --default-resources slurm_account=your_slurm_account \
+  --default-resources \
+    slurm_account=your_slurm_account \
+    slurm_partition=g100_usr_prod \
+    runtime=60 \
+    mem_mb=4000 \
+    disk_mb=10000 \
   --dry-run
 ```
 
@@ -468,14 +475,41 @@ For real SLURM execution:
 
 ```bash
 snakemake --workflow-profile profiles/slurm \
-  --default-resources slurm_account=your_slurm_account
+  --default-resources \
+    slurm_account=your_slurm_account \
+    slurm_partition=g100_usr_prod \
+    runtime=60 \
+    mem_mb=4000 \
+    disk_mb=10000
+```
+
+For the current fixture-based G100 contract check, prefer the repository helper
+instead of hand-writing the full command. It targets the differential planning
+sentinel, restores the full default resource set, and keeps the tiny STAR index
+resources small enough for a smoke test:
+
+```bash
+MODE=dry-run bash tests/run_g100_smoke.sh your_slurm_account
+bash tests/run_g100_smoke.sh your_slurm_account
+```
+
+The helper target is:
+
+```text
+results/differential_smoke/branches/rnaseq/ASPIS_TEST/differential/differential_plan.tsv
+```
+
+Inspect the resulting differential contract:
+
+```bash
+column -t -s $'\t' results/differential_smoke/branches/rnaseq/ASPIS_TEST/differential/differential_plan.tsv
 ```
 
 Do not use real SLURM submissions for routine development. Keep development and
 fixture tests local with `--cores 1`; reserve SLURM for final dry-runs, account
-validation, and full analyses.
+and partition checks, and milestone smoke tests.
 
-## 9. Public Accession Test
+## 11. Public Accession Test
 
 After local FASTQ materialization works, use the isolated smoke-test config to
 test one public `SRR`, `ERR`, or `DRR` accession without overwriting the default
@@ -511,7 +545,7 @@ cat logs/materialize/<library_id>.log
 
 Those lines are useful for a CINECA support ticket.
 
-## 10. Useful Diagnostics for CINECA Tickets
+## 12. Useful Diagnostics for CINECA Tickets
 
 ```bash
 hostname

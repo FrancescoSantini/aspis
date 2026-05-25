@@ -22,5 +22,6 @@ bash tests/run_local_smokes.sh
 
 The suite covers the default materialization/QC path, HISAT2 alignment, STAR
 alignment, RNA-seq quantification, differential-layer planning, and a
-DESeq2-only differential test. It is a local confidence gate only; it does not replace a deliberate G100 SLURM smoke
-run after local contracts are stable.
+DESeq2-only differential test. It is a local confidence gate only; it does not
+replace a deliberate G100 SLURM smoke run after local contracts are stable. Use
+`tests/run_g100_smoke.sh` for that G100 check.
