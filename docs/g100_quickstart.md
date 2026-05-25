@@ -499,10 +499,12 @@ The helper target is:
 results/differential_smoke/branches/rnaseq/ASPIS_TEST/differential/differential_plan.tsv
 ```
 
-Inspect the resulting differential contract:
+Inspect the resulting differential contracts:
 
 ```bash
 column -t -s $'\t' results/differential_smoke/branches/rnaseq/ASPIS_TEST/differential/differential_plan.tsv
+column -t -s $'\t' results/differential_smoke/branches/rnaseq/ASPIS_TEST/differential/transcript_deseq2/contrast_plan.tsv
+column -t -s $'\t' results/differential_smoke/branches/rnaseq/ASPIS_TEST/differential/isoform_switch/contrast_plan.tsv
 ```
 
 Do not use real SLURM submissions for routine development. Keep development and
