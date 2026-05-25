@@ -37,6 +37,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--hisat2", default="hisat2", help="hisat2 executable")
     parser.add_argument("--star", default="STAR", help="STAR executable")
     parser.add_argument("--samtools", default="samtools", help="samtools executable")
+    parser.add_argument(
+        "--star-tmp-dir",
+        default="",
+        help="Optional parent directory for per-sample STAR temporary directories",
+    )
     parser.add_argument("--strandness", default="", help="Optional HISAT2 --rna-strandness value")
     parser.add_argument(
         "--extra-args",
@@ -289,6 +294,7 @@ def run_star_alignment(
     samtools: str,
     threads: int,
     extra_args: str,
+    star_tmp_dir: str,
 ) -> dict[str, str]:
     if threads < 1:
         raise ValueError("--threads must be >= 1")
@@ -302,7 +308,12 @@ def run_star_alignment(
     star_bam = paths["sample_dir"] / "star_Aligned.sortedByCoord.out.bam"
     star_log = paths["sample_dir"] / "star_Log.out"
     star_progress = paths["sample_dir"] / "star_Log.progress.out"
-    star_tmp = paths["sample_dir"] / "star__STARtmp"
+    if star_tmp_dir:
+        tmp_parent = Path(star_tmp_dir)
+        tmp_parent.mkdir(parents=True, exist_ok=True)
+        star_tmp = tmp_parent / f"aspis_star_{row['library_id']}_STARtmp"
+    else:
+        star_tmp = paths["sample_dir"] / "star__STARtmp"
     for path in (
         paths["bam"],
         paths["bai"],
@@ -335,6 +346,8 @@ def run_star_alignment(
         "BAM",
         "SortedByCoordinate",
     ]
+    if star_tmp_dir:
+        star_command.extend(["--outTmpDir", str(star_tmp)])
     if fastqs_are_gzipped(row):
         star_command.extend(["--readFilesCommand", "zcat"])
     star_command.extend(shlex.split(extra_args))
@@ -353,6 +366,8 @@ def run_star_alignment(
 
     star_bam.replace(paths["bam"])
     index_bam(samtools_exe, paths["bam"], paths["bai"], star_log, max(1, threads // 2))
+    if star_tmp_dir and star_tmp.exists():
+        shutil.rmtree(star_tmp)
 
     missing = [str(paths[key]) for key in ("bam", "bai", "star_log_final") if not paths[key].exists()]
     if missing:
@@ -376,6 +391,7 @@ def run_alignment(
     threads: int,
     strandness: str,
     extra_args: str,
+    star_tmp_dir: str,
 ) -> dict[str, str]:
     if plan["aligner"] == "hisat2":
         return run_hisat2_alignment(
@@ -397,6 +413,7 @@ def run_alignment(
             samtools,
             threads,
             extra_args,
+            star_tmp_dir,
         )
     raise ValueError(f"Unsupported alignment backend: {plan['aligner']!r}")
 
@@ -453,6 +470,7 @@ def main() -> int:
                 threads=args.threads,
                 strandness=args.strandness,
                 extra_args=args.extra_args,
+                star_tmp_dir=args.star_tmp_dir,
             )
         )
 

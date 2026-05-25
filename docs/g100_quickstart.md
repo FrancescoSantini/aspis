@@ -1,5 +1,10 @@
 # G100 Quickstart
 
+Use G100 only after the local smoke-test ladder in `docs/local_smoke_tests.md`
+passes. For development PRs, prefer local Snakemake dry-runs and tiny fixture
+runs first, then one deliberate SLURM smoke run on G100 when rule contracts or
+profile resources have changed.
+
 This guide is for testing the refactored ASPIS first-stage workflow on CINECA
 Galileo100/G100 without modifying the existing `snakemake` conda environment.
 
