@@ -68,6 +68,7 @@ rnaseq_alignment:
   star_sjdb_overhang: ""
   star_genome_sa_index_nbases: ""
   star_extra_index_args: ""
+  star_tmp_dir: ""
 
 rnaseq_quantification:
   run: false
@@ -96,6 +97,8 @@ rnaseq_quantification:
 rnaseq_differential:
   run: false
   method: deseq2
+  levels:
+    - gene
   rscript_command: Rscript
   deseq2_script: workflow/scripts/run_deseq2_gene.R
   condition_col: condition
@@ -118,9 +121,7 @@ environment:
     - multiqc
   rnaseq_required_tools:
     - fastp
-  rnaseq_alignment_required_tools:
-    - STAR
-    - samtools
+  rnaseq_alignment_required_tools: auto
   rnaseq_quantification_required_tools:
     - featureCounts
     - stringtie

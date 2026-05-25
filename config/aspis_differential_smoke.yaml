@@ -1,20 +1,20 @@
-# ASPIS local RNA-seq alignment smoke-test configuration.
+# ASPIS local RNA-seq differential contract smoke-test configuration.
 #
-# This config builds a tiny synthetic HISAT2 index and runs the default local
-# FASTQ fixtures through RNA-seq preprocessing and alignment. It is only a
+# This config builds a tiny STAR index, runs quantification, and plans the
+# gene, transcript, and isoform-switch differential layers. It is only a
 # technical smoke test, not a biological reference.
 
 intake: config/intake.tsv
 
 paths:
-  raw_dir: work/alignment_smoke/raw
-  metadata_dir: meta/alignment_smoke/materialized
-  manifest: meta/alignment_smoke/materialized_manifest.tsv
-  analysis_plan: meta/alignment_smoke/analysis_plan.tsv
-  environment_report: meta/alignment_smoke/environment_report.tsv
-  sra_cache_dir: cache/alignment_smoke/sra
-  scratch_dir: work/alignment_smoke/tmp
-  branch_dir: results/alignment_smoke/branches
+  raw_dir: work/differential_smoke/raw
+  metadata_dir: meta/differential_smoke/materialized
+  manifest: meta/differential_smoke/materialized_manifest.tsv
+  analysis_plan: meta/differential_smoke/analysis_plan.tsv
+  environment_report: meta/differential_smoke/environment_report.tsv
+  sra_cache_dir: cache/differential_smoke/sra
+  scratch_dir: work/differential_smoke/tmp
+  branch_dir: results/differential_smoke/branches
 
 materialization:
   local_link_mode: symlink
@@ -54,26 +54,26 @@ rnaseq_preprocess:
 
 rnaseq_alignment:
   run: true
-  aligner: hisat2
+  aligner: star
   hisat2_command: hisat2
   hisat2_build_command: hisat2-build
   star_command: STAR
   samtools_command: samtools
   reference_fasta: tests/reference/rnaseq_toy.fa
-  hisat2_index_prefix: work/alignment_smoke/reference/rnaseq_toy
-  star_genome_dir: ""
+  hisat2_index_prefix: ""
+  star_genome_dir: work/differential_smoke/reference/star
   annotation_gtf: tests/reference/rnaseq_toy.gtf
   strandness: ""
   threads: 2
   index_threads: 2
   extra_args: ""
-  star_sjdb_overhang: ""
-  star_genome_sa_index_nbases: ""
-  star_extra_index_args: ""
-  star_tmp_dir: ""
+  star_sjdb_overhang: 11
+  star_genome_sa_index_nbases: 2
+  star_extra_index_args: "--genomeChrBinNbits 4"
+  star_tmp_dir: "/tmp/aspis_differential_smoke"
 
 rnaseq_quantification:
-  run: false
+  run: true
   transcriptome_mode: reference_guided_novel
   gene_counter: featurecounts
   featurecounts_command: featureCounts
@@ -96,6 +96,24 @@ rnaseq_quantification:
   known_codes_lenient: "=,j,c,o"
   gene_type_view: strict
 
+rnaseq_differential:
+  run: true
+  method: deseq2
+  levels:
+    - gene
+    - transcript
+    - isoform_switch
+  rscript_command: Rscript
+  deseq2_script: workflow/scripts/run_deseq2_gene.R
+  condition_col: condition
+  control_label: control
+  contrast_by:
+    - time_h
+  min_replicates_per_group: 2
+  min_count: 10
+  padj: 0.1
+  log2fc: 1.0
+
 execution:
   default_partition: g100_usr_prod
   download_partition: g100_all_serial
@@ -113,6 +131,8 @@ environment:
     - featureCounts
     - stringtie
     - gffcompare
+  rnaseq_differential_required_tools:
+    - Rscript
   sra_required_tools:
     - prefetch
     - fasterq-dump

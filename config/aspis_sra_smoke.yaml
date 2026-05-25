@@ -76,10 +76,7 @@ environment:
     - multiqc
   rnaseq_required_tools:
     - fastp
-  rnaseq_alignment_required_tools:
-    - hisat2
-    - hisat2-build
-    - samtools
+  rnaseq_alignment_required_tools: auto
   sra_required_tools:
     - prefetch
     - fasterq-dump
