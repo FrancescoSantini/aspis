@@ -39,9 +39,11 @@ one G100 smoke or milestone run.
 | SmallRNA parity plan | Added scaffold | `plan_smallrna` writes expected stages and blockers | Convert later planned stages into executable rules incrementally |
 | Adapter trimming with cutadapt | Implemented, config-gated | `preprocess_smallrna_branch.py`, `smallrna.preprocess_run` | Exercise on a real smallRNA config after `cutadapt` is present in the env |
 | Post-trim FastQC/MultiQC | Implemented, config-gated | Shared `inspect_fastqs`, `run_fastqc_branch`, and MultiQC rules over trimmed FASTQs | Exercise on a real smallRNA config after `cutadapt` is present in the env |
+| Local miRBase reference preparation | Implemented | `prepare_smallrna_reference.py`, `smallrna.reference_run` | Add real project config examples |
+| miRBase SAF generation | Implemented | `prepare_smallrna_reference.py` emits SAF from the prepared FASTA | None known |
+| miRBase Bowtie index building | Implemented, config-gated | `build_smallrna_bowtie_index`, `smallrna.build_bowtie_index` | Exercise after `bowtie-build` is present in the env |
 | Contaminant depletion | Planned | `smallrna_plan.tsv` stage `contaminant_depletion` | Implement Bowtie depletion with explicit local contaminant reference inputs |
 | miRBase Bowtie alignment | Planned | `smallrna_plan.tsv` stage `mirbase_alignment` | Implement Bowtie alignment against configured miRBase FASTA/index |
-| miRBase SAF generation | Not yet replaced | None in root workflow | Add local/reference-driven FASTA-to-SAF conversion without network downloads |
 | miRNA featureCounts | Planned | `smallrna_plan.tsv` stage `featurecounts_mirna` | Implement SAF-based featureCounts and count matrix normalization |
 | miRNA DESeq2 | Planned | `smallrna_plan.tsv` stage `deseq2_mirna` | Reuse generic feature DESeq2 runner with miRNA feature column |
 | miRNA name extraction | Not yet replaced | Legacy `extract_mirna_names.R` only | Decide whether it remains necessary after normalized result schema |
@@ -51,10 +53,9 @@ one G100 smoke or milestone run.
 
 ## Immediate Implementation Order
 
-1. Exercise smallRNA adapter trimming and post-trim QC with `smallrna.preprocess_run: true` after updating the env with `cutadapt`.
-2. Implement local-reference miRBase FASTA-to-SAF and Bowtie index handling.
-3. Implement contaminant depletion with explicit configured FASTA/index inputs.
-4. Implement miRBase alignment and featureCounts count matrix generation.
-5. Reuse the generic DESeq2 runner for miRNA counts.
-6. Add offline miRNA target table enrichment before any network-backed target cache.
-7. Compare report plots and summaries against the legacy outputs you liked, then improve the new report layer.
+1. Update the env and exercise smallRNA adapter trimming/post-trim QC plus Bowtie index building.
+2. Implement contaminant depletion with explicit configured FASTA/index inputs.
+3. Implement miRBase alignment and featureCounts count matrix generation.
+4. Reuse the generic DESeq2 runner for miRNA counts.
+5. Add offline miRNA target table enrichment before any network-backed target cache.
+6. Compare report plots and summaries against the legacy outputs you liked, then improve the new report layer.

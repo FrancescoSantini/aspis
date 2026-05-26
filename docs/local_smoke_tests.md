@@ -14,6 +14,10 @@ Use a dry-run first when changing rule targets or config contracts:
 MODE=dry-run bash tests/run_local_smokes.sh
 ```
 
+Dry-run mode also plans the smallRNA Bowtie index contract with
+`config/aspis_smallrna_bowtie_index_smoke.yaml`. Run mode skips that config so
+development machines without `bowtie-build` can still execute the local suite.
+
 Run the technical smoke suite before opening a PR:
 
 ```bash
@@ -23,8 +27,9 @@ bash tests/run_local_smokes.sh
 The suite covers the default materialization/QC path, HISAT2 alignment, STAR
 alignment, RNA-seq quantification, gene/transcript/isoform-switch differential
 planning, the blocked isoform-switch execution contract, smallRNA
-materialization/branch QC/design plus the explicit smallRNA parity plan and
-the config-gated cutadapt/post-trim-QC rule contracts,
+materialization/branch QC/design plus local reference FASTA-to-SAF preparation,
+the explicit smallRNA parity plan, and the config-gated cutadapt/post-trim-QC
+and Bowtie-index rule contracts,
 gene/transcript DESeq2 execution, and the lightweight differential report layer
 with volcano, PCA, heatmap, transformed-count, optional GMT or exported-TSV
 feature-set enrichment, and embedded HTML summary artifacts plus a project-level
