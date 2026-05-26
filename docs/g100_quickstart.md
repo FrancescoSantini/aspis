@@ -352,15 +352,21 @@ results/quantification_smoke/branches/rnaseq/ASPIS_TEST/quantification/counts/tr
 This test validates workflow mechanics and file contracts only. It should not
 be interpreted as a biologically meaningful quantification result.
 
-## 7. Gene-Level DESeq2 Stage
+## 7. RNA-seq Differential Stage
 
-Gene-level differential expression is disabled by default. Enable it only after
+RNA-seq differential analysis is disabled by default. Enable it only after
 RNA-seq quantification is working and your design has enough biological
-replicates per group:
+replicates per group. The refactored workflow uses one feature-level DESeq2
+runner for gene and transcript count matrices; isoform-switch analysis is a
+separate transcript-aware layer.
 
 ```yaml
 rnaseq_differential:
   run: true
+  levels:
+    - gene
+    - transcript
+    - isoform_switch
   contrast_by: []
   min_replicates_per_group: 2
   report_feature_sets: ""
@@ -377,24 +383,36 @@ columns are `source`, `collection`, and `description`. This is the preferred
 local contract for GO, KEGG, Reactome, or custom pathway exports when avoiding
 network/database access on the cluster.
 
-The stage writes a contrast plan before running DESeq2:
+The stage writes a layer plan, then per-level contrast plans before execution:
 
 ```bash
+column -t -s $'\t' results/branches/rnaseq/<PROJECT>/differential/differential_plan.tsv
 column -t -s $'\t' results/branches/rnaseq/<PROJECT>/differential/gene_deseq2/contrast_plan.tsv
+column -t -s $'\t' results/branches/rnaseq/<PROJECT>/differential/transcript_deseq2/contrast_plan.tsv
+column -t -s $'\t' results/branches/rnaseq/<PROJECT>/differential/isoform_switch/contrast_plan.tsv
 ```
 
 Contrasts without enough samples are marked `blocked` with a reason. Ready
-contrasts produce per-contrast DESeq2 result tables and normalized counts under:
+gene and transcript contrasts produce per-contrast DESeq2 result tables and
+normalized counts under:
 
 ```text
 results/branches/rnaseq/<PROJECT>/differential/gene_deseq2/contrasts/
+results/branches/rnaseq/<PROJECT>/differential/transcript_deseq2/contrasts/
+```
+
+When `rnaseq_differential.reports: true`, report artifacts are collected under:
+
+```text
+results/branches/rnaseq/<PROJECT>/differential/reports/
 ```
 
 ## 8. Differential-Only DESeq2 Smoke Test
 
 ASPIS also includes a DESeq2-only smoke test with synthetic count tables. It
-bypasses materialization, FASTQ QC, alignment, and quantification, so it is the
-cheapest way to confirm that Rscript and DESeq2 work in the environment:
+bypasses materialization, FASTQ QC, alignment, and quantification. It is the
+cheapest way to confirm that Rscript, DESeq2, the generic gene/transcript
+runner, and the report layer work in the environment:
 
 ```bash
 snakemake --cores 1 --configfile config/aspis_deseq2_smoke.yaml --printshellcmds
@@ -404,13 +422,16 @@ Inspect the key outputs:
 
 ```bash
 cat results/deseq2_smoke/gene_deseq2/deseq2.done
+cat results/deseq2_smoke/transcript_deseq2/deseq2.done
 column -t -s $'\t' results/deseq2_smoke/gene_deseq2/contrast_plan.tsv
 column -t -s $'\t' results/deseq2_smoke/gene_deseq2/deseq2_manifest.tsv
 column -t -s $'\t' results/deseq2_smoke/gene_deseq2/contrasts/treated_vs_control__time_h_24/summary.tsv
+ls -lh results/deseq2_smoke/reports/index.html
 ```
 
-Expected status is `ok` with one successful contrast and no failed contrasts.
-This is only a software and file-contract test; the counts are synthetic.
+Expected status is `ok` with one successful gene contrast, one successful
+transcript contrast, and no failed contrasts. This is only a software and
+file-contract test; the counts are synthetic.
 
 ## 9. Optional Snakemake 7 Compatibility Check
 
