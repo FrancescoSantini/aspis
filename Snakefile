@@ -1496,13 +1496,17 @@ rule plan_gene_differential:
     shell:
         r"""
         mkdir -p logs/branches/rnaseq
-        python3 workflow/scripts/plan_gene_differential.py \
+        python3 workflow/scripts/plan_feature_differential.py \
           --samples {input.samples:q} \
-          --gene-counts {input.gene_counts:q} \
+          --counts {input.gene_counts:q} \
           --differential-plan {input.differential_plan:q} \
           --output {output:q} \
           --outdir {params.outdir:q} \
           --project {wildcards.project:q} \
+          --level gene \
+          --feature-id-column Geneid \
+          --count-metadata-columns Geneid Chr Start End Strand Length \
+          --matrix-label "Count matrix" \
           --condition-col {params.condition_col:q} \
           --control-label {params.control_label:q} \
           --contrast-by {params.contrast_by:q} \
@@ -1536,13 +1540,17 @@ rule plan_transcript_differential:
     shell:
         r"""
         mkdir -p logs/branches/rnaseq
-        python3 workflow/scripts/plan_transcript_differential.py \
+        python3 workflow/scripts/plan_feature_differential.py \
           --samples {input.samples:q} \
-          --transcript-counts {input.transcript_counts:q} \
+          --counts {input.transcript_counts:q} \
           --differential-plan {input.differential_plan:q} \
           --output {output:q} \
           --outdir {params.outdir:q} \
           --project {wildcards.project:q} \
+          --level transcript \
+          --feature-id-column transcript_id \
+          --count-metadata-columns transcript_id \
+          --matrix-label "Transcript count matrix" \
           --condition-col {params.condition_col:q} \
           --control-label {params.control_label:q} \
           --contrast-by {params.contrast_by:q} \
@@ -1565,7 +1573,7 @@ rule run_transcript_deseq2:
         rscript=RNASEQ_DIFFERENTIAL.get("rscript_command", "Rscript"),
         deseq2_script=RNASEQ_DIFFERENTIAL.get(
             "deseq2_script",
-            "workflow/scripts/run_deseq2_gene.R",
+            "workflow/scripts/run_deseq2_feature.R",
         ),
         padj=RNASEQ_DIFFERENTIAL.get("padj", 0.1),
         log2fc=RNASEQ_DIFFERENTIAL.get("log2fc", 1.0),
@@ -1700,7 +1708,7 @@ rule run_gene_deseq2:
         rscript=RNASEQ_DIFFERENTIAL.get("rscript_command", "Rscript"),
         deseq2_script=RNASEQ_DIFFERENTIAL.get(
             "deseq2_script",
-            "workflow/scripts/run_deseq2_gene.R",
+            "workflow/scripts/run_deseq2_feature.R",
         ),
         padj=RNASEQ_DIFFERENTIAL.get("padj", 0.1),
         log2fc=RNASEQ_DIFFERENTIAL.get("log2fc", 1.0),
@@ -1890,12 +1898,16 @@ rule plan_deseq2_smoke:
     shell:
         r"""
         mkdir -p {DESEQ2_SMOKE_DIR:q}/logs
-        python3 workflow/scripts/plan_gene_differential.py \
+        python3 workflow/scripts/plan_feature_differential.py \
           --samples {input.samples:q} \
-          --gene-counts {input.gene_counts:q} \
+          --counts {input.gene_counts:q} \
           --output {output:q} \
           --outdir {params.outdir:q} \
           --project {params.project:q} \
+          --level gene \
+          --feature-id-column Geneid \
+          --count-metadata-columns Geneid Chr Start End Strand Length \
+          --matrix-label "Count matrix" \
           --condition-col {params.condition_col:q} \
           --control-label {params.control_label:q} \
           --contrast-by {params.contrast_by:q} \
@@ -1925,12 +1937,16 @@ rule plan_transcript_deseq2_smoke:
     shell:
         r"""
         mkdir -p {TRANSCRIPT_DESEQ2_SMOKE_DIR:q}/logs
-        python3 workflow/scripts/plan_transcript_differential.py \
+        python3 workflow/scripts/plan_feature_differential.py \
           --samples {input.samples:q} \
-          --transcript-counts {input.transcript_counts:q} \
+          --counts {input.transcript_counts:q} \
           --output {output:q} \
           --outdir {params.outdir:q} \
           --project {params.project:q} \
+          --level transcript \
+          --feature-id-column transcript_id \
+          --count-metadata-columns transcript_id \
+          --matrix-label "Transcript count matrix" \
           --condition-col {params.condition_col:q} \
           --control-label {params.control_label:q} \
           --contrast-by {params.contrast_by:q} \
@@ -1971,7 +1987,7 @@ rule run_deseq2_smoke:
         done=f"{DESEQ2_SMOKE_DIR}/deseq2.done"
     params:
         rscript=DESEQ2_SMOKE.get("rscript_command", "Rscript"),
-        deseq2_script=DESEQ2_SMOKE.get("deseq2_script", "workflow/scripts/run_deseq2_gene.R"),
+        deseq2_script=DESEQ2_SMOKE.get("deseq2_script", "workflow/scripts/run_deseq2_feature.R"),
         padj=DESEQ2_SMOKE.get("padj", 0.1),
         log2fc=DESEQ2_SMOKE.get("log2fc", 1.0),
         min_count=DESEQ2_SMOKE.get("min_count", 10)
@@ -2015,7 +2031,7 @@ rule run_transcript_deseq2_smoke:
         done=f"{TRANSCRIPT_DESEQ2_SMOKE_DIR}/deseq2.done"
     params:
         rscript=DESEQ2_SMOKE.get("rscript_command", "Rscript"),
-        deseq2_script=DESEQ2_SMOKE.get("deseq2_script", "workflow/scripts/run_deseq2_gene.R"),
+        deseq2_script=DESEQ2_SMOKE.get("deseq2_script", "workflow/scripts/run_deseq2_feature.R"),
         padj=DESEQ2_SMOKE.get("padj", 0.1),
         log2fc=DESEQ2_SMOKE.get("log2fc", 1.0),
         min_count=DESEQ2_SMOKE.get("min_count", 10)
