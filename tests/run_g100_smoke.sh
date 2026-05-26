@@ -7,6 +7,7 @@ DEFAULT_TARGET="results/differential_smoke/branches/rnaseq/ASPIS_TEST/differenti
 TARGET="${TARGET:-$DEFAULT_TARGET}"
 ACCOUNT="${SLURM_ACCOUNT:-}"
 VALIDATE="${VALIDATE:-auto}"
+FORCE_MODE="${FORCE_MODE:-plan}"
 
 if [[ $# -gt 0 && "${1}" != -* ]]; then
   ACCOUNT="$1"
@@ -27,11 +28,35 @@ elif [[ "$MODE" != "run" ]]; then
   exit 2
 fi
 
+FORCE_ARGS=()
+case "$FORCE_MODE" in
+  plan)
+    if [[ "$TARGET" == "$DEFAULT_TARGET" ]]; then
+      FORCE_ARGS+=(--forcerun plan_rnaseq_differential)
+    fi
+    ;;
+  all)
+    FORCE_ARGS+=(--forceall)
+    ;;
+  none)
+    ;;
+  *)
+    echo "Unsupported FORCE_MODE=$FORCE_MODE; use FORCE_MODE=plan, FORCE_MODE=all, or FORCE_MODE=none" >&2
+    exit 2
+    ;;
+esac
+
 echo "==> G100 RNA-seq differential contract smoke"
 echo "==> account: $ACCOUNT"
 echo "==> target: $TARGET"
+echo "==> force mode: $FORCE_MODE"
+if [[ ${#FORCE_ARGS[@]} -gt 0 ]]; then
+  echo "==> force args: ${FORCE_ARGS[*]}"
+else
+  echo "==> force args: none"
+fi
 
-"$SNAKEMAKE" "$TARGET" "$@" \
+"$SNAKEMAKE" "$TARGET" "${FORCE_ARGS[@]}" "$@" \
   --workflow-profile profiles/slurm \
   --configfile config/aspis_differential_smoke.yaml \
   "${EXTRA_ARGS[@]}" \
