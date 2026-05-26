@@ -1,0 +1,2 @@
+status	condition_col	control_label	test_label	feature_id_column	n_samples	n_features_input	n_features_tested	n_significant	padj_threshold	log2fc_threshold	min_count
+ok	condition	control	treated	Geneid	4	3	3	2	0.1	1.0	10
