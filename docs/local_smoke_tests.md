@@ -25,6 +25,8 @@ alignment, RNA-seq quantification, gene/transcript/isoform-switch differential
 planning, the blocked isoform-switch execution contract, gene/transcript DESeq2
 execution, and the lightweight differential report layer with volcano, PCA,
 heatmap, transformed-count, optional GMT feature-set enrichment, and embedded
-HTML summary artifacts. It is a local confidence gate only; it does not replace
-a deliberate G100 SLURM smoke run after local contracts are stable. Use
-`tests/run_g100_smoke.sh` for that G100 check.
+HTML summary artifacts. The DESeq2/report smoke also checks that transcript
+features can be mapped back to gene IDs for gene-level feature-set enrichment.
+It is a local confidence gate only; it does not replace a deliberate G100 SLURM
+smoke run after local contracts are stable. Use `tests/run_g100_smoke.sh` for
+that G100 check.
