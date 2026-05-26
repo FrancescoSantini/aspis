@@ -507,6 +507,13 @@ The helper target is:
 results/differential_smoke/branches/rnaseq/ASPIS_TEST/differential/differential_plan.tsv
 ```
 
+By default, the helper runs with `FORCE_MODE=plan` for this canonical target.
+That reruns only the cheap `plan_rnaseq_differential` rule before validation,
+so stale planning contracts from older checkouts are not silently accepted. Use
+`FORCE_MODE=none` only when you intentionally want to validate the existing
+files without refreshing the plan. Use `FORCE_MODE=all` for an explicit full
+fixture DAG refresh.
+
 On a successful real run, the helper validates the expected materialization,
 branch, STAR alignment, quantification, and differential planning contracts and
 writes a compact summary:
@@ -516,7 +523,9 @@ cat results/differential_smoke/g100_smoke_summary.tsv
 ```
 
 For custom `TARGET=...` runs, validation is skipped unless you set
-`VALIDATE=1`. Skip validation explicitly with `VALIDATE=0`.
+`VALIDATE=1`. The default `FORCE_MODE=plan` does not force custom targets unless
+they are the canonical differential planning sentinel. Skip validation
+explicitly with `VALIDATE=0`.
 
 Inspect the resulting differential contracts if validation fails or if you need
 more detail:
