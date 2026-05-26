@@ -363,11 +363,19 @@ rnaseq_differential:
   run: true
   contrast_by: []
   min_replicates_per_group: 2
+  report_feature_sets: ""
+  report_feature_set_tables: ""
 ```
 
 Use `contrast_by: [time_h]` only when each time point should be tested as a
 separate control-vs-treated contrast. Leave it empty for a one-timepoint
 experiment or for a simple global control-vs-treated comparison.
+
+`report_feature_sets` accepts GMT files. `report_feature_set_tables` accepts
+exported pathway tables with required columns `set_id` and `feature_id`; optional
+columns are `source`, `collection`, and `description`. This is the preferred
+local contract for GO, KEGG, Reactome, or custom pathway exports when avoiding
+network/database access on the cluster.
 
 The stage writes a contrast plan before running DESeq2:
 

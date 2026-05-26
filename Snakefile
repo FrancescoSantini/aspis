@@ -1795,6 +1795,10 @@ rule render_rnaseq_differential_enrichment:
             "--feature-sets",
             joined_config_values(RNASEQ_DIFFERENTIAL.get("report_feature_sets", "")),
         ),
+        feature_set_tables=lambda wildcards: optional_shell_arg(
+            "--feature-set-tables",
+            joined_config_values(RNASEQ_DIFFERENTIAL.get("report_feature_set_tables", "")),
+        ),
         min_overlap=RNASEQ_DIFFERENTIAL.get("report_feature_set_min_overlap", 2),
         top_n=RNASEQ_DIFFERENTIAL.get(
             "report_feature_set_top_n",
@@ -1810,6 +1814,7 @@ rule render_rnaseq_differential_enrichment:
           --manifest {output.manifest:q} \
           --done {output.done:q} \
           {params.feature_sets} \
+          {params.feature_set_tables} \
           --feature-set-min-overlap {params.min_overlap:q} \
           --feature-set-top-n {params.top_n:q} \
           > {log:q} 2>&1
@@ -2103,6 +2108,10 @@ rule render_deseq2_report_smoke_enrichment:
             "--feature-sets",
             joined_config_values(DESEQ2_SMOKE.get("report_feature_sets", "")),
         ),
+        feature_set_tables=lambda wildcards: optional_shell_arg(
+            "--feature-set-tables",
+            joined_config_values(DESEQ2_SMOKE.get("report_feature_set_tables", "")),
+        ),
         min_overlap=DESEQ2_SMOKE.get("report_feature_set_min_overlap", 2),
         top_n=DESEQ2_SMOKE.get(
             "report_feature_set_top_n",
@@ -2118,6 +2127,7 @@ rule render_deseq2_report_smoke_enrichment:
           --manifest {output.manifest:q} \
           --done {output.done:q} \
           {params.feature_sets} \
+          {params.feature_set_tables} \
           --feature-set-min-overlap {params.min_overlap:q} \
           --feature-set-top-n {params.top_n:q} \
           > {log:q} 2>&1

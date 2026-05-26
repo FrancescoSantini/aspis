@@ -102,6 +102,7 @@ rnaseq_differential:
   reports: true
   report_top_n: 50
   report_feature_sets: ""
+  report_feature_set_tables: ""
   report_feature_set_min_overlap: 2
   report_feature_set_top_n: 20
   rscript_command: Rscript
