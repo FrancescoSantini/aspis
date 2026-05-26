@@ -27,6 +27,21 @@ DESEQ2_SMOKE = config.get("deseq2_smoke", {})
 EXECUTION = config.get("execution", {})
 ENVIRONMENT = config.get("environment", {})
 
+
+def as_bool(value, default=False):
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        lowered = value.strip().lower()
+        if lowered in {"1", "true", "yes", "on"}:
+            return True
+        if lowered in {"0", "false", "no", "off", "none", ""}:
+            return False
+    return bool(value)
+
+
 RAW_DIR = PATHS.get("raw_dir", "work/raw")
 METADATA_DIR = PATHS.get("metadata_dir", "meta/materialized")
 MANIFEST = PATHS.get("manifest", "meta/materialized_manifest.tsv")
@@ -39,6 +54,10 @@ DESEQ2_SMOKE_DIR = DESEQ2_SMOKE.get("outdir", "results/deseq2_smoke/gene_deseq2"
 TRANSCRIPT_DESEQ2_SMOKE_DIR = DESEQ2_SMOKE.get(
     "transcript_outdir",
     "results/deseq2_smoke/transcript_deseq2",
+)
+DESEQ2_SMOKE_REPORT_DIR = DESEQ2_SMOKE.get(
+    "report_outdir",
+    "results/deseq2_smoke/reports",
 )
 RNASEQ_ALIGNER = RNASEQ_ALIGNMENT.get("aligner", "star").strip().lower()
 RNASEQ_ALIGNMENT_REFERENCE_FASTA = RNASEQ_ALIGNMENT.get("reference_fasta", "")
@@ -98,6 +117,17 @@ if invalid_differential_levels:
         f"{invalid_differential_levels}. Supported values are "
         f"{sorted(SUPPORTED_RNASEQ_DIFFERENTIAL_LEVELS)}"
     )
+RNASEQ_DIFFERENTIAL_REPORT_LEVELS = [
+    level for level in RNASEQ_DIFFERENTIAL_LEVELS if level in {"gene", "transcript"}
+]
+RNASEQ_DIFFERENTIAL_REPORTS_ENABLED = (
+    as_bool(RNASEQ_DIFFERENTIAL.get("reports", True), True)
+    and bool(RNASEQ_DIFFERENTIAL_REPORT_LEVELS)
+)
+RNASEQ_DIFFERENTIAL_REPORT_TOP_N = RNASEQ_DIFFERENTIAL.get(
+    "report_top_n",
+    RNASEQ_DIFFERENTIAL.get("plot_top_n", 50),
+)
 
 
 def read_intake(path):
@@ -184,6 +214,66 @@ def shell_arg(flag, value):
     """Return a shell-safe CLI flag/value pair, preserving empty strings."""
     text = "" if value is None else str(value)
     return f"{flag} {shlex.quote(text)}"
+
+
+def optional_shell_arg(flag, value):
+    if value is None or str(value).strip() == "":
+        return ""
+    return shell_arg(flag, value)
+
+
+def rnaseq_differential_report_manifest(project, level):
+    subdir = "gene_deseq2" if level == "gene" else "transcript_deseq2"
+    return f"{BRANCH_DIR}/rnaseq/{project}/differential/{subdir}/deseq2_manifest.tsv"
+
+
+def rnaseq_differential_report_inputs(wildcards):
+    return [
+        rnaseq_differential_report_manifest(wildcards.project, level)
+        for level in RNASEQ_DIFFERENTIAL_REPORT_LEVELS
+    ]
+
+
+def rnaseq_differential_report_manifest_arg(wildcards, level):
+    if level not in RNASEQ_DIFFERENTIAL_REPORT_LEVELS:
+        return ""
+    flag = "--gene-manifest" if level == "gene" else "--transcript-manifest"
+    return optional_shell_arg(flag, rnaseq_differential_report_manifest(wildcards.project, level))
+
+
+def deseq2_smoke_report_levels():
+    raw = DESEQ2_SMOKE.get("report_levels", [])
+    if isinstance(raw, str):
+        levels = raw.split()
+    else:
+        levels = list(raw)
+    if not levels:
+        levels = ["gene"]
+        if as_bool(DESEQ2_SMOKE.get("transcript_run", False), False):
+            levels.append("transcript")
+    return [level for level in levels if level in {"gene", "transcript"}]
+
+
+def deseq2_smoke_report_manifest(level):
+    if level == "gene":
+        return DESEQ2_SMOKE.get("report_gene_manifest", f"{DESEQ2_SMOKE_DIR}/deseq2_manifest.tsv")
+    if level == "transcript":
+        return DESEQ2_SMOKE.get(
+            "report_transcript_manifest",
+            f"{TRANSCRIPT_DESEQ2_SMOKE_DIR}/deseq2_manifest.tsv",
+        )
+    return ""
+
+
+def deseq2_smoke_report_inputs(wildcards):
+    return [deseq2_smoke_report_manifest(level) for level in deseq2_smoke_report_levels()]
+
+
+def deseq2_smoke_report_manifest_arg(level):
+    if level not in deseq2_smoke_report_levels():
+        return ""
+    flag = "--gene-manifest" if level == "gene" else "--transcript-manifest"
+    return optional_shell_arg(flag, deseq2_smoke_report_manifest(level))
 
 
 def local_fastq_inputs(wildcards):
@@ -303,6 +393,17 @@ def planned_branch_targets(wildcards):
                                 targets.append(
                                     f"{BRANCH_DIR}/{assay}/{project}/differential/isoform_switch/contrast_plan.tsv"
                                 )
+                            if RNASEQ_DIFFERENTIAL_REPORTS_ENABLED:
+                                targets.extend(
+                                    [
+                                        f"{BRANCH_DIR}/{assay}/{project}/differential/reports/report_plan.tsv",
+                                        f"{BRANCH_DIR}/{assay}/{project}/differential/reports/report_plan.done",
+                                        f"{BRANCH_DIR}/{assay}/{project}/differential/reports/plots/plots_manifest.tsv",
+                                        f"{BRANCH_DIR}/{assay}/{project}/differential/reports/plots/plots.done",
+                                        f"{BRANCH_DIR}/{assay}/{project}/differential/reports/summaries/summary_manifest.tsv",
+                                        f"{BRANCH_DIR}/{assay}/{project}/differential/reports/summaries/summary.done",
+                                    ]
+                                )
     return targets
 
 
@@ -321,6 +422,17 @@ def deseq2_smoke_targets():
                 f"{TRANSCRIPT_DESEQ2_SMOKE_DIR}/contrast_plan.tsv",
                 f"{TRANSCRIPT_DESEQ2_SMOKE_DIR}/deseq2_manifest.tsv",
                 f"{TRANSCRIPT_DESEQ2_SMOKE_DIR}/deseq2.done",
+            ]
+        )
+    if as_bool(DESEQ2_SMOKE.get("report_run", False), False) and deseq2_smoke_report_levels():
+        targets.extend(
+            [
+                f"{DESEQ2_SMOKE_REPORT_DIR}/report_plan.tsv",
+                f"{DESEQ2_SMOKE_REPORT_DIR}/report_plan.done",
+                f"{DESEQ2_SMOKE_REPORT_DIR}/plots/plots_manifest.tsv",
+                f"{DESEQ2_SMOKE_REPORT_DIR}/plots/plots.done",
+                f"{DESEQ2_SMOKE_REPORT_DIR}/summaries/summary_manifest.tsv",
+                f"{DESEQ2_SMOKE_REPORT_DIR}/summaries/summary.done",
             ]
         )
     return targets
@@ -1543,6 +1655,82 @@ rule run_gene_deseq2:
         """
 
 
+
+rule plan_rnaseq_differential_reports:
+    input:
+        manifests=rnaseq_differential_report_inputs
+    output:
+        plan=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/reports/report_plan.tsv",
+        done=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/reports/report_plan.done"
+    params:
+        outdir=lambda wildcards: f"{BRANCH_DIR}/rnaseq/{wildcards.project}/differential/reports",
+        gene_manifest=lambda wildcards: rnaseq_differential_report_manifest_arg(wildcards, "gene"),
+        transcript_manifest=lambda wildcards: rnaseq_differential_report_manifest_arg(wildcards, "transcript"),
+        levels=" ".join(RNASEQ_DIFFERENTIAL_REPORT_LEVELS)
+    log:
+        "logs/branches/rnaseq/{project}.differential_reports_plan.log"
+    shell:
+        r"""
+        mkdir -p logs/branches/rnaseq
+        python3 workflow/scripts/plan_rnaseq_differential_reports.py \
+          --project {wildcards.project:q} \
+          --outdir {params.outdir:q} \
+          --output {output.plan:q} \
+          --done {output.done:q} \
+          {params.gene_manifest} \
+          {params.transcript_manifest} \
+          --levels {params.levels} \
+          > {log:q} 2>&1
+        """
+
+
+rule render_rnaseq_differential_plots:
+    input:
+        plan=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/reports/report_plan.tsv",
+        plan_done=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/reports/report_plan.done"
+    output:
+        manifest=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/reports/plots/plots_manifest.tsv",
+        done=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/reports/plots/plots.done"
+    params:
+        rscript=RNASEQ_DIFFERENTIAL.get("rscript_command", "Rscript"),
+        top_n=RNASEQ_DIFFERENTIAL_REPORT_TOP_N,
+        padj=RNASEQ_DIFFERENTIAL.get("padj", 0.1),
+        log2fc=RNASEQ_DIFFERENTIAL.get("log2fc", 1.0)
+    log:
+        "logs/branches/rnaseq/{project}.differential_plots.log"
+    shell:
+        r"""
+        mkdir -p logs/branches/rnaseq
+        {params.rscript:q} workflow/scripts/render_rnaseq_differential_plots.R \
+          --plan {input.plan:q} \
+          --manifest {output.manifest:q} \
+          --done {output.done:q} \
+          --top-n {params.top_n:q} \
+          --padj {params.padj:q} \
+          --log2fc {params.log2fc:q} \
+          > {log:q} 2>&1
+        """
+
+
+rule render_rnaseq_differential_summaries:
+    input:
+        plan=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/reports/report_plan.tsv",
+        plots_done=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/reports/plots/plots.done"
+    output:
+        manifest=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/reports/summaries/summary_manifest.tsv",
+        done=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/reports/summaries/summary.done"
+    log:
+        "logs/branches/rnaseq/{project}.differential_summaries.log"
+    shell:
+        r"""
+        mkdir -p logs/branches/rnaseq
+        python3 workflow/scripts/render_rnaseq_differential_summary.py \
+          --plan {input.plan:q} \
+          --manifest {output.manifest:q} \
+          --done {output.done:q} \
+          > {log:q} 2>&1
+        """
+
 rule plan_deseq2_smoke:
     input:
         samples=DESEQ2_SMOKE.get("samples", "tests/differential/gene_samples.tsv"),
@@ -1707,5 +1895,81 @@ rule run_transcript_deseq2_smoke:
           --padj {params.padj:q} \
           --log2fc {params.log2fc:q} \
           --min-count {params.min_count:q} \
+          > {log:q} 2>&1
+        """
+
+rule plan_deseq2_report_smoke:
+    input:
+        manifests=deseq2_smoke_report_inputs
+    output:
+        plan=f"{DESEQ2_SMOKE_REPORT_DIR}/report_plan.tsv",
+        done=f"{DESEQ2_SMOKE_REPORT_DIR}/report_plan.done"
+    params:
+        project=DESEQ2_SMOKE.get("project", "ASPIS_DESEQ2_SMOKE"),
+        outdir=DESEQ2_SMOKE_REPORT_DIR,
+        gene_manifest=lambda wildcards: deseq2_smoke_report_manifest_arg("gene"),
+        transcript_manifest=lambda wildcards: deseq2_smoke_report_manifest_arg("transcript"),
+        levels=lambda wildcards: " ".join(deseq2_smoke_report_levels())
+    log:
+        f"{DESEQ2_SMOKE_REPORT_DIR}/logs/report_plan.log"
+    shell:
+        r"""
+        mkdir -p {DESEQ2_SMOKE_REPORT_DIR:q}/logs
+        python3 workflow/scripts/plan_rnaseq_differential_reports.py \
+          --project {params.project:q} \
+          --outdir {params.outdir:q} \
+          --output {output.plan:q} \
+          --done {output.done:q} \
+          {params.gene_manifest} \
+          {params.transcript_manifest} \
+          --levels {params.levels} \
+          > {log:q} 2>&1
+        """
+
+
+rule render_deseq2_report_smoke_plots:
+    input:
+        plan=f"{DESEQ2_SMOKE_REPORT_DIR}/report_plan.tsv",
+        plan_done=f"{DESEQ2_SMOKE_REPORT_DIR}/report_plan.done"
+    output:
+        manifest=f"{DESEQ2_SMOKE_REPORT_DIR}/plots/plots_manifest.tsv",
+        done=f"{DESEQ2_SMOKE_REPORT_DIR}/plots/plots.done"
+    params:
+        rscript=DESEQ2_SMOKE.get("rscript_command", "Rscript"),
+        top_n=DESEQ2_SMOKE.get("report_top_n", DESEQ2_SMOKE.get("plot_top_n", 50)),
+        padj=DESEQ2_SMOKE.get("padj", 0.1),
+        log2fc=DESEQ2_SMOKE.get("log2fc", 1.0)
+    log:
+        f"{DESEQ2_SMOKE_REPORT_DIR}/logs/plots.log"
+    shell:
+        r"""
+        mkdir -p {DESEQ2_SMOKE_REPORT_DIR:q}/logs
+        {params.rscript:q} workflow/scripts/render_rnaseq_differential_plots.R \
+          --plan {input.plan:q} \
+          --manifest {output.manifest:q} \
+          --done {output.done:q} \
+          --top-n {params.top_n:q} \
+          --padj {params.padj:q} \
+          --log2fc {params.log2fc:q} \
+          > {log:q} 2>&1
+        """
+
+
+rule render_deseq2_report_smoke_summaries:
+    input:
+        plan=f"{DESEQ2_SMOKE_REPORT_DIR}/report_plan.tsv",
+        plots_done=f"{DESEQ2_SMOKE_REPORT_DIR}/plots/plots.done"
+    output:
+        manifest=f"{DESEQ2_SMOKE_REPORT_DIR}/summaries/summary_manifest.tsv",
+        done=f"{DESEQ2_SMOKE_REPORT_DIR}/summaries/summary.done"
+    log:
+        f"{DESEQ2_SMOKE_REPORT_DIR}/logs/summaries.log"
+    shell:
+        r"""
+        mkdir -p {DESEQ2_SMOKE_REPORT_DIR:q}/logs
+        python3 workflow/scripts/render_rnaseq_differential_summary.py \
+          --plan {input.plan:q} \
+          --manifest {output.manifest:q} \
+          --done {output.done:q} \
           > {log:q} 2>&1
         """
