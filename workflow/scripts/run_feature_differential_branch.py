@@ -177,6 +177,7 @@ def run_ready_contrast(
     ]
     status, message = run_rscript(command, Path(row["log"]))
     output_row = dict(row)
+    output_row["feature_metadata"] = getattr(args, spec.metadata_attr)
     if status == 0:
         output_row["status"] = "ok"
         output_row["reason"] = ""
@@ -205,6 +206,7 @@ def write_manifest(path: Path, rows: list[dict[str, str]]) -> None:
         "filtered",
         "normalized_counts",
         "summary",
+        "feature_metadata",
         "log",
     ]
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -238,6 +240,8 @@ def run(args: argparse.Namespace, spec: FeatureRunSpec) -> int:
 
     ready_rows = [row for row in plan_rows if row.get("status") == "ready"]
     output_rows = [dict(row) for row in plan_rows if row.get("status") != "ready"]
+    for row in output_rows:
+        row["feature_metadata"] = getattr(args, spec.metadata_attr)
     if ready_rows:
         rscript = executable_path(args.rscript)
         if not Path(args.deseq2_script).exists():
