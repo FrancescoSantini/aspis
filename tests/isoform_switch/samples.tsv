@@ -1,0 +1,5 @@
+library_id	assay	project	condition	time_h	replicate	batch
+control_1	rnaseq	ASPIS_ISOFORM_SWITCH_SMOKE	control	24	1	smoke
+control_2	rnaseq	ASPIS_ISOFORM_SWITCH_SMOKE	control	24	2	smoke
+treated_1	rnaseq	ASPIS_ISOFORM_SWITCH_SMOKE	treated	24	1	smoke
+treated_2	rnaseq	ASPIS_ISOFORM_SWITCH_SMOKE	treated	24	2	smoke

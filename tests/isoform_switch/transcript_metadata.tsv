@@ -1,0 +1,7 @@
+transcript_id	gene_id	gene_name	class_code	gene_type
+tx_geneA_1	geneA	geneA	=	Known
+tx_geneA_2	geneA	geneA	=	Known
+tx_geneB_1	geneB	geneB	=	Known
+tx_geneB_2	geneB	geneB	=	Known
+tx_geneC_1	geneC	geneC	=	Known
+tx_geneC_2	geneC	geneC	=	Known
