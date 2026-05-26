@@ -24,6 +24,7 @@ The suite covers the default materialization/QC path, HISAT2 alignment, STAR
 alignment, RNA-seq quantification, gene/transcript/isoform-switch differential
 planning, the blocked isoform-switch execution contract, gene/transcript DESeq2
 execution, and the lightweight differential report layer with volcano, PCA,
-heatmap, transformed-count, and HTML summary artifacts. It is a local confidence
-gate only; it does not replace a deliberate G100 SLURM smoke run after local
-contracts are stable. Use `tests/run_g100_smoke.sh` for that G100 check.
+heatmap, transformed-count, enrichment-input, and embedded HTML summary
+artifacts. It is a local confidence gate only; it does not replace a deliberate
+G100 SLURM smoke run after local contracts are stable. Use
+`tests/run_g100_smoke.sh` for that G100 check.
