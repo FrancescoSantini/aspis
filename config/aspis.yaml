@@ -99,6 +99,8 @@ rnaseq_differential:
   method: deseq2
   levels:
     - gene
+  reports: true
+  report_top_n: 50
   rscript_command: Rscript
   deseq2_script: workflow/scripts/run_deseq2_feature.R
   condition_col: condition
