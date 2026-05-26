@@ -53,6 +53,8 @@ FEATURE_COLUMNS = ["feature_id", "mapped_feature_id", "log2FoldChange", "padj", 
 FEATURE_SET_COLUMNS = [
     "contrast_id",
     "collection",
+    "feature_set_source",
+    "feature_set_collection",
     "set_id",
     "description",
     "overlap",
@@ -75,6 +77,8 @@ STAT_COLUMNS = {
 
 @dataclass(frozen=True)
 class FeatureSet:
+    source: str
+    collection: str
     set_id: str
     description: str
     features: frozenset[str]
@@ -97,6 +101,14 @@ def parse_args() -> argparse.Namespace:
         "--feature-sets",
         default="",
         help="Comma-separated GMT file path(s) for optional feature-set enrichment",
+    )
+    parser.add_argument(
+        "--feature-set-tables",
+        default="",
+        help=(
+            "Comma-separated TSV feature-set tables. Required columns: set_id, feature_id. "
+            "Optional columns: source, collection, description."
+        ),
     )
     parser.add_argument(
         "--feature-set-min-overlap",
@@ -207,10 +219,13 @@ def feature_ids(rows: list[dict[str, str]]) -> set[str]:
     }
 
 
-def read_feature_sets(paths_text: str) -> list[FeatureSet]:
-    paths = [Path(path.strip()) for path in paths_text.split(",") if path.strip()]
+def split_paths(paths_text: str) -> list[Path]:
+    return [Path(path.strip()) for path in paths_text.split(",") if path.strip()]
+
+
+def read_gmt_feature_sets(paths_text: str) -> list[FeatureSet]:
     feature_sets: list[FeatureSet] = []
-    for path in paths:
+    for path in split_paths(paths_text):
         with path.open(encoding="utf-8") as handle:
             for line_number, line in enumerate(handle, start=1):
                 fields = line.rstrip("\n").split("\t")
@@ -221,12 +236,62 @@ def read_feature_sets(paths_text: str) -> list[FeatureSet]:
                     continue
                 feature_sets.append(
                     FeatureSet(
+                        source=path.stem,
+                        collection="gmt",
                         set_id=fields[0].strip(),
                         description=fields[1].strip(),
                         features=members,
                     )
                 )
     return feature_sets
+
+
+def read_table_feature_sets(paths_text: str) -> list[FeatureSet]:
+    feature_sets: list[FeatureSet] = []
+    for path in split_paths(paths_text):
+        columns, rows = read_table(path, {"set_id", "feature_id"})
+        groups: dict[tuple[str, str, str], dict[str, object]] = {}
+        has_description = "description" in columns
+        has_source = "source" in columns
+        has_collection = "collection" in columns
+        for line_number, row in enumerate(rows, start=2):
+            set_id = row.get("set_id", "")
+            feature_id = row.get("feature_id", "")
+            if not set_id:
+                raise ValueError(f"Feature-set table {path}:{line_number} has empty set_id")
+            if not feature_id:
+                raise ValueError(f"Feature-set table {path}:{line_number} has empty feature_id")
+            source = row.get("source", "") if has_source else ""
+            collection = row.get("collection", "") if has_collection else ""
+            key = (source or path.stem, collection, set_id)
+            group = groups.setdefault(
+                key,
+                {
+                    "description": row.get("description", "") if has_description else "",
+                    "features": set(),
+                },
+            )
+            if not group["description"] and has_description:
+                group["description"] = row.get("description", "")
+            group["features"].add(feature_id)
+        for (source, collection, set_id), group in groups.items():
+            features = frozenset(str(feature) for feature in group["features"])
+            if not features:
+                continue
+            feature_sets.append(
+                FeatureSet(
+                    source=source,
+                    collection=collection,
+                    set_id=set_id,
+                    description=str(group["description"]),
+                    features=features,
+                )
+            )
+    return feature_sets
+
+
+def read_feature_sets(gmt_paths_text: str, table_paths_text: str) -> list[FeatureSet]:
+    return read_gmt_feature_sets(gmt_paths_text) + read_table_feature_sets(table_paths_text)
 
 
 def log_choose(n: int, k: int) -> float:
@@ -293,6 +358,8 @@ def enrichment_rows(
                 {
                     "contrast_id": contrast_id,
                     "collection": collection,
+                    "feature_set_source": feature_set.source,
+                    "feature_set_collection": feature_set.collection,
                     "set_id": feature_set.set_id,
                     "description": feature_set.description,
                     "overlap": str(len(overlap)),
@@ -310,6 +377,8 @@ def enrichment_rows(
             parse_float(row.get("padj", "")) or 1.0,
             -(int(row.get("overlap", "0") or "0")),
             row["collection"],
+            row["feature_set_source"],
+            row["feature_set_collection"],
             row["set_id"],
         )
     )
@@ -355,7 +424,8 @@ def write_enrichment_svg(path: Path, rows: list[dict[str, str]], top_n: int) -> 
         x = margin_left + (score / max_score) * plot_width
         overlap = int(row.get("overlap", "1") or "1")
         radius = min(16, 4 + overlap * 2)
-        label = row["set_id"]
+        prefix = row.get("feature_set_collection") or row.get("feature_set_source", "")
+        label = f"{prefix}:{row['set_id']}" if prefix else row["set_id"]
         if len(label) > 45:
             label = label[:42] + "..."
         color = colors.get(row["collection"], "#4d4d4d")
@@ -450,14 +520,14 @@ def write_feature_lists(
             "feature_set_results",
             paths["feature_set_results"],
             "ok" if feature_sets else "not_configured",
-            "" if feature_sets else "No feature set GMT configured",
+            "" if feature_sets else "No feature set GMT or table configured",
             len(term_rows),
         ),
         (
             "feature_set_plot",
             paths["feature_set_plot"],
             "ok" if feature_sets else "not_configured",
-            "" if feature_sets else "No feature set GMT configured",
+            "" if feature_sets else "No feature set GMT or table configured",
             len(term_rows),
         ),
     ]
@@ -567,7 +637,7 @@ def main() -> int:
     _, plan_rows = read_table(Path(args.plan), REQUIRED_PLAN_COLUMNS)
     if not plan_rows:
         raise ValueError("Differential report plan has no rows")
-    feature_sets = read_feature_sets(args.feature_sets)
+    feature_sets = read_feature_sets(args.feature_sets, args.feature_set_tables)
     rows = [
         render_row(row, feature_sets, args.feature_set_min_overlap, args.feature_set_top_n)
         for row in plan_rows
