@@ -1,5 +1,3 @@
 ASPIS_GENE_UP	Toy gene set enriched among up-regulated genes	gene_002	gene_005	gene_008	gene_011	gene_014	gene_017	gene_020	gene_023
 ASPIS_GENE_DOWN	Toy gene set enriched among down-regulated genes	gene_003	gene_006	gene_009	gene_012	gene_015	gene_018	gene_021	gene_024
-ASPIS_TX_UP	Toy transcript set enriched among up-regulated transcripts	tx_002	tx_005	tx_008	tx_011	tx_014	tx_017	tx_020	tx_023
-ASPIS_TX_DOWN	Toy transcript set enriched among down-regulated transcripts	tx_003	tx_006	tx_009	tx_012	tx_015	tx_018	tx_021	tx_024
 ASPIS_MIXED_BACKGROUND	Toy mixed set with partial overlap	gene_001	gene_002	gene_003	tx_001	tx_002	tx_003

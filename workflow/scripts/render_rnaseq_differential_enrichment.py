@@ -49,7 +49,7 @@ CONTRAST_MANIFEST_COLUMNS = [
     "path",
     "n_features",
 ]
-FEATURE_COLUMNS = ["feature_id", "log2FoldChange", "padj", "rank_score"]
+FEATURE_COLUMNS = ["feature_id", "mapped_feature_id", "log2FoldChange", "padj", "rank_score"]
 FEATURE_SET_COLUMNS = [
     "contrast_id",
     "collection",
@@ -148,7 +148,7 @@ def parse_float(value: str) -> float | None:
 
 
 def feature_id_column(columns: list[str]) -> str:
-    preferred = ["Geneid", "gene_id", "transcript_id", "feature_id", "id"]
+    preferred = ["Geneid", "transcript_id", "feature_id", "gene_id", "id"]
     for column in preferred:
         if column in columns:
             return column
@@ -158,7 +158,29 @@ def feature_id_column(columns: list[str]) -> str:
     return columns[0]
 
 
-def feature_row(row: dict[str, str], feature_column: str) -> dict[str, str]:
+def read_feature_id_map(path_text: str) -> dict[str, str]:
+    if not path_text:
+        return {}
+    path = Path(path_text)
+    if not path.exists():
+        return {}
+    _, rows = read_table(path)
+    key_columns = ["transcript_id", "Geneid", "feature_id", "gene_id", "id", "gene_name"]
+    value_columns = ["gene_id", "Geneid", "feature_id", "transcript_id"]
+    mapping: dict[str, str] = {}
+    for row in rows:
+        mapped = next((row[column] for column in value_columns if row.get(column, "")), "")
+        if not mapped:
+            continue
+        for column in key_columns:
+            key = row.get(column, "")
+            if key and key not in mapping:
+                mapping[key] = mapped
+    return mapping
+
+
+def feature_row(row: dict[str, str], feature_column: str, id_map: dict[str, str]) -> dict[str, str]:
+    feature_id = row.get(feature_column, "")
     log2fc = parse_float(row.get("log2FoldChange", ""))
     padj = parse_float(row.get("padj", ""))
     if log2fc is None:
@@ -169,7 +191,8 @@ def feature_row(row: dict[str, str], feature_column: str) -> dict[str, str]:
         sign = -1.0 if log2fc < 0 else 1.0
         score = sign * -math.log10(max(padj, 1e-300))
     return {
-        "feature_id": row.get(feature_column, ""),
+        "feature_id": feature_id,
+        "mapped_feature_id": id_map.get(feature_id, feature_id),
         "log2FoldChange": row.get("log2FoldChange", ""),
         "padj": row.get("padj", ""),
         "rank_score": f"{score:.8g}",
@@ -177,7 +200,11 @@ def feature_row(row: dict[str, str], feature_column: str) -> dict[str, str]:
 
 
 def feature_ids(rows: list[dict[str, str]]) -> set[str]:
-    return {row["feature_id"] for row in rows if row.get("feature_id", "")}
+    return {
+        row.get("mapped_feature_id") or row.get("feature_id", "")
+        for row in rows
+        if row.get("mapped_feature_id") or row.get("feature_id", "")
+    }
 
 
 def read_feature_sets(paths_text: str) -> list[FeatureSet]:
@@ -364,6 +391,7 @@ def write_feature_lists(
     filtered_columns, filtered_rows = read_table(Path(row["filtered"]))
     result_feature_column = feature_id_column(result_columns)
     filtered_feature_column = feature_id_column(filtered_columns)
+    id_map = read_feature_id_map(row.get("feature_metadata", ""))
 
     outdir = Path(row["enrichment_manifest"]).parent
     paths = {
@@ -375,9 +403,9 @@ def write_feature_lists(
         "feature_set_plot": outdir / "feature_set_enrichment.svg",
     }
 
-    ranked = [feature_row(source_row, result_feature_column) for source_row in result_rows]
+    ranked = [feature_row(source_row, result_feature_column, id_map) for source_row in result_rows]
     ranked.sort(key=lambda source_row: parse_float(source_row["rank_score"]) or 0.0, reverse=True)
-    significant = [feature_row(source_row, filtered_feature_column) for source_row in filtered_rows]
+    significant = [feature_row(source_row, filtered_feature_column, id_map) for source_row in filtered_rows]
     up = [
         source_row
         for source_row in significant
