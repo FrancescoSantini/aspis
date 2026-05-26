@@ -30,6 +30,8 @@ run_snakemake "RNA-seq quantification smoke" \
   --configfile config/aspis_quantification_smoke.yaml
 run_snakemake "RNA-seq differential contract smoke" \
   --configfile config/aspis_differential_smoke.yaml
+run_snakemake "smallRNA parity scaffold smoke" \
+  --configfile config/aspis_smallrna_smoke.yaml
 run_snakemake "gene/transcript DESeq2 and report smoke" \
   --configfile config/aspis_deseq2_smoke.yaml
 
@@ -40,4 +42,6 @@ if [[ "$MODE" == "run" ]]; then
   python3 tests/validate_isoform_switch_ready_contract.py
   echo "==> differential report smoke output schemas"
   python3 tests/validate_differential_report_smoke_outputs.py
+  echo "==> smallRNA parity scaffold smoke"
+  python3 tests/validate_smallrna_smoke_outputs.py
 fi

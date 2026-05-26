@@ -8,7 +8,7 @@ import csv
 from collections import Counter
 from pathlib import Path
 
-from plan_gene_differential import (
+from plan_feature_differential import (
     REQUIRED_SAMPLE_COLUMNS,
     contrast_id,
     grouped_rows,

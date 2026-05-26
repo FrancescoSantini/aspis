@@ -122,6 +122,32 @@ rnaseq_differential:
   padj: 0.1
   log2fc: 1.0
 
+smallrna:
+  run: false
+  preprocess_run: false
+  adapter: AGATCGGAAGAGCACACGTCTGAACTCC
+  min_length: 15
+  max_length: 30
+  quality_cutoff: 20
+  cutadapt_overlap: 5
+  cutadapt_command: cutadapt
+  cutadapt_extra_args: ""
+  threads: 1
+  mirbase_fasta: ""
+  mirbase_saf: ""
+  bowtie_index_prefix: ""
+  contaminant_fasta: ""
+  contaminant_index_prefix: ""
+  target_enrichment_mode: disabled
+  target_table: ""
+  reports: true
+  condition_col: condition
+  control_label: control
+  contrast_by: []
+  min_replicates_per_group: 2
+  padj: 0.1
+  log2fc: 1.0
+
 execution:
   default_partition: g100_usr_prod
   download_partition: g100_all_serial
@@ -140,6 +166,13 @@ environment:
     - stringtie
     - gffcompare
   rnaseq_differential_required_tools:
+    - Rscript
+  smallrna_required_tools:
+    - cutadapt
+    - bowtie
+    - bowtie-build
+    - samtools
+    - featureCounts
     - Rscript
   sra_required_tools:
     - prefetch

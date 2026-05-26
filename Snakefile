@@ -23,6 +23,7 @@ RNASEQ_PREPROCESS = config.get("rnaseq_preprocess", {})
 RNASEQ_ALIGNMENT = config.get("rnaseq_alignment", {})
 RNASEQ_QUANTIFICATION = config.get("rnaseq_quantification", {})
 RNASEQ_DIFFERENTIAL = config.get("rnaseq_differential", {})
+SMALLRNA = config.get("smallrna", {})
 DESEQ2_SMOKE = config.get("deseq2_smoke", {})
 EXECUTION = config.get("execution", {})
 ENVIRONMENT = config.get("environment", {})
@@ -190,6 +191,10 @@ RNASEQ_QUANTIFICATION_REQUIRED_TOOLS = configured_tool_list(
 RNASEQ_DIFFERENTIAL_REQUIRED_TOOLS = configured_tool_list(
     "rnaseq_differential_required_tools", ["Rscript"]
 )
+SMALLRNA_REQUIRED_TOOLS = configured_tool_list(
+    "smallrna_required_tools", ["cutadapt", "bowtie", "bowtie-build", "samtools", "featureCounts", "Rscript"]
+)
+SMALLRNA_PREPROCESS_RUN = as_bool(SMALLRNA.get("preprocess_run", False), False)
 OPTIONAL_TOOLS = configured_tool_list("optional_tools", ["vdb-validate"])
 ACTIVE_SRA_REQUIRED_TOOLS = (
     SRA_LIMITED_REQUIRED_TOOLS if USES_INSDC and USES_SRA_SPOT_LIMIT
@@ -420,6 +425,26 @@ def planned_branch_targets(wildcards):
                                         f"{BRANCH_DIR}/{assay}/{project}/differential/reports/report_index.done",
                                     ]
                                 )
+            if assay == "smallrna" and SMALLRNA.get("run", False):
+                targets.extend(
+                    [
+                        f"{BRANCH_DIR}/{assay}/{project}/smallrna/environment_report.tsv",
+                        f"{BRANCH_DIR}/{assay}/{project}/smallrna/smallrna_plan.tsv",
+                    ]
+                )
+                if SMALLRNA_PREPROCESS_RUN:
+                    targets.extend(
+                        [
+                            f"{BRANCH_DIR}/{assay}/{project}/smallrna/preprocess/trimmed_samples.tsv",
+                            f"{BRANCH_DIR}/{assay}/{project}/smallrna/preprocess/cutadapt_manifest.tsv",
+                            f"{BRANCH_DIR}/{assay}/{project}/smallrna/preprocess/preprocess.done",
+                            f"{BRANCH_DIR}/{assay}/{project}/smallrna/preprocess/fastq_inspection.tsv",
+                            f"{BRANCH_DIR}/{assay}/{project}/smallrna/preprocess/fastqc/fastqc_manifest.tsv",
+                            f"{BRANCH_DIR}/{assay}/{project}/smallrna/preprocess/fastqc/fastqc.done",
+                            f"{BRANCH_DIR}/{assay}/{project}/smallrna/preprocess/multiqc/multiqc_report.html",
+                            f"{BRANCH_DIR}/{assay}/{project}/smallrna/preprocess/multiqc/multiqc.done",
+                        ]
+                    )
     return targets
 
 
@@ -767,6 +792,248 @@ rule run_branch_multiqc:
     shell:
         r"""
         mkdir -p logs/branches/{wildcards.assay}
+        {params.multiqc:q} {params.fastqc_dir:q} \
+          --outdir {params.outdir:q} \
+          --filename multiqc_report.html \
+          --force \
+          {params.extra_args} \
+          > {log:q} 2>&1
+        test -s {output.report:q}
+        printf "status\treport\nok\t%s\n" {output.report:q} > {output.done:q}
+        """
+
+
+rule check_smallrna_environment:
+    input:
+        samples=f"{BRANCH_DIR}" + "/smallrna/{project}/samples.tsv"
+    output:
+        f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/environment_report.tsv"
+    params:
+        required_tools=SMALLRNA_REQUIRED_TOOLS,
+        optional_tools=[]
+    log:
+        "logs/branches/smallrna/{project}.environment.log"
+    shell:
+        r"""
+        mkdir -p logs/branches/smallrna
+        python3 workflow/scripts/check_environment.py \
+          --output {output:q} \
+          --required-tools {params.required_tools:q} \
+          --optional-tools {params.optional_tools:q} \
+          > {log:q} 2>&1
+        """
+
+
+rule plan_smallrna:
+    input:
+        samples=f"{BRANCH_DIR}" + "/smallrna/{project}/samples.tsv",
+        design=f"{BRANCH_DIR}" + "/smallrna/{project}/design.tsv",
+        multiqc_done=f"{BRANCH_DIR}" + "/smallrna/{project}/multiqc/multiqc.done",
+        environment=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/environment_report.tsv"
+    output:
+        f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/smallrna_plan.tsv"
+    params:
+        adapter=SMALLRNA.get("adapter", ""),
+        min_length=SMALLRNA.get("min_length", 15),
+        max_length=SMALLRNA.get("max_length", 30),
+        quality_cutoff=SMALLRNA.get("quality_cutoff", 20),
+        mirbase_fasta_flag=(
+            "--mirbase-fasta " + shlex.quote(SMALLRNA.get("mirbase_fasta", ""))
+            if SMALLRNA.get("mirbase_fasta", "")
+            else ""
+        ),
+        mirbase_saf_flag=(
+            "--mirbase-saf " + shlex.quote(SMALLRNA.get("mirbase_saf", ""))
+            if SMALLRNA.get("mirbase_saf", "")
+            else ""
+        ),
+        bowtie_index_prefix_flag=(
+            "--bowtie-index-prefix " + shlex.quote(SMALLRNA.get("bowtie_index_prefix", ""))
+            if SMALLRNA.get("bowtie_index_prefix", "")
+            else ""
+        ),
+        contaminant_fasta_flag=(
+            "--contaminant-fasta " + shlex.quote(SMALLRNA.get("contaminant_fasta", ""))
+            if SMALLRNA.get("contaminant_fasta", "")
+            else ""
+        ),
+        contaminant_index_prefix_flag=(
+            "--contaminant-index-prefix " + shlex.quote(SMALLRNA.get("contaminant_index_prefix", ""))
+            if SMALLRNA.get("contaminant_index_prefix", "")
+            else ""
+        ),
+        condition_col=SMALLRNA.get(
+            "condition_col",
+            DESIGN.get("condition_col", "condition"),
+        ),
+        control_label=SMALLRNA.get(
+            "control_label",
+            DESIGN.get("control_label", "control"),
+        ),
+        contrast_by_flag=(
+            "--contrast-by "
+            + " ".join(shlex.quote(str(value)) for value in SMALLRNA.get("contrast_by", DESIGN.get("covariates", [])))
+            if SMALLRNA.get("contrast_by", DESIGN.get("covariates", []))
+            else ""
+        ),
+        min_replicates=SMALLRNA.get("min_replicates_per_group", 2),
+        target_enrichment_mode=SMALLRNA.get("target_enrichment_mode", "disabled"),
+        target_table_flag=(
+            "--target-table " + shlex.quote(SMALLRNA.get("target_table", ""))
+            if SMALLRNA.get("target_table", "")
+            else ""
+        ),
+        reports=str(as_bool(SMALLRNA.get("reports", True), True)).lower()
+    log:
+        "logs/branches/smallrna/{project}.smallrna_plan.log"
+    shell:
+        r"""
+        mkdir -p logs/branches/smallrna
+        python3 workflow/scripts/plan_smallrna.py \
+          --samples {input.samples:q} \
+          --design {input.design:q} \
+          --output {output:q} \
+          --project {wildcards.project:q} \
+          --adapter {params.adapter:q} \
+          --min-length {params.min_length:q} \
+          --max-length {params.max_length:q} \
+          --quality-cutoff {params.quality_cutoff:q} \
+          {params.mirbase_fasta_flag} \
+          {params.mirbase_saf_flag} \
+          {params.bowtie_index_prefix_flag} \
+          {params.contaminant_fasta_flag} \
+          {params.contaminant_index_prefix_flag} \
+          --condition-col {params.condition_col:q} \
+          --control-label {params.control_label:q} \
+          {params.contrast_by_flag} \
+          --min-replicates {params.min_replicates:q} \
+          --target-enrichment-mode {params.target_enrichment_mode:q} \
+          {params.target_table_flag} \
+          --reports {params.reports:q} \
+          > {log:q} 2>&1
+        """
+
+
+rule preprocess_smallrna_branch:
+    input:
+        samples=f"{BRANCH_DIR}" + "/smallrna/{project}/samples.tsv",
+        plan=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/smallrna_plan.tsv",
+        environment=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/environment_report.tsv"
+    output:
+        samples=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/preprocess/trimmed_samples.tsv",
+        manifest=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/preprocess/cutadapt_manifest.tsv",
+        done=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/preprocess/preprocess.done"
+    params:
+        outdir=lambda wildcards: f"{BRANCH_DIR}/smallrna/{wildcards.project}/smallrna/preprocess",
+        adapter=SMALLRNA.get("adapter", ""),
+        min_length=SMALLRNA.get("min_length", 15),
+        max_length=SMALLRNA.get("max_length", 30),
+        quality_cutoff=SMALLRNA.get("quality_cutoff", 20),
+        overlap=SMALLRNA.get("cutadapt_overlap", 5),
+        cutadapt=SMALLRNA.get("cutadapt_command", "cutadapt"),
+        extra_args_flag=(
+            "--extra-args " + shlex.quote(SMALLRNA.get("cutadapt_extra_args", ""))
+            if SMALLRNA.get("cutadapt_extra_args", "")
+            else ""
+        )
+    threads:
+        SMALLRNA.get("threads", 1)
+    log:
+        "logs/branches/smallrna/{project}.smallrna_preprocess.log"
+    shell:
+        r"""
+        mkdir -p logs/branches/smallrna
+        python3 workflow/scripts/preprocess_smallrna_branch.py \
+          --samples {input.samples:q} \
+          --outdir {params.outdir:q} \
+          --output {output.samples:q} \
+          --manifest {output.manifest:q} \
+          --done {output.done:q} \
+          --adapter {params.adapter:q} \
+          --min-length {params.min_length:q} \
+          --max-length {params.max_length:q} \
+          --quality-cutoff {params.quality_cutoff:q} \
+          --overlap {params.overlap:q} \
+          --threads {threads:q} \
+          --cutadapt {params.cutadapt:q} \
+          {params.extra_args_flag} \
+          > {log:q} 2>&1
+        """
+
+
+rule inspect_preprocessed_smallrna_fastqs:
+    input:
+        samples=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/preprocess/trimmed_samples.tsv"
+    output:
+        f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/preprocess/fastq_inspection.tsv"
+    params:
+        max_records=FASTQ_INSPECTION.get("max_records", 100000)
+    log:
+        "logs/branches/smallrna/{project}.smallrna_preprocess.fastq_inspection.log"
+    shell:
+        r"""
+        mkdir -p logs/branches/smallrna
+        python3 workflow/scripts/inspect_fastqs.py \
+          --samples {input.samples:q} \
+          --output {output:q} \
+          --max-records {params.max_records:q} \
+          > {log:q} 2>&1
+        """
+
+
+rule run_preprocessed_smallrna_fastqc:
+    input:
+        samples=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/preprocess/trimmed_samples.tsv",
+        inspection=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/preprocess/fastq_inspection.tsv",
+        environment=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/environment_report.tsv"
+    output:
+        manifest=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/preprocess/fastqc/fastqc_manifest.tsv",
+        done=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/preprocess/fastqc/fastqc.done"
+    params:
+        outdir=lambda wildcards: f"{BRANCH_DIR}/smallrna/{wildcards.project}/smallrna/preprocess/fastqc",
+        fastqc=FASTQC.get("command", "fastqc"),
+        extra_args_flag=(
+            "--extra-args " + shlex.quote(FASTQC.get("extra_args", ""))
+            if FASTQC.get("extra_args", "")
+            else ""
+        )
+    threads:
+        FASTQC.get("threads", 2)
+    log:
+        "logs/branches/smallrna/{project}.smallrna_preprocess.fastqc.log"
+    shell:
+        r"""
+        mkdir -p logs/branches/smallrna
+        python3 workflow/scripts/run_fastqc_branch.py \
+          --samples {input.samples:q} \
+          --outdir {params.outdir:q} \
+          --manifest {output.manifest:q} \
+          --done {output.done:q} \
+          --threads {threads:q} \
+          --fastqc {params.fastqc:q} \
+          {params.extra_args_flag} \
+          > {log:q} 2>&1
+        """
+
+
+rule run_preprocessed_smallrna_multiqc:
+    input:
+        fastqc_manifest=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/preprocess/fastqc/fastqc_manifest.tsv",
+        fastqc_done=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/preprocess/fastqc/fastqc.done",
+        environment=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/environment_report.tsv"
+    output:
+        report=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/preprocess/multiqc/multiqc_report.html",
+        done=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/preprocess/multiqc/multiqc.done"
+    params:
+        fastqc_dir=lambda wildcards: f"{BRANCH_DIR}/smallrna/{wildcards.project}/smallrna/preprocess/fastqc/files",
+        outdir=lambda wildcards: f"{BRANCH_DIR}/smallrna/{wildcards.project}/smallrna/preprocess/multiqc",
+        multiqc=MULTIQC.get("command", "multiqc"),
+        extra_args=MULTIQC.get("extra_args", "")
+    log:
+        "logs/branches/smallrna/{project}.smallrna_preprocess.multiqc.log"
+    shell:
+        r"""
+        mkdir -p logs/branches/smallrna
         {params.multiqc:q} {params.fastqc_dir:q} \
           --outdir {params.outdir:q} \
           --filename multiqc_report.html \
