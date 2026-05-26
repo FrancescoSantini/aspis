@@ -416,6 +416,8 @@ def planned_branch_targets(wildcards):
                                         f"{BRANCH_DIR}/{assay}/{project}/differential/reports/enrichment/enrichment.done",
                                         f"{BRANCH_DIR}/{assay}/{project}/differential/reports/summaries/summary_manifest.tsv",
                                         f"{BRANCH_DIR}/{assay}/{project}/differential/reports/summaries/summary.done",
+                                        f"{BRANCH_DIR}/{assay}/{project}/differential/reports/index.html",
+                                        f"{BRANCH_DIR}/{assay}/{project}/differential/reports/report_index.done",
                                     ]
                                 )
     return targets
@@ -449,6 +451,8 @@ def deseq2_smoke_targets():
                 f"{DESEQ2_SMOKE_REPORT_DIR}/enrichment/enrichment.done",
                 f"{DESEQ2_SMOKE_REPORT_DIR}/summaries/summary_manifest.tsv",
                 f"{DESEQ2_SMOKE_REPORT_DIR}/summaries/summary.done",
+                f"{DESEQ2_SMOKE_REPORT_DIR}/index.html",
+                f"{DESEQ2_SMOKE_REPORT_DIR}/report_index.done",
             ]
         )
     return targets
@@ -1835,6 +1839,34 @@ rule render_rnaseq_differential_summaries:
           > {log:q} 2>&1
         """
 
+
+rule render_rnaseq_differential_report_index:
+    input:
+        plan=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/reports/report_plan.tsv",
+        plots_manifest=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/reports/plots/plots_manifest.tsv",
+        plots_done=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/reports/plots/plots.done",
+        enrichment_manifest=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/reports/enrichment/enrichment_manifest.tsv",
+        enrichment_done=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/reports/enrichment/enrichment.done",
+        summary_manifest=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/reports/summaries/summary_manifest.tsv",
+        summary_done=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/reports/summaries/summary.done"
+    output:
+        html=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/reports/index.html",
+        done=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/reports/report_index.done"
+    log:
+        "logs/branches/rnaseq/{project}.differential_report_index.log"
+    shell:
+        r"""
+        mkdir -p logs/branches/rnaseq
+        python3 workflow/scripts/render_rnaseq_differential_report_index.py \
+          --plan {input.plan:q} \
+          --plots-manifest {input.plots_manifest:q} \
+          --enrichment-manifest {input.enrichment_manifest:q} \
+          --summary-manifest {input.summary_manifest:q} \
+          --output {output.html:q} \
+          --done {output.done:q} \
+          > {log:q} 2>&1
+        """
+
 rule plan_deseq2_smoke:
     input:
         samples=DESEQ2_SMOKE.get("samples", "tests/differential/gene_samples.tsv"),
@@ -2112,5 +2144,33 @@ rule render_deseq2_report_smoke_summaries:
           --manifest {output.manifest:q} \
           --done {output.done:q} \
           --top-n {params.top_n:q} \
+          > {log:q} 2>&1
+        """
+
+
+rule render_deseq2_report_smoke_index:
+    input:
+        plan=f"{DESEQ2_SMOKE_REPORT_DIR}/report_plan.tsv",
+        plots_manifest=f"{DESEQ2_SMOKE_REPORT_DIR}/plots/plots_manifest.tsv",
+        plots_done=f"{DESEQ2_SMOKE_REPORT_DIR}/plots/plots.done",
+        enrichment_manifest=f"{DESEQ2_SMOKE_REPORT_DIR}/enrichment/enrichment_manifest.tsv",
+        enrichment_done=f"{DESEQ2_SMOKE_REPORT_DIR}/enrichment/enrichment.done",
+        summary_manifest=f"{DESEQ2_SMOKE_REPORT_DIR}/summaries/summary_manifest.tsv",
+        summary_done=f"{DESEQ2_SMOKE_REPORT_DIR}/summaries/summary.done"
+    output:
+        html=f"{DESEQ2_SMOKE_REPORT_DIR}/index.html",
+        done=f"{DESEQ2_SMOKE_REPORT_DIR}/report_index.done"
+    log:
+        f"{DESEQ2_SMOKE_REPORT_DIR}/logs/report_index.log"
+    shell:
+        r"""
+        mkdir -p {DESEQ2_SMOKE_REPORT_DIR:q}/logs
+        python3 workflow/scripts/render_rnaseq_differential_report_index.py \
+          --plan {input.plan:q} \
+          --plots-manifest {input.plots_manifest:q} \
+          --enrichment-manifest {input.enrichment_manifest:q} \
+          --summary-manifest {input.summary_manifest:q} \
+          --output {output.html:q} \
+          --done {output.done:q} \
           > {log:q} 2>&1
         """
