@@ -101,6 +101,9 @@ rnaseq_differential:
     - gene
   reports: true
   report_top_n: 50
+  report_feature_sets: ""
+  report_feature_set_min_overlap: 2
+  report_feature_set_top_n: 20
   rscript_command: Rscript
   deseq2_script: workflow/scripts/run_deseq2_feature.R
   isoform_switch_script: workflow/scripts/run_isoform_switch_contrast.R

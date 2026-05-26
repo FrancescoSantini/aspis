@@ -222,6 +222,14 @@ def optional_shell_arg(flag, value):
     return shell_arg(flag, value)
 
 
+def joined_config_values(value):
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        return value
+    return ",".join(str(item) for item in value if str(item).strip())
+
+
 def rnaseq_differential_report_manifest(project, level):
     subdir = "gene_deseq2" if level == "gene" else "transcript_deseq2"
     return f"{BRANCH_DIR}/rnaseq/{project}/differential/{subdir}/deseq2_manifest.tsv"
@@ -1778,6 +1786,16 @@ rule render_rnaseq_differential_enrichment:
     output:
         manifest=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/reports/enrichment/enrichment_manifest.tsv",
         done=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/reports/enrichment/enrichment.done"
+    params:
+        feature_sets=lambda wildcards: optional_shell_arg(
+            "--feature-sets",
+            joined_config_values(RNASEQ_DIFFERENTIAL.get("report_feature_sets", "")),
+        ),
+        min_overlap=RNASEQ_DIFFERENTIAL.get("report_feature_set_min_overlap", 2),
+        top_n=RNASEQ_DIFFERENTIAL.get(
+            "report_feature_set_top_n",
+            RNASEQ_DIFFERENTIAL_REPORT_TOP_N,
+        )
     log:
         "logs/branches/rnaseq/{project}.differential_enrichment.log"
     shell:
@@ -1787,6 +1805,9 @@ rule render_rnaseq_differential_enrichment:
           --plan {input.plan:q} \
           --manifest {output.manifest:q} \
           --done {output.done:q} \
+          {params.feature_sets} \
+          --feature-set-min-overlap {params.min_overlap:q} \
+          --feature-set-top-n {params.top_n:q} \
           > {log:q} 2>&1
         """
 
@@ -2045,6 +2066,16 @@ rule render_deseq2_report_smoke_enrichment:
     output:
         manifest=f"{DESEQ2_SMOKE_REPORT_DIR}/enrichment/enrichment_manifest.tsv",
         done=f"{DESEQ2_SMOKE_REPORT_DIR}/enrichment/enrichment.done"
+    params:
+        feature_sets=lambda wildcards: optional_shell_arg(
+            "--feature-sets",
+            joined_config_values(DESEQ2_SMOKE.get("report_feature_sets", "")),
+        ),
+        min_overlap=DESEQ2_SMOKE.get("report_feature_set_min_overlap", 2),
+        top_n=DESEQ2_SMOKE.get(
+            "report_feature_set_top_n",
+            DESEQ2_SMOKE.get("report_top_n", DESEQ2_SMOKE.get("plot_top_n", 50)),
+        )
     log:
         f"{DESEQ2_SMOKE_REPORT_DIR}/logs/enrichment.log"
     shell:
@@ -2054,6 +2085,9 @@ rule render_deseq2_report_smoke_enrichment:
           --plan {input.plan:q} \
           --manifest {output.manifest:q} \
           --done {output.done:q} \
+          {params.feature_sets} \
+          --feature-set-min-overlap {params.min_overlap:q} \
+          --feature-set-top-n {params.top_n:q} \
           > {log:q} 2>&1
         """
 
