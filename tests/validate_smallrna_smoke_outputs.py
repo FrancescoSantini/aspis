@@ -10,6 +10,7 @@ from pathlib import Path
 PROJECT = "ASPIS_SMALLRNA_TEST"
 META = Path("meta/smallrna_smoke")
 BRANCH = Path("results/smallrna_smoke/branches/smallrna/ASPIS_SMALLRNA_TEST")
+REFERENCE = Path("work/smallrna_smoke/reference")
 EXPECTED_STAGES = {
     "initial_fastqc_multiqc": ("ready", "implemented"),
     "adapter_trim": ("ready", "implemented"),
@@ -87,6 +88,29 @@ def validate_branch() -> None:
         raise ValueError(f"Unexpected smallRNA design rows: {design_rows}")
 
 
+def validate_reference() -> None:
+    _, rows = read_tsv(
+        REFERENCE / "reference_manifest.tsv",
+        {"source_fasta", "output_fasta", "saf", "species_prefix", "replace_u_with_t", "n_records"},
+    )
+    manifest = rows[0]
+    if manifest["species_prefix"] != "hsa" or manifest["replace_u_with_t"] != "true":
+        raise ValueError(f"Unexpected smallRNA reference manifest: {manifest}")
+    if manifest["n_records"] != "2":
+        raise ValueError(f"Expected 2 human miRNA reference records, got {manifest}")
+    require_path(manifest["source_fasta"], REFERENCE / "reference_manifest.tsv", "source_fasta")
+    require_path(manifest["output_fasta"], REFERENCE / "reference_manifest.tsv", "output_fasta")
+    require_path(manifest["saf"], REFERENCE / "reference_manifest.tsv", "saf")
+    read_tsv(REFERENCE / "reference.done", {"status", "records"})
+
+    fasta_text = Path(manifest["output_fasta"]).read_text(encoding="utf-8")
+    if ">mmu-" in fasta_text or "U" in fasta_text:
+        raise ValueError("Prepared smallRNA FASTA should be human-filtered and U-to-T normalized")
+    _, saf_rows = read_tsv(Path(manifest["saf"]), {"GeneID", "Chr", "Start", "End", "Strand"})
+    if {row["GeneID"] for row in saf_rows} != {"hsa-miR-1-3p", "hsa-miR-2-3p"}:
+        raise ValueError(f"Unexpected SAF miRNA IDs: {saf_rows}")
+
+
 def validate_plan() -> None:
     _, rows = read_tsv(
         BRANCH / "smallrna/smallrna_plan.tsv",
@@ -107,11 +131,22 @@ def validate_plan() -> None:
             )
         if row["n_libraries"] != "2":
             raise ValueError(f"SmallRNA stage {stage!r} expected 2 libraries, got {row}")
+    if "miRBase Bowtie index prefix" in by_stage["mirbase_alignment"]["reason"]:
+        raise ValueError(
+            "mirbase_alignment should use the prepared FASTA as a buildable reference, "
+            f"got: {by_stage['mirbase_alignment']}"
+        )
+    if "miRBase SAF" in by_stage["featurecounts_mirna"]["reason"]:
+        raise ValueError(
+            "featurecounts_mirna should see the prepared SAF, "
+            f"got: {by_stage['featurecounts_mirna']}"
+        )
 
 
 def main() -> int:
     validate_materialization()
     validate_branch()
+    validate_reference()
     validate_plan()
     return 0
 

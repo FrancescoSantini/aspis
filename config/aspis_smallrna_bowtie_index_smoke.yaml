@@ -1,21 +1,20 @@
-# ASPIS local smallRNA parity scaffold smoke-test configuration.
+# ASPIS local smallRNA Bowtie index contract smoke-test configuration.
 #
-# This smoke test exercises smallRNA intake classification, generic branch QC,
-# design summarization, local reference preparation, environment reporting, and
-# the explicit smallRNA parity plan. It does not run cutadapt, Bowtie,
-# featureCounts, DESeq2, or target enrichment yet.
+# This config is intended for dry-runs: it proves the local miRBase reference
+# and Bowtie index targets wire into the DAG without requiring bowtie-build to
+# be installed on every development machine.
 
 intake: config/intake_smallrna_smoke.tsv
 
 paths:
-  raw_dir: work/smallrna_smoke/raw
-  metadata_dir: meta/smallrna_smoke/materialized
-  manifest: meta/smallrna_smoke/materialized_manifest.tsv
-  analysis_plan: meta/smallrna_smoke/analysis_plan.tsv
-  environment_report: meta/smallrna_smoke/environment_report.tsv
-  sra_cache_dir: cache/smallrna_smoke/sra
-  scratch_dir: work/smallrna_smoke/tmp
-  branch_dir: results/smallrna_smoke/branches
+  raw_dir: work/smallrna_bowtie_index_smoke/raw
+  metadata_dir: meta/smallrna_bowtie_index_smoke/materialized
+  manifest: meta/smallrna_bowtie_index_smoke/materialized_manifest.tsv
+  analysis_plan: meta/smallrna_bowtie_index_smoke/analysis_plan.tsv
+  environment_report: meta/smallrna_bowtie_index_smoke/environment_report.tsv
+  sra_cache_dir: cache/smallrna_bowtie_index_smoke/sra
+  scratch_dir: work/smallrna_bowtie_index_smoke/tmp
+  branch_dir: results/smallrna_bowtie_index_smoke/branches
 
 materialization:
   local_link_mode: symlink
@@ -42,12 +41,12 @@ smallrna:
   cutadapt_extra_args: ""
   threads: 1
   reference_run: true
-  reference_dir: work/smallrna_smoke/reference
+  reference_dir: work/smallrna_bowtie_index_smoke/reference
   mirbase_species_prefix: hsa
   mirbase_replace_u_with_t: true
   prepared_mirbase_fasta: ""
   prepared_mirbase_saf: ""
-  build_bowtie_index: false
+  build_bowtie_index: true
   bowtie_build_command: bowtie-build
   index_threads: 1
   mirbase_fasta: tests/reference/smallrna_mirbase_toy.fa
