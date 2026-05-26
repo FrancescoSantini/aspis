@@ -557,6 +557,35 @@ column -t -s $'\t' results/differential_smoke/branches/rnaseq/ASPIS_TEST/alignme
 column -t -s $'\t' results/differential_smoke/branches/rnaseq/ASPIS_TEST/quantification/quantification_plan.tsv
 ```
 
+After that contract check passes, use the separate synthetic DESeq2/report G100
+helper to test the R execution layer without spending time on FASTQ alignment
+or quantification. It runs the gene/transcript DESeq2 smoke and the lightweight
+report renderer through the SLURM profile:
+
+```bash
+MODE=dry-run bash tests/run_g100_deseq2_smoke.sh ELIX6_santini
+bash tests/run_g100_deseq2_smoke.sh ELIX6_santini
+```
+
+The DESeq2/report helper target is:
+
+```text
+results/deseq2_smoke/reports/report_index.done
+```
+
+By default, this helper uses `FORCE_MODE=plan` for the canonical target. That
+reruns the two cheap contrast-planning rules and lets their downstream DESeq2
+and report jobs refresh naturally, so validation is not satisfied by stale
+synthetic smoke outputs. Use `FORCE_MODE=none` only when intentionally
+validating existing files, or `FORCE_MODE=all` to refresh the full synthetic
+DESeq2/report DAG.
+
+On a successful real run, inspect the compact summary:
+
+```bash
+cat results/deseq2_smoke/g100_deseq2_smoke_summary.tsv
+```
+
 Do not use real SLURM submissions for routine development. Keep development and
 fixture tests local with `--cores 1`; reserve SLURM for final dry-runs, account
 and partition checks, and milestone smoke tests.
