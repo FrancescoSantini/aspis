@@ -32,3 +32,8 @@ run_snakemake "RNA-seq differential contract smoke" \
   --configfile config/aspis_differential_smoke.yaml
 run_snakemake "gene/transcript DESeq2 and report smoke" \
   --configfile config/aspis_deseq2_smoke.yaml
+
+if [[ "$MODE" == "run" ]]; then
+  echo "==> differential report smoke output schemas"
+  python3 tests/validate_differential_report_smoke_outputs.py
+fi
