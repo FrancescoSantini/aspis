@@ -1,0 +1,20 @@
+source	collection	set_id	description	feature_id
+toy_pathways	GO	ASPIS_TABLE_UP	Toy table pathway enriched among up-regulated genes	gene_002
+toy_pathways	GO	ASPIS_TABLE_UP	Toy table pathway enriched among up-regulated genes	gene_005
+toy_pathways	GO	ASPIS_TABLE_UP	Toy table pathway enriched among up-regulated genes	gene_008
+toy_pathways	GO	ASPIS_TABLE_UP	Toy table pathway enriched among up-regulated genes	gene_011
+toy_pathways	GO	ASPIS_TABLE_UP	Toy table pathway enriched among up-regulated genes	gene_014
+toy_pathways	GO	ASPIS_TABLE_UP	Toy table pathway enriched among up-regulated genes	gene_017
+toy_pathways	GO	ASPIS_TABLE_UP	Toy table pathway enriched among up-regulated genes	gene_020
+toy_pathways	GO	ASPIS_TABLE_UP	Toy table pathway enriched among up-regulated genes	gene_023
+toy_pathways	GO	ASPIS_TABLE_DOWN	Toy table pathway enriched among down-regulated genes	gene_003
+toy_pathways	GO	ASPIS_TABLE_DOWN	Toy table pathway enriched among down-regulated genes	gene_006
+toy_pathways	GO	ASPIS_TABLE_DOWN	Toy table pathway enriched among down-regulated genes	gene_009
+toy_pathways	GO	ASPIS_TABLE_DOWN	Toy table pathway enriched among down-regulated genes	gene_012
+toy_pathways	GO	ASPIS_TABLE_DOWN	Toy table pathway enriched among down-regulated genes	gene_015
+toy_pathways	GO	ASPIS_TABLE_DOWN	Toy table pathway enriched among down-regulated genes	gene_018
+toy_pathways	GO	ASPIS_TABLE_DOWN	Toy table pathway enriched among down-regulated genes	gene_021
+toy_pathways	GO	ASPIS_TABLE_DOWN	Toy table pathway enriched among down-regulated genes	gene_024
+toy_pathways	REACTOME	ASPIS_TABLE_MIXED	Toy table mixed pathway with gene-level overlap	gene_001
+toy_pathways	REACTOME	ASPIS_TABLE_MIXED	Toy table mixed pathway with gene-level overlap	gene_002
+toy_pathways	REACTOME	ASPIS_TABLE_MIXED	Toy table mixed pathway with gene-level overlap	gene_003
