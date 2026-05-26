@@ -1,0 +1,7 @@
+transcript_id	control_1	control_2	treated_1	treated_2
+tx_geneA_1	100	110	40	44
+tx_geneA_2	20	22	120	132
+tx_geneB_1	180	200	210	220
+tx_geneB_2	70	80	88	92
+tx_geneC_1	15	18	65	70
+tx_geneC_2	95	100	42	39
