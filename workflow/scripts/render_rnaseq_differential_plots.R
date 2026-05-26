@@ -5,7 +5,7 @@
 # happened upstream, and this layer should be cheap to run on login/local nodes.
 
 parse_args <- function(argv) {
-  out <- list(top_n = "50")
+  out <- list(top_n = "50", padj = "0.1", log2fc = "1.0")
   i <- 1
   while (i <= length(argv)) {
     key <- argv[[i]]
@@ -15,7 +15,8 @@ parse_args <- function(argv) {
     if (i == length(argv)) {
       stop("Missing value for argument: ", key)
     }
-    out[[substring(key, 3)]] <- argv[[i + 1]]
+    name <- chartr("-", "_", substring(key, 3))
+    out[[name]] <- argv[[i + 1]]
     i <- i + 2
   }
   out
@@ -60,7 +61,7 @@ numeric_column <- function(table, column) {
   suppressWarnings(as.numeric(table[[column]]))
 }
 
-plot_volcano <- function(results, path, title) {
+plot_volcano <- function(results, path, title, padj_cutoff, log2fc_cutoff) {
   ensure_columns(results, c("log2FoldChange", "padj"), "DESeq2 results")
   log2fc <- numeric_column(results, "log2FoldChange")
   padj <- numeric_column(results, "padj")
@@ -71,7 +72,7 @@ plot_volcano <- function(results, path, title) {
   }
   log2fc <- log2fc[keep]
   y <- -log10(pmax(padj[keep], .Machine$double.xmin))
-  significant <- padj[keep] < 0.1 & abs(log2fc) >= 1
+  significant <- padj[keep] < padj_cutoff & abs(log2fc) >= log2fc_cutoff
 
   ensure_parent(path)
   grDevices::pdf(path)
@@ -84,8 +85,8 @@ plot_volcano <- function(results, path, title) {
     ylab = "-log10 adjusted p-value",
     main = title
   )
-  abline(v = c(-1, 1), col = "#737373", lty = 2)
-  abline(h = -log10(0.1), col = "#737373", lty = 2)
+  abline(v = c(-log2fc_cutoff, log2fc_cutoff), col = "#737373", lty = 2)
+  abline(h = -log10(padj_cutoff), col = "#737373", lty = 2)
   grDevices::dev.off()
 }
 
@@ -116,6 +117,10 @@ plot_pca <- function(transformed, path, title) {
     return()
   }
   pca <- stats::prcomp(t(transformed), center = TRUE, scale. = FALSE)
+  if (ncol(pca$x) < 2 || sum(pca$sdev^2) == 0) {
+    blank_pdf(path, title, "PCA requires at least two variable dimensions")
+    return()
+  }
   variance <- round(100 * (pca$sdev^2 / sum(pca$sdev^2)), 1)
   ensure_parent(path)
   grDevices::pdf(path)
@@ -159,7 +164,7 @@ manifest_columns <- c(
   "n_significant"
 )
 
-render_row <- function(row, top_n) {
+render_row <- function(row, top_n, padj_cutoff, log2fc_cutoff) {
   if (!identical(row[["status"]], "ready")) {
     return(data.frame(
       project = row[["project"]],
@@ -182,7 +187,7 @@ render_row <- function(row, top_n) {
   filtered <- read_tsv(row[["filtered"]])
   normalized <- read_normalized_counts(row[["normalized_counts"]])
   transformed <- write_transformed_counts(normalized, row[["vst_tsv"]])
-  plot_volcano(results, row[["volcano_pdf"]], paste(title, "volcano"))
+  plot_volcano(results, row[["volcano_pdf"]], paste(title, "volcano"), padj_cutoff, log2fc_cutoff)
   plot_pca(transformed, row[["pca_pdf"]], paste(title, "PCA"))
   plot_heatmap(transformed, row[["heatmap_pdf"]], paste(title, "heatmap"), top_n)
 
@@ -209,7 +214,15 @@ main <- function() {
   done_path <- required_arg(args, "done")
   top_n <- as.integer(args[["top_n"]])
   if (is.na(top_n) || top_n < 1) {
-    stop("--top_n must be a positive integer")
+    stop("--top-n/--top_n must be a positive integer")
+  }
+  padj_cutoff <- as.numeric(args[["padj"]])
+  if (is.na(padj_cutoff) || padj_cutoff <= 0 || padj_cutoff > 1) {
+    stop("--padj must be a number in (0, 1]")
+  }
+  log2fc_cutoff <- as.numeric(args[["log2fc"]])
+  if (is.na(log2fc_cutoff) || log2fc_cutoff < 0) {
+    stop("--log2fc must be a non-negative number")
   }
 
   plan <- read_tsv(plan_path)
@@ -239,7 +252,7 @@ main <- function() {
   for (i in seq_len(nrow(plan))) {
     row <- as.list(plan[i, , drop = FALSE])
     rows[[i]] <- tryCatch(
-      render_row(row, top_n),
+      render_row(row, top_n, padj_cutoff, log2fc_cutoff),
       error = function(err) {
         data.frame(
           project = row[["project"]],

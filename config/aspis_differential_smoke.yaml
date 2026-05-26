@@ -103,6 +103,8 @@ rnaseq_differential:
     - gene
     - transcript
     - isoform_switch
+  reports: true
+  report_top_n: 20
   rscript_command: Rscript
   deseq2_script: workflow/scripts/run_deseq2_feature.R
   condition_col: condition
