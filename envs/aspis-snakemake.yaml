@@ -13,6 +13,8 @@ dependencies:
   - fastqc
   - multiqc
   - fastp
+  - cutadapt
+  - bowtie
   - star
   - hisat2
   - samtools
