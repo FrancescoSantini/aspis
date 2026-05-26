@@ -195,6 +195,58 @@ SMALLRNA_REQUIRED_TOOLS = configured_tool_list(
     "smallrna_required_tools", ["cutadapt", "bowtie", "bowtie-build", "samtools", "featureCounts", "Rscript"]
 )
 SMALLRNA_PREPROCESS_RUN = as_bool(SMALLRNA.get("preprocess_run", False), False)
+SMALLRNA_REFERENCE_RUN = as_bool(SMALLRNA.get("reference_run", False), False)
+SMALLRNA_BUILD_BOWTIE_INDEX = as_bool(SMALLRNA.get("build_bowtie_index", False), False)
+SMALLRNA_REFERENCE_DIR = SMALLRNA.get("reference_dir", "work/smallrna_reference")
+SMALLRNA_CONFIGURED_MIRBASE_FASTA = SMALLRNA.get("mirbase_fasta", "")
+SMALLRNA_CONFIGURED_MIRBASE_SAF = SMALLRNA.get("mirbase_saf", "")
+SMALLRNA_CONFIGURED_BOWTIE_INDEX_PREFIX = SMALLRNA.get("bowtie_index_prefix", "")
+SMALLRNA_PREPARED_MIRBASE_FASTA = SMALLRNA.get(
+    "prepared_mirbase_fasta",
+    f"{SMALLRNA_REFERENCE_DIR}/mirbase.fa",
+) or f"{SMALLRNA_REFERENCE_DIR}/mirbase.fa"
+SMALLRNA_PREPARED_MIRBASE_SAF = SMALLRNA.get(
+    "prepared_mirbase_saf",
+    f"{SMALLRNA_REFERENCE_DIR}/mirbase.saf",
+) or f"{SMALLRNA_REFERENCE_DIR}/mirbase.saf"
+SMALLRNA_REFERENCE_MANIFEST = f"{SMALLRNA_REFERENCE_DIR}/reference_manifest.tsv"
+SMALLRNA_REFERENCE_DONE = (
+    f"{SMALLRNA_REFERENCE_DIR}/reference.done"
+    if SMALLRNA_REFERENCE_RUN and SMALLRNA_CONFIGURED_MIRBASE_FASTA
+    else ""
+)
+SMALLRNA_EFFECTIVE_MIRBASE_FASTA = (
+    SMALLRNA_PREPARED_MIRBASE_FASTA
+    if SMALLRNA_REFERENCE_DONE
+    else SMALLRNA_CONFIGURED_MIRBASE_FASTA
+)
+SMALLRNA_EFFECTIVE_MIRBASE_SAF = (
+    SMALLRNA_CONFIGURED_MIRBASE_SAF
+    or (SMALLRNA_PREPARED_MIRBASE_SAF if SMALLRNA_REFERENCE_DONE else "")
+)
+SMALLRNA_EFFECTIVE_BOWTIE_INDEX_PREFIX = (
+    SMALLRNA_CONFIGURED_BOWTIE_INDEX_PREFIX
+    or (f"{SMALLRNA_REFERENCE_DIR}/bowtie/mirbase" if SMALLRNA_BUILD_BOWTIE_INDEX else "")
+)
+SMALLRNA_BOWTIE_INDEX_DONE = (
+    f"{SMALLRNA_REFERENCE_DIR}/bowtie/.aspis_bowtie_index.done"
+    if SMALLRNA_BUILD_BOWTIE_INDEX and SMALLRNA_EFFECTIVE_MIRBASE_FASTA
+    else ""
+)
+SMALLRNA_REFERENCE_TARGETS = (
+    [
+        SMALLRNA_PREPARED_MIRBASE_FASTA,
+        SMALLRNA_PREPARED_MIRBASE_SAF,
+        SMALLRNA_REFERENCE_MANIFEST,
+        SMALLRNA_REFERENCE_DONE,
+    ]
+    if SMALLRNA_REFERENCE_DONE
+    else []
+)
+SMALLRNA_REFERENCE_PLAN_INPUTS = (
+    ([SMALLRNA_REFERENCE_DONE] if SMALLRNA_REFERENCE_DONE else [])
+    + ([SMALLRNA_BOWTIE_INDEX_DONE] if SMALLRNA_BOWTIE_INDEX_DONE else [])
+)
 OPTIONAL_TOOLS = configured_tool_list("optional_tools", ["vdb-validate"])
 ACTIVE_SRA_REQUIRED_TOOLS = (
     SRA_LIMITED_REQUIRED_TOOLS if USES_INSDC and USES_SRA_SPOT_LIMIT
@@ -432,6 +484,9 @@ def planned_branch_targets(wildcards):
                         f"{BRANCH_DIR}/{assay}/{project}/smallrna/smallrna_plan.tsv",
                     ]
                 )
+                targets.extend(SMALLRNA_REFERENCE_TARGETS)
+                if SMALLRNA_BOWTIE_INDEX_DONE:
+                    targets.append(SMALLRNA_BOWTIE_INDEX_DONE)
                 if SMALLRNA_PREPROCESS_RUN:
                     targets.extend(
                         [
@@ -803,6 +858,69 @@ rule run_branch_multiqc:
         """
 
 
+if SMALLRNA_REFERENCE_DONE:
+    rule prepare_smallrna_reference:
+        input:
+            fasta=SMALLRNA_CONFIGURED_MIRBASE_FASTA
+        output:
+            fasta=SMALLRNA_PREPARED_MIRBASE_FASTA,
+            saf=SMALLRNA_PREPARED_MIRBASE_SAF,
+            manifest=SMALLRNA_REFERENCE_MANIFEST,
+            done=SMALLRNA_REFERENCE_DONE
+        params:
+            species_prefix_flag=optional_shell_arg(
+                "--species-prefix",
+                SMALLRNA.get("mirbase_species_prefix", ""),
+            ),
+            replace_u_flag=(
+                "--replace-u-with-t"
+                if as_bool(SMALLRNA.get("mirbase_replace_u_with_t", True), True)
+                else ""
+            )
+        log:
+            "logs/references/smallrna_reference.log"
+        shell:
+            r"""
+            mkdir -p logs/references
+            python3 workflow/scripts/prepare_smallrna_reference.py \
+              --fasta {input.fasta:q} \
+              --output-fasta {output.fasta:q} \
+              --saf {output.saf:q} \
+              --manifest {output.manifest:q} \
+              --done {output.done:q} \
+              {params.species_prefix_flag} \
+              {params.replace_u_flag} \
+              > {log:q} 2>&1
+            """
+
+
+if SMALLRNA_BOWTIE_INDEX_DONE:
+    rule build_smallrna_bowtie_index:
+        input:
+            fasta=SMALLRNA_EFFECTIVE_MIRBASE_FASTA,
+            reference=([SMALLRNA_REFERENCE_DONE] if SMALLRNA_REFERENCE_DONE else [])
+        output:
+            done=SMALLRNA_BOWTIE_INDEX_DONE
+        params:
+            prefix=SMALLRNA_EFFECTIVE_BOWTIE_INDEX_PREFIX,
+            index_dir=str(Path(SMALLRNA_EFFECTIVE_BOWTIE_INDEX_PREFIX).parent),
+            bowtie_build=SMALLRNA.get("bowtie_build_command", "bowtie-build")
+        threads:
+            SMALLRNA.get("index_threads", SMALLRNA.get("threads", 1))
+        log:
+            "logs/references/smallrna_bowtie_index.log"
+        shell:
+            r"""
+            mkdir -p logs/references {params.index_dir:q}
+            {params.bowtie_build:q} {input.fasta:q} {params.prefix:q} > {log:q} 2>&1
+            if [ ! -s {params.prefix:q}.1.ebwt ] && [ ! -s {params.prefix:q}.1.ebwtl ]; then
+              echo "bowtie-build did not create expected index files for {params.prefix:q}" >> {log:q}
+              exit 1
+            fi
+            printf "status\tprefix\nok\t%s\n" {params.prefix:q} > {output.done:q}
+            """
+
+
 rule check_smallrna_environment:
     input:
         samples=f"{BRANCH_DIR}" + "/smallrna/{project}/samples.tsv"
@@ -829,7 +947,8 @@ rule plan_smallrna:
         samples=f"{BRANCH_DIR}" + "/smallrna/{project}/samples.tsv",
         design=f"{BRANCH_DIR}" + "/smallrna/{project}/design.tsv",
         multiqc_done=f"{BRANCH_DIR}" + "/smallrna/{project}/multiqc/multiqc.done",
-        environment=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/environment_report.tsv"
+        environment=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/environment_report.tsv",
+        reference=SMALLRNA_REFERENCE_PLAN_INPUTS
     output:
         f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/smallrna_plan.tsv"
     params:
@@ -838,18 +957,18 @@ rule plan_smallrna:
         max_length=SMALLRNA.get("max_length", 30),
         quality_cutoff=SMALLRNA.get("quality_cutoff", 20),
         mirbase_fasta_flag=(
-            "--mirbase-fasta " + shlex.quote(SMALLRNA.get("mirbase_fasta", ""))
-            if SMALLRNA.get("mirbase_fasta", "")
+            "--mirbase-fasta " + shlex.quote(SMALLRNA_EFFECTIVE_MIRBASE_FASTA)
+            if SMALLRNA_EFFECTIVE_MIRBASE_FASTA
             else ""
         ),
         mirbase_saf_flag=(
-            "--mirbase-saf " + shlex.quote(SMALLRNA.get("mirbase_saf", ""))
-            if SMALLRNA.get("mirbase_saf", "")
+            "--mirbase-saf " + shlex.quote(SMALLRNA_EFFECTIVE_MIRBASE_SAF)
+            if SMALLRNA_EFFECTIVE_MIRBASE_SAF
             else ""
         ),
         bowtie_index_prefix_flag=(
-            "--bowtie-index-prefix " + shlex.quote(SMALLRNA.get("bowtie_index_prefix", ""))
-            if SMALLRNA.get("bowtie_index_prefix", "")
+            "--bowtie-index-prefix " + shlex.quote(SMALLRNA_EFFECTIVE_BOWTIE_INDEX_PREFIX)
+            if SMALLRNA_EFFECTIVE_BOWTIE_INDEX_PREFIX
             else ""
         ),
         contaminant_fasta_flag=(

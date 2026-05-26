@@ -32,6 +32,10 @@ run_snakemake "RNA-seq differential contract smoke" \
   --configfile config/aspis_differential_smoke.yaml
 run_snakemake "smallRNA parity scaffold smoke" \
   --configfile config/aspis_smallrna_smoke.yaml
+if [[ "$MODE" == "dry-run" ]]; then
+  run_snakemake "smallRNA Bowtie index contract smoke" \
+    --configfile config/aspis_smallrna_bowtie_index_smoke.yaml
+fi
 run_snakemake "gene/transcript DESeq2 and report smoke" \
   --configfile config/aspis_deseq2_smoke.yaml
 

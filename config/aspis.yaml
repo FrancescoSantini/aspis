@@ -133,6 +133,15 @@ smallrna:
   cutadapt_command: cutadapt
   cutadapt_extra_args: ""
   threads: 1
+  reference_run: false
+  reference_dir: work/smallrna_reference
+  mirbase_species_prefix: ""
+  mirbase_replace_u_with_t: true
+  prepared_mirbase_fasta: ""
+  prepared_mirbase_saf: ""
+  build_bowtie_index: false
+  bowtie_build_command: bowtie-build
+  index_threads: 1
   mirbase_fasta: ""
   mirbase_saf: ""
   bowtie_index_prefix: ""
