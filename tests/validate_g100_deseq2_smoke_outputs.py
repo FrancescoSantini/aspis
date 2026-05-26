@@ -1,0 +1,318 @@
+#!/usr/bin/env python3
+"""Validate and summarize the G100 synthetic DESeq2/report smoke outputs."""
+
+from __future__ import annotations
+
+import csv
+from pathlib import Path
+
+
+PROJECT = "ASPIS_DESEQ2_SMOKE"
+BASE = Path("results/deseq2_smoke")
+SUMMARY = BASE / "g100_deseq2_smoke_summary.tsv"
+LEVELS = {
+    "gene": {
+        "branch": BASE / "gene_deseq2",
+        "feature_column": "Geneid",
+    },
+    "transcript": {
+        "branch": BASE / "transcript_deseq2",
+        "feature_column": "transcript_id",
+    },
+}
+REPORT_DIR = BASE / "reports"
+DESEQ_PLAN_COLUMNS = {
+    "project",
+    "assay",
+    "level",
+    "method",
+    "contrast_id",
+    "status",
+    "condition_col",
+    "control_label",
+    "test_label",
+    "n_control",
+    "n_test",
+    "samples",
+    "counts",
+    "coldata",
+    "results",
+    "filtered",
+    "normalized_counts",
+    "summary",
+    "log",
+}
+DESEQ_MANIFEST_COLUMNS = {
+    "contrast_id",
+    "status",
+    "reason",
+    "condition_col",
+    "control_label",
+    "test_label",
+    "contrast_by",
+    "contrast_values",
+    "n_control",
+    "n_test",
+    "samples",
+    "counts",
+    "coldata",
+    "results",
+    "filtered",
+    "normalized_counts",
+    "summary",
+    "feature_metadata",
+    "log",
+}
+REPORT_SCHEMAS = {
+    "report_plan.tsv": {
+        "project",
+        "level",
+        "contrast_id",
+        "status",
+        "reason",
+        "source_manifest",
+        "results",
+        "filtered",
+        "normalized_counts",
+        "deseq2_summary",
+        "feature_metadata",
+        "volcano_pdf",
+        "pca_pdf",
+        "heatmap_pdf",
+        "vst_tsv",
+        "enrichment_manifest",
+        "summary_html",
+    },
+    "plots/plots_manifest.tsv": {
+        "project",
+        "level",
+        "contrast_id",
+        "status",
+        "reason",
+        "volcano_pdf",
+        "pca_pdf",
+        "heatmap_pdf",
+        "vst_tsv",
+        "n_features",
+        "n_significant",
+    },
+    "enrichment/enrichment_manifest.tsv": {
+        "project",
+        "level",
+        "contrast_id",
+        "status",
+        "reason",
+        "enrichment_manifest",
+        "ranked_features",
+        "significant_features",
+        "up_features",
+        "down_features",
+        "feature_set_results",
+        "feature_set_plot",
+        "n_ranked",
+        "n_significant",
+        "n_up",
+        "n_down",
+        "n_feature_sets",
+        "n_feature_set_terms",
+    },
+    "summaries/summary_manifest.tsv": {
+        "project",
+        "level",
+        "contrast_id",
+        "status",
+        "reason",
+        "summary_html",
+        "results",
+        "filtered",
+        "n_features",
+        "n_significant",
+        "n_up",
+        "n_down",
+    },
+    "report_index.done": {
+        "status",
+        "reports_ok",
+        "reports_blocked",
+        "reports_failed",
+        "reports_total",
+    },
+}
+FEATURE_SET_RESULT_COLUMNS = {
+    "contrast_id",
+    "collection",
+    "feature_set_source",
+    "feature_set_collection",
+    "set_id",
+    "description",
+    "overlap",
+    "set_size",
+    "query_size",
+    "universe_size",
+    "pvalue",
+    "padj",
+    "features",
+}
+
+
+def read_tsv(path: Path, required_columns: set[str]) -> tuple[list[str], list[dict[str, str]]]:
+    if not path.exists():
+        raise FileNotFoundError(f"Missing expected G100 DESeq2 smoke output: {path}")
+    with path.open(newline="", encoding="utf-8") as handle:
+        reader = csv.DictReader(handle, delimiter="\t")
+        if reader.fieldnames is None:
+            raise ValueError(f"{path} is empty")
+        missing = required_columns - set(reader.fieldnames)
+        if missing:
+            raise ValueError(f"{path} is missing columns: {sorted(missing)}")
+        rows = [{key: (value or "").strip() for key, value in row.items()} for row in reader]
+    if not rows:
+        raise ValueError(f"{path} has no data rows")
+    return list(reader.fieldnames), rows
+
+
+def require_path(path_text: str, source: Path, column: str) -> None:
+    if not path_text:
+        raise ValueError(f"{source} column {column!r} is empty")
+    path = Path(path_text)
+    if not path.exists():
+        raise FileNotFoundError(f"{source} column {column!r} points to missing path: {path}")
+
+
+def validate_level(level: str, branch: Path, feature_column: str) -> str:
+    _, plan_rows = read_tsv(branch / "contrast_plan.tsv", DESEQ_PLAN_COLUMNS)
+    ready = [row for row in plan_rows if row.get("status") == "ready"]
+    if len(ready) != 1:
+        raise ValueError(f"{branch / 'contrast_plan.tsv'} expected one ready contrast, got {len(ready)}")
+    plan = ready[0]
+    if plan.get("project") != PROJECT or plan.get("assay") != "rnaseq" or plan.get("level") != level:
+        raise ValueError(f"Unexpected {level} contrast plan row: {plan}")
+    if plan.get("method") != "deseq2" or plan.get("n_control") != "2" or plan.get("n_test") != "2":
+        raise ValueError(f"Unexpected {level} contrast plan contract: {plan}")
+
+    _, manifest_rows = read_tsv(branch / "deseq2_manifest.tsv", DESEQ_MANIFEST_COLUMNS)
+    ok_rows = [row for row in manifest_rows if row.get("status") == "ok"]
+    if len(ok_rows) != 1:
+        raise ValueError(f"{branch / 'deseq2_manifest.tsv'} expected one ok contrast, got {len(ok_rows)}")
+    manifest = ok_rows[0]
+    if manifest.get("n_control") != "2" or manifest.get("n_test") != "2":
+        raise ValueError(f"Unexpected {level} manifest replicate contract: {manifest}")
+    for column in [
+        "counts",
+        "coldata",
+        "results",
+        "filtered",
+        "normalized_counts",
+        "summary",
+        "feature_metadata",
+        "log",
+    ]:
+        require_path(manifest[column], branch / "deseq2_manifest.tsv", column)
+
+    _, result_rows = read_tsv(Path(manifest["results"]), {feature_column, "padj"})
+    _, normalized_rows = read_tsv(Path(manifest["normalized_counts"]), {feature_column})
+    summary_columns = {
+        "status",
+        "feature_id_column",
+        "n_samples",
+        "n_features_input",
+        "n_features_tested",
+        "n_significant",
+    }
+    _, summary_rows = read_tsv(Path(manifest["summary"]), summary_columns)
+    summary = summary_rows[0]
+    if summary.get("status") != "ok" or summary.get("feature_id_column") != feature_column:
+        raise ValueError(f"Unexpected {level} DESeq2 summary row: {summary}")
+
+    _, done_rows = read_tsv(branch / "deseq2.done", {"status", "contrasts_ok", "contrasts_failed"})
+    done = done_rows[0]
+    if done.get("status") != "ok" or done.get("contrasts_ok") != "1" or done.get("contrasts_failed") != "0":
+        raise ValueError(f"Unexpected {level} DESeq2 done row: {done}")
+    return f"{level} DESeq2 ok with {len(result_rows)} result rows and {len(normalized_rows)} normalized rows"
+
+
+def validate_report_tsv(relative_path: str, required_columns: set[str]) -> list[dict[str, str]]:
+    _, rows = read_tsv(REPORT_DIR / relative_path, required_columns)
+    for row in rows:
+        if row.get("project") and row.get("project") != PROJECT:
+            raise ValueError(f"{REPORT_DIR / relative_path} has unexpected project row: {row}")
+    return rows
+
+
+def validate_report_html() -> None:
+    path = REPORT_DIR / "index.html"
+    if not path.exists():
+        raise FileNotFoundError(f"Missing expected G100 DESeq2 smoke output: {path}")
+    text = path.read_text(encoding="utf-8")
+    if "differential report index" not in text or "</html>" not in text:
+        raise ValueError(f"{path} does not look like a complete report index")
+
+
+def validate_feature_set_results() -> None:
+    _, manifest_rows = read_tsv(
+        REPORT_DIR / "enrichment/enrichment_manifest.tsv",
+        REPORT_SCHEMAS["enrichment/enrichment_manifest.tsv"],
+    )
+    found_table_adapter_term = False
+    for row in manifest_rows:
+        if row.get("status") != "ok" or not row.get("feature_set_results", ""):
+            continue
+        result_path = Path(row["feature_set_results"])
+        _, result_rows = read_tsv(result_path, FEATURE_SET_RESULT_COLUMNS)
+        if any(result_row.get("feature_set_source", "") == "toy_pathways" for result_row in result_rows):
+            found_table_adapter_term = True
+    if not found_table_adapter_term:
+        raise ValueError(f"{REPORT_DIR} did not include feature-set terms from the TSV adapter")
+
+
+def validate_reports() -> str:
+    observed_levels = set()
+    for relative_path, columns in REPORT_SCHEMAS.items():
+        rows = validate_report_tsv(relative_path, columns)
+        if relative_path == "report_plan.tsv":
+            observed_levels = {row["level"] for row in rows if row.get("status") == "ready"}
+    expected_levels = set(LEVELS)
+    if observed_levels != expected_levels:
+        raise ValueError(f"Report plan ready levels are {sorted(observed_levels)}, expected {sorted(expected_levels)}")
+    validate_report_html()
+    validate_feature_set_results()
+    return "gene/transcript report plots, enrichment, summaries, and index present"
+
+
+def run_check(name: str, checks: list[dict[str, str]], func) -> None:
+    try:
+        detail = func()
+    except Exception as exc:  # noqa: BLE001 - preserve compact smoke summary.
+        checks.append({"check": name, "status": "failed", "detail": str(exc)})
+    else:
+        checks.append({"check": name, "status": "ok", "detail": detail})
+
+
+def write_summary(path: Path, rows: list[dict[str, str]]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=["check", "status", "detail"], delimiter="\t", lineterminator="\n")
+        writer.writeheader()
+        writer.writerows(rows)
+
+
+def main() -> int:
+    checks: list[dict[str, str]] = []
+    for level, spec in LEVELS.items():
+        run_check(
+            f"{level}_deseq2",
+            checks,
+            lambda level=level, spec=spec: validate_level(level, spec["branch"], spec["feature_column"]),
+        )
+    run_check("reports", checks, validate_reports)
+    write_summary(SUMMARY, checks)
+    for row in checks:
+        print(f"{row['check']}\t{row['status']}\t{row['detail']}")
+    failed = [row for row in checks if row["status"] != "ok"]
+    if failed:
+        raise SystemExit(1)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
