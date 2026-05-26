@@ -100,7 +100,7 @@ rnaseq_differential:
   levels:
     - gene
   rscript_command: Rscript
-  deseq2_script: workflow/scripts/run_deseq2_gene.R
+  deseq2_script: workflow/scripts/run_deseq2_feature.R
   condition_col: condition
   control_label: control
   contrast_by: []
