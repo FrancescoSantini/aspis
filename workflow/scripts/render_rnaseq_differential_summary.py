@@ -110,6 +110,11 @@ def enrichment_status(path: Path) -> str:
     return ",".join(statuses)
 
 
+def enrichment_resources(path: Path) -> dict[str, dict[str, str]]:
+    _, rows = read_table(path)
+    return {row.get("resource", ""): row for row in rows if row.get("resource", "")}
+
+
 def top_feature_table(rows: list[dict[str, str]], top_n: int) -> str:
     if not rows:
         return "<p>No significant features.</p>"
@@ -137,18 +142,36 @@ def top_feature_table(rows: list[dict[str, str]], top_n: int) -> str:
   </table>"""
 
 
-def plot_panel(label: str, path: str, html_path: Path) -> str:
+def artifact_panel(label: str, path: str, html_path: Path, mime_type: str) -> str:
     link = html.escape(relative_link(path, html_path))
     title = html.escape(label)
     return f"""<section class="plot">
     <h3>{title}</h3>
-    <object data="{link}" type="application/pdf">
+    <object data="{link}" type="{mime_type}">
       <a href="{link}">{title}</a>
     </object>
   </section>"""
 
 
-def render_html(row: dict[str, str], metrics: dict[str, str], filtered_rows: list[dict[str, str]], top_n: int) -> str:
+def plot_panel(label: str, path: str, html_path: Path) -> str:
+    return artifact_panel(label, path, html_path, "application/pdf")
+
+
+def enrichment_panel(resources: dict[str, dict[str, str]], html_path: Path) -> str:
+    plot = resources.get("feature_set_plot", {})
+    path = plot.get("path", "")
+    if not path:
+        return ""
+    return "\n" + artifact_panel("Feature-Set Enrichment", path, html_path, "image/svg+xml")
+
+
+def render_html(
+    row: dict[str, str],
+    metrics: dict[str, str],
+    filtered_rows: list[dict[str, str]],
+    resources: dict[str, dict[str, str]],
+    top_n: int,
+) -> str:
     title = f"{row['project']} {row['level']} {row['contrast_id']}"
     metric_rows = "\n".join(
         f"<tr><th>{html.escape(key)}</th><td>{html.escape(str(value))}</td></tr>"
@@ -160,6 +183,7 @@ def render_html(row: dict[str, str], metrics: dict[str, str], filtered_rows: lis
             plot_panel("Volcano", row["volcano_pdf"], output),
             plot_panel("PCA", row["pca_pdf"], output),
             plot_panel("Heatmap", row["heatmap_pdf"], output),
+            enrichment_panel(resources, output),
         ]
     )
     artifacts = [
@@ -167,6 +191,9 @@ def render_html(row: dict[str, str], metrics: dict[str, str], filtered_rows: lis
         ("Filtered DESeq2 results", row["filtered"]),
         ("Enrichment manifest", row["enrichment_manifest"]),
     ]
+    feature_set_results = resources.get("feature_set_results", {}).get("path", "")
+    if feature_set_results:
+        artifacts.append(("Feature-set enrichment", feature_set_results))
     artifact_rows = "\n".join(
         f"<li><a href=\"{html.escape(relative_link(path, output))}\">{html.escape(label)}</a></li>"
         for label, path in artifacts
@@ -215,6 +242,7 @@ def render_ready_row(row: dict[str, str], top_n: int) -> dict[str, str]:
         if not path.exists():
             raise FileNotFoundError(f"Planned input does not exist: {path}")
 
+    resources = enrichment_resources(enrichment_path)
     _, result_rows = read_table(results_path)
     _, filtered_rows = read_table(filtered_path)
     summary = first_summary_row(summary_path)
@@ -235,7 +263,7 @@ def render_ready_row(row: dict[str, str], top_n: int) -> dict[str, str]:
 
     output = Path(row["summary_html"])
     output.parent.mkdir(parents=True, exist_ok=True)
-    output.write_text(render_html(row, metrics, filtered_rows, top_n), encoding="utf-8")
+    output.write_text(render_html(row, metrics, filtered_rows, resources, top_n), encoding="utf-8")
     return {
         "project": row["project"],
         "level": row["level"],
