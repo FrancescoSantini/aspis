@@ -195,12 +195,16 @@ SMALLRNA_REQUIRED_TOOLS = configured_tool_list(
     "smallrna_required_tools", ["cutadapt", "bowtie", "bowtie-build", "samtools", "featureCounts", "Rscript"]
 )
 SMALLRNA_PREPROCESS_RUN = as_bool(SMALLRNA.get("preprocess_run", False), False)
+SMALLRNA_DEPLETION_RUN = as_bool(SMALLRNA.get("depletion_run", False), False)
 SMALLRNA_REFERENCE_RUN = as_bool(SMALLRNA.get("reference_run", False), False)
 SMALLRNA_BUILD_BOWTIE_INDEX = as_bool(SMALLRNA.get("build_bowtie_index", False), False)
+SMALLRNA_BUILD_CONTAMINANT_INDEX = as_bool(SMALLRNA.get("build_contaminant_index", False), False)
 SMALLRNA_REFERENCE_DIR = SMALLRNA.get("reference_dir", "work/smallrna_reference")
 SMALLRNA_CONFIGURED_MIRBASE_FASTA = SMALLRNA.get("mirbase_fasta", "")
 SMALLRNA_CONFIGURED_MIRBASE_SAF = SMALLRNA.get("mirbase_saf", "")
 SMALLRNA_CONFIGURED_BOWTIE_INDEX_PREFIX = SMALLRNA.get("bowtie_index_prefix", "")
+SMALLRNA_CONFIGURED_CONTAMINANT_FASTA = SMALLRNA.get("contaminant_fasta", "")
+SMALLRNA_CONFIGURED_CONTAMINANT_INDEX_PREFIX = SMALLRNA.get("contaminant_index_prefix", "")
 SMALLRNA_PREPARED_MIRBASE_FASTA = SMALLRNA.get(
     "prepared_mirbase_fasta",
     f"{SMALLRNA_REFERENCE_DIR}/mirbase.fa",
@@ -233,6 +237,15 @@ SMALLRNA_BOWTIE_INDEX_DONE = (
     if SMALLRNA_BUILD_BOWTIE_INDEX and SMALLRNA_EFFECTIVE_MIRBASE_FASTA
     else ""
 )
+SMALLRNA_EFFECTIVE_CONTAMINANT_INDEX_PREFIX = (
+    SMALLRNA_CONFIGURED_CONTAMINANT_INDEX_PREFIX
+    or (f"{SMALLRNA_REFERENCE_DIR}/bowtie/contaminants" if SMALLRNA_BUILD_CONTAMINANT_INDEX else "")
+)
+SMALLRNA_CONTAMINANT_INDEX_DONE = (
+    f"{SMALLRNA_REFERENCE_DIR}/bowtie/.aspis_contaminant_index.done"
+    if SMALLRNA_BUILD_CONTAMINANT_INDEX and SMALLRNA_CONFIGURED_CONTAMINANT_FASTA
+    else ""
+)
 SMALLRNA_REFERENCE_TARGETS = (
     [
         SMALLRNA_PREPARED_MIRBASE_FASTA,
@@ -246,7 +259,10 @@ SMALLRNA_REFERENCE_TARGETS = (
 SMALLRNA_REFERENCE_PLAN_INPUTS = (
     ([SMALLRNA_REFERENCE_DONE] if SMALLRNA_REFERENCE_DONE else [])
     + ([SMALLRNA_BOWTIE_INDEX_DONE] if SMALLRNA_BOWTIE_INDEX_DONE else [])
+    + ([SMALLRNA_CONTAMINANT_INDEX_DONE] if SMALLRNA_CONTAMINANT_INDEX_DONE else [])
 )
+if SMALLRNA_DEPLETION_RUN and not SMALLRNA_PREPROCESS_RUN:
+    raise ValueError("smallrna.depletion_run requires smallrna.preprocess_run: true")
 OPTIONAL_TOOLS = configured_tool_list("optional_tools", ["vdb-validate"])
 ACTIVE_SRA_REQUIRED_TOOLS = (
     SRA_LIMITED_REQUIRED_TOOLS if USES_INSDC and USES_SRA_SPOT_LIMIT
@@ -487,6 +503,8 @@ def planned_branch_targets(wildcards):
                 targets.extend(SMALLRNA_REFERENCE_TARGETS)
                 if SMALLRNA_BOWTIE_INDEX_DONE:
                     targets.append(SMALLRNA_BOWTIE_INDEX_DONE)
+                if SMALLRNA_CONTAMINANT_INDEX_DONE:
+                    targets.append(SMALLRNA_CONTAMINANT_INDEX_DONE)
                 if SMALLRNA_PREPROCESS_RUN:
                     targets.extend(
                         [
@@ -498,6 +516,14 @@ def planned_branch_targets(wildcards):
                             f"{BRANCH_DIR}/{assay}/{project}/smallrna/preprocess/fastqc/fastqc.done",
                             f"{BRANCH_DIR}/{assay}/{project}/smallrna/preprocess/multiqc/multiqc_report.html",
                             f"{BRANCH_DIR}/{assay}/{project}/smallrna/preprocess/multiqc/multiqc.done",
+                        ]
+                    )
+                if SMALLRNA_DEPLETION_RUN:
+                    targets.extend(
+                        [
+                            f"{BRANCH_DIR}/{assay}/{project}/smallrna/depletion/depleted_samples.tsv",
+                            f"{BRANCH_DIR}/{assay}/{project}/smallrna/depletion/depletion_manifest.tsv",
+                            f"{BRANCH_DIR}/{assay}/{project}/smallrna/depletion/depletion.done",
                         ]
                     )
     return targets
@@ -921,6 +947,32 @@ if SMALLRNA_BOWTIE_INDEX_DONE:
             """
 
 
+if SMALLRNA_CONTAMINANT_INDEX_DONE:
+    rule build_smallrna_contaminant_index:
+        input:
+            fasta=SMALLRNA_CONFIGURED_CONTAMINANT_FASTA
+        output:
+            done=SMALLRNA_CONTAMINANT_INDEX_DONE
+        params:
+            prefix=SMALLRNA_EFFECTIVE_CONTAMINANT_INDEX_PREFIX,
+            index_dir=str(Path(SMALLRNA_EFFECTIVE_CONTAMINANT_INDEX_PREFIX).parent),
+            bowtie_build=SMALLRNA.get("bowtie_build_command", "bowtie-build")
+        threads:
+            SMALLRNA.get("index_threads", SMALLRNA.get("threads", 1))
+        log:
+            "logs/references/smallrna_contaminant_index.log"
+        shell:
+            r"""
+            mkdir -p logs/references {params.index_dir:q}
+            {params.bowtie_build:q} {input.fasta:q} {params.prefix:q} > {log:q} 2>&1
+            if [ ! -s {params.prefix:q}.1.ebwt ] && [ ! -s {params.prefix:q}.1.ebwtl ]; then
+              echo "bowtie-build did not create expected index files for {params.prefix:q}" >> {log:q}
+              exit 1
+            fi
+            printf "status\tprefix\nok\t%s\n" {params.prefix:q} > {output.done:q}
+            """
+
+
 rule check_smallrna_environment:
     input:
         samples=f"{BRANCH_DIR}" + "/smallrna/{project}/samples.tsv"
@@ -972,13 +1024,13 @@ rule plan_smallrna:
             else ""
         ),
         contaminant_fasta_flag=(
-            "--contaminant-fasta " + shlex.quote(SMALLRNA.get("contaminant_fasta", ""))
-            if SMALLRNA.get("contaminant_fasta", "")
+            "--contaminant-fasta " + shlex.quote(SMALLRNA_CONFIGURED_CONTAMINANT_FASTA)
+            if SMALLRNA_CONFIGURED_CONTAMINANT_FASTA
             else ""
         ),
         contaminant_index_prefix_flag=(
-            "--contaminant-index-prefix " + shlex.quote(SMALLRNA.get("contaminant_index_prefix", ""))
-            if SMALLRNA.get("contaminant_index_prefix", "")
+            "--contaminant-index-prefix " + shlex.quote(SMALLRNA_EFFECTIVE_CONTAMINANT_INDEX_PREFIX)
+            if SMALLRNA_EFFECTIVE_CONTAMINANT_INDEX_PREFIX
             else ""
         ),
         condition_col=SMALLRNA.get(
@@ -1161,6 +1213,43 @@ rule run_preprocessed_smallrna_multiqc:
           > {log:q} 2>&1
         test -s {output.report:q}
         printf "status\treport\nok\t%s\n" {output.report:q} > {output.done:q}
+        """
+
+
+rule deplete_smallrna_contaminants:
+    input:
+        samples=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/preprocess/trimmed_samples.tsv",
+        preprocess_done=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/preprocess/preprocess.done",
+        plan=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/smallrna_plan.tsv",
+        contaminant_index=([SMALLRNA_CONTAMINANT_INDEX_DONE] if SMALLRNA_CONTAMINANT_INDEX_DONE else []),
+        environment=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/environment_report.tsv"
+    output:
+        samples=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/depletion/depleted_samples.tsv",
+        manifest=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/depletion/depletion_manifest.tsv",
+        done=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/depletion/depletion.done"
+    params:
+        outdir=lambda wildcards: f"{BRANCH_DIR}/smallrna/{wildcards.project}/smallrna/depletion",
+        index_prefix=SMALLRNA_EFFECTIVE_CONTAMINANT_INDEX_PREFIX,
+        bowtie=SMALLRNA.get("bowtie_command", "bowtie"),
+        mismatches=SMALLRNA.get("contaminant_mismatches", 1)
+    threads:
+        SMALLRNA.get("threads", 1)
+    log:
+        "logs/branches/smallrna/{project}.smallrna_depletion.log"
+    shell:
+        r"""
+        mkdir -p logs/branches/smallrna
+        python3 workflow/scripts/deplete_smallrna_contaminants.py \
+          --samples {input.samples:q} \
+          --outdir {params.outdir:q} \
+          --output {output.samples:q} \
+          --manifest {output.manifest:q} \
+          --done {output.done:q} \
+          --index-prefix {params.index_prefix:q} \
+          --bowtie {params.bowtie:q} \
+          --threads {threads:q} \
+          --mismatches {params.mismatches:q} \
+          > {log:q} 2>&1
         """
 
 

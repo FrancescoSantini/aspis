@@ -125,6 +125,7 @@ rnaseq_differential:
 smallrna:
   run: false
   preprocess_run: false
+  depletion_run: false
   adapter: AGATCGGAAGAGCACACGTCTGAACTCC
   min_length: 15
   max_length: 30
@@ -140,8 +141,11 @@ smallrna:
   prepared_mirbase_fasta: ""
   prepared_mirbase_saf: ""
   build_bowtie_index: false
+  build_contaminant_index: false
   bowtie_build_command: bowtie-build
+  bowtie_command: bowtie
   index_threads: 1
+  contaminant_mismatches: 1
   mirbase_fasta: ""
   mirbase_saf: ""
   bowtie_index_prefix: ""
