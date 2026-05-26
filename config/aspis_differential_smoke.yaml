@@ -107,6 +107,13 @@ rnaseq_differential:
   report_top_n: 20
   rscript_command: Rscript
   deseq2_script: workflow/scripts/run_deseq2_feature.R
+  isoform_switch_script: workflow/scripts/run_isoform_switch_contrast.R
+  isoform_switch_gene_expr: 1.0
+  isoform_switch_isoform_expr: 1.0
+  isoform_switch_padj: 0.1
+  isoform_switch_dif: 0.1
+  isoform_switch_max_genes: 30
+  isoform_switch_genome_object: ""
   condition_col: condition
   control_label: control
   contrast_by:
