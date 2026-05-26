@@ -507,13 +507,24 @@ The helper target is:
 results/differential_smoke/branches/rnaseq/ASPIS_TEST/differential/differential_plan.tsv
 ```
 
-Inspect the resulting differential contracts:
+On a successful real run, the helper validates the expected materialization,
+branch, STAR alignment, quantification, and differential planning contracts and
+writes a compact summary:
+
+```bash
+cat results/differential_smoke/g100_smoke_summary.tsv
+```
+
+For custom `TARGET=...` runs, validation is skipped unless you set
+`VALIDATE=1`. Skip validation explicitly with `VALIDATE=0`.
+
+Inspect the resulting differential contracts if validation fails or if you need
+more detail:
 
 ```bash
 column -t -s $'\t' results/differential_smoke/branches/rnaseq/ASPIS_TEST/differential/differential_plan.tsv
-column -t -s $'\t' results/differential_smoke/branches/rnaseq/ASPIS_TEST/differential/transcript_deseq2/contrast_plan.tsv
-cat results/differential_smoke/branches/rnaseq/ASPIS_TEST/differential/transcript_deseq2/deseq2.done
-column -t -s $'\t' results/differential_smoke/branches/rnaseq/ASPIS_TEST/differential/isoform_switch/contrast_plan.tsv
+column -t -s $'\t' results/differential_smoke/branches/rnaseq/ASPIS_TEST/alignment/aligned_samples.tsv
+column -t -s $'\t' results/differential_smoke/branches/rnaseq/ASPIS_TEST/quantification/quantification_plan.tsv
 ```
 
 Do not use real SLURM submissions for routine development. Keep development and
