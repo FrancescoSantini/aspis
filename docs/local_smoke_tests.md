@@ -28,9 +28,11 @@ heatmap, transformed-count, optional GMT or exported-TSV feature-set
 enrichment, and embedded HTML summary artifacts plus a project-level report
 index. The DESeq2/report smoke also checks that transcript features can be
 mapped back to gene IDs for gene-level feature-set enrichment. In run mode, the
-suite also exercises the ready isoform-switch runner handoff with a tiny mock R
-contrast script, then validates the report plan, plot, enrichment, summary,
-feature-set result, and index schemas emitted by the smoke fixtures.
+suite also validates core materialization, branch, alignment, quantification,
+and differential output contracts, exercises the ready isoform-switch runner
+handoff with a tiny mock R contrast script, then validates the report plan,
+plot, enrichment, summary, feature-set result, and index schemas emitted by the
+smoke fixtures.
 It is a local confidence gate only; it does not replace a deliberate G100 SLURM
 smoke run after local contracts are stable. Use `tests/run_g100_smoke.sh` for
 that G100 check.
