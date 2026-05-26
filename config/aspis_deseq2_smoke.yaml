@@ -18,6 +18,7 @@ deseq2_smoke:
     - transcript
   report_top_n: 20
   report_feature_sets: tests/differential/feature_sets.gmt
+  report_feature_set_tables: tests/differential/pathway_feature_sets.tsv
   report_feature_set_min_overlap: 1
   report_feature_set_top_n: 12
   samples: tests/differential/gene_samples.tsv

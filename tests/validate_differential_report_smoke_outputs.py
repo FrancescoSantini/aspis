@@ -86,6 +86,21 @@ SCHEMAS = {
         "reports_total",
     },
 }
+FEATURE_SET_RESULT_COLUMNS = {
+    "contrast_id",
+    "collection",
+    "feature_set_source",
+    "feature_set_collection",
+    "set_id",
+    "description",
+    "overlap",
+    "set_size",
+    "query_size",
+    "universe_size",
+    "pvalue",
+    "padj",
+    "features",
+}
 
 
 def read_tsv(path: Path) -> tuple[list[str], list[dict[str, str]]]:
@@ -116,11 +131,34 @@ def validate_html(path: Path) -> None:
         raise ValueError(f"{path} does not look like a complete report index")
 
 
+def validate_feature_set_results(report_dir: Path, require_table_adapter: bool = False) -> None:
+    _, manifest_rows = read_tsv(report_dir / "enrichment/enrichment_manifest.tsv")
+    found_table_adapter_term = False
+    for manifest_row in manifest_rows:
+        if manifest_row.get("status") != "ok" or not manifest_row.get("feature_set_results", ""):
+            continue
+        result_path = Path(manifest_row["feature_set_results"])
+        if not result_path.exists():
+            raise FileNotFoundError(f"Missing feature-set result table: {result_path}")
+        columns, rows = read_tsv(result_path)
+        missing = FEATURE_SET_RESULT_COLUMNS - set(columns)
+        if missing:
+            raise ValueError(f"{result_path} is missing columns: {sorted(missing)}")
+        if any(row.get("feature_set_source", "") == "toy_pathways" for row in rows):
+            found_table_adapter_term = True
+    if require_table_adapter and not found_table_adapter_term:
+        raise ValueError(f"{report_dir} did not include feature-set terms from the TSV adapter")
+
+
 def main() -> int:
     for report_dir in REPORT_DIRS:
         for relative_path, columns in SCHEMAS.items():
             validate_tsv(report_dir / relative_path, columns)
         validate_html(report_dir / "index.html")
+        validate_feature_set_results(
+            report_dir,
+            require_table_adapter=report_dir == Path("results/deseq2_smoke/reports"),
+        )
     return 0
 
 
