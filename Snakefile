@@ -390,8 +390,12 @@ def planned_branch_targets(wildcards):
                                     ]
                                 )
                             if "isoform_switch" in RNASEQ_DIFFERENTIAL_LEVELS:
-                                targets.append(
-                                    f"{BRANCH_DIR}/{assay}/{project}/differential/isoform_switch/contrast_plan.tsv"
+                                targets.extend(
+                                    [
+                                        f"{BRANCH_DIR}/{assay}/{project}/differential/isoform_switch/contrast_plan.tsv",
+                                        f"{BRANCH_DIR}/{assay}/{project}/differential/isoform_switch/isoform_switch_manifest.tsv",
+                                        f"{BRANCH_DIR}/{assay}/{project}/differential/isoform_switch/isoform_switch.done",
+                                    ]
                                 )
                             if RNASEQ_DIFFERENTIAL_REPORTS_ENABLED:
                                 targets.extend(
@@ -1611,6 +1615,57 @@ rule plan_isoform_switch:
           --control-label {params.control_label:q} \
           --contrast-by {params.contrast_by:q} \
           --min-replicates {params.min_replicates:q} \
+          > {log:q} 2>&1
+        """
+
+
+rule run_isoform_switch:
+    input:
+        plan=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/isoform_switch/contrast_plan.tsv",
+        samples=f"{BRANCH_DIR}" + "/rnaseq/{project}/samples.tsv",
+        transcript_counts=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/counts/transcript_counts.tsv",
+        transcript_metadata=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/counts/transcript_metadata.tsv",
+        annotated=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/gffcompare/annotated.gtf",
+        environment=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/environment_report.tsv"
+    output:
+        manifest=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/isoform_switch/isoform_switch_manifest.tsv",
+        done=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/isoform_switch/isoform_switch.done"
+    params:
+        rscript=RNASEQ_DIFFERENTIAL.get("rscript_command", "Rscript"),
+        isoform_switch_script=RNASEQ_DIFFERENTIAL.get(
+            "isoform_switch_script",
+            "workflow/scripts/run_isoform_switch_contrast.R",
+        ),
+        gene_expr=RNASEQ_DIFFERENTIAL.get("isoform_switch_gene_expr", 1.0),
+        isoform_expr=RNASEQ_DIFFERENTIAL.get("isoform_switch_isoform_expr", 1.0),
+        padj=RNASEQ_DIFFERENTIAL.get("isoform_switch_padj", RNASEQ_DIFFERENTIAL.get("padj", 0.1)),
+        dif=RNASEQ_DIFFERENTIAL.get("isoform_switch_dif", 0.1),
+        max_genes=RNASEQ_DIFFERENTIAL.get("isoform_switch_max_genes", 30),
+        genome_object=lambda wildcards: optional_shell_arg(
+            "--genome-object",
+            RNASEQ_DIFFERENTIAL.get("isoform_switch_genome_object", ""),
+        )
+    log:
+        "logs/branches/rnaseq/{project}.isoform_switch.log"
+    shell:
+        r"""
+        mkdir -p logs/branches/rnaseq
+        python3 workflow/scripts/run_isoform_switch_branch.py \
+          --plan {input.plan:q} \
+          --samples {input.samples:q} \
+          --transcript-counts {input.transcript_counts:q} \
+          --transcript-metadata {input.transcript_metadata:q} \
+          --annotated-gtf {input.annotated:q} \
+          --manifest {output.manifest:q} \
+          --done {output.done:q} \
+          --rscript {params.rscript:q} \
+          --isoform-switch-script {params.isoform_switch_script:q} \
+          --gene-expr {params.gene_expr:q} \
+          --isoform-expr {params.isoform_expr:q} \
+          --padj {params.padj:q} \
+          --dif {params.dif:q} \
+          --max-genes {params.max_genes:q} \
+          {params.genome_object} \
           > {log:q} 2>&1
         """
 

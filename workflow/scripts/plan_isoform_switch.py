@@ -155,6 +155,14 @@ def build_plan_rows(args: argparse.Namespace) -> list[dict[str, str]]:
                     "design": str(contrast_dir / "switch_design.tsv"),
                     "results": str(contrast_dir / "isoform_switch_results.tsv"),
                     "summary": str(contrast_dir / "summary.tsv"),
+                    "qc_pdf": str(contrast_dir / "isoform_switch_qc.pdf"),
+                    "switch_rds": str(contrast_dir / "switch_list.rds"),
+                    "consequences": str(contrast_dir / "switch_consequences.tsv"),
+                    "detailed": str(contrast_dir / "isoform_switch_detailed.tsv"),
+                    "dif_distribution_pdf": str(contrast_dir / "dif_distribution.pdf"),
+                    "nt_fasta": str(contrast_dir / "isoformSwitchAnalyzeR_nt.fasta"),
+                    "aa_fasta": str(contrast_dir / "isoformSwitchAnalyzeR_AA.fasta"),
+                    "expression_summary": str(contrast_dir / "expression_summary.txt"),
                     "log": str(contrast_dir / "isoform_switch.log"),
                 }
             )
@@ -186,6 +194,14 @@ def build_plan_rows(args: argparse.Namespace) -> list[dict[str, str]]:
                 "design": "",
                 "results": "",
                 "summary": "",
+                "qc_pdf": "",
+                "switch_rds": "",
+                "consequences": "",
+                "detailed": "",
+                "dif_distribution_pdf": "",
+                "nt_fasta": "",
+                "aa_fasta": "",
+                "expression_summary": "",
                 "log": "",
             }
         )
@@ -220,6 +236,14 @@ def write_plan(path: Path, rows: list[dict[str, str]]) -> None:
         "design",
         "results",
         "summary",
+        "qc_pdf",
+        "switch_rds",
+        "consequences",
+        "detailed",
+        "dif_distribution_pdf",
+        "nt_fasta",
+        "aa_fasta",
+        "expression_summary",
         "log",
     ]
     path.parent.mkdir(parents=True, exist_ok=True)
