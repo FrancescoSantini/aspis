@@ -15,12 +15,13 @@ MODE=dry-run bash tests/run_local_smokes.sh
 ```
 
 Dry-run mode also plans the smallRNA Bowtie index, contaminant-depletion,
-miRBase-alignment, and miRNA featureCounts contracts with
+miRBase-alignment, miRNA featureCounts, and miRNA DESeq2 contracts with
 `config/aspis_smallrna_bowtie_index_smoke.yaml`,
 `config/aspis_smallrna_depletion_smoke.yaml`,
-`config/aspis_smallrna_alignment_smoke.yaml`, and
-`config/aspis_smallrna_featurecounts_smoke.yaml`. Run mode skips those configs
-so development machines without `cutadapt`, Bowtie, samtools, or featureCounts
+`config/aspis_smallrna_alignment_smoke.yaml`,
+`config/aspis_smallrna_featurecounts_smoke.yaml`, and
+`config/aspis_smallrna_deseq2_smoke.yaml`. Run mode skips those configs
+so development machines without `cutadapt`, Bowtie, samtools, featureCounts, or Rscript
 can still execute the local suite.
 
 Run the technical smoke suite before opening a PR:
@@ -34,7 +35,8 @@ alignment, RNA-seq quantification, gene/transcript/isoform-switch differential
 planning, the blocked isoform-switch execution contract, smallRNA
 materialization/branch QC/design plus local reference FASTA-to-SAF preparation,
 the explicit smallRNA parity plan, and the config-gated cutadapt/post-trim-QC,
-Bowtie-index, contaminant-depletion, miRBase-alignment, and miRNA featureCounts
+Bowtie-index, contaminant-depletion, miRBase-alignment, miRNA featureCounts,
+and miRNA DESeq2
 rule contracts,
 gene/transcript DESeq2 execution, and the lightweight differential report layer
 with volcano, PCA, heatmap, transformed-count, optional GMT or exported-TSV

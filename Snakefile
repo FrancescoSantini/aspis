@@ -198,6 +198,7 @@ SMALLRNA_PREPROCESS_RUN = as_bool(SMALLRNA.get("preprocess_run", False), False)
 SMALLRNA_DEPLETION_RUN = as_bool(SMALLRNA.get("depletion_run", False), False)
 SMALLRNA_ALIGNMENT_RUN = as_bool(SMALLRNA.get("alignment_run", False), False)
 SMALLRNA_QUANTIFICATION_RUN = as_bool(SMALLRNA.get("quantification_run", False), False)
+SMALLRNA_DIFFERENTIAL_RUN = as_bool(SMALLRNA.get("differential_run", False), False)
 SMALLRNA_REFERENCE_RUN = as_bool(SMALLRNA.get("reference_run", False), False)
 SMALLRNA_BUILD_BOWTIE_INDEX = as_bool(SMALLRNA.get("build_bowtie_index", False), False)
 SMALLRNA_BUILD_CONTAMINANT_INDEX = as_bool(SMALLRNA.get("build_contaminant_index", False), False)
@@ -273,6 +274,8 @@ if SMALLRNA_QUANTIFICATION_RUN and not SMALLRNA_ALIGNMENT_RUN:
     raise ValueError("smallrna.quantification_run requires smallrna.alignment_run: true")
 if SMALLRNA_QUANTIFICATION_RUN and not SMALLRNA_EFFECTIVE_MIRBASE_SAF:
     raise ValueError("smallrna.quantification_run requires smallrna.mirbase_saf or smallrna.reference_run: true")
+if SMALLRNA_DIFFERENTIAL_RUN and not SMALLRNA_QUANTIFICATION_RUN:
+    raise ValueError("smallrna.differential_run requires smallrna.quantification_run: true")
 OPTIONAL_TOOLS = configured_tool_list("optional_tools", ["vdb-validate"])
 ACTIVE_SRA_REQUIRED_TOOLS = (
     SRA_LIMITED_REQUIRED_TOOLS if USES_INSDC and USES_SRA_SPOT_LIMIT
@@ -551,6 +554,14 @@ def planned_branch_targets(wildcards):
                             f"{BRANCH_DIR}/{assay}/{project}/smallrna/quantification/mirna_metadata.tsv",
                             f"{BRANCH_DIR}/{assay}/{project}/smallrna/quantification/featurecounts_manifest.tsv",
                             f"{BRANCH_DIR}/{assay}/{project}/smallrna/quantification/featurecounts.done",
+                        ]
+                    )
+                if SMALLRNA_DIFFERENTIAL_RUN:
+                    targets.extend(
+                        [
+                            f"{BRANCH_DIR}/{assay}/{project}/smallrna/differential/mirna_deseq2/contrast_plan.tsv",
+                            f"{BRANCH_DIR}/{assay}/{project}/smallrna/differential/mirna_deseq2/deseq2_manifest.tsv",
+                            f"{BRANCH_DIR}/{assay}/{project}/smallrna/differential/mirna_deseq2/deseq2.done",
                         ]
                     )
     return targets
@@ -1362,6 +1373,85 @@ rule featurecounts_smallrna_mirna:
           --featurecounts {params.featurecounts:q} \
           --threads {threads:q} \
           {params.extra_args_flag} \
+          > {log:q} 2>&1
+        """
+
+
+rule plan_mirna_differential:
+    input:
+        samples=f"{BRANCH_DIR}" + "/smallrna/{project}/samples.tsv",
+        mirna_counts=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/quantification/mirna_counts.tsv",
+        featurecounts_done=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/quantification/featurecounts.done"
+    output:
+        f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/differential/mirna_deseq2/contrast_plan.tsv"
+    params:
+        outdir=lambda wildcards: f"{BRANCH_DIR}/smallrna/{wildcards.project}/smallrna/differential/mirna_deseq2",
+        condition_col=SMALLRNA.get(
+            "condition_col",
+            DESIGN.get("condition_col", "condition"),
+        ),
+        control_label=SMALLRNA.get(
+            "control_label",
+            DESIGN.get("control_label", "control"),
+        ),
+        contrast_by=SMALLRNA.get("contrast_by", DESIGN.get("covariates", [])),
+        min_replicates=SMALLRNA.get("min_replicates_per_group", 2)
+    log:
+        "logs/branches/smallrna/{project}.mirna_differential_plan.log"
+    shell:
+        r"""
+        mkdir -p logs/branches/smallrna
+        python3 workflow/scripts/plan_mirna_differential.py \
+          --samples {input.samples:q} \
+          --mirna-counts {input.mirna_counts:q} \
+          --output {output:q} \
+          --outdir {params.outdir:q} \
+          --project {wildcards.project:q} \
+          --condition-col {params.condition_col:q} \
+          --control-label {params.control_label:q} \
+          --contrast-by {params.contrast_by:q} \
+          --min-replicates {params.min_replicates:q} \
+          > {log:q} 2>&1
+        """
+
+
+rule run_mirna_deseq2:
+    input:
+        plan=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/differential/mirna_deseq2/contrast_plan.tsv",
+        samples=f"{BRANCH_DIR}" + "/smallrna/{project}/samples.tsv",
+        mirna_counts=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/quantification/mirna_counts.tsv",
+        mirna_metadata=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/quantification/mirna_metadata.tsv",
+        featurecounts_done=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/quantification/featurecounts.done",
+        environment=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/environment_report.tsv"
+    output:
+        manifest=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/differential/mirna_deseq2/deseq2_manifest.tsv",
+        done=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/differential/mirna_deseq2/deseq2.done"
+    params:
+        rscript=SMALLRNA.get("rscript_command", "Rscript"),
+        deseq2_script=SMALLRNA.get(
+            "deseq2_script",
+            "workflow/scripts/run_deseq2_feature.R",
+        ),
+        padj=SMALLRNA.get("padj", 0.1),
+        log2fc=SMALLRNA.get("log2fc", 1.0),
+        min_count=SMALLRNA.get("min_count", 10)
+    log:
+        "logs/branches/smallrna/{project}.mirna_deseq2.log"
+    shell:
+        r"""
+        mkdir -p logs/branches/smallrna
+        python3 workflow/scripts/run_mirna_differential_branch.py \
+          --plan {input.plan:q} \
+          --samples {input.samples:q} \
+          --mirna-counts {input.mirna_counts:q} \
+          --mirna-metadata {input.mirna_metadata:q} \
+          --manifest {output.manifest:q} \
+          --done {output.done:q} \
+          --rscript {params.rscript:q} \
+          --deseq2-script {params.deseq2_script:q} \
+          --padj {params.padj:q} \
+          --log2fc {params.log2fc:q} \
+          --min-count {params.min_count:q} \
           > {log:q} 2>&1
         """
 

@@ -1,0 +1,99 @@
+# ASPIS local smallRNA miRNA DESeq2 contract smoke-test configuration.
+#
+# This config is intended for dry-runs: it proves the cutadapt -> contaminant
+# depletion -> miRBase Bowtie alignment -> SAF featureCounts -> miRNA DESeq2
+# rule chain without requiring those external tools on every development
+# machine.
+
+intake: config/intake_smallrna_smoke.tsv
+
+paths:
+  raw_dir: work/smallrna_deseq2_smoke/raw
+  metadata_dir: meta/smallrna_deseq2_smoke/materialized
+  manifest: meta/smallrna_deseq2_smoke/materialized_manifest.tsv
+  analysis_plan: meta/smallrna_deseq2_smoke/analysis_plan.tsv
+  environment_report: meta/smallrna_deseq2_smoke/environment_report.tsv
+  sra_cache_dir: cache/smallrna_deseq2_smoke/sra
+  scratch_dir: work/smallrna_deseq2_smoke/tmp
+  branch_dir: results/smallrna_deseq2_smoke/branches
+
+materialization:
+  local_link_mode: symlink
+
+design:
+  condition_col: condition
+  control_label: control
+  covariates:
+    - time_h
+  min_condition_groups: 2
+
+fastq_inspection:
+  max_records: 1000
+
+smallrna:
+  run: true
+  preprocess_run: true
+  depletion_run: true
+  alignment_run: true
+  quantification_run: true
+  differential_run: true
+  adapter: AGATCGGAAGAGCACACGTCTGAACTCC
+  min_length: 15
+  max_length: 30
+  quality_cutoff: 20
+  cutadapt_overlap: 5
+  cutadapt_command: cutadapt
+  cutadapt_extra_args: ""
+  threads: 1
+  reference_run: true
+  reference_dir: work/smallrna_deseq2_smoke/reference
+  mirbase_species_prefix: hsa
+  mirbase_replace_u_with_t: true
+  prepared_mirbase_fasta: ""
+  prepared_mirbase_saf: ""
+  build_bowtie_index: true
+  build_contaminant_index: true
+  bowtie_build_command: bowtie-build
+  bowtie_command: bowtie
+  samtools_command: samtools
+  index_threads: 1
+  contaminant_mismatches: 1
+  alignment_mismatches: 2
+  alignment_multi_alignments: 10
+  alignment_extra_args: "--best --strata"
+  featurecounts_command: featureCounts
+  featurecounts_threads: 1
+  featurecounts_extra_args: ""
+  rscript_command: Rscript
+  deseq2_script: workflow/scripts/run_deseq2_feature.R
+  min_count: 10
+  mirbase_fasta: tests/reference/smallrna_mirbase_toy.fa
+  mirbase_saf: ""
+  bowtie_index_prefix: ""
+  contaminant_fasta: tests/reference/smallrna_contaminants_toy.fa
+  contaminant_index_prefix: ""
+  target_enrichment_mode: disabled
+  target_table: ""
+  reports: true
+  condition_col: condition
+  control_label: control
+  contrast_by:
+    - time_h
+  min_replicates_per_group: 2
+  padj: 0.1
+  log2fc: 1.0
+
+environment:
+  required_tools:
+    - python3
+    - snakemake
+    - fastqc
+    - multiqc
+  smallrna_required_tools: []
+  optional_tools:
+    - cutadapt
+    - bowtie
+    - bowtie-build
+    - samtools
+    - featureCounts
+    - Rscript
