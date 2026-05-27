@@ -305,7 +305,7 @@ def build_rows(args: argparse.Namespace) -> list[dict[str, str]]:
             stage="contaminant_depletion",
             status=contaminant_status,
             reason=contaminant_reason,
-            runner_status="planned",
+            runner_status="implemented",
             libraries=libraries,
             key_inputs=[args.contaminant_fasta, args.contaminant_index_prefix],
             expected_outputs=["depletion/depleted_samples.tsv", "depletion/depletion_manifest.tsv"],
