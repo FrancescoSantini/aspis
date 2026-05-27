@@ -197,6 +197,7 @@ SMALLRNA_REQUIRED_TOOLS = configured_tool_list(
 SMALLRNA_PREPROCESS_RUN = as_bool(SMALLRNA.get("preprocess_run", False), False)
 SMALLRNA_DEPLETION_RUN = as_bool(SMALLRNA.get("depletion_run", False), False)
 SMALLRNA_ALIGNMENT_RUN = as_bool(SMALLRNA.get("alignment_run", False), False)
+SMALLRNA_QUANTIFICATION_RUN = as_bool(SMALLRNA.get("quantification_run", False), False)
 SMALLRNA_REFERENCE_RUN = as_bool(SMALLRNA.get("reference_run", False), False)
 SMALLRNA_BUILD_BOWTIE_INDEX = as_bool(SMALLRNA.get("build_bowtie_index", False), False)
 SMALLRNA_BUILD_CONTAMINANT_INDEX = as_bool(SMALLRNA.get("build_contaminant_index", False), False)
@@ -268,6 +269,10 @@ if SMALLRNA_ALIGNMENT_RUN and not SMALLRNA_DEPLETION_RUN:
     raise ValueError("smallrna.alignment_run requires smallrna.depletion_run: true")
 if SMALLRNA_ALIGNMENT_RUN and not SMALLRNA_EFFECTIVE_BOWTIE_INDEX_PREFIX:
     raise ValueError("smallrna.alignment_run requires smallrna.bowtie_index_prefix or smallrna.build_bowtie_index: true")
+if SMALLRNA_QUANTIFICATION_RUN and not SMALLRNA_ALIGNMENT_RUN:
+    raise ValueError("smallrna.quantification_run requires smallrna.alignment_run: true")
+if SMALLRNA_QUANTIFICATION_RUN and not SMALLRNA_EFFECTIVE_MIRBASE_SAF:
+    raise ValueError("smallrna.quantification_run requires smallrna.mirbase_saf or smallrna.reference_run: true")
 OPTIONAL_TOOLS = configured_tool_list("optional_tools", ["vdb-validate"])
 ACTIVE_SRA_REQUIRED_TOOLS = (
     SRA_LIMITED_REQUIRED_TOOLS if USES_INSDC and USES_SRA_SPOT_LIMIT
@@ -537,6 +542,15 @@ def planned_branch_targets(wildcards):
                             f"{BRANCH_DIR}/{assay}/{project}/smallrna/alignment/aligned_samples.tsv",
                             f"{BRANCH_DIR}/{assay}/{project}/smallrna/alignment/alignment_manifest.tsv",
                             f"{BRANCH_DIR}/{assay}/{project}/smallrna/alignment/alignment.done",
+                        ]
+                    )
+                if SMALLRNA_QUANTIFICATION_RUN:
+                    targets.extend(
+                        [
+                            f"{BRANCH_DIR}/{assay}/{project}/smallrna/quantification/mirna_counts.tsv",
+                            f"{BRANCH_DIR}/{assay}/{project}/smallrna/quantification/mirna_metadata.tsv",
+                            f"{BRANCH_DIR}/{assay}/{project}/smallrna/quantification/featurecounts_manifest.tsv",
+                            f"{BRANCH_DIR}/{assay}/{project}/smallrna/quantification/featurecounts.done",
                         ]
                     )
     return targets
@@ -1305,6 +1319,49 @@ rule align_smallrna_mirbase:
           --mismatches {params.mismatches:q} \
           --multi-alignments {params.multi_alignments:q} \
           --extra-args {params.extra_args:q} \
+          > {log:q} 2>&1
+        """
+
+
+rule featurecounts_smallrna_mirna:
+    input:
+        samples=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/alignment/aligned_samples.tsv",
+        alignment_done=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/alignment/alignment.done",
+        plan=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/smallrna_plan.tsv",
+        saf=([SMALLRNA_EFFECTIVE_MIRBASE_SAF] if SMALLRNA_EFFECTIVE_MIRBASE_SAF else []),
+        environment=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/environment_report.tsv"
+    output:
+        counts=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/quantification/mirna_counts.tsv",
+        metadata=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/quantification/mirna_metadata.tsv",
+        manifest=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/quantification/featurecounts_manifest.tsv",
+        done=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/quantification/featurecounts.done"
+    params:
+        outdir=lambda wildcards: f"{BRANCH_DIR}/smallrna/{wildcards.project}/smallrna/quantification/featurecounts/files",
+        saf=SMALLRNA_EFFECTIVE_MIRBASE_SAF,
+        featurecounts=SMALLRNA.get("featurecounts_command", "featureCounts"),
+        extra_args_flag=shell_arg(
+            "--extra-args",
+            SMALLRNA.get("featurecounts_extra_args", ""),
+        )
+    threads:
+        SMALLRNA.get("featurecounts_threads", SMALLRNA.get("threads", 1))
+    log:
+        "logs/branches/smallrna/{project}.smallrna_featurecounts.log"
+    shell:
+        r"""
+        mkdir -p logs/branches/smallrna
+        python3 workflow/scripts/run_smallrna_featurecounts.py \
+          --samples {input.samples:q} \
+          --plan {input.plan:q} \
+          --saf {params.saf:q} \
+          --outdir {params.outdir:q} \
+          --counts {output.counts:q} \
+          --metadata {output.metadata:q} \
+          --manifest {output.manifest:q} \
+          --done {output.done:q} \
+          --featurecounts {params.featurecounts:q} \
+          --threads {threads:q} \
+          {params.extra_args_flag} \
           > {log:q} 2>&1
         """
 
