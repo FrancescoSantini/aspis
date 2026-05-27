@@ -563,6 +563,19 @@ column -t -s $'\t' results/differential_smoke/branches/rnaseq/ASPIS_TEST/alignme
 column -t -s $'\t' results/differential_smoke/branches/rnaseq/ASPIS_TEST/quantification/quantification_plan.tsv
 ```
 
+After the fixture smoke passes, use `docs/rnaseq_real_project.md` for non-toy
+bulk RNA-seq projects. Copy the config/intake templates, replace project paths
+and reference files, choose STAR or HISAT2, and start with:
+
+```bash
+MODE=dry-run bash tests/run_g100_rnaseq_project.sh \
+  ELIX6_santini \
+  config/aspis_rnaseq_<project>.yaml
+```
+
+That helper runs the real project config through the SLURM profile and does not
+run the toy G100 validator.
+
 After that contract check passes, use the separate synthetic DESeq2/report G100
 helper to test the R execution layer without spending time on FASTQ alignment
 or quantification. It runs the gene/transcript DESeq2 smoke and the lightweight

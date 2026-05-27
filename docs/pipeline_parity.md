@@ -14,8 +14,8 @@ one G100 smoke or milestone run.
 | Branch sample sheet and design | Replaced | `assay_branch_ready`, `build_branch_design` | Keep improving contrast diagnostics |
 | Initial FastQC/MultiQC | Replaced | `run_branch_fastqc`, `run_branch_multiqc` | None known |
 | fastp preprocessing | Replaced | `preprocess_rnaseq_branch`, post-preprocess FastQC/MultiQC | None known |
-| STAR alignment | Replaced | `build_rnaseq_star_index`, `align_rnaseq_branch` | Real project config examples |
-| HISAT2 alignment | Replaced | `build_rnaseq_hisat2_index`, `align_rnaseq_branch` | Real project config examples |
+| STAR alignment | Replaced | `build_rnaseq_star_index`, `align_rnaseq_branch`, `config/aspis_rnaseq_project.example.yaml` | Exercise on first real RNA-seq project config |
+| HISAT2 alignment | Replaced | `build_rnaseq_hisat2_index`, `align_rnaseq_branch`, `docs/rnaseq_real_project.md` | Exercise on first real RNA-seq project config |
 | Alignment QC | Replaced | `qc_rnaseq_alignment`, alignment MultiQC | None known |
 | featureCounts gene counts | Replaced | `featurecounts_gene_counts` | None known |
 | StringTie assembly/merge/quantification | Replaced | `stringtie_assemble_branch`, `merge_stringtie_assemblies`, `stringtie_quantify_branch` | None known |
@@ -28,6 +28,7 @@ one G100 smoke or milestone run.
 | Feature-set enrichment | Replaced with offline inputs | `render_rnaseq_differential_enrichment.py` | Add project-specific feature-set examples |
 | Per-contrast HTML summaries | Replaced in lightweight form | `render_rnaseq_differential_summary.py` | Compare with preferred legacy summary layout |
 | Project report index | New replacement | `render_rnaseq_differential_report_index.py` | Add links/sections as real users need them |
+| Real-project G100 entry point | Added | `tests/run_g100_rnaseq_project.sh`, `docs/rnaseq_real_project.md` | Use on first non-toy RNA-seq dataset |
 
 ## SmallRNA-seq
 
@@ -55,6 +56,6 @@ one G100 smoke or milestone run.
 
 ## Immediate Implementation Order
 
-1. Prepare a real smallRNA project config from `config/aspis_smallrna_project.example.yaml` and dry-run it on G100 with `tests/run_g100_smallrna_project.sh`.
-2. Run one small, real smallRNA project milestone on G100 and compare count matrices, DESeq2 contrasts, target enrichment, and reports against the legacy outputs you liked.
+1. Prepare one real RNA-seq or smallRNA project config from the relevant `config/aspis_*_project.example.yaml` template and dry-run it on G100 with the matching `tests/run_g100_*_project.sh` helper.
+2. Run one small, real project milestone on G100 and compare count matrices, DESeq2 contrasts, enrichment, and reports against the legacy outputs you liked.
 3. Improve the smallRNA and RNA-seq report layer where real-output comparisons show missing labels, plot aesthetics, or summary fields.
