@@ -36,6 +36,10 @@ ASSAY_ALIASES = {
     "mirna-seq": "smallrna",
 }
 VALID_RNASEQ_LEVELS = {"gene", "transcript", "isoform_switch"}
+IUPAC_BASES = set("ACGTURYSWKMBDHVNacgturyswkmbdhvn")
+FEATURE_SET_TABLE_REQUIRED_COLUMNS = {"set_id", "feature_id"}
+TARGET_MIRNA_COLUMNS = {"mirna_id", "mature_mirna_id", "miRNA", "mirna", "mature_id"}
+TARGET_GENE_COLUMNS = {"target_id", "target_symbol", "target_gene", "gene_symbol", "target_entrez", "gene_id"}
 
 
 def parse_args() -> argparse.Namespace:
@@ -123,6 +127,119 @@ def require_existing_optional_file(errors: list[str], value: Any, label: str) ->
 def require_existing_files(errors: list[str], value: Any, label: str) -> None:
     for item in clean_list(value):
         require_existing_file(errors, item, label)
+
+
+def existing_file(value: Any) -> Path | None:
+    path = resolve_path(value)
+    if path is not None and path.is_file():
+        return path
+    return None
+
+
+def integer_value(value: Any) -> int | None:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def first_data_line(path: Path, errors: list[str], label: str) -> str:
+    try:
+        with path.open(encoding="utf-8") as handle:
+            for line in handle:
+                stripped = line.strip()
+                if stripped and not stripped.startswith("#"):
+                    return stripped
+    except OSError as exc:
+        errors.append(f"{label} could not be read: {exc}")
+        return ""
+    errors.append(f"{label} is empty or contains only comments: {path}")
+    return ""
+
+
+def require_fasta_shape(errors: list[str], value: Any, label: str) -> None:
+    path = existing_file(value)
+    if path is None:
+        return
+    line = first_data_line(path, errors, label)
+    if line and not line.startswith(">"):
+        errors.append(f"{label} does not look like FASTA; first data line must start with '>': {path}")
+
+
+def require_gtf_shape(errors: list[str], value: Any, label: str) -> None:
+    path = existing_file(value)
+    if path is None:
+        return
+    line = first_data_line(path, errors, label)
+    if line and len(line.split("\t")) < 9:
+        errors.append(f"{label} does not look like GTF/GFF; first data line has fewer than 9 tab-separated fields: {path}")
+
+
+def require_positive_int(errors: list[str], value: Any, label: str) -> int | None:
+    parsed = integer_value(value)
+    if parsed is None or parsed <= 0:
+        errors.append(f"{label} must be a positive integer, got {value!r}")
+        return None
+    return parsed
+
+
+def require_nonempty_sequence(errors: list[str], value: Any, label: str) -> None:
+    sequence = str(value or "").strip()
+    if not sequence:
+        errors.append(f"{label} must not be empty")
+        return
+    invalid = sorted({base for base in sequence if base not in IUPAC_BASES})
+    if invalid:
+        errors.append(f"{label} contains non-IUPAC nucleotide characters: {''.join(invalid)}")
+
+
+def validate_tsv_header(errors: list[str], value: Any, label: str, required: set[str]) -> None:
+    path = existing_file(value)
+    if path is None:
+        return
+    try:
+        with path.open(newline="", encoding="utf-8") as handle:
+            reader = csv.reader(handle, delimiter="\t")
+            header = next(reader, [])
+    except OSError as exc:
+        errors.append(f"{label} could not be read: {exc}")
+        return
+    missing = sorted(required - set(header))
+    if missing:
+        errors.append(f"{label} is missing required column(s): {missing}")
+
+
+def validate_feature_set_tables(errors: list[str], value: Any, label: str) -> None:
+    for item in clean_list(value):
+        validate_tsv_header(errors, item, label, FEATURE_SET_TABLE_REQUIRED_COLUMNS)
+
+
+def validate_gmt_files(errors: list[str], value: Any, label: str) -> None:
+    for item in clean_list(value):
+        path = existing_file(item)
+        if path is None:
+            continue
+        line = first_data_line(path, errors, label)
+        if line and len(line.split("\t")) < 3:
+            errors.append(f"{label} does not look like GMT; first data line needs set, description, and at least one feature: {path}")
+
+
+def validate_target_table(errors: list[str], value: Any, label: str) -> None:
+    path = existing_file(value)
+    if path is None:
+        return
+    try:
+        with path.open(newline="", encoding="utf-8") as handle:
+            reader = csv.reader(handle, delimiter="\t")
+            header = next(reader, [])
+    except OSError as exc:
+        errors.append(f"{label} could not be read: {exc}")
+        return
+    fields = set(header)
+    if not fields & TARGET_MIRNA_COLUMNS:
+        errors.append(f"{label} is missing a miRNA column; accepted names: {sorted(TARGET_MIRNA_COLUMNS)}")
+    if not fields & TARGET_GENE_COLUMNS:
+        errors.append(f"{label} is missing a target-gene column; accepted names: {sorted(TARGET_GENE_COLUMNS)}")
 
 
 def bowtie_index_exists(prefix: Any) -> bool:
@@ -313,35 +430,52 @@ def validate_rnaseq_config(config: dict[str, Any]) -> list[str]:
     alignment = config.get("rnaseq_alignment", {}) or {}
     quant = config.get("rnaseq_quantification", {}) or {}
     diff = config.get("rnaseq_differential", {}) or {}
+    alignment_run = truthy(alignment.get("run"), True)
+    quant_run = truthy(quant.get("run"), False)
+    diff_run = truthy(diff.get("run"), False)
 
-    if truthy(alignment.get("run"), True):
+    if alignment_run:
         aligner = str(alignment.get("aligner", "star")).strip().lower()
         if aligner not in {"star", "hisat2"}:
             errors.append(f"rnaseq_alignment.aligner must be 'star' or 'hisat2', got {aligner!r}")
         require_existing_optional_file(errors, alignment.get("annotation_gtf"), "rnaseq_alignment.annotation_gtf")
+        require_gtf_shape(errors, alignment.get("annotation_gtf"), "rnaseq_alignment.annotation_gtf")
         reference_fasta = resolve_path(alignment.get("reference_fasta"))
         if aligner == "star":
             if reference_fasta is not None:
                 require_existing_file(errors, alignment.get("reference_fasta"), "rnaseq_alignment.reference_fasta")
+                require_fasta_shape(errors, alignment.get("reference_fasta"), "rnaseq_alignment.reference_fasta")
             elif not star_index_exists(alignment.get("star_genome_dir")):
                 errors.append("rnaseq_alignment needs reference_fasta for STAR index building or an existing star_genome_dir")
         elif aligner == "hisat2":
+            if str(alignment.get("star_genome_dir") or "").strip():
+                errors.append("rnaseq_alignment.star_genome_dir should be empty when aligner is 'hisat2'")
             if reference_fasta is not None:
                 require_existing_file(errors, alignment.get("reference_fasta"), "rnaseq_alignment.reference_fasta")
+                require_fasta_shape(errors, alignment.get("reference_fasta"), "rnaseq_alignment.reference_fasta")
             elif not hisat2_index_exists(alignment.get("hisat2_index_prefix")):
                 errors.append("rnaseq_alignment needs reference_fasta for HISAT2 index building or an existing hisat2_index_prefix")
 
-    if truthy(quant.get("run"), False):
+    if quant_run:
+        if not alignment_run:
+            errors.append("rnaseq_quantification.run=true requires rnaseq_alignment.run=true")
         require_existing_file(errors, quant.get("annotation_gtf"), "rnaseq_quantification.annotation_gtf")
+        require_gtf_shape(errors, quant.get("annotation_gtf"), "rnaseq_quantification.annotation_gtf")
         require_existing_optional_file(errors, quant.get("reference_fasta"), "rnaseq_quantification.reference_fasta")
+        require_fasta_shape(errors, quant.get("reference_fasta"), "rnaseq_quantification.reference_fasta")
+        require_positive_int(errors, quant.get("read_length", 1), "rnaseq_quantification.read_length")
 
-    if truthy(diff.get("run"), False):
+    if diff_run:
+        if not quant_run:
+            errors.append("rnaseq_differential.run=true requires rnaseq_quantification.run=true")
         levels = clean_list(diff.get("levels", ["gene"]))
         unknown = sorted(set(levels) - VALID_RNASEQ_LEVELS)
         if unknown:
             errors.append(f"rnaseq_differential.levels contains unsupported level(s): {unknown}")
         require_existing_files(errors, diff.get("report_feature_sets"), "rnaseq_differential.report_feature_sets")
         require_existing_files(errors, diff.get("report_feature_set_tables"), "rnaseq_differential.report_feature_set_tables")
+        validate_gmt_files(errors, diff.get("report_feature_sets"), "rnaseq_differential.report_feature_sets")
+        validate_feature_set_tables(errors, diff.get("report_feature_set_tables"), "rnaseq_differential.report_feature_set_tables")
     return errors
 
 
@@ -352,38 +486,70 @@ def validate_smallrna_config(config: dict[str, Any]) -> list[str]:
         return errors
 
     reference_run = truthy(small.get("reference_run"), False)
+    preprocess_run = truthy(small.get("preprocess_run"), True)
+    depletion_run = truthy(small.get("depletion_run"), False)
+    alignment_run = truthy(small.get("alignment_run"), False)
+    residual_run = truthy(small.get("residual_run"), False)
+    quantification_run = truthy(small.get("quantification_run"), False)
+    differential_run = truthy(small.get("differential_run"), False)
+    require_nonempty_sequence(errors, small.get("adapter", ""), "smallrna.adapter")
+    min_length = require_positive_int(errors, small.get("min_length", 1), "smallrna.min_length")
+    max_length = require_positive_int(errors, small.get("max_length", 1), "smallrna.max_length")
+    if min_length is not None and max_length is not None and max_length < min_length:
+        errors.append("smallrna.max_length must be greater than or equal to smallrna.min_length")
     if reference_run:
         require_existing_file(errors, small.get("mirbase_fasta"), "smallrna.mirbase_fasta")
+        require_fasta_shape(errors, small.get("mirbase_fasta"), "smallrna.mirbase_fasta")
     else:
         require_existing_optional_file(errors, small.get("prepared_mirbase_fasta"), "smallrna.prepared_mirbase_fasta")
         require_existing_optional_file(errors, small.get("prepared_mirbase_saf"), "smallrna.prepared_mirbase_saf")
+        require_fasta_shape(errors, small.get("prepared_mirbase_fasta"), "smallrna.prepared_mirbase_fasta")
 
-    if truthy(small.get("depletion_run"), False):
+    if depletion_run:
+        if not preprocess_run:
+            errors.append("smallrna.depletion_run=true requires smallrna.preprocess_run=true")
         if truthy(small.get("build_contaminant_index"), False):
             require_existing_file(errors, small.get("contaminant_fasta"), "smallrna.contaminant_fasta")
+            require_fasta_shape(errors, small.get("contaminant_fasta"), "smallrna.contaminant_fasta")
         elif not bowtie_index_exists(small.get("contaminant_index_prefix")):
             errors.append("smallrna.depletion_run needs contaminant_fasta for index building or an existing contaminant_index_prefix")
 
-    if truthy(small.get("alignment_run"), False):
+    if alignment_run:
+        if not depletion_run:
+            errors.append("smallrna.alignment_run=true requires smallrna.depletion_run=true")
         if truthy(small.get("build_bowtie_index"), False):
             if not reference_run:
                 require_existing_file(errors, small.get("prepared_mirbase_fasta"), "smallrna.prepared_mirbase_fasta")
+                require_fasta_shape(errors, small.get("prepared_mirbase_fasta"), "smallrna.prepared_mirbase_fasta")
         elif not bowtie_index_exists(small.get("bowtie_index_prefix")):
             errors.append("smallrna.alignment_run needs build_bowtie_index=true or an existing bowtie_index_prefix")
 
-    if truthy(small.get("residual_run"), False):
+    if residual_run:
+        if not alignment_run:
+            errors.append("smallrna.residual_run=true requires smallrna.alignment_run=true")
         if truthy(small.get("build_residual_genome_index"), False):
             require_existing_file(errors, small.get("residual_genome_fasta"), "smallrna.residual_genome_fasta")
+            require_fasta_shape(errors, small.get("residual_genome_fasta"), "smallrna.residual_genome_fasta")
         elif not bowtie_index_exists(small.get("residual_genome_index_prefix")):
             errors.append("smallrna.residual_run needs residual_genome_fasta for index building or an existing residual_genome_index_prefix")
         require_existing_optional_file(errors, small.get("residual_annotation_gtf"), "smallrna.residual_annotation_gtf")
+        require_gtf_shape(errors, small.get("residual_annotation_gtf"), "smallrna.residual_annotation_gtf")
 
-    if truthy(small.get("quantification_run"), False) and not reference_run:
-        require_existing_file(errors, small.get("prepared_mirbase_saf"), "smallrna.prepared_mirbase_saf")
+    if quantification_run:
+        if not alignment_run:
+            errors.append("smallrna.quantification_run=true requires smallrna.alignment_run=true")
+        if not reference_run:
+            require_existing_file(errors, small.get("prepared_mirbase_saf"), "smallrna.prepared_mirbase_saf")
+
+    if differential_run and not quantification_run:
+        errors.append("smallrna.differential_run=true requires smallrna.quantification_run=true")
 
     require_existing_optional_file(errors, small.get("target_table"), "smallrna.target_table")
     require_existing_files(errors, small.get("target_feature_sets"), "smallrna.target_feature_sets")
     require_existing_files(errors, small.get("target_feature_set_tables"), "smallrna.target_feature_set_tables")
+    validate_target_table(errors, small.get("target_table"), "smallrna.target_table")
+    validate_gmt_files(errors, small.get("target_feature_sets"), "smallrna.target_feature_sets")
+    validate_feature_set_tables(errors, small.get("target_feature_set_tables"), "smallrna.target_feature_set_tables")
     return errors
 
 
