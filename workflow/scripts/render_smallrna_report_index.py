@@ -18,6 +18,10 @@ SUMMARY_COLUMNS = {
     "summary_html",
     "results",
     "filtered",
+    "volcano_pdf",
+    "pca_pdf",
+    "heatmap_pdf",
+    "vst_tsv",
     "n_features",
     "n_significant",
     "n_up",
@@ -70,6 +74,10 @@ def render_index(path: Path, rows: list[dict[str, str]]) -> None:
                 link(row.get("mirna_targets", ""), "targets"),
                 link(row.get("target_enrichment", ""), "enrichment"),
                 link(row.get("target_feature_set_results", ""), "feature sets"),
+                link(row.get("volcano_pdf", ""), "volcano"),
+                link(row.get("pca_pdf", ""), "PCA"),
+                link(row.get("heatmap_pdf", ""), "heatmap"),
+                link(row.get("vst_tsv", ""), "log2 counts"),
             ]
             if value
         )

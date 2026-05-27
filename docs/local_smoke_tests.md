@@ -52,6 +52,8 @@ the ready isoform-switch runner handoff with a tiny mock R contrast script, then
 validates the RNA-seq report plan, plot, enrichment, summary, feature-set result,
 and index schemas plus the smallRNA target-enrichment, target feature-set, and
 report contracts emitted by the smoke fixtures.
-It is a local confidence gate only; it does not replace a deliberate G100 SLURM
-smoke run after local contracts are stable. Use `tests/run_g100_smoke.sh` for
-that G100 check.
+It is a local confidence gate only; it does not replace deliberate G100 SLURM
+smoke runs after local contracts are stable. Use `tests/run_g100_smoke.sh` for
+the RNA-seq fixture contract, `tests/run_g100_deseq2_smoke.sh` for the
+gene/transcript DESeq2/report layer, and `tests/run_g100_smallrna_smoke.sh` as
+the default dry-run contract gate for the smallRNA miRNA/report layer.
