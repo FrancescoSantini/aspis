@@ -57,3 +57,16 @@ smoke runs after local contracts are stable. Use `tests/run_g100_smoke.sh` for
 the RNA-seq fixture contract, `tests/run_g100_deseq2_smoke.sh` for the
 gene/transcript DESeq2/report layer, and `tests/run_g100_smallrna_smoke.sh` as
 the default dry-run contract gate for the smallRNA miRNA/report layer.
+
+To exercise only the isoform-switch runner handoff:
+
+```bash
+bash tests/run_isoform_switch_smoke.sh
+```
+
+After updating the conda environment, require the real R dependency check before
+the mock execution smoke:
+
+```bash
+REQUIRE_REAL_DEPENDENCY=1 bash tests/run_isoform_switch_smoke.sh
+```
