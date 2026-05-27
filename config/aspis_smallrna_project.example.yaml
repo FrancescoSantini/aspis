@@ -85,6 +85,14 @@ smallrna:
   alignment_mismatches: 2
   alignment_multi_alignments: 10
   alignment_extra_args: "--best --strata"
+  residual_run: true
+  build_residual_genome_index: true
+  residual_genome_fasta: /path/to/reference/genome.fa
+  residual_genome_index_prefix: ""
+  residual_annotation_gtf: /path/to/reference/annotation.gtf
+  residual_mismatches: 1
+  residual_multi_alignments: 10
+  residual_extra_args: "--best --strata"
 
   featurecounts_command: featureCounts
   featurecounts_threads: 4
@@ -130,6 +138,7 @@ environment:
     - samtools
     - featureCounts
     - Rscript
+    - R::DESeq2
   sra_required_tools:
     - prefetch
     - fasterq-dump
