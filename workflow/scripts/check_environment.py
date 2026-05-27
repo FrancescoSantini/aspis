@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -32,13 +33,135 @@ VERSION_COMMANDS = {
     "vdb-validate": ["vdb-validate", "--version"],
 }
 
+KEYWORD_VERSION_RE = re.compile(
+    r"(?i)(?:version|v)\s*[:=]?\s*([0-9]+(?:\.[0-9]+)*(?:[A-Za-z][A-Za-z0-9._-]*)?)"
+)
+VERSION_RE = re.compile(
+    r"(?<![A-Za-z0-9])([0-9]+(?:\.[0-9]+)*(?:[A-Za-z][A-Za-z0-9._-]*)?)(?![A-Za-z0-9])"
+)
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", required=True, help="Output TSV report")
     parser.add_argument("--required-tools", nargs="*", default=[], help="Tools that must exist")
     parser.add_argument("--optional-tools", nargs="*", default=[], help="Tools to report if present")
+    parser.add_argument(
+        "--minimum-versions",
+        nargs="*",
+        default=[],
+        metavar="TOOL=VERSION",
+        help="Minimum accepted versions; required tools below these values fail the check",
+    )
+    parser.add_argument(
+        "--recommended-versions",
+        nargs="*",
+        default=[],
+        metavar="TOOL=VERSION",
+        help="Recommended versions to report as advisory warnings when older versions are detected",
+    )
     return parser.parse_args()
+
+
+def parse_version_requirements(values: list[str], option: str) -> dict[str, str]:
+    requirements: dict[str, str] = {}
+    for value in values:
+        if "=" not in value:
+            raise SystemExit(f"{option} entries must use TOOL=VERSION syntax: {value!r}")
+        tool, version = value.split("=", 1)
+        tool = tool.strip()
+        version = version.strip()
+        if not tool or not version:
+            raise SystemExit(f"{option} entries must use TOOL=VERSION syntax: {value!r}")
+        requirements[tool] = version
+    return requirements
+
+
+def parse_version_tuple(text: str) -> tuple[int, ...]:
+    if not text:
+        return ()
+    keyword_match = KEYWORD_VERSION_RE.search(text)
+    if keyword_match:
+        candidate = keyword_match.group(1)
+    else:
+        candidates = [match.group(1) for match in VERSION_RE.finditer(text)]
+        dotted = [candidate for candidate in candidates if "." in candidate]
+        candidate = (dotted or candidates or [""])[0]
+    return tuple(int(part) for part in re.findall(r"\d+", candidate))
+
+
+def compare_versions(detected: str, required: str) -> int | None:
+    detected_parts = parse_version_tuple(detected)
+    required_parts = parse_version_tuple(required)
+    if not detected_parts or not required_parts:
+        return None
+    width = max(len(detected_parts), len(required_parts))
+    detected_parts = detected_parts + (0,) * (width - len(detected_parts))
+    required_parts = required_parts + (0,) * (width - len(required_parts))
+    if detected_parts < required_parts:
+        return -1
+    if detected_parts > required_parts:
+        return 1
+    return 0
+
+
+def append_detail(existing: str, addition: str) -> str:
+    if not existing:
+        return addition
+    if not addition:
+        return existing
+    return f"{existing}; {addition}"
+
+
+def annotate_version(
+    row: dict[str, str],
+    minimum_versions: dict[str, str],
+    recommended_versions: dict[str, str],
+) -> dict[str, str]:
+    tool = row["tool"]
+    minimum = minimum_versions.get(tool, "")
+    recommended = recommended_versions.get(tool, "")
+    row["minimum_version"] = minimum
+    row["recommended_version"] = recommended
+
+    if row["status"] in {"missing", "optional_missing"}:
+        row["version_status"] = "missing"
+        return row
+
+    if not minimum and not recommended:
+        row["version_status"] = "not_checked"
+        return row
+
+    if minimum:
+        comparison = compare_versions(row["version"], minimum)
+        if comparison is None:
+            row["status"] = "version_unknown"
+            row["version_status"] = "version_unknown"
+            row["detail"] = append_detail(
+                row["detail"], f"could not compare detected version against minimum {minimum}"
+            )
+            return row
+        if comparison < 0:
+            row["status"] = "below_minimum"
+            row["version_status"] = "below_minimum"
+            row["detail"] = append_detail(row["detail"], f"minimum required version is {minimum}")
+            return row
+
+    if recommended:
+        comparison = compare_versions(row["version"], recommended)
+        if comparison is None:
+            row["version_status"] = "version_unknown"
+            row["detail"] = append_detail(
+                row["detail"], f"could not compare detected version against recommended {recommended}"
+            )
+            return row
+        if comparison < 0:
+            row["version_status"] = "below_recommended"
+            row["detail"] = append_detail(row["detail"], f"recommended version is {recommended}")
+            return row
+
+    row["version_status"] = "ok"
+    return row
 
 
 def version_for(tool: str) -> tuple[str, str]:
@@ -165,21 +288,41 @@ def main() -> int:
     optional_tools = [
         tool for tool in ordered_unique(args.optional_tools) if tool not in set(required_tools)
     ]
+    minimum_versions = parse_version_requirements(args.minimum_versions, "--minimum-versions")
+    recommended_versions = parse_version_requirements(
+        args.recommended_versions, "--recommended-versions"
+    )
 
-    rows = [inspect_tool(tool, required=True) for tool in required_tools]
-    rows.extend(inspect_tool(tool, required=False) for tool in optional_tools)
+    rows = [
+        annotate_version(inspect_tool(tool, required=True), minimum_versions, recommended_versions)
+        for tool in required_tools
+    ]
+    rows.extend(
+        annotate_version(inspect_tool(tool, required=False), minimum_versions, recommended_versions)
+        for tool in optional_tools
+    )
 
     output = Path(args.output)
     output.parent.mkdir(parents=True, exist_ok=True)
-    columns = ["tool", "required", "status", "path", "version", "detail"]
+    columns = [
+        "tool",
+        "required",
+        "status",
+        "path",
+        "version",
+        "minimum_version",
+        "recommended_version",
+        "version_status",
+        "detail",
+    ]
     with output.open("w", newline="", encoding="utf-8") as handle:
         writer = csv.DictWriter(handle, fieldnames=columns, delimiter="\t", lineterminator="\n")
         writer.writeheader()
         writer.writerows(rows)
 
-    missing = [row["tool"] for row in rows if row["required"] == "true" and row["status"] != "ok"]
-    if missing:
-        raise SystemExit(f"Missing required tools: {', '.join(missing)}")
+    failed = [row["tool"] for row in rows if row["required"] == "true" and row["status"] != "ok"]
+    if failed:
+        raise SystemExit(f"Required tools failed environment check: {', '.join(failed)}")
     return 0
 
 
