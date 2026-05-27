@@ -65,6 +65,8 @@ def setup_inputs() -> dict[str, Path]:
         "target_feature_set_done": TARGET_FEATURE_SETS / "target_feature_sets.done",
         "report_plan": REPORTS / "report_plan.tsv",
         "report_plan_done": REPORTS / "report_plan.done",
+        "plots_manifest": REPORTS / "plots" / "plots_manifest.tsv",
+        "plots_done": REPORTS / "plots" / "plots.done",
         "summary_manifest": REPORTS / "summaries" / "summary_manifest.tsv",
         "summary_done": REPORTS / "summaries" / "summary.done",
         "index": REPORTS / "index.html",
@@ -221,6 +223,24 @@ def run_report_contract(paths: dict[str, Path]) -> None:
     )
     run_command(
         [
+            "Rscript",
+            "workflow/scripts/render_rnaseq_differential_plots.R",
+            "--plan",
+            str(paths["report_plan"]),
+            "--manifest",
+            str(paths["plots_manifest"]),
+            "--done",
+            str(paths["plots_done"]),
+            "--top-n",
+            "10",
+            "--padj",
+            "0.1",
+            "--log2fc",
+            "1.0",
+        ]
+    )
+    run_command(
+        [
             sys.executable,
             "workflow/scripts/render_smallrna_report_summary.py",
             "--report-plan",
@@ -258,10 +278,30 @@ def validate_outputs(paths: dict[str, Path]) -> None:
         raise ValueError(f"Expected target feature-set enrichment terms, got {target_feature_rows[0]}")
     plan_rows = read_tsv(
         paths["report_plan"],
-        {"contrast_id", "status", "summary_html", "mirna_targets", "target_feature_set_results"},
+        {
+            "contrast_id",
+            "status",
+            "summary_html",
+            "mirna_targets",
+            "target_feature_set_results",
+            "volcano_pdf",
+            "pca_pdf",
+            "heatmap_pdf",
+            "vst_tsv",
+        },
     )
     if len(plan_rows) != 1 or plan_rows[0]["status"] != "ready":
         raise ValueError(f"Expected one ready report-plan row, got {plan_rows}")
+    plot_rows = read_tsv(
+        paths["plots_manifest"],
+        {"contrast_id", "status", "volcano_pdf", "pca_pdf", "heatmap_pdf", "vst_tsv"},
+    )
+    if len(plot_rows) != 1 or plot_rows[0]["status"] != "ok":
+        raise ValueError(f"Expected one ok plot row, got {plot_rows}")
+    for column in ["volcano_pdf", "pca_pdf", "heatmap_pdf", "vst_tsv"]:
+        path = Path(plot_rows[0][column])
+        if not path.exists():
+            raise FileNotFoundError(f"Missing smallRNA report plot artifact from {column}: {path}")
     summary_rows = read_tsv(
         paths["summary_manifest"],
         {
@@ -276,6 +316,10 @@ def validate_outputs(paths: dict[str, Path]) -> None:
             "n_targets",
             "n_enrichment_terms",
             "n_target_feature_set_terms",
+            "volcano_pdf",
+            "pca_pdf",
+            "heatmap_pdf",
+            "vst_tsv",
         },
     )
     if len(summary_rows) != 1 or summary_rows[0]["status"] != "ok":
@@ -291,10 +335,15 @@ def validate_outputs(paths: dict[str, Path]) -> None:
     if not summary_html.exists():
         raise FileNotFoundError(f"Missing summary HTML: {summary_html}")
     text = summary_html.read_text(encoding="utf-8")
-    if "hsa-miR-1-3p" not in text or "Target enrichment" not in text or "Target-gene feature sets" not in text:
-        raise ValueError("Summary HTML lacks expected miRNA, target-enrichment, or feature-set content")
+    if (
+        "hsa-miR-1-3p" not in text
+        or "Target enrichment" not in text
+        or "Target-gene feature sets" not in text
+        or "volcano plot" not in text
+    ):
+        raise ValueError("Summary HTML lacks expected miRNA, target-enrichment, feature-set, or plot content")
     index_text = paths["index"].read_text(encoding="utf-8")
-    if "treated_vs_control__time_h_24" not in index_text or "feature sets" not in index_text:
+    if "treated_vs_control__time_h_24" not in index_text or "feature sets" not in index_text or "volcano" not in index_text:
         raise ValueError("Report index lacks expected contrast/resource links")
     done_rows = read_tsv(paths["index_done"], {"status", "reports_ok", "reports_total"})
     if done_rows[0]["status"] != "ok" or done_rows[0]["reports_ok"] != "1":

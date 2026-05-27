@@ -50,6 +50,10 @@ REPORT_COLUMNS = [
     "target_feature_set_manifest",
     "target_feature_set_results",
     "target_feature_set_plot",
+    "volcano_pdf",
+    "pca_pdf",
+    "heatmap_pdf",
+    "vst_tsv",
     "summary_html",
 ]
 
@@ -180,6 +184,10 @@ def planned_row(
         "target_feature_set_manifest": target_feature_set_row.get("target_feature_set_manifest", ""),
         "target_feature_set_results": target_feature_set_row.get("target_feature_set_results", ""),
         "target_feature_set_plot": target_feature_set_row.get("target_feature_set_plot", ""),
+        "volcano_pdf": str(Path(args.outdir) / "plots" / f"{safe_path_id(contrast_id)}.volcano.pdf"),
+        "pca_pdf": str(Path(args.outdir) / "plots" / f"{safe_path_id(contrast_id)}.pca.pdf"),
+        "heatmap_pdf": str(Path(args.outdir) / "plots" / f"{safe_path_id(contrast_id)}.heatmap.pdf"),
+        "vst_tsv": str(Path(args.outdir) / "plots" / f"{safe_path_id(contrast_id)}.log2_counts.tsv"),
         "summary_html": str(Path(args.outdir) / "summaries" / f"{safe_path_id(contrast_id)}.html"),
     }
 
