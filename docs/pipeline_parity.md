@@ -18,7 +18,7 @@ one G100 smoke or milestone run.
 | Legacy component | New workflow status | Current replacement | Remaining parity work |
 | --- | --- | --- | --- |
 | SRA/local FASTQ materialization | Replaced | `materialize_library`, materialized manifest, branch audit manifest | Add more public accession edge cases as needed |
-| Branch sample sheet and design | Replaced | `assay_branch_ready`, `build_branch_design` | Keep improving contrast diagnostics |
+| Branch sample sheet and design | Replaced | `assay_branch_ready`, `build_branch_design`; capped public-SRA RNA-seq G100 milestone in `docs/g100_public_sra_tests.md` | Keep improving contrast diagnostics |
 | Initial FastQC/MultiQC | Replaced | `run_branch_fastqc`, `run_branch_multiqc` | None known |
 | fastp preprocessing | Replaced | `preprocess_rnaseq_branch`, post-preprocess FastQC/MultiQC | None known |
 | STAR alignment | Replaced | `build_rnaseq_star_index`, `align_rnaseq_branch`, `config/aspis_rnaseq_project.example.yaml` | Exercise on first real RNA-seq project config |
@@ -41,7 +41,7 @@ one G100 smoke or milestone run.
 
 | Legacy component | New workflow status | Current replacement | Remaining parity work |
 | --- | --- | --- | --- |
-| SRA/local FASTQ materialization | Replaced | Shared `materialize_library` with smallRNA assay detection | Add a public smallRNA accession smoke when needed |
+| SRA/local FASTQ materialization | Replaced | Shared `materialize_library` with smallRNA assay detection; capped public-SRA smallRNA G100 milestone in `docs/g100_public_sra_tests.md` | Add more public accession edge cases as needed |
 | Branch sample sheet and design | Replaced | Shared `assay_branch_ready`, `build_branch_design` plus `config/intake_smallrna_project.example.tsv` | Confirm project-specific metadata conventions on first real dataset |
 | Initial FastQC/MultiQC | Replaced | Shared `run_branch_fastqc`, `run_branch_multiqc` | None known |
 | SmallRNA parity plan | Added scaffold | `plan_smallrna` writes expected stages and blockers | Convert later planned stages into executable rules incrementally |
@@ -64,7 +64,8 @@ one G100 smoke or milestone run.
 
 ## Immediate Implementation Order
 
-1. Prepare one real RNA-seq or smallRNA project config from the relevant `config/aspis_*_project.example.yaml` template and dry-run it on G100 with the matching `tests/run_g100_*_project.sh` helper.
-2. For the first real smallRNA project, inspect residual-genome `biotype_counts.tsv` and `feature_counts.tsv` to decide whether the configured contaminant FASTA should be expanded or whether residual classes should be reported separately.
-3. Run one small, real project milestone on G100 and compare count matrices, DESeq2 contrasts, enrichment, residual-read fate, and reports against the legacy outputs you liked.
-4. Improve the smallRNA and RNA-seq report layer where real-output comparisons show missing labels, plot aesthetics, or summary fields.
+1. Run the capped public-SRA RNA-seq and smallRNA G100 milestones in `docs/g100_public_sra_tests.md` whenever private real data are unavailable but public accession ingestion must be checked.
+2. Prepare one real RNA-seq or smallRNA project config from the relevant `config/aspis_*_project.example.yaml` template and dry-run it on G100 with the matching `tests/run_g100_*_project.sh` helper.
+3. For the first real smallRNA project, inspect residual-genome `biotype_counts.tsv` and `feature_counts.tsv` to decide whether the configured contaminant FASTA should be expanded or whether residual classes should be reported separately.
+4. Run one small, real project milestone on G100 and compare count matrices, DESeq2 contrasts, enrichment, residual-read fate, and reports against the legacy outputs you liked.
+5. Improve the smallRNA and RNA-seq report layer where real-output comparisons show missing labels, plot aesthetics, or summary fields.

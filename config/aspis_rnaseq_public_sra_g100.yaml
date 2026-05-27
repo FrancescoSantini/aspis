@@ -1,0 +1,84 @@
+# ASPIS G100 public-SRA RNA-seq ingestion/preprocess milestone.
+#
+# This configuration uses real public INSDC run accessions, but caps extraction
+# with fastq-dump -X so the test remains cheap. It deliberately stops after
+# RNA-seq preprocessing; alignment and downstream biology need project-matched
+# references and should be tested with a real project config.
+
+intake: config/intake_rnaseq_public_sra_g100.tsv
+
+paths:
+  raw_dir: work/rnaseq_public_sra_g100/raw
+  metadata_dir: meta/rnaseq_public_sra_g100/materialized
+  manifest: meta/rnaseq_public_sra_g100/materialized_manifest.tsv
+  analysis_plan: meta/rnaseq_public_sra_g100/analysis_plan.tsv
+  environment_report: meta/rnaseq_public_sra_g100/environment_report.tsv
+  sra_cache_dir: cache/rnaseq_public_sra_g100/sra
+  scratch_dir: work/rnaseq_public_sra_g100/tmp
+  branch_dir: results/rnaseq_public_sra_g100/branches
+
+materialization:
+  local_link_mode: symlink
+  sra_max_size: 1G
+  sra_spot_limit: 10000
+  validate_sra: false
+  public_metadata_mode: required
+  ena_api_url: https://www.ebi.ac.uk/ena/portal/api/filereport
+  public_metadata_timeout: 60
+
+planning:
+  allow_unclassified: false
+
+design:
+  condition_col: condition
+  control_label: control
+  covariates:
+    - time_h
+  min_condition_groups: 2
+
+fastq_inspection:
+  max_records: 10000
+
+fastqc:
+  command: fastqc
+  threads: 1
+  extra_args: ""
+
+multiqc:
+  command: multiqc
+  extra_args: ""
+
+rnaseq_preprocess:
+  command: fastp
+  threads: 1
+  extra_args: ""
+
+rnaseq_alignment:
+  run: false
+
+rnaseq_quantification:
+  run: false
+
+rnaseq_differential:
+  run: false
+
+execution:
+  default_partition: g100_usr_prod
+  download_partition: g100_all_serial
+
+environment:
+  required_tools:
+    - python3
+    - snakemake
+    - fastqc
+    - multiqc
+  rnaseq_required_tools:
+    - fastp
+  rnaseq_alignment_required_tools: auto
+  sra_required_tools:
+    - prefetch
+    - fasterq-dump
+  sra_limited_required_tools:
+    - fastq-dump
+  optional_tools:
+    - vdb-validate
