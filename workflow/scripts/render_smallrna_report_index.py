@@ -25,6 +25,7 @@ SUMMARY_COLUMNS = {
     "n_target_rows",
     "n_targets",
     "n_enrichment_terms",
+    "n_target_feature_set_terms",
 }
 
 
@@ -68,6 +69,7 @@ def render_index(path: Path, rows: list[dict[str, str]]) -> None:
                 link(row.get("filtered", ""), "significant"),
                 link(row.get("mirna_targets", ""), "targets"),
                 link(row.get("target_enrichment", ""), "enrichment"),
+                link(row.get("target_feature_set_results", ""), "feature sets"),
             ]
             if value
         )
@@ -83,6 +85,7 @@ def render_index(path: Path, rows: list[dict[str, str]]) -> None:
             row.get("n_down", ""),
             row.get("n_targets", ""),
             row.get("n_enrichment_terms", ""),
+            row.get("n_target_feature_set_terms", ""),
             resources,
         ]
         body_rows.append("<tr>" + "".join(f"<td>{value}</td>" if value.startswith("<a ") else f"<td>{html.escape(value)}</td>" for value in cells) + "</tr>")
@@ -100,6 +103,7 @@ def render_index(path: Path, rows: list[dict[str, str]]) -> None:
             "down",
             "targets",
             "enrichment_terms",
+            "feature_set_terms",
             "resources",
         ]
     )

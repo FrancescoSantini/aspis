@@ -43,6 +43,14 @@ def as_bool(value, default=False):
     return bool(value)
 
 
+def config_value_list(value):
+    if value is None:
+        return []
+    if isinstance(value, str):
+        return [item.strip() for item in value.split(",") if item.strip()]
+    return [str(item).strip() for item in value if str(item).strip()]
+
+
 RAW_DIR = PATHS.get("raw_dir", "work/raw")
 METADATA_DIR = PATHS.get("metadata_dir", "meta/materialized")
 MANIFEST = PATHS.get("manifest", "meta/materialized_manifest.tsv")
@@ -201,6 +209,11 @@ SMALLRNA_QUANTIFICATION_RUN = as_bool(SMALLRNA.get("quantification_run", False),
 SMALLRNA_DIFFERENTIAL_RUN = as_bool(SMALLRNA.get("differential_run", False), False)
 SMALLRNA_TARGET_ENRICHMENT_MODE = str(SMALLRNA.get("target_enrichment_mode", "disabled")).strip().lower()
 SMALLRNA_TARGET_ENRICHMENT_RUN = SMALLRNA_TARGET_ENRICHMENT_MODE == "table"
+SMALLRNA_TARGET_FEATURE_SET_FILES = config_value_list(SMALLRNA.get("target_feature_sets", ""))
+SMALLRNA_TARGET_FEATURE_SET_TABLES = config_value_list(SMALLRNA.get("target_feature_set_tables", ""))
+SMALLRNA_TARGET_FEATURE_SET_RUN = SMALLRNA_TARGET_ENRICHMENT_RUN and bool(
+    SMALLRNA_TARGET_FEATURE_SET_FILES or SMALLRNA_TARGET_FEATURE_SET_TABLES
+)
 SMALLRNA_REPORTS_RUN = (
     as_bool(SMALLRNA.get("reports", True), True)
     and SMALLRNA_DIFFERENTIAL_RUN
@@ -287,6 +300,8 @@ if SMALLRNA_TARGET_ENRICHMENT_RUN and not SMALLRNA_DIFFERENTIAL_RUN:
     raise ValueError("smallrna.target_enrichment_mode: table requires smallrna.differential_run: true")
 if SMALLRNA_TARGET_ENRICHMENT_RUN and not SMALLRNA.get("target_table", ""):
     raise ValueError("smallrna.target_enrichment_mode: table requires smallrna.target_table")
+if (SMALLRNA_TARGET_FEATURE_SET_FILES or SMALLRNA_TARGET_FEATURE_SET_TABLES) and not SMALLRNA_TARGET_ENRICHMENT_RUN:
+    raise ValueError("smallrna target feature sets require smallrna.target_enrichment_mode: table")
 OPTIONAL_TOOLS = configured_tool_list("optional_tools", ["vdb-validate"])
 ACTIVE_SRA_REQUIRED_TOOLS = (
     SRA_LIMITED_REQUIRED_TOOLS if USES_INSDC and USES_SRA_SPOT_LIMIT
@@ -389,12 +404,29 @@ def smallrna_target_enrichment_done(project):
     return f"{BRANCH_DIR}/smallrna/{project}/smallrna/differential/target_enrichment/target_enrichment.done"
 
 
+def smallrna_target_feature_set_manifest(project):
+    return f"{BRANCH_DIR}/smallrna/{project}/smallrna/differential/target_feature_sets/target_feature_set_manifest.tsv"
+
+
+def smallrna_target_feature_set_done(project):
+    return f"{BRANCH_DIR}/smallrna/{project}/smallrna/differential/target_feature_sets/target_feature_sets.done"
+
+
 def smallrna_target_manifest_flag(wildcards):
     if not SMALLRNA_TARGET_ENRICHMENT_RUN:
         return ""
     return optional_shell_arg(
         "--target-manifest",
         smallrna_target_enrichment_manifest(wildcards.project),
+    )
+
+
+def smallrna_target_feature_set_manifest_flag(wildcards):
+    if not SMALLRNA_TARGET_FEATURE_SET_RUN:
+        return ""
+    return optional_shell_arg(
+        "--target-feature-set-manifest",
+        smallrna_target_feature_set_manifest(wildcards.project),
     )
 
 
@@ -597,6 +629,13 @@ def planned_branch_targets(wildcards):
                         [
                             f"{BRANCH_DIR}/{assay}/{project}/smallrna/differential/target_enrichment/target_manifest.tsv",
                             f"{BRANCH_DIR}/{assay}/{project}/smallrna/differential/target_enrichment/target_enrichment.done",
+                        ]
+                    )
+                if SMALLRNA_TARGET_FEATURE_SET_RUN:
+                    targets.extend(
+                        [
+                            f"{BRANCH_DIR}/{assay}/{project}/smallrna/differential/target_feature_sets/target_feature_set_manifest.tsv",
+                            f"{BRANCH_DIR}/{assay}/{project}/smallrna/differential/target_feature_sets/target_feature_sets.done",
                         ]
                     )
                 if SMALLRNA_REPORTS_RUN:
@@ -1533,6 +1572,39 @@ rule render_smallrna_target_enrichment:
         """
 
 
+rule render_smallrna_target_featuresets:
+    input:
+        target_manifest=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/differential/target_enrichment/target_manifest.tsv",
+        target_done=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/differential/target_enrichment/target_enrichment.done",
+        feature_sets=SMALLRNA_TARGET_FEATURE_SET_FILES,
+        feature_set_tables=SMALLRNA_TARGET_FEATURE_SET_TABLES
+    output:
+        manifest=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/differential/target_feature_sets/target_feature_set_manifest.tsv",
+        done=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/differential/target_feature_sets/target_feature_sets.done"
+    params:
+        outdir=lambda wildcards: f"{BRANCH_DIR}/smallrna/{wildcards.project}/smallrna/differential/target_feature_sets",
+        feature_sets=joined_config_values(SMALLRNA_TARGET_FEATURE_SET_FILES),
+        feature_set_tables=joined_config_values(SMALLRNA_TARGET_FEATURE_SET_TABLES),
+        min_overlap=SMALLRNA.get("target_feature_set_min_overlap", 2),
+        top_n=SMALLRNA.get("target_feature_set_top_n", 20)
+    log:
+        "logs/branches/smallrna/{project}.target_feature_sets.log"
+    shell:
+        r"""
+        mkdir -p logs/branches/smallrna
+        python3 workflow/scripts/render_smallrna_target_featuresets.py \
+          --target-manifest {input.target_manifest:q} \
+          --outdir {params.outdir:q} \
+          --manifest {output.manifest:q} \
+          --done {output.done:q} \
+          --feature-sets {params.feature_sets:q} \
+          --feature-set-tables {params.feature_set_tables:q} \
+          --min-overlap {params.min_overlap:q} \
+          --top-n {params.top_n:q} \
+          > {log:q} 2>&1
+        """
+
+
 rule plan_smallrna_report:
     input:
         plan=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/smallrna_plan.tsv",
@@ -1547,13 +1619,24 @@ rule plan_smallrna_report:
             [smallrna_target_enrichment_done(wildcards.project)]
             if SMALLRNA_TARGET_ENRICHMENT_RUN
             else []
+        ),
+        target_feature_set_manifest=lambda wildcards: (
+            [smallrna_target_feature_set_manifest(wildcards.project)]
+            if SMALLRNA_TARGET_FEATURE_SET_RUN
+            else []
+        ),
+        target_feature_set_done=lambda wildcards: (
+            [smallrna_target_feature_set_done(wildcards.project)]
+            if SMALLRNA_TARGET_FEATURE_SET_RUN
+            else []
         )
     output:
         plan=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/differential/reports/report_plan.tsv",
         done=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/differential/reports/report_plan.done"
     params:
         outdir=lambda wildcards: f"{BRANCH_DIR}/smallrna/{wildcards.project}/smallrna/differential/reports",
-        target_manifest_flag=smallrna_target_manifest_flag
+        target_manifest_flag=smallrna_target_manifest_flag,
+        target_feature_set_manifest_flag=smallrna_target_feature_set_manifest_flag
     log:
         "logs/branches/smallrna/{project}.smallrna_report_plan.log"
     shell:
@@ -1563,6 +1646,7 @@ rule plan_smallrna_report:
           --smallrna-plan {input.plan:q} \
           --deseq2-manifest {input.deseq2_manifest:q} \
           {params.target_manifest_flag} \
+          {params.target_feature_set_manifest_flag} \
           --project {wildcards.project:q} \
           --outdir {params.outdir:q} \
           --output {output.plan:q} \

@@ -1,0 +1,8 @@
+source	collection	set_id	description	feature_id
+toy	target_process	target_shared	Shared targets hit by up and down miRNAs	GENE1
+toy	target_process	target_shared	Shared targets hit by up and down miRNAs	GENE2
+toy	target_process	target_shared	Shared targets hit by up and down miRNAs	GENE3
+toy	target_process	target_up	Targets dominated by up miRNAs	GENE1
+toy	target_process	target_up	Targets dominated by up miRNAs	GENE2
+toy	target_process	target_down	Targets dominated by down miRNAs	GENE3
+toy	target_process	target_other	Background target set	GENE4

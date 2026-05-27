@@ -13,6 +13,7 @@ from pathlib import Path
 BASE = Path("results/smallrna_report_contract")
 INPUT = BASE / "input"
 TARGETS = BASE / "target_enrichment"
+TARGET_FEATURE_SETS = BASE / "target_feature_sets"
 REPORTS = BASE / "reports"
 
 
@@ -57,8 +58,11 @@ def setup_inputs() -> dict[str, Path]:
         "summary": INPUT / "deseq2_summary.tsv",
         "metadata": INPUT / "mirna_metadata.tsv",
         "targets": INPUT / "targets.tsv",
+        "feature_sets": INPUT / "target_feature_sets.tsv",
         "target_manifest": TARGETS / "target_manifest.tsv",
         "target_done": TARGETS / "target_enrichment.done",
+        "target_feature_set_manifest": TARGET_FEATURE_SETS / "target_feature_set_manifest.tsv",
+        "target_feature_set_done": TARGET_FEATURE_SETS / "target_feature_sets.done",
         "report_plan": REPORTS / "report_plan.tsv",
         "report_plan_done": REPORTS / "report_plan.done",
         "summary_manifest": REPORTS / "summaries" / "summary_manifest.tsv",
@@ -128,6 +132,19 @@ def setup_inputs() -> dict[str, Path]:
             {"mirna_id": "hsa-miR-3-3p", "target_id": "GENE4", "target_symbol": "GENE4", "target_entrez": "1004", "database": "TargetScan", "evidence": "predicted"},
         ],
     )
+    write_tsv(
+        paths["feature_sets"],
+        ["source", "collection", "set_id", "description", "feature_id"],
+        [
+            {"source": "toy", "collection": "target_process", "set_id": "target_shared", "description": "Shared targets", "feature_id": "GENE1"},
+            {"source": "toy", "collection": "target_process", "set_id": "target_shared", "description": "Shared targets", "feature_id": "GENE2"},
+            {"source": "toy", "collection": "target_process", "set_id": "target_shared", "description": "Shared targets", "feature_id": "GENE3"},
+            {"source": "toy", "collection": "target_process", "set_id": "target_up", "description": "Up-miRNA targets", "feature_id": "GENE1"},
+            {"source": "toy", "collection": "target_process", "set_id": "target_up", "description": "Up-miRNA targets", "feature_id": "GENE2"},
+            {"source": "toy", "collection": "target_process", "set_id": "target_down", "description": "Down-miRNA targets", "feature_id": "GENE3"},
+            {"source": "toy", "collection": "target_process", "set_id": "target_other", "description": "Background targets", "feature_id": "GENE4"},
+        ],
+    )
     return paths
 
 
@@ -154,6 +171,32 @@ def run_contract(paths: dict[str, Path]) -> None:
             "10",
         ]
     )
+
+
+def run_feature_set_contract(paths: dict[str, Path]) -> None:
+    run_command(
+        [
+            sys.executable,
+            "workflow/scripts/render_smallrna_target_featuresets.py",
+            "--target-manifest",
+            str(paths["target_manifest"]),
+            "--outdir",
+            str(TARGET_FEATURE_SETS),
+            "--manifest",
+            str(paths["target_feature_set_manifest"]),
+            "--done",
+            str(paths["target_feature_set_done"]),
+            "--feature-set-tables",
+            str(paths["feature_sets"]),
+            "--min-overlap",
+            "1",
+            "--top-n",
+            "10",
+        ]
+    )
+
+
+def run_report_contract(paths: dict[str, Path]) -> None:
     run_command(
         [
             sys.executable,
@@ -164,6 +207,8 @@ def run_contract(paths: dict[str, Path]) -> None:
             str(paths["deseq2_manifest"]),
             "--target-manifest",
             str(paths["target_manifest"]),
+            "--target-feature-set-manifest",
+            str(paths["target_feature_set_manifest"]),
             "--project",
             "ASPIS_SMALLRNA_TEST",
             "--outdir",
@@ -203,7 +248,18 @@ def run_contract(paths: dict[str, Path]) -> None:
 
 
 def validate_outputs(paths: dict[str, Path]) -> None:
-    plan_rows = read_tsv(paths["report_plan"], {"contrast_id", "status", "summary_html", "mirna_targets"})
+    target_feature_rows = read_tsv(
+        paths["target_feature_set_manifest"],
+        {"contrast_id", "status", "target_feature_set_results", "target_feature_set_plot", "n_target_feature_set_terms"},
+    )
+    if len(target_feature_rows) != 1 or target_feature_rows[0]["status"] != "ok":
+        raise ValueError(f"Expected one ok target feature-set row, got {target_feature_rows}")
+    if int(target_feature_rows[0]["n_target_feature_set_terms"]) < 1:
+        raise ValueError(f"Expected target feature-set enrichment terms, got {target_feature_rows[0]}")
+    plan_rows = read_tsv(
+        paths["report_plan"],
+        {"contrast_id", "status", "summary_html", "mirna_targets", "target_feature_set_results"},
+    )
     if len(plan_rows) != 1 or plan_rows[0]["status"] != "ready":
         raise ValueError(f"Expected one ready report-plan row, got {plan_rows}")
     summary_rows = read_tsv(
@@ -219,6 +275,7 @@ def validate_outputs(paths: dict[str, Path]) -> None:
             "n_target_rows",
             "n_targets",
             "n_enrichment_terms",
+            "n_target_feature_set_terms",
         },
     )
     if len(summary_rows) != 1 or summary_rows[0]["status"] != "ok":
@@ -228,14 +285,16 @@ def validate_outputs(paths: dict[str, Path]) -> None:
     for key, value in expected.items():
         if row[key] != value:
             raise ValueError(f"Unexpected {key}: expected {value}, got {row[key]}")
+    if int(row["n_target_feature_set_terms"]) < 1:
+        raise ValueError(f"Expected target feature-set terms in summary row, got {row}")
     summary_html = Path(row["summary_html"])
     if not summary_html.exists():
         raise FileNotFoundError(f"Missing summary HTML: {summary_html}")
     text = summary_html.read_text(encoding="utf-8")
-    if "hsa-miR-1-3p" not in text or "Target enrichment" not in text:
-        raise ValueError("Summary HTML lacks expected miRNA or target-enrichment content")
+    if "hsa-miR-1-3p" not in text or "Target enrichment" not in text or "Target-gene feature sets" not in text:
+        raise ValueError("Summary HTML lacks expected miRNA, target-enrichment, or feature-set content")
     index_text = paths["index"].read_text(encoding="utf-8")
-    if "treated_vs_control__time_h_24" not in index_text or "summary" not in index_text:
+    if "treated_vs_control__time_h_24" not in index_text or "feature sets" not in index_text:
         raise ValueError("Report index lacks expected contrast/resource links")
     done_rows = read_tsv(paths["index_done"], {"status", "reports_ok", "reports_total"})
     if done_rows[0]["status"] != "ok" or done_rows[0]["reports_ok"] != "1":
@@ -245,6 +304,8 @@ def validate_outputs(paths: dict[str, Path]) -> None:
 def main() -> int:
     paths = setup_inputs()
     run_contract(paths)
+    run_feature_set_contract(paths)
+    run_report_contract(paths)
     validate_outputs(paths)
     return 0
 

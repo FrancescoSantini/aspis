@@ -168,6 +168,10 @@ smallrna:
   target_table: ""
   target_min_overlap: 1
   target_top_n: 20
+  target_feature_sets: ""
+  target_feature_set_tables: ""
+  target_feature_set_min_overlap: 2
+  target_feature_set_top_n: 20
   reports: true
   condition_col: condition
   control_label: control
