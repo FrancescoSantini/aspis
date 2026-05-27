@@ -47,6 +47,9 @@ if [[ "$MODE" == "dry-run" ]]; then
   run_snakemake "smallRNA miRNA target-enrichment contract smoke" \
     results/smallrna_target_enrichment_smoke/branches/smallrna/ASPIS_SMALLRNA_TEST/smallrna/differential/target_enrichment/target_enrichment.done \
     --configfile config/aspis_smallrna_target_enrichment_smoke.yaml
+  run_snakemake "smallRNA miRNA report contract smoke" \
+    results/smallrna_report_smoke/branches/smallrna/ASPIS_SMALLRNA_TEST/smallrna/differential/reports/report_index.done \
+    --configfile config/aspis_smallrna_report_smoke.yaml
 fi
 run_snakemake "gene/transcript DESeq2 and report smoke" \
   --configfile config/aspis_deseq2_smoke.yaml
@@ -62,4 +65,6 @@ if [[ "$MODE" == "run" ]]; then
   python3 tests/validate_smallrna_smoke_outputs.py
   echo "==> smallRNA target enrichment contract"
   python3 tests/validate_smallrna_target_enrichment_contract.py
+  echo "==> smallRNA report contract"
+  python3 tests/validate_smallrna_report_contract.py
 fi
