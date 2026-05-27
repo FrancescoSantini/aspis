@@ -141,8 +141,9 @@ The report index is:
 <branch_dir>/smallrna/<PROJECT>/smallrna/differential/reports/index.html
 ```
 
-When residual genome alignment is enabled, the per-contrast HTML summaries also
-link the residual manifest, residual biotype matrix, and residual feature matrix.
+Per-contrast HTML summaries link the MA, volcano, PCA, and heatmap plots. When
+residual genome alignment is enabled, they also link the residual manifest,
+residual biotype matrix, and residual feature matrix.
 
 Important intermediate manifests are:
 
