@@ -197,6 +197,9 @@ The report index is:
 <branch_dir>/rnaseq/<PROJECT>/differential/reports/index.html
 ```
 
+Per-contrast HTML summaries link the MA, volcano, PCA, heatmap, transformed
+count table, and feature-set enrichment outputs.
+
 Important intermediate manifests are:
 
 ```text

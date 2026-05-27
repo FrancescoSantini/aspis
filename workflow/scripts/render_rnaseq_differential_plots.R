@@ -57,6 +57,15 @@ blank_pdf <- function(path, title, message) {
   grDevices::dev.off()
 }
 
+feature_id_column <- function(table) {
+  stat_columns <- c("baseMean", "log2FoldChange", "lfcSE", "stat", "pvalue", "padj")
+  candidates <- setdiff(colnames(table), stat_columns)
+  if (length(candidates)) {
+    return(candidates[[1]])
+  }
+  colnames(table)[[1]]
+}
+
 numeric_column <- function(table, column) {
   suppressWarnings(as.numeric(table[[column]]))
 }
@@ -73,6 +82,7 @@ plot_volcano <- function(results, path, title, padj_cutoff, log2fc_cutoff) {
   log2fc <- log2fc[keep]
   y <- -log10(pmax(padj[keep], .Machine$double.xmin))
   significant <- padj[keep] < padj_cutoff & abs(log2fc) >= log2fc_cutoff
+  kept_results <- results[keep, , drop = FALSE]
 
   ensure_parent(path)
   grDevices::pdf(path)
@@ -87,6 +97,49 @@ plot_volcano <- function(results, path, title, padj_cutoff, log2fc_cutoff) {
   )
   abline(v = c(-log2fc_cutoff, log2fc_cutoff), col = "#737373", lty = 2)
   abline(h = -log10(padj_cutoff), col = "#737373", lty = 2)
+  if (any(significant)) {
+    label_column <- feature_id_column(kept_results)
+    label_candidates <- which(significant)
+    label_candidates <- label_candidates[order(padj[keep][label_candidates], decreasing = FALSE)]
+    label_candidates <- head(label_candidates, 8)
+    text(
+      log2fc[label_candidates],
+      y[label_candidates],
+      labels = kept_results[[label_column]][label_candidates],
+      pos = 3,
+      cex = 0.55,
+      col = "#111111"
+    )
+  }
+  grDevices::dev.off()
+}
+
+plot_ma <- function(results, path, title, padj_cutoff, log2fc_cutoff) {
+  ensure_columns(results, c("baseMean", "log2FoldChange", "padj"), "DESeq2 results")
+  base_mean <- numeric_column(results, "baseMean")
+  log2fc <- numeric_column(results, "log2FoldChange")
+  padj <- numeric_column(results, "padj")
+  keep <- !is.na(base_mean) & !is.na(log2fc) & !is.na(padj)
+  if (!any(keep)) {
+    blank_pdf(path, title, "No valid baseMean/log2FoldChange/padj rows")
+    return()
+  }
+  x <- log10(base_mean[keep] + 1)
+  y <- log2fc[keep]
+  significant <- padj[keep] < padj_cutoff & abs(y) >= log2fc_cutoff
+
+  ensure_parent(path)
+  grDevices::pdf(path)
+  plot(
+    x,
+    y,
+    pch = 16,
+    col = ifelse(significant, "#2166ac", "#4d4d4d"),
+    xlab = "log10 mean normalized count + 1",
+    ylab = "log2 fold change",
+    main = title
+  )
+  abline(h = c(-log2fc_cutoff, 0, log2fc_cutoff), col = c("#737373", "#bdbdbd", "#737373"), lty = c(2, 1, 2))
   grDevices::dev.off()
 }
 
@@ -111,7 +164,25 @@ write_transformed_counts <- function(matrix, path) {
   transformed
 }
 
-plot_pca <- function(transformed, path, title) {
+read_coldata <- function(path, sample_ids) {
+  if (is.null(path) || is.na(path) || path == "" || !file.exists(path)) {
+    return(NULL)
+  }
+  coldata <- read_tsv(path)
+  id_column <- intersect(c("library_id", "sample_id", "sample", "id"), colnames(coldata))
+  if (!length(id_column)) {
+    return(NULL)
+  }
+  id_column <- id_column[[1]]
+  matched <- coldata[match(sample_ids, coldata[[id_column]]), , drop = FALSE]
+  if (any(is.na(matched[[id_column]]))) {
+    return(NULL)
+  }
+  rownames(matched) <- matched[[id_column]]
+  matched
+}
+
+plot_pca <- function(transformed, path, title, coldata = NULL) {
   if (ncol(transformed) < 2 || nrow(transformed) < 2) {
     blank_pdf(path, title, "PCA requires at least two samples and two features")
     return()
@@ -122,21 +193,34 @@ plot_pca <- function(transformed, path, title) {
     return()
   }
   variance <- round(100 * (pca$sdev^2 / sum(pca$sdev^2)), 1)
+  groups <- NULL
+  if (!is.null(coldata) && "condition" %in% colnames(coldata)) {
+    groups <- as.factor(coldata[rownames(pca$x), "condition"])
+  }
+  colors <- rep("#1f78b4", nrow(pca$x))
+  if (!is.null(groups)) {
+    palette <- grDevices::hcl.colors(length(levels(groups)), "Dark 3")
+    colors <- palette[as.integer(groups)]
+  }
   ensure_parent(path)
   grDevices::pdf(path)
   plot(
     pca$x[, 1],
     pca$x[, 2],
     pch = 16,
+    col = colors,
     xlab = paste0("PC1 (", variance[[1]], "%)"),
     ylab = paste0("PC2 (", variance[[2]], "%)"),
     main = title
   )
   text(pca$x[, 1], pca$x[, 2], labels = rownames(pca$x), pos = 3, cex = 0.7)
+  if (!is.null(groups)) {
+    legend("topright", legend = levels(groups), col = palette, pch = 16, bty = "n", cex = 0.8)
+  }
   grDevices::dev.off()
 }
 
-plot_heatmap <- function(transformed, path, title, top_n) {
+plot_heatmap <- function(transformed, path, title, top_n, coldata = NULL) {
   if (ncol(transformed) < 2 || nrow(transformed) < 2) {
     blank_pdf(path, title, "Heatmap requires at least two samples and two features")
     return()
@@ -144,6 +228,10 @@ plot_heatmap <- function(transformed, path, title, top_n) {
   variances <- apply(transformed, 1, stats::var)
   keep <- head(order(variances, decreasing = TRUE), min(top_n, nrow(transformed)))
   matrix <- transformed[keep, , drop = FALSE]
+  if (!is.null(coldata) && "condition" %in% colnames(coldata)) {
+    order_index <- order(coldata[colnames(matrix), "condition"], colnames(matrix))
+    matrix <- matrix[, order_index, drop = FALSE]
+  }
   ensure_parent(path)
   grDevices::pdf(path)
   stats::heatmap(matrix, scale = "row", margins = c(8, 8), main = title)
@@ -157,6 +245,7 @@ manifest_columns <- c(
   "status",
   "reason",
   "volcano_pdf",
+  "ma_pdf",
   "pca_pdf",
   "heatmap_pdf",
   "vst_tsv",
@@ -173,6 +262,7 @@ render_row <- function(row, top_n, padj_cutoff, log2fc_cutoff) {
       status = "blocked",
       reason = row[["reason"]],
       volcano_pdf = row[["volcano_pdf"]],
+      ma_pdf = row[["ma_pdf"]],
       pca_pdf = row[["pca_pdf"]],
       heatmap_pdf = row[["heatmap_pdf"]],
       vst_tsv = row[["vst_tsv"]],
@@ -187,9 +277,11 @@ render_row <- function(row, top_n, padj_cutoff, log2fc_cutoff) {
   filtered <- read_tsv(row[["filtered"]])
   normalized <- read_normalized_counts(row[["normalized_counts"]])
   transformed <- write_transformed_counts(normalized, row[["vst_tsv"]])
+  coldata <- read_coldata(row[["coldata"]], colnames(transformed))
   plot_volcano(results, row[["volcano_pdf"]], paste(title, "volcano"), padj_cutoff, log2fc_cutoff)
-  plot_pca(transformed, row[["pca_pdf"]], paste(title, "PCA"))
-  plot_heatmap(transformed, row[["heatmap_pdf"]], paste(title, "heatmap"), top_n)
+  plot_ma(results, row[["ma_pdf"]], paste(title, "MA"), padj_cutoff, log2fc_cutoff)
+  plot_pca(transformed, row[["pca_pdf"]], paste(title, "PCA"), coldata)
+  plot_heatmap(transformed, row[["heatmap_pdf"]], paste(title, "heatmap"), top_n, coldata)
 
   data.frame(
     project = row[["project"]],
@@ -198,6 +290,7 @@ render_row <- function(row, top_n, padj_cutoff, log2fc_cutoff) {
     status = "ok",
     reason = "",
     volcano_pdf = row[["volcano_pdf"]],
+    ma_pdf = row[["ma_pdf"]],
     pca_pdf = row[["pca_pdf"]],
     heatmap_pdf = row[["heatmap_pdf"]],
     vst_tsv = row[["vst_tsv"]],
@@ -238,6 +331,7 @@ main <- function() {
       "filtered",
       "normalized_counts",
       "volcano_pdf",
+      "ma_pdf",
       "pca_pdf",
       "heatmap_pdf",
       "vst_tsv"
@@ -261,6 +355,7 @@ main <- function() {
           status = "failed",
           reason = conditionMessage(err),
           volcano_pdf = row[["volcano_pdf"]],
+          ma_pdf = row[["ma_pdf"]],
           pca_pdf = row[["pca_pdf"]],
           heatmap_pdf = row[["heatmap_pdf"]],
           vst_tsv = row[["vst_tsv"]],
