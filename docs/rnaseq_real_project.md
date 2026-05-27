@@ -166,8 +166,10 @@ The G100 helper first runs a login-node preflight against the project
 config and intake sheet. It checks local FASTQ/reference paths, assay
 labels, path-safe IDs, configured design columns, differential replicate
 counts, aligner/index settings, and optional report feature-set files
-before submitting Snakemake jobs. Set `PREFLIGHT=0` only when you need to
-debug Snakemake itself despite a known preflight warning.
+before submitting Snakemake jobs. The default report is written to
+`logs/preflight/<config-file>.rnaseq.tsv`; override it with
+`PREFLIGHT_REPORT=/path/to/report.tsv` when needed. Set `PREFLIGHT=0` only
+when you need to debug Snakemake itself despite a known preflight warning.
 
 ```bash
 conda activate aspis-smk9

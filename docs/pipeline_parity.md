@@ -11,7 +11,7 @@ one G100 smoke or milestone run.
 | Legacy component | New workflow status | Current replacement | Remaining parity work |
 | --- | --- | --- | --- |
 | Environment/tool checks | Replaced | check_environment.py writes executable and R-package paths, detected versions, configured minimum/recommended versions, and fail-fast status for every workflow and branch environment report | Keep version policy updated as dependencies change |
-| Real-project preflight | Added | `validate_project_inputs.py` runs from the G100 real-project helpers before Snakemake submission and checks intake paths, assay labels, design columns, replicate counts, references, indexes, and optional report inputs | Extend checks when new production-only config keys are added |
+| Real-project preflight | Added | `validate_project_inputs.py` runs from the G100 real-project helpers before Snakemake submission and writes an auditable TSV report while checking intake paths, assay labels, design columns, replicate counts, references, indexes, and optional report inputs | Extend checks when new production-only config keys are added |
 
 ## RNA-seq
 
