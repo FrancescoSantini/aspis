@@ -5,8 +5,9 @@ SNAKEMAKE="${SNAKEMAKE:-snakemake}"
 MODE="${MODE:-dry-run}"
 FORCE_MODE="${FORCE_MODE:-none}"
 CONFIGFILE="${CONFIGFILE:-config/aspis_rnaseq_public_sra_g100.yaml}"
-DEFAULT_TARGET="results/rnaseq_public_sra_g100/branches/rnaseq/ASPIS_PUBLIC_RNASEQ_SRA/preprocess/multiqc/multiqc.done"
-TARGET="${TARGET:-$DEFAULT_TARGET}"
+DEFAULT_RAW_TARGET="results/rnaseq_public_sra_g100/branches/rnaseq/ASPIS_PUBLIC_RNASEQ_SRA/multiqc/multiqc.done"
+DEFAULT_PREPROCESS_TARGET="results/rnaseq_public_sra_g100/branches/rnaseq/ASPIS_PUBLIC_RNASEQ_SRA/preprocess/multiqc/multiqc.done"
+TARGET="${TARGET:-}"
 ACCOUNT="${SLURM_ACCOUNT:-}"
 VALIDATE="${VALIDATE:-auto}"
 PREFLIGHT="${PREFLIGHT:-1}"
@@ -49,10 +50,19 @@ case "$FORCE_MODE" in
     ;;
 esac
 
+DEFAULT_RUN=0
+TARGET_ARGS=()
+if [[ -n "$TARGET" ]]; then
+  read -r -a TARGET_ARGS <<< "$TARGET"
+else
+  DEFAULT_RUN=1
+  TARGET_ARGS+=("$DEFAULT_PREPROCESS_TARGET" "$DEFAULT_RAW_TARGET")
+fi
+
 echo "==> G100 public-SRA RNA-seq ingestion/preprocess milestone"
 echo "==> account: $ACCOUNT"
 echo "==> config: $CONFIGFILE"
-echo "==> target: $TARGET"
+echo "==> targets: ${TARGET_ARGS[*]}"
 echo "==> mode: $MODE"
 echo "==> force mode: $FORCE_MODE"
 echo "==> preflight: $PREFLIGHT"
@@ -66,7 +76,7 @@ if [[ "$PREFLIGHT" != "0" && "$PREFLIGHT" != "false" && "$PREFLIGHT" != "no" ]];
     --report-tsv "$PREFLIGHT_REPORT"
 fi
 
-"$SNAKEMAKE" "$TARGET" "${FORCE_ARGS[@]}" "$@" \
+"$SNAKEMAKE" "${TARGET_ARGS[@]}" "${FORCE_ARGS[@]}" "$@" \
   --workflow-profile profiles/slurm \
   --configfile "$CONFIGFILE" \
   "${EXTRA_ARGS[@]}" \
@@ -92,11 +102,11 @@ fi
     run_preprocessed_rnaseq_multiqc:mem_mb=4000
 
 if [[ "$MODE" == "run" ]]; then
-  if [[ "$VALIDATE" == "1" || "$VALIDATE" == "true" || ( "$VALIDATE" == "auto" && "$TARGET" == "$DEFAULT_TARGET" ) ]]; then
+  if [[ "$VALIDATE" == "1" || "$VALIDATE" == "true" || ( "$VALIDATE" == "auto" && "$DEFAULT_RUN" == "1" ) ]]; then
     echo "==> validating G100 public-SRA RNA-seq outputs"
     python3 tests/validate_g100_public_sra_rnaseq_outputs.py
     echo "==> summary: results/rnaseq_public_sra_g100/g100_public_sra_rnaseq_summary.tsv"
   else
-    echo "==> skipping public-SRA RNA-seq validation for custom target: $TARGET"
+    echo "==> skipping public-SRA RNA-seq validation for custom target(s): ${TARGET_ARGS[*]}"
   fi
 fi

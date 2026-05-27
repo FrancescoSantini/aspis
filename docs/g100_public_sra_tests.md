@@ -49,10 +49,11 @@ MODE=run bash tests/run_g100_public_sra_rnaseq.sh your_slurm_account
 cat results/rnaseq_public_sra_g100/g100_public_sra_rnaseq_summary.tsv
 ```
 
-The default target is:
+The default targets are:
 
 ```text
 results/rnaseq_public_sra_g100/branches/rnaseq/ASPIS_PUBLIC_RNASEQ_SRA/preprocess/multiqc/multiqc.done
+results/rnaseq_public_sra_g100/branches/rnaseq/ASPIS_PUBLIC_RNASEQ_SRA/multiqc/multiqc.done
 ```
 
 The validator checks that all four libraries came from INSDC accessions, ENA
