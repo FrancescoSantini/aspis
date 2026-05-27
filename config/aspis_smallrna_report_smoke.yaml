@@ -95,7 +95,13 @@ environment:
     - snakemake
     - fastqc
     - multiqc
-  smallrna_required_tools: []
+  smallrna_required_tools:
+    - cutadapt
+    - bowtie
+    - bowtie-build
+    - samtools
+    - featureCounts
+    - Rscript
   optional_tools:
     - cutadapt
     - bowtie
