@@ -91,6 +91,7 @@ def build_plan_rows(args: argparse.Namespace) -> list[dict[str, str]]:
         sample_columns,
         samples,
         args.project,
+        "rnaseq",
         args.condition_col,
         contrast_by,
         count_columns,
