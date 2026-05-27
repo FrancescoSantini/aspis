@@ -39,13 +39,13 @@ From the G100 repository checkout:
 ```bash
 conda activate aspis-smk9
 cd ~/aspis
-MODE=dry-run bash tests/run_g100_public_sra_rnaseq.sh ELIX6_santini
+MODE=dry-run bash tests/run_g100_public_sra_rnaseq.sh <SLURM_ACCOUNT>
 ```
 
 Run it:
 
 ```bash
-MODE=run bash tests/run_g100_public_sra_rnaseq.sh ELIX6_santini
+MODE=run bash tests/run_g100_public_sra_rnaseq.sh <SLURM_ACCOUNT>
 cat results/rnaseq_public_sra_g100/g100_public_sra_rnaseq_summary.tsv
 ```
 
@@ -67,13 +67,13 @@ Dry-run:
 ```bash
 conda activate aspis-smk9
 cd ~/aspis
-MODE=dry-run bash tests/run_g100_public_sra_smallrna.sh ELIX6_santini
+MODE=dry-run bash tests/run_g100_public_sra_smallrna.sh <SLURM_ACCOUNT>
 ```
 
 Run it:
 
 ```bash
-MODE=run bash tests/run_g100_public_sra_smallrna.sh ELIX6_santini
+MODE=run bash tests/run_g100_public_sra_smallrna.sh <SLURM_ACCOUNT>
 cat results/smallrna_public_sra_g100/g100_public_sra_smallrna_summary.tsv
 ```
 
@@ -93,8 +93,8 @@ The helpers default to `FORCE_MODE=none`, so rerunning the same command resumes
 from present outputs:
 
 ```bash
-MODE=run FORCE_MODE=none bash tests/run_g100_public_sra_rnaseq.sh ELIX6_santini
-MODE=run FORCE_MODE=none bash tests/run_g100_public_sra_smallrna.sh ELIX6_santini
+MODE=run FORCE_MODE=none bash tests/run_g100_public_sra_rnaseq.sh <SLURM_ACCOUNT>
+MODE=run FORCE_MODE=none bash tests/run_g100_public_sra_smallrna.sh <SLURM_ACCOUNT>
 ```
 
 Use `FORCE_MODE=all` only when intentionally rebuilding the milestone outputs.
