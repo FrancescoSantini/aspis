@@ -7,6 +7,7 @@ FORCE_MODE="${FORCE_MODE:-none}"
 TARGET="${TARGET:-}"
 ACCOUNT="${SLURM_ACCOUNT:-}"
 CONFIGFILE="${CONFIGFILE:-}"
+PREFLIGHT="${PREFLIGHT:-1}"
 
 if [[ $# -gt 0 && "${1}" != -* ]]; then
   ACCOUNT="$1"
@@ -62,6 +63,13 @@ echo "==> config: $CONFIGFILE"
 echo "==> target: ${TARGET:-rule all}"
 echo "==> mode: $MODE"
 echo "==> force mode: $FORCE_MODE"
+echo "==> preflight: $PREFLIGHT"
+
+if [[ "$PREFLIGHT" != "0" && "$PREFLIGHT" != "false" && "$PREFLIGHT" != "no" ]]; then
+  python3 workflow/scripts/validate_project_inputs.py \
+    --config "$CONFIGFILE" \
+    --assay rnaseq
+fi
 
 "$SNAKEMAKE" "${TARGET_ARGS[@]}" "${FORCE_ARGS[@]}" "$@" \
   --workflow-profile profiles/slurm \
