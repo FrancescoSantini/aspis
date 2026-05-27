@@ -42,6 +42,13 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", required=True, help="Project config YAML")
     parser.add_argument("--assay", required=True, choices=("rnaseq", "smallrna"))
+    parser.add_argument(
+        "--report-tsv",
+        "--report",
+        dest="report_tsv",
+        default="",
+        help="Optional preflight report TSV to write before exiting",
+    )
     return parser.parse_args()
 
 
@@ -154,6 +161,46 @@ def read_intake(path: Path) -> tuple[list[str], list[dict[str, str]]]:
     if not rows:
         raise ValueError(f"Intake file contains no libraries: {path}")
     return list(reader.fieldnames), rows
+
+
+def summarize_intake(config: dict[str, Any]) -> tuple[int, list[str]]:
+    intake_path = resolve_path(config.get("intake"))
+    if intake_path is None:
+        return 0, []
+    _, rows = read_intake(intake_path)
+    projects = sorted({row.get("project", "") or "default" for row in rows})
+    return len(rows), projects
+
+
+def write_report(path: Path, config_path: Path, assay: str, errors: list[str]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    columns = ["check", "status", "detail"]
+    with path.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=columns, delimiter="\t", lineterminator="\n")
+        writer.writeheader()
+        writer.writerow(
+            {
+                "check": "config",
+                "status": "ok" if config_path.exists() else "failed",
+                "detail": str(config_path),
+            }
+        )
+        writer.writerow({"check": "assay", "status": "ok", "detail": assay})
+        if errors:
+            for error in errors:
+                writer.writerow({"check": "preflight", "status": "failed", "detail": error})
+            return
+
+        try:
+            config = load_config(config_path)
+            n_libraries, projects = summarize_intake(config)
+            detail = (
+                f"{n_libraries} {assay} libraries across "
+                f"{len(projects)} project(s): {', '.join(projects)}"
+            )
+        except Exception as exc:
+            detail = f"preflight passed; summary unavailable: {exc}"
+        writer.writerow({"check": "preflight", "status": "ok", "detail": detail})
 
 
 def normalized_assay(row: dict[str, str]) -> str:
@@ -370,7 +417,14 @@ def run_preflight(config_path: Path, assay: str) -> list[str]:
 def main() -> int:
     args = parse_args()
     config_path = Path(args.config)
-    errors = run_preflight(config_path, args.assay)
+    try:
+        errors = run_preflight(config_path, args.assay)
+    except (OSError, ValueError, yaml.YAMLError) as exc:
+        errors = [str(exc)]
+
+    if args.report_tsv:
+        write_report(Path(args.report_tsv), config_path, args.assay, errors)
+
     if errors:
         print("Preflight failed:", file=sys.stderr)
         for error in errors:
@@ -378,12 +432,9 @@ def main() -> int:
         return 1
 
     config = load_config(config_path)
-    intake_path = resolve_path(config.get("intake"))
-    assert intake_path is not None
-    _, rows = read_intake(intake_path)
-    projects = sorted({row.get("project", "") or "default" for row in rows})
+    n_libraries, projects = summarize_intake(config)
     print(
-        f"Preflight ok: {len(rows)} {args.assay} libraries across "
+        f"Preflight ok: {n_libraries} {args.assay} libraries across "
         f"{len(projects)} project(s): {', '.join(projects)}"
     )
     return 0

@@ -8,6 +8,7 @@ TARGET="${TARGET:-}"
 ACCOUNT="${SLURM_ACCOUNT:-}"
 CONFIGFILE="${CONFIGFILE:-}"
 PREFLIGHT="${PREFLIGHT:-1}"
+PREFLIGHT_REPORT="${PREFLIGHT_REPORT:-}"
 
 if [[ $# -gt 0 && "${1}" != -* ]]; then
   ACCOUNT="$1"
@@ -29,6 +30,11 @@ fi
 if [[ ! -f "$CONFIGFILE" ]]; then
   echo "Config file does not exist: $CONFIGFILE" >&2
   exit 2
+fi
+
+if [[ -z "$PREFLIGHT_REPORT" ]]; then
+  CONFIG_BASENAME="$(basename "$CONFIGFILE")"
+  PREFLIGHT_REPORT="logs/preflight/${CONFIG_BASENAME}.smallrna.tsv"
 fi
 
 EXTRA_ARGS=(--rerun-incomplete)
@@ -64,11 +70,14 @@ echo "==> target: ${TARGET:-rule all}"
 echo "==> mode: $MODE"
 echo "==> force mode: $FORCE_MODE"
 echo "==> preflight: $PREFLIGHT"
+echo "==> preflight report: $PREFLIGHT_REPORT"
 
 if [[ "$PREFLIGHT" != "0" && "$PREFLIGHT" != "false" && "$PREFLIGHT" != "no" ]]; then
+  mkdir -p "$(dirname "$PREFLIGHT_REPORT")"
   python3 workflow/scripts/validate_project_inputs.py \
     --config "$CONFIGFILE" \
-    --assay smallrna
+    --assay smallrna \
+    --report-tsv "$PREFLIGHT_REPORT"
 fi
 
 "$SNAKEMAKE" "${TARGET_ARGS[@]}" "${FORCE_ARGS[@]}" "$@" \

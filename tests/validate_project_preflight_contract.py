@@ -27,9 +27,12 @@ def make_fastq(path: Path) -> Path:
     return write(path, "@r1\nACGTACGT\n+\nFFFFFFFF\n")
 
 
-def run_preflight(config: Path, assay: str) -> subprocess.CompletedProcess[str]:
+def run_preflight(config: Path, assay: str, report: Path | None = None) -> subprocess.CompletedProcess[str]:
+    command = [sys.executable, str(SCRIPT), "--config", str(config), "--assay", assay]
+    if report is not None:
+        command.extend(["--report-tsv", str(report)])
     return subprocess.run(
-        [sys.executable, str(SCRIPT), "--config", str(config), "--assay", assay],
+        command,
         cwd=REPO,
         text=True,
         stdout=subprocess.PIPE,
@@ -128,6 +131,14 @@ def assert_failure_contains(result: subprocess.CompletedProcess[str], label: str
         raise AssertionError(f"{label} did not mention {expected!r}\n{output}")
 
 
+def assert_file_contains(path: Path, expected: str, label: str) -> None:
+    if not path.is_file():
+        raise AssertionError(f"{label} did not create report: {path}")
+    text = path.read_text(encoding="utf-8")
+    if expected not in text:
+        raise AssertionError(f"{label} report did not contain {expected!r}\n{text}")
+
+
 def main() -> int:
     with tempfile.TemporaryDirectory() as tmpdir:
         tmp = Path(tmpdir)
@@ -147,7 +158,10 @@ def main() -> int:
                 ("treated_2", "treated", str(r1[3]), str(r2[3])),
             ],
         )
-        assert_success(run_preflight(rnaseq_config(tmp, valid_rnaseq, genome, annotation), "rnaseq"), "valid RNA-seq")
+        valid_rnaseq_config = rnaseq_config(tmp, valid_rnaseq, genome, annotation)
+        valid_report = tmp / "valid_rnaseq_preflight.tsv"
+        assert_success(run_preflight(valid_rnaseq_config, "rnaseq", valid_report), "valid RNA-seq")
+        assert_file_contains(valid_report, "preflight\tok", "valid RNA-seq")
 
         low_rep_rnaseq = rnaseq_intake(
             tmp,
@@ -156,11 +170,13 @@ def main() -> int:
                 ("treated_only", "treated", str(r1[1]), str(r2[1])),
             ],
         )
+        failed_report = tmp / "failed_rnaseq_preflight.tsv"
         assert_failure_contains(
-            run_preflight(rnaseq_config(tmp, low_rep_rnaseq, genome, annotation), "rnaseq"),
+            run_preflight(rnaseq_config(tmp, low_rep_rnaseq, genome, annotation), "rnaseq", failed_report),
             "low-replicate RNA-seq",
             "has 1 sample(s)",
         )
+        assert_file_contains(failed_report, "preflight\tfailed", "failed RNA-seq")
 
         missing_fastq = rnaseq_intake(
             tmp,
