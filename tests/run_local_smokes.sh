@@ -37,6 +37,8 @@ if [[ "$MODE" == "dry-run" ]]; then
     --configfile config/aspis_smallrna_bowtie_index_smoke.yaml
   run_snakemake "smallRNA contaminant-depletion contract smoke" \
     --configfile config/aspis_smallrna_depletion_smoke.yaml
+  run_snakemake "smallRNA miRBase-alignment contract smoke" \
+    --configfile config/aspis_smallrna_alignment_smoke.yaml
 fi
 run_snakemake "gene/transcript DESeq2 and report smoke" \
   --configfile config/aspis_deseq2_smoke.yaml

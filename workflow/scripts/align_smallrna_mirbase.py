@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
-"""Deplete smallRNA contaminant reads with Bowtie."""
+"""Align contaminant-depleted smallRNA reads to a miRBase Bowtie index."""
 
 from __future__ import annotations
 
 import argparse
 import csv
-import gzip
 import shlex
 import shutil
 import subprocess
@@ -14,21 +13,20 @@ from pathlib import Path
 
 REQUIRED_COLUMNS = {"library_id", "assay", "project", "layout", "fastq_1"}
 ADDED_COLUMNS = [
-    "pre_depletion_fastq_1",
-    "contaminant_sam",
-    "contaminant_log",
-    "depletion_stats",
-    "depletion_tool",
+    "pre_alignment_fastq_1",
+    "bam",
+    "flagstat",
+    "alignment_log",
+    "alignment_tool",
 ]
 MANIFEST_COLUMNS = [
     "library_id",
     "project",
     "assay",
     "input_fastq_1",
-    "depleted_fastq_1",
-    "contaminant_sam",
-    "contaminant_log",
-    "depletion_stats",
+    "bam",
+    "flagstat",
+    "alignment_log",
     "status",
     "message",
 ]
@@ -36,15 +34,18 @@ MANIFEST_COLUMNS = [
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--samples", required=True, help="Trimmed smallRNA sample table TSV")
-    parser.add_argument("--outdir", required=True, help="Contaminant depletion output directory")
-    parser.add_argument("--output", required=True, help="Depleted sample table TSV")
-    parser.add_argument("--manifest", required=True, help="Depletion manifest TSV")
+    parser.add_argument("--samples", required=True, help="Depleted smallRNA sample table TSV")
+    parser.add_argument("--outdir", required=True, help="Alignment output directory")
+    parser.add_argument("--output", required=True, help="Aligned sample table TSV")
+    parser.add_argument("--manifest", required=True, help="Alignment manifest TSV")
     parser.add_argument("--done", required=True, help="Completion sentinel")
-    parser.add_argument("--index-prefix", required=True, help="Contaminant Bowtie index prefix")
+    parser.add_argument("--index-prefix", required=True, help="miRBase Bowtie index prefix")
     parser.add_argument("--bowtie", default="bowtie", help="Bowtie executable")
-    parser.add_argument("--threads", type=int, default=1, help="Bowtie threads per sample")
-    parser.add_argument("--mismatches", type=int, default=1, help="Bowtie -v mismatches for contaminant mapping")
+    parser.add_argument("--samtools", default="samtools", help="samtools executable")
+    parser.add_argument("--threads", type=int, default=1, help="Threads per sample")
+    parser.add_argument("--mismatches", type=int, default=2, help="Bowtie -v mismatches")
+    parser.add_argument("--multi-alignments", type=int, default=10, help="Bowtie -k alignments per read")
+    parser.add_argument("--extra-args", default="--best --strata", help="Extra Bowtie arguments")
     return parser.parse_args()
 
 
@@ -62,14 +63,14 @@ def read_samples(path: Path) -> tuple[list[str], list[dict[str, str]]]:
 
 def validate_samples(rows: list[dict[str, str]]) -> None:
     if not rows:
-        raise ValueError("smallRNA depletion received an empty sample table")
+        raise ValueError("smallRNA miRBase alignment received an empty sample table")
     errors = []
     for row in rows:
         library_id = row.get("library_id", "")
         if row.get("assay") != "smallrna":
             errors.append(f"{library_id}: expected assay='smallrna', got {row.get('assay')!r}")
         if row.get("layout") != "single":
-            errors.append(f"{library_id}: smallRNA depletion expects single-end libraries")
+            errors.append(f"{library_id}: smallRNA miRBase alignment expects single-end libraries")
         if row.get("fastq_2"):
             errors.append(f"{library_id}: single-end smallRNA sample unexpectedly has fastq_2")
         fastq_1 = row.get("fastq_1", "")
@@ -78,16 +79,22 @@ def validate_samples(rows: list[dict[str, str]]) -> None:
         elif not Path(fastq_1).exists():
             errors.append(f"{library_id}: fastq_1 does not exist: {fastq_1}")
     if errors:
-        raise ValueError("smallRNA depletion cannot start:\n- " + "\n- ".join(errors))
+        raise ValueError("smallRNA miRBase alignment cannot start:\n- " + "\n- ".join(errors))
 
 
-def validate_args(args: argparse.Namespace) -> None:
+def validate_args(args: argparse.Namespace) -> list[str]:
     if args.threads < 1:
         raise ValueError("--threads must be >= 1")
     if args.mismatches < 0:
         raise ValueError("--mismatches cannot be negative")
+    if args.multi_alignments < 1:
+        raise ValueError("--multi-alignments must be >= 1")
     if not args.index_prefix:
         raise ValueError("--index-prefix is required")
+    try:
+        return shlex.split(args.extra_args)
+    except ValueError as exc:
+        raise ValueError(f"--extra-args is not valid shell-like syntax: {exc}") from exc
 
 
 def output_columns(input_columns: list[str]) -> list[str]:
@@ -102,11 +109,11 @@ def outputs_for(row: dict[str, str], outdir: Path) -> dict[str, Path]:
     library_dir = outdir / row["library_id"]
     return {
         "library_dir": library_dir,
-        "fastq_1": library_dir / "depleted.fastq.gz",
-        "tmp_fastq_1": library_dir / "depleted.fastq",
-        "contaminant_sam": library_dir / "contaminants.sam",
-        "contaminant_log": library_dir / "bowtie.log",
-        "depletion_stats": library_dir / "depletion_stats.tsv",
+        "sam": library_dir / "aligned.sam",
+        "unsorted_bam": library_dir / "aligned.unsorted.bam",
+        "bam": library_dir / "aligned.bam",
+        "flagstat": library_dir / "flagstat.txt",
+        "alignment_log": library_dir / "bowtie.log",
     }
 
 
@@ -118,63 +125,64 @@ def remove_stale_outputs(outputs: dict[str, Path]) -> None:
             path.unlink()
 
 
-def count_fastq_records(path: Path) -> int:
-    opener = gzip.open if path.suffix == ".gz" else open
-    with opener(path, "rt", encoding="utf-8", errors="replace") as handle:
-        return sum(1 for _line in handle) // 4
+def run_command(command: list[str], *, stdout: Path | None = None, stderr: Path | None = None) -> None:
+    print("[CMD] " + shlex.join(command))
+    stdout_handle = stdout.open("w", encoding="utf-8") if stdout else None
+    stderr_handle = stderr.open("w", encoding="utf-8") if stderr else None
+    try:
+        subprocess.run(command, check=True, stdout=stdout_handle, stderr=stderr_handle, text=True)
+    finally:
+        if stdout_handle:
+            stdout_handle.close()
+        if stderr_handle:
+            stderr_handle.close()
 
 
-def gzip_fastq(source: Path, target: Path) -> None:
-    with source.open("rb") as input_handle, gzip.open(target, "wb") as output_handle:
-        shutil.copyfileobj(input_handle, output_handle)
-    source.unlink()
-
-
-def run_bowtie(row: dict[str, str], outputs: dict[str, Path], args: argparse.Namespace) -> None:
-    executable = shutil.which(args.bowtie)
-    if executable is None:
+def run_alignment(
+    row: dict[str, str],
+    outputs: dict[str, Path],
+    args: argparse.Namespace,
+    extra_args: list[str],
+) -> None:
+    bowtie = shutil.which(args.bowtie)
+    if bowtie is None:
         raise FileNotFoundError(f"Bowtie executable not found on PATH: {args.bowtie}")
+    samtools = shutil.which(args.samtools)
+    if samtools is None:
+        raise FileNotFoundError(f"samtools executable not found on PATH: {args.samtools}")
 
     outputs["library_dir"].mkdir(parents=True, exist_ok=True)
     remove_stale_outputs(outputs)
 
-    command = [
-        executable,
+    bowtie_command = [
+        bowtie,
         "-v",
         str(args.mismatches),
+        "-k",
+        str(args.multi_alignments),
         "-p",
         str(args.threads),
-        "--un",
-        str(outputs["tmp_fastq_1"]),
+        "-S",
+        *extra_args,
         args.index_prefix,
         row["fastq_1"],
     ]
-    print("[CMD] " + shlex.join(command))
-    with outputs["contaminant_sam"].open("w", encoding="utf-8") as sam_handle, outputs[
-        "contaminant_log"
-    ].open("w", encoding="utf-8") as log_handle:
-        completed = subprocess.run(
-            command,
-            check=False,
-            stdout=sam_handle,
-            stderr=log_handle,
-            text=True,
-        )
-    if completed.returncode != 0:
-        raise RuntimeError(f"{row['library_id']}: bowtie exited with status {completed.returncode}")
-    if not outputs["tmp_fastq_1"].exists():
-        raise RuntimeError(f"{row['library_id']}: Bowtie did not create unaligned FASTQ")
-
-    gzip_fastq(outputs["tmp_fastq_1"], outputs["fastq_1"])
-    input_reads = count_fastq_records(Path(row["fastq_1"]))
-    depleted_reads = count_fastq_records(outputs["fastq_1"])
-    outputs["depletion_stats"].write_text(
-        "metric\tvalue\n"
-        f"input_reads\t{input_reads}\n"
-        f"depleted_reads\t{depleted_reads}\n"
-        f"contaminant_reads\t{input_reads - depleted_reads}\n",
-        encoding="utf-8",
+    run_command(bowtie_command, stdout=outputs["sam"], stderr=outputs["alignment_log"])
+    run_command([samtools, "view", "-bS", "-o", str(outputs["unsorted_bam"]), str(outputs["sam"])])
+    run_command(
+        [
+            samtools,
+            "sort",
+            "-@",
+            str(args.threads),
+            "-o",
+            str(outputs["bam"]),
+            str(outputs["unsorted_bam"]),
+        ]
     )
+    run_command([samtools, "flagstat", str(outputs["bam"])], stdout=outputs["flagstat"])
+    outputs["sam"].unlink(missing_ok=True)
+    outputs["unsorted_bam"].unlink(missing_ok=True)
 
 
 def write_tsv(path: Path, columns: list[str], rows: list[dict[str, str]]) -> None:
@@ -195,7 +203,7 @@ def write_done(path: Path, rows: list[dict[str, str]]) -> None:
 
 def main() -> int:
     args = parse_args()
-    validate_args(args)
+    extra_args = validate_args(args)
     input_columns, rows = read_samples(Path(args.samples))
     validate_samples(rows)
 
@@ -204,28 +212,25 @@ def main() -> int:
     manifest_rows = []
     for row in rows:
         outputs = outputs_for(row, outdir)
-        run_bowtie(row, outputs, args)
-        depleted = {
+        run_alignment(row, outputs, args, extra_args)
+        aligned = {
             **row,
-            "pre_depletion_fastq_1": row["fastq_1"],
-            "fastq_1": str(outputs["fastq_1"]),
-            "fastq_2": "",
-            "contaminant_sam": str(outputs["contaminant_sam"]),
-            "contaminant_log": str(outputs["contaminant_log"]),
-            "depletion_stats": str(outputs["depletion_stats"]),
-            "depletion_tool": "bowtie",
+            "pre_alignment_fastq_1": row["fastq_1"],
+            "bam": str(outputs["bam"]),
+            "flagstat": str(outputs["flagstat"]),
+            "alignment_log": str(outputs["alignment_log"]),
+            "alignment_tool": "bowtie",
         }
-        output_rows.append(depleted)
+        output_rows.append(aligned)
         manifest_rows.append(
             {
                 "library_id": row["library_id"],
                 "project": row.get("project", ""),
                 "assay": row.get("assay", ""),
                 "input_fastq_1": row["fastq_1"],
-                "depleted_fastq_1": str(outputs["fastq_1"]),
-                "contaminant_sam": str(outputs["contaminant_sam"]),
-                "contaminant_log": str(outputs["contaminant_log"]),
-                "depletion_stats": str(outputs["depletion_stats"]),
+                "bam": str(outputs["bam"]),
+                "flagstat": str(outputs["flagstat"]),
+                "alignment_log": str(outputs["alignment_log"]),
                 "status": "ok",
                 "message": "",
             }

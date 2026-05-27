@@ -196,6 +196,7 @@ SMALLRNA_REQUIRED_TOOLS = configured_tool_list(
 )
 SMALLRNA_PREPROCESS_RUN = as_bool(SMALLRNA.get("preprocess_run", False), False)
 SMALLRNA_DEPLETION_RUN = as_bool(SMALLRNA.get("depletion_run", False), False)
+SMALLRNA_ALIGNMENT_RUN = as_bool(SMALLRNA.get("alignment_run", False), False)
 SMALLRNA_REFERENCE_RUN = as_bool(SMALLRNA.get("reference_run", False), False)
 SMALLRNA_BUILD_BOWTIE_INDEX = as_bool(SMALLRNA.get("build_bowtie_index", False), False)
 SMALLRNA_BUILD_CONTAMINANT_INDEX = as_bool(SMALLRNA.get("build_contaminant_index", False), False)
@@ -263,6 +264,10 @@ SMALLRNA_REFERENCE_PLAN_INPUTS = (
 )
 if SMALLRNA_DEPLETION_RUN and not SMALLRNA_PREPROCESS_RUN:
     raise ValueError("smallrna.depletion_run requires smallrna.preprocess_run: true")
+if SMALLRNA_ALIGNMENT_RUN and not SMALLRNA_DEPLETION_RUN:
+    raise ValueError("smallrna.alignment_run requires smallrna.depletion_run: true")
+if SMALLRNA_ALIGNMENT_RUN and not SMALLRNA_EFFECTIVE_BOWTIE_INDEX_PREFIX:
+    raise ValueError("smallrna.alignment_run requires smallrna.bowtie_index_prefix or smallrna.build_bowtie_index: true")
 OPTIONAL_TOOLS = configured_tool_list("optional_tools", ["vdb-validate"])
 ACTIVE_SRA_REQUIRED_TOOLS = (
     SRA_LIMITED_REQUIRED_TOOLS if USES_INSDC and USES_SRA_SPOT_LIMIT
@@ -524,6 +529,14 @@ def planned_branch_targets(wildcards):
                             f"{BRANCH_DIR}/{assay}/{project}/smallrna/depletion/depleted_samples.tsv",
                             f"{BRANCH_DIR}/{assay}/{project}/smallrna/depletion/depletion_manifest.tsv",
                             f"{BRANCH_DIR}/{assay}/{project}/smallrna/depletion/depletion.done",
+                        ]
+                    )
+                if SMALLRNA_ALIGNMENT_RUN:
+                    targets.extend(
+                        [
+                            f"{BRANCH_DIR}/{assay}/{project}/smallrna/alignment/aligned_samples.tsv",
+                            f"{BRANCH_DIR}/{assay}/{project}/smallrna/alignment/alignment_manifest.tsv",
+                            f"{BRANCH_DIR}/{assay}/{project}/smallrna/alignment/alignment.done",
                         ]
                     )
     return targets
@@ -1249,6 +1262,49 @@ rule deplete_smallrna_contaminants:
           --bowtie {params.bowtie:q} \
           --threads {threads:q} \
           --mismatches {params.mismatches:q} \
+          > {log:q} 2>&1
+        """
+
+
+rule align_smallrna_mirbase:
+    input:
+        samples=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/depletion/depleted_samples.tsv",
+        depletion_done=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/depletion/depletion.done",
+        plan=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/smallrna_plan.tsv",
+        mirbase_index=([SMALLRNA_BOWTIE_INDEX_DONE] if SMALLRNA_BOWTIE_INDEX_DONE else []),
+        environment=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/environment_report.tsv"
+    output:
+        samples=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/alignment/aligned_samples.tsv",
+        manifest=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/alignment/alignment_manifest.tsv",
+        done=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/alignment/alignment.done"
+    params:
+        outdir=lambda wildcards: f"{BRANCH_DIR}/smallrna/{wildcards.project}/smallrna/alignment",
+        index_prefix=SMALLRNA_EFFECTIVE_BOWTIE_INDEX_PREFIX,
+        bowtie=SMALLRNA.get("bowtie_command", "bowtie"),
+        samtools=SMALLRNA.get("samtools_command", "samtools"),
+        mismatches=SMALLRNA.get("alignment_mismatches", 2),
+        multi_alignments=SMALLRNA.get("alignment_multi_alignments", 10),
+        extra_args=SMALLRNA.get("alignment_extra_args", "--best --strata")
+    threads:
+        SMALLRNA.get("threads", 1)
+    log:
+        "logs/branches/smallrna/{project}.smallrna_alignment.log"
+    shell:
+        r"""
+        mkdir -p logs/branches/smallrna
+        python3 workflow/scripts/align_smallrna_mirbase.py \
+          --samples {input.samples:q} \
+          --outdir {params.outdir:q} \
+          --output {output.samples:q} \
+          --manifest {output.manifest:q} \
+          --done {output.done:q} \
+          --index-prefix {params.index_prefix:q} \
+          --bowtie {params.bowtie:q} \
+          --samtools {params.samtools:q} \
+          --threads {threads:q} \
+          --mismatches {params.mismatches:q} \
+          --multi-alignments {params.multi_alignments:q} \
+          --extra-args {params.extra_args:q} \
           > {log:q} 2>&1
         """
 
