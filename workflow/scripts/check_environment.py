@@ -61,7 +61,72 @@ def version_for(tool: str) -> tuple[str, str]:
     return first_line, ""
 
 
+def inspect_r_package(spec: str, required: bool) -> dict[str, str]:
+    package = spec.split("::", 1)[1]
+    rscript = shutil.which("Rscript")
+    if rscript is None:
+        return {
+            "tool": spec,
+            "required": str(required).lower(),
+            "status": "missing" if required else "optional_missing",
+            "path": "",
+            "version": "",
+            "detail": "Rscript not found on PATH",
+        }
+
+    package_literal = package.replace("\\", "\\\\").replace("'", "\\'")
+    command = [
+        rscript,
+        "-e",
+        (
+            f"if (!requireNamespace('{package_literal}', quietly=TRUE)) quit(status=2); "
+            f"cat(as.character(utils::packageVersion('{package_literal}')))"
+        ),
+    ]
+    try:
+        completed = subprocess.run(
+            command,
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+    except Exception as exc:  # noqa: BLE001 - report failure compactly.
+        return {
+            "tool": spec,
+            "required": str(required).lower(),
+            "status": "missing" if required else "optional_missing",
+            "path": rscript,
+            "version": "",
+            "detail": f"R package version check failed: {exc}",
+        }
+
+    version = (completed.stdout or "").strip().splitlines()[0] if completed.stdout.strip() else ""
+    if completed.returncode != 0:
+        detail = (completed.stderr or completed.stdout or f"R package {package} is not installed").strip()
+        return {
+            "tool": spec,
+            "required": str(required).lower(),
+            "status": "missing" if required else "optional_missing",
+            "path": rscript,
+            "version": version,
+            "detail": detail.splitlines()[0] if detail else f"R package {package} is not installed",
+        }
+
+    return {
+        "tool": spec,
+        "required": str(required).lower(),
+        "status": "ok",
+        "path": rscript,
+        "version": version,
+        "detail": "",
+    }
+
+
 def inspect_tool(tool: str, required: bool) -> dict[str, str]:
+    if tool.startswith("R::"):
+        return inspect_r_package(tool, required)
+
     path = shutil.which(tool)
     if path is None:
         return {

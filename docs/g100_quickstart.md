@@ -109,6 +109,11 @@ Rscript -e 'suppressPackageStartupMessages(library(DESeq2)); packageVersion("DES
 Rscript -e 'suppressPackageStartupMessages(library(IsoformSwitchAnalyzeR)); packageVersion("IsoformSwitchAnalyzeR")'
 ```
 
+ASPIS environment reports also accept required entries such as `R::DESeq2` and
+record the detected R package version. If a required executable or R package is
+missing, the corresponding environment-check rule fails before downstream jobs
+consume compute time.
+
 Expected major version:
 
 ```text

@@ -40,6 +40,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--bowtie-index-prefix", default="", help="miRBase Bowtie index prefix")
     parser.add_argument("--contaminant-fasta", default="", help="Contaminant FASTA for depletion")
     parser.add_argument("--contaminant-index-prefix", default="", help="Contaminant Bowtie index prefix")
+    parser.add_argument("--residual-run", default="false", help="Whether to align miRBase-unmapped reads to genome")
+    parser.add_argument("--residual-genome-fasta", default="", help="Genome FASTA used to build the residual Bowtie index")
+    parser.add_argument("--residual-genome-index-prefix", default="", help="Residual-genome Bowtie index prefix")
+    parser.add_argument("--residual-annotation-gtf", default="", help="Optional GTF used to classify residual alignments")
     parser.add_argument("--condition-col", default="condition", help="Condition column")
     parser.add_argument("--control-label", default="control", help="Control condition label")
     parser.add_argument("--contrast-by", nargs="*", default=[], help="Optional stratifying columns")
@@ -238,6 +242,19 @@ def build_rows(args: argparse.Namespace) -> list[dict[str, str]]:
         )
     alignment_status, alignment_reason = status_from_errors(alignment_errors)
 
+    residual_errors = [] if alignment_status == "ready" else ["mirbase_alignment is not ready"]
+    if not bool_text(args.residual_run):
+        residual_errors.append("residual genome alignment is disabled")
+    else:
+        if not (existing_bowtie_index(args.residual_genome_index_prefix) or existing_path(args.residual_genome_fasta)):
+            residual_errors.append(
+                missing_bowtie_index_reason("residual genome Bowtie index prefix", args.residual_genome_index_prefix)
+                or missing_path_reason("residual genome FASTA", args.residual_genome_fasta)
+            )
+        if args.residual_annotation_gtf and not existing_path(args.residual_annotation_gtf):
+            residual_errors.append(missing_path_reason("residual annotation GTF", args.residual_annotation_gtf))
+    residual_status, residual_reason = status_from_errors(residual_errors)
+
     quant_errors = [] if alignment_status == "ready" else ["mirbase_alignment is not ready"]
     if not existing_path(args.mirbase_saf):
         quant_errors.append(missing_path_reason("miRBase SAF", args.mirbase_saf))
@@ -322,6 +339,30 @@ def build_rows(args: argparse.Namespace) -> list[dict[str, str]]:
             key_inputs=[args.mirbase_fasta, args.bowtie_index_prefix],
             expected_outputs=["alignment/aligned_samples.tsv", "alignment/alignment_manifest.tsv"],
             parameters=["bowtie=-v 2 -k 10 --best --strata"],
+        ),
+        row(
+            args=args,
+            stage="residual_genome_alignment",
+            status=residual_status,
+            reason=residual_reason,
+            runner_status="implemented",
+            libraries=libraries,
+            key_inputs=[
+                "alignment/aligned_samples.tsv",
+                args.residual_genome_fasta,
+                args.residual_genome_index_prefix,
+                args.residual_annotation_gtf,
+            ],
+            expected_outputs=[
+                "residual_genome/residual_samples.tsv",
+                "residual_genome/residual_manifest.tsv",
+                "residual_genome/biotype_counts.tsv",
+                "residual_genome/feature_counts.tsv",
+            ],
+            parameters=[
+                f"residual_run={args.residual_run}",
+                f"annotation_gtf={args.residual_annotation_gtf}" if args.residual_annotation_gtf else "",
+            ],
         ),
         row(
             args=args,
