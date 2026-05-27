@@ -57,6 +57,8 @@ run_snakemake "gene/transcript DESeq2 and report smoke" \
 if [[ "$MODE" == "run" ]]; then
   echo "==> environment version contract"
   python3 tests/validate_environment_version_contract.py
+  echo "==> branch design input contract"
+  python3 tests/validate_branch_design_contract.py
   echo "==> core smoke output contracts"
   python3 tests/validate_smoke_contract_outputs.py
   echo "==> isoform-switch ready contract smoke"
