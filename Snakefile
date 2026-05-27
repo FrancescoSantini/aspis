@@ -1583,8 +1583,14 @@ rule render_smallrna_target_featuresets:
         done=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/differential/target_feature_sets/target_feature_sets.done"
     params:
         outdir=lambda wildcards: f"{BRANCH_DIR}/smallrna/{wildcards.project}/smallrna/differential/target_feature_sets",
-        feature_sets=joined_config_values(SMALLRNA_TARGET_FEATURE_SET_FILES),
-        feature_set_tables=joined_config_values(SMALLRNA_TARGET_FEATURE_SET_TABLES),
+        feature_sets=lambda wildcards: optional_shell_arg(
+            "--feature-sets",
+            joined_config_values(SMALLRNA_TARGET_FEATURE_SET_FILES),
+        ),
+        feature_set_tables=lambda wildcards: optional_shell_arg(
+            "--feature-set-tables",
+            joined_config_values(SMALLRNA_TARGET_FEATURE_SET_TABLES),
+        ),
         min_overlap=SMALLRNA.get("target_feature_set_min_overlap", 2),
         top_n=SMALLRNA.get("target_feature_set_top_n", 20)
     log:
@@ -1597,8 +1603,8 @@ rule render_smallrna_target_featuresets:
           --outdir {params.outdir:q} \
           --manifest {output.manifest:q} \
           --done {output.done:q} \
-          --feature-sets {params.feature_sets:q} \
-          --feature-set-tables {params.feature_set_tables:q} \
+          {params.feature_sets} \
+          {params.feature_set_tables} \
           --min-overlap {params.min_overlap:q} \
           --top-n {params.top_n:q} \
           > {log:q} 2>&1
