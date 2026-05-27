@@ -55,6 +55,8 @@ run_snakemake "gene/transcript DESeq2 and report smoke" \
   --configfile config/aspis_deseq2_smoke.yaml
 
 if [[ "$MODE" == "run" ]]; then
+  echo "==> environment version contract"
+  python3 tests/validate_environment_version_contract.py
   echo "==> core smoke output contracts"
   python3 tests/validate_smoke_contract_outputs.py
   echo "==> isoform-switch ready contract smoke"

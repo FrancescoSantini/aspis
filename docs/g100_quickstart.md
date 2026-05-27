@@ -111,14 +111,21 @@ Rscript -e 'suppressPackageStartupMessages(library(IsoformSwitchAnalyzeR)); pack
 
 ASPIS environment reports also accept required entries such as `R::DESeq2` and
 record the detected R package version. If a required executable or R package is
-missing, the corresponding environment-check rule fails before downstream jobs
-consume compute time.
+missing, or if a required tool is older than the configured minimum version, the
+corresponding environment-check rule fails before downstream jobs consume compute
+time.
 
-Expected major version:
+The report columns are:
 
 ```text
-snakemake 9.x
+tool  required  status  path  version  minimum_version  recommended_version  version_status  detail
 ```
+
+`minimum_versions` and `recommended_versions` live under the `environment:`
+config block. Minimum versions are enforced for required tools. Recommended
+versions are advisory: older detected versions keep `status=ok`, but the row is
+marked with `version_status=below_recommended` and the recommendation is written
+in `detail`.
 
 ## 3. Local Materialization Test
 

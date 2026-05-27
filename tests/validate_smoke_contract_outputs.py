@@ -87,7 +87,7 @@ def require_project_rows(path: Path, columns: set[str] | None = None) -> list[di
 
 
 def validate_environment_report(path: Path, required_tools: set[str]) -> None:
-    _, rows = read_tsv(path, {"tool", "required", "status", "path", "version", "detail"})
+    _, rows = read_tsv(path, {"tool", "required", "status", "path", "version", "minimum_version", "recommended_version", "version_status", "detail"})
     by_tool = {row["tool"]: row for row in rows}
     missing = required_tools - set(by_tool)
     if missing:
