@@ -54,20 +54,56 @@ def validate_processing() -> str:
         ("smallrna_plan.tsv", {"stage", "status", "reason"}),
         ("preprocess/cutadapt_manifest.tsv", {"library_id", "status", "trimmed_fastq_1"}),
         ("depletion/depletion_manifest.tsv", {"library_id", "status", "depleted_fastq_1"}),
-        ("alignment/alignment_manifest.tsv", {"library_id", "status", "bam", "flagstat"}),
+        ("alignment/alignment_manifest.tsv", {"library_id", "status", "bam", "flagstat", "mirbase_unmapped_fastq_1"}),
+        (
+            "residual_genome/residual_manifest.tsv",
+            {
+                "library_id",
+                "status",
+                "input_fastq_1",
+                "genome_unmapped_fastq_1",
+                "bam",
+                "flagstat",
+                "assignment_tsv",
+                "input_reads",
+                "genome_aligned_reads",
+                "genome_unmapped_reads",
+            },
+        ),
     ]:
         path = SMALLRNA / relative
         _, rows = read_tsv(path, columns)
         non_ok = [row for row in rows if row.get("status") not in {"ok", "ready"}]
         if non_ok:
             raise ValueError(f"{path} has non-ok rows: {non_ok}")
+        for row in rows:
+            for column in ["trimmed_fastq_1", "depleted_fastq_1", "bam", "flagstat", "mirbase_unmapped_fastq_1"]:
+                if column in row:
+                    require_path(row[column], path, column)
+            for column in ["input_fastq_1", "genome_unmapped_fastq_1", "assignment_tsv"]:
+                if column in row:
+                    require_path(row[column], path, column)
     for done in [
         SMALLRNA / "preprocess/preprocess.done",
         SMALLRNA / "depletion/depletion.done",
         SMALLRNA / "alignment/alignment.done",
+        SMALLRNA / "residual_genome/residual.done",
     ]:
         require_path(str(done), done, "done")
-    return "cutadapt, contaminant-depletion, and miRBase alignment outputs present"
+
+    _, biotype_rows = read_tsv(
+        SMALLRNA / "residual_genome/biotype_counts.tsv",
+        {"biotype", "smallrna_control_1", "smallrna_control_2", "smallrna_treated_1", "smallrna_treated_2"},
+    )
+    if not any(row["biotype"] == "snoRNA" for row in biotype_rows):
+        raise ValueError("Residual biotype matrix does not include expected snoRNA residual reads")
+    _, feature_rows = read_tsv(
+        SMALLRNA / "residual_genome/feature_counts.tsv",
+        {"feature_id", "feature_name", "biotype"},
+    )
+    if not any(row["feature_id"] == "toy_snoRNA" and row["biotype"] == "snoRNA" for row in feature_rows):
+        raise ValueError("Residual feature matrix does not include expected toy_snoRNA counts")
+    return "cutadapt, depletion, miRBase alignment, and residual genome classification outputs present"
 
 
 def validate_quantification_and_deseq2() -> str:
@@ -127,6 +163,9 @@ def validate_reports() -> str:
             "n_targets",
             "n_enrichment_terms",
             "n_target_feature_set_terms",
+            "n_residual_input_reads",
+            "n_residual_genome_aligned_reads",
+            "n_residual_biotypes",
             "volcano_pdf",
             "pca_pdf",
             "heatmap_pdf",
@@ -155,7 +194,7 @@ def validate_reports() -> str:
     text = index.read_text(encoding="utf-8")
     if "smallRNA differential reports" not in text or "volcano" not in text or "</html>" not in text:
         raise ValueError(f"{index} does not look like a complete smallRNA report index")
-    return "smallRNA report plots, target enrichment, feature sets, summaries, and index present"
+    return "smallRNA report plots, residual read fate, target enrichment, feature sets, summaries, and index present"
 
 
 def run_check(name: str, checks: list[dict[str, str]], func) -> None:

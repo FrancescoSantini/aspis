@@ -1,0 +1,3 @@
+toy_chr1	ASPIS	gene	39	110	.	+	.	gene_id "toy_snoRNA"; gene_name "toy_snoRNA"; gene_biotype "snoRNA";
+toy_chr1	ASPIS	transcript	39	110	.	+	.	gene_id "toy_snoRNA"; transcript_id "toy_snoRNA_tx"; gene_name "toy_snoRNA"; gene_biotype "snoRNA"; transcript_biotype "snoRNA";
+toy_chr1	ASPIS	exon	39	110	.	+	.	gene_id "toy_snoRNA"; transcript_id "toy_snoRNA_tx"; gene_name "toy_snoRNA"; gene_biotype "snoRNA"; transcript_biotype "snoRNA"; exon_number "1";

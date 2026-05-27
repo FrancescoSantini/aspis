@@ -83,12 +83,16 @@ echo "==> force mode: $FORCE_MODE"
     build_smallrna_bowtie_index:mem_mb=16000 \
     build_smallrna_contaminant_index:runtime=60 \
     build_smallrna_contaminant_index:mem_mb=8000 \
+    build_smallrna_residual_genome_index:runtime=120 \
+    build_smallrna_residual_genome_index:mem_mb=16000 \
     preprocess_smallrna_branch:runtime=120 \
     preprocess_smallrna_branch:mem_mb=8000 \
     deplete_smallrna_contaminants:runtime=120 \
     deplete_smallrna_contaminants:mem_mb=8000 \
     align_smallrna_mirbase:runtime=120 \
     align_smallrna_mirbase:mem_mb=8000 \
+    align_smallrna_residual_genome:runtime=120 \
+    align_smallrna_residual_genome:mem_mb=8000 \
     featurecounts_smallrna_mirna:runtime=120 \
     featurecounts_smallrna_mirna:mem_mb=8000 \
     run_mirna_deseq2:runtime=120 \

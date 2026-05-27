@@ -25,6 +25,14 @@ Edit `config/aspis_smallrna_<project>.yaml`:
 - `smallrna.contaminant_fasta`: provide contaminant sequences to deplete
   before miRBase alignment, for example rRNA, tRNA, snRNA, snoRNA, adapter
   dimers, or other lab-specific contaminant sequences.
+- `smallrna.residual_genome_fasta` or
+  `smallrna.residual_genome_index_prefix`: provide a genome reference for
+  miRBase-unmapped reads. With `smallrna.residual_run: true`, ASPIS keeps the
+  miRBase-unmapped FASTQs, aligns them to this genome, and reports residual
+  read counts by annotation biotype and feature.
+- `smallrna.residual_annotation_gtf`: optionally provide the matching genome
+  GTF so residual reads can be classified as snoRNA, snRNA, rRNA, tRNA,
+  protein-coding, unassigned, or other GTF biotypes.
 - `smallrna.target_table`: provide an offline miRNA-to-target TSV if target
   enrichment should run.
 - `smallrna.target_feature_set_tables` or `smallrna.target_feature_sets`:
@@ -133,12 +141,18 @@ The report index is:
 <branch_dir>/smallrna/<PROJECT>/smallrna/differential/reports/index.html
 ```
 
+When residual genome alignment is enabled, the per-contrast HTML summaries also
+link the residual manifest, residual biotype matrix, and residual feature matrix.
+
 Important intermediate manifests are:
 
 ```text
 <branch_dir>/smallrna/<PROJECT>/smallrna/preprocess/cutadapt_manifest.tsv
 <branch_dir>/smallrna/<PROJECT>/smallrna/depletion/depletion_manifest.tsv
 <branch_dir>/smallrna/<PROJECT>/smallrna/alignment/alignment_manifest.tsv
+<branch_dir>/smallrna/<PROJECT>/smallrna/residual_genome/residual_manifest.tsv
+<branch_dir>/smallrna/<PROJECT>/smallrna/residual_genome/biotype_counts.tsv
+<branch_dir>/smallrna/<PROJECT>/smallrna/residual_genome/feature_counts.tsv
 <branch_dir>/smallrna/<PROJECT>/smallrna/quantification/featurecounts_manifest.tsv
 <branch_dir>/smallrna/<PROJECT>/smallrna/differential/mirna_deseq2/deseq2_manifest.tsv
 ```

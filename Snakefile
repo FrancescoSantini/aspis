@@ -196,11 +196,15 @@ RNASEQ_ALIGNMENT_REQUIRED_TOOLS = configured_tool_list(
 RNASEQ_QUANTIFICATION_REQUIRED_TOOLS = configured_tool_list(
     "rnaseq_quantification_required_tools", ["featureCounts", "stringtie", "gffcompare"]
 )
+DEFAULT_RNASEQ_DIFFERENTIAL_TOOLS = ["Rscript", "R::DESeq2"] + (
+    ["R::IsoformSwitchAnalyzeR"] if "isoform_switch" in RNASEQ_DIFFERENTIAL_LEVELS else []
+)
 RNASEQ_DIFFERENTIAL_REQUIRED_TOOLS = configured_tool_list(
-    "rnaseq_differential_required_tools", ["Rscript"]
+    "rnaseq_differential_required_tools", DEFAULT_RNASEQ_DIFFERENTIAL_TOOLS
 )
 SMALLRNA_REQUIRED_TOOLS = configured_tool_list(
-    "smallrna_required_tools", ["cutadapt", "bowtie", "bowtie-build", "samtools", "featureCounts", "Rscript"]
+    "smallrna_required_tools",
+    ["cutadapt", "bowtie", "bowtie-build", "samtools", "featureCounts", "Rscript", "R::DESeq2"]
 )
 SMALLRNA_PREPROCESS_RUN = as_bool(SMALLRNA.get("preprocess_run", False), False)
 SMALLRNA_DEPLETION_RUN = as_bool(SMALLRNA.get("depletion_run", False), False)
@@ -222,12 +226,17 @@ SMALLRNA_REPORT_TOP_N = SMALLRNA.get("report_top_n", SMALLRNA.get("target_top_n"
 SMALLRNA_REFERENCE_RUN = as_bool(SMALLRNA.get("reference_run", False), False)
 SMALLRNA_BUILD_BOWTIE_INDEX = as_bool(SMALLRNA.get("build_bowtie_index", False), False)
 SMALLRNA_BUILD_CONTAMINANT_INDEX = as_bool(SMALLRNA.get("build_contaminant_index", False), False)
+SMALLRNA_RESIDUAL_RUN = as_bool(SMALLRNA.get("residual_run", False), False)
+SMALLRNA_BUILD_RESIDUAL_GENOME_INDEX = as_bool(SMALLRNA.get("build_residual_genome_index", False), False)
 SMALLRNA_REFERENCE_DIR = SMALLRNA.get("reference_dir", "work/smallrna_reference")
 SMALLRNA_CONFIGURED_MIRBASE_FASTA = SMALLRNA.get("mirbase_fasta", "")
 SMALLRNA_CONFIGURED_MIRBASE_SAF = SMALLRNA.get("mirbase_saf", "")
 SMALLRNA_CONFIGURED_BOWTIE_INDEX_PREFIX = SMALLRNA.get("bowtie_index_prefix", "")
 SMALLRNA_CONFIGURED_CONTAMINANT_FASTA = SMALLRNA.get("contaminant_fasta", "")
 SMALLRNA_CONFIGURED_CONTAMINANT_INDEX_PREFIX = SMALLRNA.get("contaminant_index_prefix", "")
+SMALLRNA_CONFIGURED_RESIDUAL_GENOME_FASTA = SMALLRNA.get("residual_genome_fasta", "")
+SMALLRNA_CONFIGURED_RESIDUAL_GENOME_INDEX_PREFIX = SMALLRNA.get("residual_genome_index_prefix", "")
+SMALLRNA_CONFIGURED_RESIDUAL_ANNOTATION_GTF = SMALLRNA.get("residual_annotation_gtf", "")
 SMALLRNA_PREPARED_MIRBASE_FASTA = SMALLRNA.get(
     "prepared_mirbase_fasta",
     f"{SMALLRNA_REFERENCE_DIR}/mirbase.fa",
@@ -269,6 +278,15 @@ SMALLRNA_CONTAMINANT_INDEX_DONE = (
     if SMALLRNA_BUILD_CONTAMINANT_INDEX and SMALLRNA_CONFIGURED_CONTAMINANT_FASTA
     else ""
 )
+SMALLRNA_EFFECTIVE_RESIDUAL_GENOME_INDEX_PREFIX = (
+    SMALLRNA_CONFIGURED_RESIDUAL_GENOME_INDEX_PREFIX
+    or (f"{SMALLRNA_REFERENCE_DIR}/bowtie/residual_genome" if SMALLRNA_BUILD_RESIDUAL_GENOME_INDEX else "")
+)
+SMALLRNA_RESIDUAL_GENOME_INDEX_DONE = (
+    f"{SMALLRNA_REFERENCE_DIR}/bowtie/.aspis_residual_genome_index.done"
+    if SMALLRNA_BUILD_RESIDUAL_GENOME_INDEX and SMALLRNA_CONFIGURED_RESIDUAL_GENOME_FASTA
+    else ""
+)
 SMALLRNA_REFERENCE_TARGETS = (
     [
         SMALLRNA_PREPARED_MIRBASE_FASTA,
@@ -283,6 +301,7 @@ SMALLRNA_REFERENCE_PLAN_INPUTS = (
     ([SMALLRNA_REFERENCE_DONE] if SMALLRNA_REFERENCE_DONE else [])
     + ([SMALLRNA_BOWTIE_INDEX_DONE] if SMALLRNA_BOWTIE_INDEX_DONE else [])
     + ([SMALLRNA_CONTAMINANT_INDEX_DONE] if SMALLRNA_CONTAMINANT_INDEX_DONE else [])
+    + ([SMALLRNA_RESIDUAL_GENOME_INDEX_DONE] if SMALLRNA_RESIDUAL_GENOME_INDEX_DONE else [])
 )
 if SMALLRNA_DEPLETION_RUN and not SMALLRNA_PREPROCESS_RUN:
     raise ValueError("smallrna.depletion_run requires smallrna.preprocess_run: true")
@@ -290,6 +309,15 @@ if SMALLRNA_ALIGNMENT_RUN and not SMALLRNA_DEPLETION_RUN:
     raise ValueError("smallrna.alignment_run requires smallrna.depletion_run: true")
 if SMALLRNA_ALIGNMENT_RUN and not SMALLRNA_EFFECTIVE_BOWTIE_INDEX_PREFIX:
     raise ValueError("smallrna.alignment_run requires smallrna.bowtie_index_prefix or smallrna.build_bowtie_index: true")
+if SMALLRNA_BUILD_RESIDUAL_GENOME_INDEX and not SMALLRNA_CONFIGURED_RESIDUAL_GENOME_FASTA:
+    raise ValueError("smallrna.build_residual_genome_index requires smallrna.residual_genome_fasta")
+if SMALLRNA_RESIDUAL_RUN and not SMALLRNA_ALIGNMENT_RUN:
+    raise ValueError("smallrna.residual_run requires smallrna.alignment_run: true")
+if SMALLRNA_RESIDUAL_RUN and not SMALLRNA_EFFECTIVE_RESIDUAL_GENOME_INDEX_PREFIX:
+    raise ValueError(
+        "smallrna.residual_run requires smallrna.residual_genome_index_prefix "
+        "or smallrna.build_residual_genome_index: true"
+    )
 if SMALLRNA_QUANTIFICATION_RUN and not SMALLRNA_ALIGNMENT_RUN:
     raise ValueError("smallrna.quantification_run requires smallrna.alignment_run: true")
 if SMALLRNA_QUANTIFICATION_RUN and not SMALLRNA_EFFECTIVE_MIRBASE_SAF:
@@ -578,6 +606,8 @@ def planned_branch_targets(wildcards):
                     targets.append(SMALLRNA_BOWTIE_INDEX_DONE)
                 if SMALLRNA_CONTAMINANT_INDEX_DONE:
                     targets.append(SMALLRNA_CONTAMINANT_INDEX_DONE)
+                if SMALLRNA_RESIDUAL_GENOME_INDEX_DONE:
+                    targets.append(SMALLRNA_RESIDUAL_GENOME_INDEX_DONE)
                 if SMALLRNA_PREPROCESS_RUN:
                     targets.extend(
                         [
@@ -605,6 +635,16 @@ def planned_branch_targets(wildcards):
                             f"{BRANCH_DIR}/{assay}/{project}/smallrna/alignment/aligned_samples.tsv",
                             f"{BRANCH_DIR}/{assay}/{project}/smallrna/alignment/alignment_manifest.tsv",
                             f"{BRANCH_DIR}/{assay}/{project}/smallrna/alignment/alignment.done",
+                        ]
+                    )
+                if SMALLRNA_RESIDUAL_RUN:
+                    targets.extend(
+                        [
+                            f"{BRANCH_DIR}/{assay}/{project}/smallrna/residual_genome/residual_samples.tsv",
+                            f"{BRANCH_DIR}/{assay}/{project}/smallrna/residual_genome/residual_manifest.tsv",
+                            f"{BRANCH_DIR}/{assay}/{project}/smallrna/residual_genome/biotype_counts.tsv",
+                            f"{BRANCH_DIR}/{assay}/{project}/smallrna/residual_genome/feature_counts.tsv",
+                            f"{BRANCH_DIR}/{assay}/{project}/smallrna/residual_genome/residual.done",
                         ]
                     )
                 if SMALLRNA_QUANTIFICATION_RUN:
@@ -1096,6 +1136,32 @@ if SMALLRNA_CONTAMINANT_INDEX_DONE:
             """
 
 
+if SMALLRNA_RESIDUAL_GENOME_INDEX_DONE:
+    rule build_smallrna_residual_genome_index:
+        input:
+            fasta=SMALLRNA_CONFIGURED_RESIDUAL_GENOME_FASTA
+        output:
+            done=SMALLRNA_RESIDUAL_GENOME_INDEX_DONE
+        params:
+            prefix=SMALLRNA_EFFECTIVE_RESIDUAL_GENOME_INDEX_PREFIX,
+            index_dir=str(Path(SMALLRNA_EFFECTIVE_RESIDUAL_GENOME_INDEX_PREFIX).parent),
+            bowtie_build=SMALLRNA.get("bowtie_build_command", "bowtie-build")
+        threads:
+            SMALLRNA.get("index_threads", SMALLRNA.get("threads", 1))
+        log:
+            "logs/references/smallrna_residual_genome_index.log"
+        shell:
+            r"""
+            mkdir -p logs/references {params.index_dir:q}
+            {params.bowtie_build:q} {input.fasta:q} {params.prefix:q} > {log:q} 2>&1
+            if [ ! -s {params.prefix:q}.1.ebwt ] && [ ! -s {params.prefix:q}.1.ebwtl ]; then
+              echo "bowtie-build did not create expected index files for {params.prefix:q}" >> {log:q}
+              exit 1
+            fi
+            printf "status\tprefix\nok\t%s\n" {params.prefix:q} > {output.done:q}
+            """
+
+
 rule check_smallrna_environment:
     input:
         samples=f"{BRANCH_DIR}" + "/smallrna/{project}/samples.tsv"
@@ -1156,6 +1222,22 @@ rule plan_smallrna:
             if SMALLRNA_EFFECTIVE_CONTAMINANT_INDEX_PREFIX
             else ""
         ),
+        residual_run=str(SMALLRNA_RESIDUAL_RUN).lower(),
+        residual_genome_fasta_flag=(
+            "--residual-genome-fasta " + shlex.quote(SMALLRNA_CONFIGURED_RESIDUAL_GENOME_FASTA)
+            if SMALLRNA_CONFIGURED_RESIDUAL_GENOME_FASTA
+            else ""
+        ),
+        residual_genome_index_prefix_flag=(
+            "--residual-genome-index-prefix " + shlex.quote(SMALLRNA_EFFECTIVE_RESIDUAL_GENOME_INDEX_PREFIX)
+            if SMALLRNA_EFFECTIVE_RESIDUAL_GENOME_INDEX_PREFIX
+            else ""
+        ),
+        residual_annotation_gtf_flag=(
+            "--residual-annotation-gtf " + shlex.quote(SMALLRNA_CONFIGURED_RESIDUAL_ANNOTATION_GTF)
+            if SMALLRNA_CONFIGURED_RESIDUAL_ANNOTATION_GTF
+            else ""
+        ),
         condition_col=SMALLRNA.get(
             "condition_col",
             DESIGN.get("condition_col", "condition"),
@@ -1197,6 +1279,10 @@ rule plan_smallrna:
           {params.bowtie_index_prefix_flag} \
           {params.contaminant_fasta_flag} \
           {params.contaminant_index_prefix_flag} \
+          --residual-run {params.residual_run:q} \
+          {params.residual_genome_fasta_flag} \
+          {params.residual_genome_index_prefix_flag} \
+          {params.residual_annotation_gtf_flag} \
           --condition-col {params.condition_col:q} \
           --control-label {params.control_label:q} \
           {params.contrast_by_flag} \
@@ -1419,6 +1505,56 @@ rule align_smallrna_mirbase:
         """
 
 
+rule align_smallrna_residual_genome:
+    input:
+        samples=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/alignment/aligned_samples.tsv",
+        alignment_done=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/alignment/alignment.done",
+        plan=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/smallrna_plan.tsv",
+        residual_index=([SMALLRNA_RESIDUAL_GENOME_INDEX_DONE] if SMALLRNA_RESIDUAL_GENOME_INDEX_DONE else []),
+        annotation=([SMALLRNA_CONFIGURED_RESIDUAL_ANNOTATION_GTF] if SMALLRNA_CONFIGURED_RESIDUAL_ANNOTATION_GTF else []),
+        environment=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/environment_report.tsv"
+    output:
+        samples=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/residual_genome/residual_samples.tsv",
+        manifest=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/residual_genome/residual_manifest.tsv",
+        biotype_counts=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/residual_genome/biotype_counts.tsv",
+        feature_counts=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/residual_genome/feature_counts.tsv",
+        done=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/residual_genome/residual.done"
+    params:
+        outdir=lambda wildcards: f"{BRANCH_DIR}/smallrna/{wildcards.project}/smallrna/residual_genome",
+        index_prefix=SMALLRNA_EFFECTIVE_RESIDUAL_GENOME_INDEX_PREFIX,
+        annotation_gtf_flag=optional_shell_arg("--annotation-gtf", SMALLRNA_CONFIGURED_RESIDUAL_ANNOTATION_GTF),
+        bowtie=SMALLRNA.get("bowtie_command", "bowtie"),
+        samtools=SMALLRNA.get("samtools_command", "samtools"),
+        mismatches=SMALLRNA.get("residual_mismatches", 1),
+        multi_alignments=SMALLRNA.get("residual_multi_alignments", 10),
+        extra_args=SMALLRNA.get("residual_extra_args", "--best --strata")
+    threads:
+        SMALLRNA.get("threads", 1)
+    log:
+        "logs/branches/smallrna/{project}.smallrna_residual_genome.log"
+    shell:
+        r"""
+        mkdir -p logs/branches/smallrna
+        python3 workflow/scripts/align_smallrna_residual_genome.py \
+          --samples {input.samples:q} \
+          --outdir {params.outdir:q} \
+          --output {output.samples:q} \
+          --manifest {output.manifest:q} \
+          --biotype-counts {output.biotype_counts:q} \
+          --feature-counts {output.feature_counts:q} \
+          --done {output.done:q} \
+          --index-prefix {params.index_prefix:q} \
+          {params.annotation_gtf_flag} \
+          --bowtie {params.bowtie:q} \
+          --samtools {params.samtools:q} \
+          --threads {threads:q} \
+          --mismatches {params.mismatches:q} \
+          --multi-alignments {params.multi_alignments:q} \
+          --extra-args {params.extra_args:q} \
+          > {log:q} 2>&1
+        """
+
+
 rule featurecounts_smallrna_mirna:
     input:
         samples=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/alignment/aligned_samples.tsv",
@@ -1616,6 +1752,26 @@ rule plan_smallrna_report:
         plan=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/smallrna_plan.tsv",
         deseq2_manifest=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/differential/mirna_deseq2/deseq2_manifest.tsv",
         deseq2_done=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/differential/mirna_deseq2/deseq2.done",
+        residual_manifest=lambda wildcards: (
+            [f"{BRANCH_DIR}/smallrna/{wildcards.project}/smallrna/residual_genome/residual_manifest.tsv"]
+            if SMALLRNA_RESIDUAL_RUN
+            else []
+        ),
+        residual_biotype_counts=lambda wildcards: (
+            [f"{BRANCH_DIR}/smallrna/{wildcards.project}/smallrna/residual_genome/biotype_counts.tsv"]
+            if SMALLRNA_RESIDUAL_RUN
+            else []
+        ),
+        residual_feature_counts=lambda wildcards: (
+            [f"{BRANCH_DIR}/smallrna/{wildcards.project}/smallrna/residual_genome/feature_counts.tsv"]
+            if SMALLRNA_RESIDUAL_RUN
+            else []
+        ),
+        residual_done=lambda wildcards: (
+            [f"{BRANCH_DIR}/smallrna/{wildcards.project}/smallrna/residual_genome/residual.done"]
+            if SMALLRNA_RESIDUAL_RUN
+            else []
+        ),
         target_manifest=lambda wildcards: (
             [smallrna_target_enrichment_manifest(wildcards.project)]
             if SMALLRNA_TARGET_ENRICHMENT_RUN
@@ -1641,6 +1797,24 @@ rule plan_smallrna_report:
         done=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/differential/reports/report_plan.done"
     params:
         outdir=lambda wildcards: f"{BRANCH_DIR}/smallrna/{wildcards.project}/smallrna/differential/reports",
+        residual_manifest_flag=lambda wildcards: optional_shell_arg(
+            "--residual-manifest",
+            f"{BRANCH_DIR}/smallrna/{wildcards.project}/smallrna/residual_genome/residual_manifest.tsv"
+            if SMALLRNA_RESIDUAL_RUN
+            else "",
+        ),
+        residual_biotype_counts_flag=lambda wildcards: optional_shell_arg(
+            "--residual-biotype-counts",
+            f"{BRANCH_DIR}/smallrna/{wildcards.project}/smallrna/residual_genome/biotype_counts.tsv"
+            if SMALLRNA_RESIDUAL_RUN
+            else "",
+        ),
+        residual_feature_counts_flag=lambda wildcards: optional_shell_arg(
+            "--residual-feature-counts",
+            f"{BRANCH_DIR}/smallrna/{wildcards.project}/smallrna/residual_genome/feature_counts.tsv"
+            if SMALLRNA_RESIDUAL_RUN
+            else "",
+        ),
         target_manifest_flag=smallrna_target_manifest_flag,
         target_feature_set_manifest_flag=smallrna_target_feature_set_manifest_flag
     log:
@@ -1651,6 +1825,9 @@ rule plan_smallrna_report:
         python3 workflow/scripts/plan_smallrna_report.py \
           --smallrna-plan {input.plan:q} \
           --deseq2-manifest {input.deseq2_manifest:q} \
+          {params.residual_manifest_flag} \
+          {params.residual_biotype_counts_flag} \
+          {params.residual_feature_counts_flag} \
           {params.target_manifest_flag} \
           {params.target_feature_set_manifest_flag} \
           --project {wildcards.project:q} \

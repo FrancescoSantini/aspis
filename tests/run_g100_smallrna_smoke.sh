@@ -73,12 +73,16 @@ fi
     build_smallrna_bowtie_index:mem_mb=4000 \
     build_smallrna_contaminant_index:runtime=30 \
     build_smallrna_contaminant_index:mem_mb=4000 \
+    build_smallrna_residual_genome_index:runtime=30 \
+    build_smallrna_residual_genome_index:mem_mb=4000 \
     preprocess_smallrna_branch:runtime=30 \
     preprocess_smallrna_branch:mem_mb=4000 \
     deplete_smallrna_contaminants:runtime=30 \
     deplete_smallrna_contaminants:mem_mb=4000 \
     align_smallrna_mirbase:runtime=30 \
     align_smallrna_mirbase:mem_mb=4000 \
+    align_smallrna_residual_genome:runtime=30 \
+    align_smallrna_residual_genome:mem_mb=4000 \
     featurecounts_smallrna_mirna:runtime=30 \
     featurecounts_smallrna_mirna:mem_mb=4000 \
     run_mirna_deseq2:runtime=30 \

@@ -142,6 +142,8 @@ environment:
     - gffcompare
   rnaseq_differential_required_tools:
     - Rscript
+    - R::DESeq2
+    - R::IsoformSwitchAnalyzeR
   sra_required_tools:
     - prefetch
     - fasterq-dump

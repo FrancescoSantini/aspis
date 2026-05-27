@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import gzip
 import shlex
 import shutil
 import subprocess
@@ -14,6 +15,7 @@ from pathlib import Path
 REQUIRED_COLUMNS = {"library_id", "assay", "project", "layout", "fastq_1"}
 ADDED_COLUMNS = [
     "pre_alignment_fastq_1",
+    "mirbase_unmapped_fastq_1",
     "bam",
     "flagstat",
     "alignment_log",
@@ -24,6 +26,7 @@ MANIFEST_COLUMNS = [
     "project",
     "assay",
     "input_fastq_1",
+    "mirbase_unmapped_fastq_1",
     "bam",
     "flagstat",
     "alignment_log",
@@ -112,6 +115,8 @@ def outputs_for(row: dict[str, str], outdir: Path) -> dict[str, Path]:
         "sam": library_dir / "aligned.sam",
         "unsorted_bam": library_dir / "aligned.unsorted.bam",
         "bam": library_dir / "aligned.bam",
+        "unmapped_fastq_1": library_dir / "mirbase_unmapped.fastq.gz",
+        "tmp_unmapped_fastq_1": library_dir / "mirbase_unmapped.fastq",
         "flagstat": library_dir / "flagstat.txt",
         "alignment_log": library_dir / "bowtie.log",
     }
@@ -173,6 +178,8 @@ def run_alignment(
         str(args.multi_alignments),
         "-p",
         str(args.threads),
+        "--un",
+        str(outputs["tmp_unmapped_fastq_1"]),
         "-S",
         *extra_args,
         args.index_prefix,
@@ -192,6 +199,16 @@ def run_alignment(
         ]
     )
     run_command([samtools, "flagstat", str(outputs["bam"])], stdout=outputs["flagstat"])
+    if outputs["tmp_unmapped_fastq_1"].exists():
+        with outputs["tmp_unmapped_fastq_1"].open("rb") as input_handle, gzip.open(
+            outputs["unmapped_fastq_1"],
+            "wb",
+        ) as output_handle:
+            shutil.copyfileobj(input_handle, output_handle)
+        outputs["tmp_unmapped_fastq_1"].unlink(missing_ok=True)
+    else:
+        with gzip.open(outputs["unmapped_fastq_1"], "wb"):
+            pass
     outputs["sam"].unlink(missing_ok=True)
     outputs["unsorted_bam"].unlink(missing_ok=True)
 
@@ -227,6 +244,7 @@ def main() -> int:
         aligned = {
             **row,
             "pre_alignment_fastq_1": row["fastq_1"],
+            "mirbase_unmapped_fastq_1": str(outputs["unmapped_fastq_1"]),
             "bam": str(outputs["bam"]),
             "flagstat": str(outputs["flagstat"]),
             "alignment_log": str(outputs["alignment_log"]),
@@ -239,6 +257,7 @@ def main() -> int:
                 "project": row.get("project", ""),
                 "assay": row.get("assay", ""),
                 "input_fastq_1": row["fastq_1"],
+                "mirbase_unmapped_fastq_1": str(outputs["unmapped_fastq_1"]),
                 "bam": str(outputs["bam"]),
                 "flagstat": str(outputs["flagstat"]),
                 "alignment_log": str(outputs["alignment_log"]),

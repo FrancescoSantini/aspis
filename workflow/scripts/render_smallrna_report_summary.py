@@ -38,6 +38,9 @@ SUMMARY_COLUMNS = [
     "target_feature_set_manifest",
     "target_feature_set_results",
     "target_feature_set_plot",
+    "residual_manifest",
+    "residual_biotype_counts",
+    "residual_feature_counts",
     "volcano_pdf",
     "pca_pdf",
     "heatmap_pdf",
@@ -50,6 +53,10 @@ SUMMARY_COLUMNS = [
     "n_targets",
     "n_enrichment_terms",
     "n_target_feature_set_terms",
+    "n_residual_input_reads",
+    "n_residual_genome_aligned_reads",
+    "n_residual_genome_unmapped_reads",
+    "n_residual_biotypes",
 ]
 STAT_COLUMNS = {"baseMean", "log2FoldChange", "lfcSE", "stat", "pvalue", "padj"}
 
@@ -150,6 +157,18 @@ def html_table(rows: list[dict[str, str]], columns: list[str]) -> str:
     return f"<table><thead><tr>{header}</tr></thead><tbody>{''.join(body)}</tbody></table>"
 
 
+def numeric_total(row: dict[str, str], skip: set[str]) -> int:
+    total = 0
+    for key, value in row.items():
+        if key in skip:
+            continue
+        try:
+            total += int(float(value))
+        except ValueError:
+            continue
+    return total
+
+
 def read_existing(path_text: str, required: set[str] | None = None) -> tuple[list[str], list[dict[str, str]]]:
     if not path_text:
         return [], []
@@ -179,6 +198,9 @@ def render_html(
     target_enrichment: list[dict[str, str]],
     target_summary: list[dict[str, str]],
     target_feature_sets: list[dict[str, str]],
+    residual_manifest: list[dict[str, str]],
+    residual_biotypes: list[dict[str, str]],
+    residual_features: list[dict[str, str]],
     top_n: int,
 ) -> None:
     summary_path = Path(plan_row["summary_html"])
@@ -192,11 +214,22 @@ def render_html(
         target_feature_sets,
         key=lambda row: (parse_float(row.get("padj", "")) or 1.0, row.get("collection", ""), row.get("set_id", "")),
     )[:top_n]
+    residual_biotype_preview = sorted(
+        residual_biotypes,
+        key=lambda row: (-numeric_total(row, {"biotype"}), row.get("biotype", "")),
+    )[:top_n]
+    residual_feature_preview = sorted(
+        residual_features,
+        key=lambda row: (-numeric_total(row, {"feature_id", "feature_name", "biotype"}), row.get("feature_id", "")),
+    )[:top_n]
     links = [
         html_link(plan_row.get("results", ""), "DESeq2 results"),
         html_link(plan_row.get("filtered", ""), "significant miRNAs"),
         html_link(plan_row.get("normalized_counts", ""), "normalized counts"),
         html_link(plan_row.get("deseq2_summary", ""), "DESeq2 summary"),
+        html_link(plan_row.get("residual_manifest", ""), "residual manifest"),
+        html_link(plan_row.get("residual_biotype_counts", ""), "residual biotypes"),
+        html_link(plan_row.get("residual_feature_counts", ""), "residual features"),
         html_link(plan_row.get("mirna_targets", ""), "miRNA targets"),
         html_link(plan_row.get("target_enrichment", ""), "target enrichment"),
         html_link(plan_row.get("target_feature_set_results", ""), "target feature sets"),
@@ -208,6 +241,9 @@ def render_html(
     links_html = " | ".join(link for link in links if link) or "No linked resources."
     n_up = sum(1 for row in filtered_rows if direction(row) == "up")
     n_down = sum(1 for row in filtered_rows if direction(row) == "down")
+    residual_input_reads = sum(int(row.get("input_reads", "0") or 0) for row in residual_manifest)
+    residual_aligned_reads = sum(int(row.get("genome_aligned_reads", "0") or 0) for row in residual_manifest)
+    residual_unmapped_reads = sum(int(row.get("genome_unmapped_reads", "0") or 0) for row in residual_manifest)
     metrics = [
         ("Features tested", str(len(result_rows))),
         ("Significant miRNAs", str(len(filtered_rows))),
@@ -217,6 +253,9 @@ def render_html(
         ("Target genes", str(len({row.get("target_id", "") for row in target_mapping if row.get("target_id", "")}))),
         ("Enrichment terms", str(len(target_enrichment))),
         ("Target feature-set terms", str(len(target_feature_sets))),
+        ("Residual reads", str(residual_input_reads)),
+        ("Residual genome-aligned", str(residual_aligned_reads)),
+        ("Residual genome-unmapped", str(residual_unmapped_reads)),
     ]
     metric_html = "".join(
         f"<div><strong>{html.escape(label)}</strong><span>{html.escape(value)}</span></div>"
@@ -238,6 +277,8 @@ def render_html(
         for column in ["collection", "set_id", "description", "overlap", "query_size", "padj", "targets"]
         if feature_set_preview and column in feature_set_preview[0]
     ]
+    residual_biotype_columns = list(residual_biotype_preview[0]) if residual_biotype_preview else []
+    residual_feature_columns = list(residual_feature_preview[0]) if residual_feature_preview else []
     title = f"{plan_row['project']} {plan_row['contrast_id']} miRNA differential report"
     content = f"""<!doctype html>
 <html lang="en">
@@ -271,6 +312,10 @@ def render_html(
   <h2>Target-gene feature sets</h2>
   {embedded_svg(plan_row.get("target_feature_set_plot", ""))}
   {html_table(feature_set_preview, feature_set_columns)}
+  <h2>Residual genome read fate</h2>
+  {html_table(residual_biotype_preview, residual_biotype_columns)}
+  <h2>Top residual annotated features</h2>
+  {html_table(residual_feature_preview, residual_feature_columns)}
 </body>
 </html>
 """
@@ -296,6 +341,9 @@ def blocked_summary(row: dict[str, str]) -> dict[str, str]:
         "target_feature_set_manifest": row.get("target_feature_set_manifest", ""),
         "target_feature_set_results": row.get("target_feature_set_results", ""),
         "target_feature_set_plot": row.get("target_feature_set_plot", ""),
+        "residual_manifest": row.get("residual_manifest", ""),
+        "residual_biotype_counts": row.get("residual_biotype_counts", ""),
+        "residual_feature_counts": row.get("residual_feature_counts", ""),
         "volcano_pdf": row.get("volcano_pdf", ""),
         "pca_pdf": row.get("pca_pdf", ""),
         "heatmap_pdf": row.get("heatmap_pdf", ""),
@@ -308,6 +356,10 @@ def blocked_summary(row: dict[str, str]) -> dict[str, str]:
         "n_targets": "0",
         "n_enrichment_terms": "0",
         "n_target_feature_set_terms": "0",
+        "n_residual_input_reads": "0",
+        "n_residual_genome_aligned_reads": "0",
+        "n_residual_genome_unmapped_reads": "0",
+        "n_residual_biotypes": "0",
     }
 
 
@@ -329,6 +381,12 @@ def render_row(row: dict[str, str], top_n: int) -> dict[str, str]:
         _, target_enrichment = read_existing(row.get("target_enrichment", ""), {"target_id"})
         _, target_summary = read_existing(row.get("target_summary", ""))
         _, target_feature_sets = read_existing(row.get("target_feature_set_results", ""), {"set_id"})
+        _, residual_manifest = read_existing(
+            row.get("residual_manifest", ""),
+            {"library_id", "input_reads", "genome_aligned_reads", "genome_unmapped_reads"},
+        )
+        _, residual_biotypes = read_existing(row.get("residual_biotype_counts", ""), {"biotype"})
+        _, residual_features = read_existing(row.get("residual_feature_counts", ""), {"feature_id", "biotype"})
         render_html(
             row,
             result_rows,
@@ -337,10 +395,16 @@ def render_row(row: dict[str, str], top_n: int) -> dict[str, str]:
             target_enrichment,
             target_summary,
             target_feature_sets,
+            residual_manifest,
+            residual_biotypes,
+            residual_features,
             top_n,
         )
         n_up = sum(1 for item in filtered_rows if direction(item) == "up")
         n_down = sum(1 for item in filtered_rows if direction(item) == "down")
+        residual_input_reads = sum(int(item.get("input_reads", "0") or 0) for item in residual_manifest)
+        residual_aligned_reads = sum(int(item.get("genome_aligned_reads", "0") or 0) for item in residual_manifest)
+        residual_unmapped_reads = sum(int(item.get("genome_unmapped_reads", "0") or 0) for item in residual_manifest)
         return {
             "project": row.get("project", ""),
             "assay": "smallrna",
@@ -359,6 +423,9 @@ def render_row(row: dict[str, str], top_n: int) -> dict[str, str]:
             "target_feature_set_manifest": row.get("target_feature_set_manifest", ""),
             "target_feature_set_results": row.get("target_feature_set_results", ""),
             "target_feature_set_plot": row.get("target_feature_set_plot", ""),
+            "residual_manifest": row.get("residual_manifest", ""),
+            "residual_biotype_counts": row.get("residual_biotype_counts", ""),
+            "residual_feature_counts": row.get("residual_feature_counts", ""),
             "volcano_pdf": row.get("volcano_pdf", ""),
             "pca_pdf": row.get("pca_pdf", ""),
             "heatmap_pdf": row.get("heatmap_pdf", ""),
@@ -371,6 +438,10 @@ def render_row(row: dict[str, str], top_n: int) -> dict[str, str]:
             "n_targets": str(len({item.get("target_id", "") for item in target_mapping if item.get("target_id", "")})),
             "n_enrichment_terms": str(len(target_enrichment)),
             "n_target_feature_set_terms": str(len(target_feature_sets)),
+            "n_residual_input_reads": str(residual_input_reads),
+            "n_residual_genome_aligned_reads": str(residual_aligned_reads),
+            "n_residual_genome_unmapped_reads": str(residual_unmapped_reads),
+            "n_residual_biotypes": str(len(residual_biotypes)),
         }
     except Exception as exc:
         failed = blocked_summary(row)
