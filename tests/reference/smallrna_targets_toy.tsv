@@ -4,3 +4,8 @@ hsa-miR-1-3p	GENE2	GENE2	1002	miRTarBase	strong
 hsa-miR-2-3p	GENE1	GENE1	1001	miRTarBase	strong
 hsa-miR-2-3p	GENE3	GENE3	1003	TargetScan	predicted
 hsa-miR-3-3p	GENE4	GENE4	1004	TargetScan	predicted
+hsa-miR-4-5p	GENE5	GENE5	1005	TargetScan	predicted
+hsa-miR-5-5p	GENE2	GENE2	1002	miRTarBase	strong
+hsa-miR-6-5p	GENE6	GENE6	1006	TargetScan	predicted
+hsa-miR-7-5p	GENE7	GENE7	1007	TargetScan	predicted
+hsa-miR-8-3p	GENE3	GENE3	1003	miRTarBase	strong

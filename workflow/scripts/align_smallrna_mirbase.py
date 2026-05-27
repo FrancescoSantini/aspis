@@ -125,17 +125,28 @@ def remove_stale_outputs(outputs: dict[str, Path]) -> None:
             path.unlink()
 
 
+def log_tail(path: Path, max_lines: int = 20) -> str:
+    if not path.exists():
+        return ""
+    lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+    return "\n".join(lines[-max_lines:])
+
+
 def run_command(command: list[str], *, stdout: Path | None = None, stderr: Path | None = None) -> None:
     print("[CMD] " + shlex.join(command))
     stdout_handle = stdout.open("w", encoding="utf-8") if stdout else None
     stderr_handle = stderr.open("w", encoding="utf-8") if stderr else None
     try:
-        subprocess.run(command, check=True, stdout=stdout_handle, stderr=stderr_handle, text=True)
+        completed = subprocess.run(command, check=False, stdout=stdout_handle, stderr=stderr_handle, text=True)
     finally:
         if stdout_handle:
             stdout_handle.close()
         if stderr_handle:
             stderr_handle.close()
+    if completed.returncode != 0:
+        message = log_tail(stderr) if stderr else ""
+        detail = f"\n{message}" if message else ""
+        raise RuntimeError(f"{Path(command[0]).name} exited with status {completed.returncode}{detail}")
 
 
 def run_alignment(
