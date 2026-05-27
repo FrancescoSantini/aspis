@@ -134,6 +134,17 @@ source, collection, description
 Use this local contract for GO, KEGG, Reactome, or custom pathway exports when
 avoiding network/database access on G100.
 
+Minimal examples are provided under:
+
+```text
+examples/rnaseq_feature_sets.example.tsv
+examples/rnaseq_feature_sets.example.gmt
+```
+
+Copy one of those files, replace the placeholder feature IDs with IDs from your
+gene count metadata, and point `report_feature_set_tables` or
+`report_feature_sets` to the copied file.
+
 ## G100 Run
 
 Start with a dry-run:

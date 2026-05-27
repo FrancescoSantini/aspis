@@ -1,0 +1,3 @@
+cell_cycle	Cell-cycle marker genes	GENE_A	GENE_B
+stress_response	Stress-response marker genes	GENE_C	GENE_D
+immune_signal	Immune signaling marker genes	GENE_E	GENE_F
