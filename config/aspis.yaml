@@ -166,6 +166,8 @@ smallrna:
   contaminant_index_prefix: ""
   target_enrichment_mode: disabled
   target_table: ""
+  target_min_overlap: 1
+  target_top_n: 20
   reports: true
   condition_col: condition
   control_label: control
