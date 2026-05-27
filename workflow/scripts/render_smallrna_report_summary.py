@@ -35,6 +35,9 @@ SUMMARY_COLUMNS = [
     "target_enrichment",
     "target_summary",
     "target_enrichment_plot",
+    "target_feature_set_manifest",
+    "target_feature_set_results",
+    "target_feature_set_plot",
     "n_features",
     "n_significant",
     "n_up",
@@ -42,6 +45,7 @@ SUMMARY_COLUMNS = [
     "n_target_rows",
     "n_targets",
     "n_enrichment_terms",
+    "n_target_feature_set_terms",
 ]
 STAT_COLUMNS = {"baseMean", "log2FoldChange", "lfcSE", "stat", "pvalue", "padj"}
 
@@ -170,6 +174,7 @@ def render_html(
     target_mapping: list[dict[str, str]],
     target_enrichment: list[dict[str, str]],
     target_summary: list[dict[str, str]],
+    target_feature_sets: list[dict[str, str]],
     top_n: int,
 ) -> None:
     summary_path = Path(plan_row["summary_html"])
@@ -179,6 +184,10 @@ def render_html(
         target_enrichment,
         key=lambda row: (parse_float(row.get("padj", "")) or 1.0, row.get("collection", ""), row.get("target_id", "")),
     )[:top_n]
+    feature_set_preview = sorted(
+        target_feature_sets,
+        key=lambda row: (parse_float(row.get("padj", "")) or 1.0, row.get("collection", ""), row.get("set_id", "")),
+    )[:top_n]
     links = [
         html_link(plan_row.get("results", ""), "DESeq2 results"),
         html_link(plan_row.get("filtered", ""), "significant miRNAs"),
@@ -186,6 +195,7 @@ def render_html(
         html_link(plan_row.get("deseq2_summary", ""), "DESeq2 summary"),
         html_link(plan_row.get("mirna_targets", ""), "miRNA targets"),
         html_link(plan_row.get("target_enrichment", ""), "target enrichment"),
+        html_link(plan_row.get("target_feature_set_results", ""), "target feature sets"),
     ]
     links_html = " | ".join(link for link in links if link) or "No linked resources."
     n_up = sum(1 for row in filtered_rows if direction(row) == "up")
@@ -198,6 +208,7 @@ def render_html(
         ("Target rows", str(len(target_mapping))),
         ("Target genes", str(len({row.get("target_id", "") for row in target_mapping if row.get("target_id", "")}))),
         ("Enrichment terms", str(len(target_enrichment))),
+        ("Target feature-set terms", str(len(target_feature_sets))),
     ]
     metric_html = "".join(
         f"<div><strong>{html.escape(label)}</strong><span>{html.escape(value)}</span></div>"
@@ -213,6 +224,11 @@ def render_html(
     ]
     summary_columns = [
         column for column in ["collection", "n_mirnas", "n_target_rows", "n_targets"] if target_summary and column in target_summary[0]
+    ]
+    feature_set_columns = [
+        column
+        for column in ["collection", "set_id", "description", "overlap", "query_size", "padj", "targets"]
+        if feature_set_preview and column in feature_set_preview[0]
     ]
     title = f"{plan_row['project']} {plan_row['contrast_id']} miRNA differential report"
     content = f"""<!doctype html>
@@ -244,6 +260,9 @@ def render_html(
   <h2>Target enrichment</h2>
   {embedded_svg(plan_row.get("target_enrichment_plot", ""))}
   {html_table(enrichment_preview, enrichment_columns)}
+  <h2>Target-gene feature sets</h2>
+  {embedded_svg(plan_row.get("target_feature_set_plot", ""))}
+  {html_table(feature_set_preview, feature_set_columns)}
 </body>
 </html>
 """
@@ -266,6 +285,9 @@ def blocked_summary(row: dict[str, str]) -> dict[str, str]:
         "target_enrichment": row.get("target_enrichment", ""),
         "target_summary": row.get("target_summary", ""),
         "target_enrichment_plot": row.get("target_enrichment_plot", ""),
+        "target_feature_set_manifest": row.get("target_feature_set_manifest", ""),
+        "target_feature_set_results": row.get("target_feature_set_results", ""),
+        "target_feature_set_plot": row.get("target_feature_set_plot", ""),
         "n_features": "0",
         "n_significant": "0",
         "n_up": "0",
@@ -273,6 +295,7 @@ def blocked_summary(row: dict[str, str]) -> dict[str, str]:
         "n_target_rows": "0",
         "n_targets": "0",
         "n_enrichment_terms": "0",
+        "n_target_feature_set_terms": "0",
     }
 
 
@@ -293,7 +316,17 @@ def render_row(row: dict[str, str], top_n: int) -> dict[str, str]:
         _, target_mapping = read_existing(row.get("mirna_targets", ""), {"target_id"})
         _, target_enrichment = read_existing(row.get("target_enrichment", ""), {"target_id"})
         _, target_summary = read_existing(row.get("target_summary", ""))
-        render_html(row, result_rows, filtered_rows, target_mapping, target_enrichment, target_summary, top_n)
+        _, target_feature_sets = read_existing(row.get("target_feature_set_results", ""), {"set_id"})
+        render_html(
+            row,
+            result_rows,
+            filtered_rows,
+            target_mapping,
+            target_enrichment,
+            target_summary,
+            target_feature_sets,
+            top_n,
+        )
         n_up = sum(1 for item in filtered_rows if direction(item) == "up")
         n_down = sum(1 for item in filtered_rows if direction(item) == "down")
         return {
@@ -311,6 +344,9 @@ def render_row(row: dict[str, str], top_n: int) -> dict[str, str]:
             "target_enrichment": row.get("target_enrichment", ""),
             "target_summary": row.get("target_summary", ""),
             "target_enrichment_plot": row.get("target_enrichment_plot", ""),
+            "target_feature_set_manifest": row.get("target_feature_set_manifest", ""),
+            "target_feature_set_results": row.get("target_feature_set_results", ""),
+            "target_feature_set_plot": row.get("target_feature_set_plot", ""),
             "n_features": str(len(result_rows)),
             "n_significant": str(len(filtered_rows)),
             "n_up": str(n_up),
@@ -318,6 +354,7 @@ def render_row(row: dict[str, str], top_n: int) -> dict[str, str]:
             "n_target_rows": str(len(target_mapping)),
             "n_targets": str(len({item.get("target_id", "") for item in target_mapping if item.get("target_id", "")})),
             "n_enrichment_terms": str(len(target_enrichment)),
+            "n_target_feature_set_terms": str(len(target_feature_sets)),
         }
     except Exception as exc:
         failed = blocked_summary(row)
