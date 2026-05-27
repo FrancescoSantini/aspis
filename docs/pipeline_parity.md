@@ -12,6 +12,7 @@ one G100 smoke or milestone run.
 | --- | --- | --- | --- |
 | Environment/tool checks | Replaced | check_environment.py writes executable and R-package paths, detected versions, configured minimum/recommended versions, and fail-fast status for every workflow and branch environment report | Keep version policy updated as dependencies change |
 | Real-project preflight | Added | `validate_project_inputs.py` runs from the G100 real-project helpers before Snakemake submission and writes an auditable TSV report while checking intake paths, assay labels, design columns, replicate counts, references, indexes, and optional report inputs | Extend checks when new production-only config keys are added |
+| Legacy-vs-new comparison utility | Added | `compare_aspis_tables.py` compares tabular outputs by key with numeric tolerances and row/column mismatch details | Use on the first private real datasets to decide where report or result parity still differs |
 
 ## RNA-seq
 
@@ -65,7 +66,7 @@ one G100 smoke or milestone run.
 ## Immediate Implementation Order
 
 1. Run the capped public-SRA RNA-seq and smallRNA G100 milestones in `docs/g100_public_sra_tests.md` whenever private real data are unavailable but public accession ingestion must be checked.
-2. Prepare one real RNA-seq or smallRNA project config from the relevant `config/aspis_*_project.example.yaml` template and dry-run it on G100 with the matching `tests/run_g100_*_project.sh` helper.
+2. Prepare one real RNA-seq or smallRNA project config from the relevant `config/aspis_*_project.example.yaml` template, follow `docs/real_data_readiness.md`, and dry-run it on G100 with the matching `tests/run_g100_*_project.sh` helper.
 3. For the first real smallRNA project, inspect residual-genome `biotype_counts.tsv` and `feature_counts.tsv` to decide whether the configured contaminant FASTA should be expanded or whether residual classes should be reported separately.
 4. Run one small, real project milestone on G100 and compare count matrices, DESeq2 contrasts, enrichment, residual-read fate, and reports against the legacy outputs you liked.
 5. Improve the smallRNA and RNA-seq report layer where real-output comparisons show missing labels, plot aesthetics, or summary fields.

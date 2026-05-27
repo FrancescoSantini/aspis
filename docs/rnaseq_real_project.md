@@ -4,6 +4,8 @@ The fixture smoke tests prove the rule contracts. Real bulk RNA-seq projects
 should use their own config and intake files so toy paths, toy references, and
 toy validation do not leak into production runs.
 
+Use `docs/real_data_readiness.md` as the cross-assay launch checklist.
+
 ## Files To Prepare
 
 Copy the templates:
@@ -236,3 +238,23 @@ Important intermediate manifests are:
 <branch_dir>/rnaseq/<PROJECT>/differential/gene_deseq2/deseq2_manifest.tsv
 <branch_dir>/rnaseq/<PROJECT>/differential/transcript_deseq2/deseq2_manifest.tsv
 ```
+
+## Legacy Comparison
+
+When legacy results exist for the same samples, compare tables before comparing
+HTML report layout:
+
+```bash
+python3 workflow/scripts/compare_aspis_tables.py \
+  --expected legacy/gene_counts.tsv \
+  --observed <branch_dir>/rnaseq/<PROJECT>/quantification/featurecounts/gene_counts.tsv \
+  --key-columns Geneid \
+  --ignore-columns Chr,Start,End,Strand,Length \
+  --summary <branch_dir>/rnaseq/<PROJECT>/legacy_compare/gene_counts.summary.tsv \
+  --details <branch_dir>/rnaseq/<PROJECT>/legacy_compare/gene_counts.details.tsv
+```
+
+Repeat for transcript counts, gene DESeq2 results, transcript DESeq2 results,
+isoform-switch outputs when enabled, enrichment tables, and report asset
+manifests. Differences in exact row IDs or count totals should be resolved
+before plot aesthetics are tuned.
