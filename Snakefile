@@ -961,7 +961,19 @@ rule build_branch_design:
         condition_col=DESIGN.get("condition_col", "condition"),
         control_label=DESIGN.get("control_label", "control"),
         covariates=" ".join(DESIGN.get("covariates", [])),
-        min_condition_groups=DESIGN.get("min_condition_groups", 2)
+        contrast_by=lambda wildcards: " ".join(
+            config_value_list(
+                RNASEQ_DIFFERENTIAL.get("contrast_by", [])
+                if wildcards.assay == "rnaseq"
+                else SMALLRNA.get("contrast_by", [])
+            )
+        ),
+        min_condition_groups=DESIGN.get("min_condition_groups", 2),
+        min_replicates_per_group=lambda wildcards: (
+            RNASEQ_DIFFERENTIAL.get("min_replicates_per_group", 2)
+            if wildcards.assay == "rnaseq"
+            else SMALLRNA.get("min_replicates_per_group", 2)
+        )
     log:
         "logs/branches/{assay}/{project}.design.log"
     shell:
@@ -975,7 +987,9 @@ rule build_branch_design:
           --condition-col {params.condition_col:q} \
           --control-label {params.control_label:q} \
           --min-condition-groups {params.min_condition_groups:q} \
+          --min-replicates-per-group {params.min_replicates_per_group:q} \
           --covariates {params.covariates} \
+          --contrast-by {params.contrast_by} \
           > {log:q} 2>&1
         """
 
@@ -1959,6 +1973,7 @@ rule check_rnaseq_preprocess_environment:
 rule preprocess_rnaseq_branch:
     input:
         samples=f"{BRANCH_DIR}" + "/rnaseq/{project}/samples.tsv",
+        design=f"{BRANCH_DIR}" + "/rnaseq/{project}/design.tsv",
         inspection=f"{BRANCH_DIR}" + "/rnaseq/{project}/fastq_inspection.tsv",
         environment=f"{BRANCH_DIR}" + "/rnaseq/{project}/preprocess/environment_report.tsv"
     output:

@@ -43,6 +43,19 @@ Edit `config/intake_rnaseq_<project>.tsv`:
 The pipeline accepts local FASTQ paths or INSDC run accessions in `input_1`.
 Local paths are symlinked or copied according to `materialization.local_link_mode`.
 
+## Input Contract
+
+Before RNA-seq preprocessing starts, ASPIS validates the branch `samples.tsv`
+against the configured design columns. It fails early for malformed sample
+sheets, including duplicate `library_id` values, missing `condition`, missing
+configured covariates or `contrast_by` columns, invalid single/paired layout
+metadata, and FASTQ paths that do not exist after materialization.
+
+Differential-design issues that can still support upstream QC and
+quantification, such as too few replicates per contrast group or a missing
+control label, are written as `differential_status=blocked` in `design.tsv` with
+a concrete `reason`.
+
 ## STAR Or HISAT2
 
 The template defaults to STAR because that is the preferred aligner for full

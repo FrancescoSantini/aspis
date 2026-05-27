@@ -52,6 +52,20 @@ Edit `config/intake_smallrna_<project>.tsv`:
 The pipeline accepts local FASTQ paths or INSDC run accessions in `input_1`.
 Local paths are symlinked or copied according to `materialization.local_link_mode`.
 
+## Input Contract
+
+Before smallRNA processing starts, ASPIS validates the branch `samples.tsv`
+against the configured design columns. It fails early for malformed sample
+sheets, including duplicate `library_id` values, missing `condition`, missing
+configured covariates or `contrast_by` columns, invalid FASTQ paths, and paired
+smallRNA libraries. The current smallRNA implementation expects single-end
+inputs.
+
+Differential-design issues that can still support upstream QC and alignment,
+such as too few replicates per contrast group or a missing control label, are
+written as `differential_status=blocked` in `design.tsv` with a concrete
+`reason`.
+
 ## Target Tables
 
 `smallrna.target_table` must be a TSV. The miRNA column can be named one of:
