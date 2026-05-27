@@ -1,0 +1,5 @@
+library_id	biospecimen_id	project	input_1	input_2	assay_hint	condition	treatment	dose	dose_unit	time_h	replicate	batch
+control_1	specimen_control_1	MY_RNASEQ_PROJECT	/path/to/fastq/control_1_R1.fastq.gz	/path/to/fastq/control_1_R2.fastq.gz	rnaseq	control	vehicle	0	uM	24	1	batch_1
+control_2	specimen_control_2	MY_RNASEQ_PROJECT	/path/to/fastq/control_2_R1.fastq.gz	/path/to/fastq/control_2_R2.fastq.gz	rnaseq	control	vehicle	0	uM	24	2	batch_1
+treated_1	specimen_treated_1	MY_RNASEQ_PROJECT	/path/to/fastq/treated_1_R1.fastq.gz	/path/to/fastq/treated_1_R2.fastq.gz	rnaseq	treated	compound	10	uM	24	1	batch_1
+treated_2	specimen_treated_2	MY_RNASEQ_PROJECT	/path/to/fastq/treated_2_R1.fastq.gz	/path/to/fastq/treated_2_R2.fastq.gz	rnaseq	treated	compound	10	uM	24	2	batch_1
