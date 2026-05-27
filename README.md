@@ -407,8 +407,8 @@ MODE=dry-run bash tests/run_local_smokes.sh
 bash tests/run_local_smokes.sh
 
 # Run the fixture-based G100 SLURM smoke after the local ladder passes
-MODE=dry-run bash tests/run_g100_smoke.sh your_slurm_account
-bash tests/run_g100_smoke.sh your_slurm_account
+MODE=dry-run bash tests/run_g100_smoke.sh <SLURM_ACCOUNT>
+bash tests/run_g100_smoke.sh <SLURM_ACCOUNT>
 ```
 
 See `docs/local_smoke_tests.md` for the local validation ladder used to limit

@@ -8,11 +8,12 @@ CONFIGFILE="${CONFIGFILE:-config/aspis_smallrna_public_sra_g100.yaml}"
 DEFAULT_TARGET="results/smallrna_public_sra_g100/branches/smallrna/ASPIS_PUBLIC_SMALLRNA_SRA/smallrna/preprocess/multiqc/multiqc.done"
 TARGET="${TARGET:-$DEFAULT_TARGET}"
 ACCOUNT="${SLURM_ACCOUNT:-}"
+PARTITION="${SLURM_PARTITION:-g100_usr_prod}"
 VALIDATE="${VALIDATE:-auto}"
 PREFLIGHT="${PREFLIGHT:-1}"
 PREFLIGHT_REPORT="${PREFLIGHT_REPORT:-logs/preflight/aspis_smallrna_public_sra_g100.smallrna.tsv}"
 
-if [[ $# -gt 0 && "${1}" != -* ]]; then
+if [[ $# -gt 0 && "${1}" != -* && ( -z "$ACCOUNT" || "${1}" == "$ACCOUNT" ) ]]; then
   ACCOUNT="$1"
   shift
 fi
@@ -51,6 +52,7 @@ esac
 
 echo "==> G100 public-SRA smallRNA ingestion/preprocess milestone"
 echo "==> account: $ACCOUNT"
+echo "==> partition: $PARTITION"
 echo "==> config: $CONFIGFILE"
 echo "==> target: $TARGET"
 echo "==> mode: $MODE"
@@ -72,7 +74,7 @@ fi
   "${EXTRA_ARGS[@]}" \
   --default-resources \
     "slurm_account=$ACCOUNT" \
-    slurm_partition=g100_usr_prod \
+    "slurm_partition=$PARTITION" \
     runtime=60 \
     mem_mb=4000 \
     disk_mb=10000 \
