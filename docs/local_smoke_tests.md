@@ -14,11 +14,12 @@ Use a dry-run first when changing rule targets or config contracts:
 MODE=dry-run bash tests/run_local_smokes.sh
 ```
 
-Dry-run mode also plans the smallRNA Bowtie index and contaminant-depletion
-contracts with `config/aspis_smallrna_bowtie_index_smoke.yaml` and
-`config/aspis_smallrna_depletion_smoke.yaml`. Run mode skips those configs so
-development machines without `cutadapt` or Bowtie can still execute the local
-suite.
+Dry-run mode also plans the smallRNA Bowtie index, contaminant-depletion, and
+miRBase-alignment contracts with `config/aspis_smallrna_bowtie_index_smoke.yaml`,
+`config/aspis_smallrna_depletion_smoke.yaml`, and
+`config/aspis_smallrna_alignment_smoke.yaml`. Run mode skips those configs so
+development machines without `cutadapt`, Bowtie, or samtools can still execute
+the local suite.
 
 Run the technical smoke suite before opening a PR:
 
@@ -30,8 +31,8 @@ The suite covers the default materialization/QC path, HISAT2 alignment, STAR
 alignment, RNA-seq quantification, gene/transcript/isoform-switch differential
 planning, the blocked isoform-switch execution contract, smallRNA
 materialization/branch QC/design plus local reference FASTA-to-SAF preparation,
-the explicit smallRNA parity plan, and the config-gated cutadapt/post-trim-QC
-Bowtie-index, and contaminant-depletion rule contracts,
+the explicit smallRNA parity plan, and the config-gated cutadapt/post-trim-QC,
+Bowtie-index, contaminant-depletion, and miRBase-alignment rule contracts,
 gene/transcript DESeq2 execution, and the lightweight differential report layer
 with volcano, PCA, heatmap, transformed-count, optional GMT or exported-TSV
 feature-set enrichment, and embedded HTML summary artifacts plus a project-level

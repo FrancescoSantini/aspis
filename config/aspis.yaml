@@ -126,6 +126,7 @@ smallrna:
   run: false
   preprocess_run: false
   depletion_run: false
+  alignment_run: false
   adapter: AGATCGGAAGAGCACACGTCTGAACTCC
   min_length: 15
   max_length: 30
@@ -144,8 +145,12 @@ smallrna:
   build_contaminant_index: false
   bowtie_build_command: bowtie-build
   bowtie_command: bowtie
+  samtools_command: samtools
   index_threads: 1
   contaminant_mismatches: 1
+  alignment_mismatches: 2
+  alignment_multi_alignments: 10
+  alignment_extra_args: "--best --strata"
   mirbase_fasta: ""
   mirbase_saf: ""
   bowtie_index_prefix: ""
