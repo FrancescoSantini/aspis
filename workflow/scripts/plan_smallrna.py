@@ -342,7 +342,7 @@ def build_rows(args: argparse.Namespace) -> list[dict[str, str]]:
             stage="deseq2_mirna",
             status=differential_status,
             reason=differential_reason,
-            runner_status="planned",
+            runner_status="implemented",
             libraries=libraries,
             key_inputs=["quantification/mirna_counts.tsv", args.design],
             expected_outputs=["differential/mirna_deseq2/deseq2_manifest.tsv"],

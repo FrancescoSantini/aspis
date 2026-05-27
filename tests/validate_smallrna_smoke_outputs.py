@@ -18,7 +18,7 @@ EXPECTED_STAGES = {
     "contaminant_depletion": ("blocked", "implemented"),
     "mirbase_alignment": ("blocked", "implemented"),
     "featurecounts_mirna": ("blocked", "implemented"),
-    "deseq2_mirna": ("blocked", "planned"),
+    "deseq2_mirna": ("blocked", "implemented"),
     "mirna_target_enrichment": ("blocked", "planned"),
     "summary_report": ("blocked", "planned"),
 }
