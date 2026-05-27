@@ -76,6 +76,7 @@ dds <- tryCatch(
     if (!grepl("all gene-wise dispersion estimates are within 2 orders of magnitude", message, fixed = TRUE)) {
       stop(err)
     }
+    dds <- estimateSizeFactors(dds)
     dds <- estimateDispersionsGeneEst(dds)
     dispersions(dds) <- mcols(dds)$dispGeneEst
     nbinomWaldTest(dds)
