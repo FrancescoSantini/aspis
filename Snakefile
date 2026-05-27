@@ -199,6 +199,8 @@ SMALLRNA_DEPLETION_RUN = as_bool(SMALLRNA.get("depletion_run", False), False)
 SMALLRNA_ALIGNMENT_RUN = as_bool(SMALLRNA.get("alignment_run", False), False)
 SMALLRNA_QUANTIFICATION_RUN = as_bool(SMALLRNA.get("quantification_run", False), False)
 SMALLRNA_DIFFERENTIAL_RUN = as_bool(SMALLRNA.get("differential_run", False), False)
+SMALLRNA_TARGET_ENRICHMENT_MODE = str(SMALLRNA.get("target_enrichment_mode", "disabled")).strip().lower()
+SMALLRNA_TARGET_ENRICHMENT_RUN = SMALLRNA_TARGET_ENRICHMENT_MODE == "table"
 SMALLRNA_REFERENCE_RUN = as_bool(SMALLRNA.get("reference_run", False), False)
 SMALLRNA_BUILD_BOWTIE_INDEX = as_bool(SMALLRNA.get("build_bowtie_index", False), False)
 SMALLRNA_BUILD_CONTAMINANT_INDEX = as_bool(SMALLRNA.get("build_contaminant_index", False), False)
@@ -276,6 +278,10 @@ if SMALLRNA_QUANTIFICATION_RUN and not SMALLRNA_EFFECTIVE_MIRBASE_SAF:
     raise ValueError("smallrna.quantification_run requires smallrna.mirbase_saf or smallrna.reference_run: true")
 if SMALLRNA_DIFFERENTIAL_RUN and not SMALLRNA_QUANTIFICATION_RUN:
     raise ValueError("smallrna.differential_run requires smallrna.quantification_run: true")
+if SMALLRNA_TARGET_ENRICHMENT_RUN and not SMALLRNA_DIFFERENTIAL_RUN:
+    raise ValueError("smallrna.target_enrichment_mode: table requires smallrna.differential_run: true")
+if SMALLRNA_TARGET_ENRICHMENT_RUN and not SMALLRNA.get("target_table", ""):
+    raise ValueError("smallrna.target_enrichment_mode: table requires smallrna.target_table")
 OPTIONAL_TOOLS = configured_tool_list("optional_tools", ["vdb-validate"])
 ACTIVE_SRA_REQUIRED_TOOLS = (
     SRA_LIMITED_REQUIRED_TOOLS if USES_INSDC and USES_SRA_SPOT_LIMIT
@@ -562,6 +568,13 @@ def planned_branch_targets(wildcards):
                             f"{BRANCH_DIR}/{assay}/{project}/smallrna/differential/mirna_deseq2/contrast_plan.tsv",
                             f"{BRANCH_DIR}/{assay}/{project}/smallrna/differential/mirna_deseq2/deseq2_manifest.tsv",
                             f"{BRANCH_DIR}/{assay}/{project}/smallrna/differential/mirna_deseq2/deseq2.done",
+                        ]
+                    )
+                if SMALLRNA_TARGET_ENRICHMENT_RUN:
+                    targets.extend(
+                        [
+                            f"{BRANCH_DIR}/{assay}/{project}/smallrna/differential/target_enrichment/target_manifest.tsv",
+                            f"{BRANCH_DIR}/{assay}/{project}/smallrna/differential/target_enrichment/target_enrichment.done",
                         ]
                     )
     return targets
@@ -1452,6 +1465,37 @@ rule run_mirna_deseq2:
           --padj {params.padj:q} \
           --log2fc {params.log2fc:q} \
           --min-count {params.min_count:q} \
+          > {log:q} 2>&1
+        """
+
+
+rule render_smallrna_target_enrichment:
+    input:
+        plan=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/smallrna_plan.tsv",
+        deseq2_manifest=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/differential/mirna_deseq2/deseq2_manifest.tsv",
+        deseq2_done=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/differential/mirna_deseq2/deseq2.done",
+        target_table=([SMALLRNA.get("target_table", "")] if SMALLRNA_TARGET_ENRICHMENT_RUN else [])
+    output:
+        manifest=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/differential/target_enrichment/target_manifest.tsv",
+        done=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/differential/target_enrichment/target_enrichment.done"
+    params:
+        outdir=lambda wildcards: f"{BRANCH_DIR}/smallrna/{wildcards.project}/smallrna/differential/target_enrichment",
+        min_overlap=SMALLRNA.get("target_min_overlap", 1),
+        top_n=SMALLRNA.get("target_top_n", 20)
+    log:
+        "logs/branches/smallrna/{project}.target_enrichment.log"
+    shell:
+        r"""
+        mkdir -p logs/branches/smallrna
+        python3 workflow/scripts/render_smallrna_target_enrichment.py \
+          --smallrna-plan {input.plan:q} \
+          --deseq2-manifest {input.deseq2_manifest:q} \
+          --target-table {input.target_table:q} \
+          --outdir {params.outdir:q} \
+          --manifest {output.manifest:q} \
+          --done {output.done:q} \
+          --min-overlap {params.min_overlap:q} \
+          --top-n {params.top_n:q} \
           > {log:q} 2>&1
         """
 

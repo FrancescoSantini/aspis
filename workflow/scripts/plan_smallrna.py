@@ -253,6 +253,7 @@ def build_rows(args: argparse.Namespace) -> list[dict[str, str]]:
     elif args.target_enrichment_mode == "table" and not existing_path(args.target_table):
         target_errors.append(missing_path_reason("target table", args.target_table))
     target_status, target_reason = status_from_errors(target_errors)
+    target_runner_status = "implemented" if args.target_enrichment_mode == "table" else "planned"
 
     report_errors = []
     if not bool_text(args.reports):
@@ -358,11 +359,14 @@ def build_rows(args: argparse.Namespace) -> list[dict[str, str]]:
             stage="mirna_target_enrichment",
             status=target_status,
             reason=target_reason,
-            runner_status="planned",
+            runner_status=target_runner_status,
             libraries=libraries,
             key_inputs=[args.target_table],
-            expected_outputs=["differential/reports/enrichment/enrichment_manifest.tsv"],
-            parameters=[f"target_enrichment_mode={args.target_enrichment_mode}"],
+            expected_outputs=["differential/target_enrichment/target_manifest.tsv"],
+            parameters=[
+                f"target_enrichment_mode={args.target_enrichment_mode}",
+                f"target_table={args.target_table}" if args.target_table else "",
+            ],
         ),
         row(
             args=args,
