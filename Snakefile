@@ -604,6 +604,7 @@ def planned_branch_targets(wildcards):
                                         f"{BRANCH_DIR}/{assay}/{project}/differential/reports/summaries/summary_manifest.tsv",
                                         f"{BRANCH_DIR}/{assay}/{project}/differential/reports/summaries/summary.done",
                                         f"{BRANCH_DIR}/{assay}/{project}/differential/reports/index.html",
+                                        f"{BRANCH_DIR}/{assay}/{project}/differential/reports/asset_manifest.tsv",
                                         f"{BRANCH_DIR}/{assay}/{project}/differential/reports/report_index.done",
                                     ]
                                 )
@@ -699,6 +700,7 @@ def planned_branch_targets(wildcards):
                             f"{BRANCH_DIR}/{assay}/{project}/smallrna/differential/reports/summaries/summary_manifest.tsv",
                             f"{BRANCH_DIR}/{assay}/{project}/smallrna/differential/reports/summaries/summary.done",
                             f"{BRANCH_DIR}/{assay}/{project}/smallrna/differential/reports/index.html",
+                            f"{BRANCH_DIR}/{assay}/{project}/smallrna/differential/reports/asset_manifest.tsv",
                             f"{BRANCH_DIR}/{assay}/{project}/smallrna/differential/reports/report_index.done",
                         ]
                     )
@@ -734,6 +736,7 @@ def deseq2_smoke_targets():
                 f"{DESEQ2_SMOKE_REPORT_DIR}/summaries/summary_manifest.tsv",
                 f"{DESEQ2_SMOKE_REPORT_DIR}/summaries/summary.done",
                 f"{DESEQ2_SMOKE_REPORT_DIR}/index.html",
+                f"{DESEQ2_SMOKE_REPORT_DIR}/asset_manifest.tsv",
                 f"{DESEQ2_SMOKE_REPORT_DIR}/report_index.done",
             ]
         )
@@ -1931,6 +1934,7 @@ rule render_smallrna_report_index:
         summaries_done=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/differential/reports/summaries/summary.done"
     output:
         index=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/differential/reports/index.html",
+        asset_manifest=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/differential/reports/asset_manifest.tsv",
         done=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/differential/reports/report_index.done"
     log:
         "logs/branches/smallrna/{project}.smallrna_report_index.log"
@@ -1939,6 +1943,7 @@ rule render_smallrna_report_index:
         mkdir -p logs/branches/smallrna
         python3 workflow/scripts/render_smallrna_report_index.py \
           --summary-manifest {input.manifest:q} \
+          --asset-manifest {output.asset_manifest:q} \
           --output {output.index:q} \
           --done {output.done:q} \
           > {log:q} 2>&1
@@ -3048,6 +3053,7 @@ rule render_rnaseq_differential_report_index:
         summary_done=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/reports/summaries/summary.done"
     output:
         html=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/reports/index.html",
+        asset_manifest=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/reports/asset_manifest.tsv",
         done=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/reports/report_index.done"
     log:
         "logs/branches/rnaseq/{project}.differential_report_index.log"
@@ -3059,6 +3065,7 @@ rule render_rnaseq_differential_report_index:
           --plots-manifest {input.plots_manifest:q} \
           --enrichment-manifest {input.enrichment_manifest:q} \
           --summary-manifest {input.summary_manifest:q} \
+          --asset-manifest {output.asset_manifest:q} \
           --output {output.html:q} \
           --done {output.done:q} \
           > {log:q} 2>&1
@@ -3373,6 +3380,7 @@ rule render_deseq2_report_smoke_index:
         summary_done=f"{DESEQ2_SMOKE_REPORT_DIR}/summaries/summary.done"
     output:
         html=f"{DESEQ2_SMOKE_REPORT_DIR}/index.html",
+        asset_manifest=f"{DESEQ2_SMOKE_REPORT_DIR}/asset_manifest.tsv",
         done=f"{DESEQ2_SMOKE_REPORT_DIR}/report_index.done"
     log:
         f"{DESEQ2_SMOKE_REPORT_DIR}/logs/report_index.log"
@@ -3384,6 +3392,7 @@ rule render_deseq2_report_smoke_index:
           --plots-manifest {input.plots_manifest:q} \
           --enrichment-manifest {input.enrichment_manifest:q} \
           --summary-manifest {input.summary_manifest:q} \
+          --asset-manifest {output.asset_manifest:q} \
           --output {output.html:q} \
           --done {output.done:q} \
           > {log:q} 2>&1
