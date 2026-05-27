@@ -155,6 +155,10 @@ smallrna:
   featurecounts_command: featureCounts
   featurecounts_threads: 1
   featurecounts_extra_args: ""
+  differential_run: false
+  rscript_command: Rscript
+  deseq2_script: workflow/scripts/run_deseq2_feature.R
+  min_count: 10
   mirbase_fasta: ""
   mirbase_saf: ""
   bowtie_index_prefix: ""

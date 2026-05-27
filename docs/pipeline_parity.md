@@ -45,7 +45,7 @@ one G100 smoke or milestone run.
 | Contaminant depletion | Implemented, config-gated | `build_smallrna_contaminant_index`, `deplete_smallrna_contaminants.py`, `smallrna.depletion_run` | Exercise after `cutadapt`, `bowtie-build`, and `bowtie` are present in the env |
 | miRBase Bowtie alignment | Implemented, config-gated | `align_smallrna_mirbase.py`, `smallrna.alignment_run` | Exercise after `cutadapt`, `bowtie-build`, `bowtie`, and `samtools` are present in the env |
 | miRNA featureCounts | Implemented, config-gated | `run_smallrna_featurecounts.py`, `smallrna.quantification_run` | Exercise after `cutadapt`, `bowtie-build`, `bowtie`, `samtools`, and `featureCounts` are present in the env |
-| miRNA DESeq2 | Planned | `smallrna_plan.tsv` stage `deseq2_mirna` | Reuse generic feature DESeq2 runner with miRNA feature column |
+| miRNA DESeq2 | Implemented, config-gated | `plan_mirna_differential.py`, `run_mirna_differential_branch.py`, `run_deseq2_feature.R`, `smallrna.differential_run` | Exercise after the smallRNA alignment/counting toolchain and R DESeq2 are present in the env |
 | miRNA name extraction | Not yet replaced | Legacy `extract_mirna_names.R` only | Decide whether it remains necessary after normalized result schema |
 | Target retrieval/cache | Planned | `smallrna_plan.tsv` stage `mirna_target_enrichment` | Prefer local target table mode; avoid cluster network dependency by default |
 | Target enrichment | Planned | `smallrna_plan.tsv` stage `mirna_target_enrichment` | Implement offline target enrichment and optional multimiR mode |
@@ -53,7 +53,6 @@ one G100 smoke or milestone run.
 
 ## Immediate Implementation Order
 
-1. Update the env and exercise smallRNA adapter trimming/post-trim QC plus Bowtie index, contaminant depletion, miRBase alignment, and miRNA featureCounts execution.
-2. Reuse the generic DESeq2 runner for miRNA counts.
-3. Add offline miRNA target table enrichment before any network-backed target cache.
-4. Compare report plots and summaries against the legacy outputs you liked, then improve the new report layer.
+1. Update the env and exercise smallRNA adapter trimming/post-trim QC plus Bowtie index, contaminant depletion, miRBase alignment, miRNA featureCounts, and miRNA DESeq2 execution.
+2. Add offline miRNA target table enrichment before any network-backed target cache.
+3. Compare report plots and summaries against the legacy outputs you liked, then improve the new report layer.

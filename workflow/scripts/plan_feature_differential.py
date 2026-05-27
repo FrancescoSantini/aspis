@@ -54,6 +54,7 @@ def add_common_arguments(
     parser.add_argument("--output", required=True, help="Contrast plan TSV")
     parser.add_argument("--outdir", required=True, help="Differential output directory")
     parser.add_argument("--project", required=True, help="Project ID")
+    parser.add_argument("--assay", default="rnaseq", help="Expected assay in branch samples.tsv")
     parser.add_argument("--condition-col", default="condition", help="Condition column")
     parser.add_argument("--control-label", default="control", help="Control condition label")
     parser.add_argument("--contrast-by", nargs="*", default=[], help="Optional stratifying columns")
@@ -136,6 +137,7 @@ def validate_samples(
     columns: list[str],
     rows: list[dict[str, str]],
     project: str,
+    assay: str,
     condition_col: str,
     contrast_by: list[str],
     count_columns: list[str],
@@ -150,8 +152,8 @@ def validate_samples(
     for row in rows:
         library_id = row.get("library_id", "")
         sample_ids.append(library_id)
-        if row.get("assay") != "rnaseq":
-            errors.append(f"{library_id}: expected assay='rnaseq', got {row.get('assay')!r}")
+        if row.get("assay") != assay:
+            errors.append(f"{library_id}: expected assay={assay!r}, got {row.get('assay')!r}")
         if row.get("project") != project:
             errors.append(f"{library_id}: expected project={project!r}, got {row.get('project')!r}")
         if not row.get(condition_col, ""):
@@ -205,7 +207,7 @@ def validate_differential_plan(path: Path, level: str) -> list[str]:
 def blocked_row(args: argparse.Namespace, contrast_by: list[str]) -> dict[str, str]:
     return {
         "project": args.project,
-        "assay": "rnaseq",
+        "assay": args.assay,
         "level": args.level,
         "method": "deseq2",
         "contrast_id": "no_contrasts",
@@ -250,6 +252,7 @@ def build_plan_rows(args: argparse.Namespace) -> list[dict[str, str]]:
         sample_columns,
         samples,
         args.project,
+        args.assay,
         args.condition_col,
         contrast_by,
         count_columns,
@@ -284,7 +287,7 @@ def build_plan_rows(args: argparse.Namespace) -> list[dict[str, str]]:
             rows.append(
                 {
                     "project": args.project,
-                    "assay": "rnaseq",
+                    "assay": args.assay,
                     "level": args.level,
                     "method": "deseq2",
                     "contrast_id": cid,
