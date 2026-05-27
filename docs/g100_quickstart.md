@@ -6,7 +6,9 @@ runs first, then one deliberate SLURM smoke run on G100 when rule contracts or
 profile resources have changed. Real-project G100 helpers run a login-node
 preflight by default, so missing FASTQs, missing references, malformed design
 columns, and under-replicated differential contrasts fail before any SLURM job
-is submitted. Use `PREFLIGHT=0` only for deliberate Snakemake debugging.
+is submitted. They also write `logs/preflight/<config-file>.<assay>.tsv`
+unless `PREFLIGHT_REPORT` is set. Use `PREFLIGHT=0` only for deliberate
+Snakemake debugging.
 
 This guide is for testing the refactored ASPIS first-stage workflow on CINECA
 Galileo100/G100 without modifying the existing `snakemake` conda environment.

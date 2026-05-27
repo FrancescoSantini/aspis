@@ -112,8 +112,10 @@ config and intake sheet. It checks local FASTQ/reference paths, assay
 labels, path-safe IDs, single-end smallRNA layout, configured design
 columns, differential replicate counts, miRBase/contaminant/residual
 reference settings, and optional target/feature-set files before
-submitting Snakemake jobs. Set `PREFLIGHT=0` only when you need to debug
-Snakemake itself despite a known preflight warning.
+submitting Snakemake jobs. The default report is written to
+`logs/preflight/<config-file>.smallrna.tsv`; override it with
+`PREFLIGHT_REPORT=/path/to/report.tsv` when needed. Set `PREFLIGHT=0` only
+when you need to debug Snakemake itself despite a known preflight warning.
 
 ```bash
 conda activate aspis-smk9
