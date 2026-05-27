@@ -173,6 +173,18 @@ def validate_reports() -> str:
             "heatmap_pdf",
             "vst_tsv",
         },
+        "asset_manifest.tsv": {
+            "project",
+            "assay",
+            "level",
+            "contrast_id",
+            "status",
+            "asset_group",
+            "asset_label",
+            "asset_kind",
+            "path",
+            "exists",
+        },
         "report_index.done": {"status", "reports_ok", "reports_failed", "reports_total"},
     }
     for relative, columns in schemas.items():
@@ -187,6 +199,12 @@ def validate_reports() -> str:
         for column in ["volcano_pdf", "ma_pdf", "pca_pdf", "heatmap_pdf", "vst_tsv"]:
             require_path(row[column], reports / "plots/plots_manifest.tsv", column)
 
+    _, asset_rows = read_tsv(reports / "asset_manifest.tsv", schemas["asset_manifest.tsv"])
+    labels = {row["asset_label"] for row in asset_rows if row.get("exists") == "true"}
+    required_labels = {"summary_html", "results", "target_feature_set_results", "volcano_pdf", "ma_pdf", "pca_pdf", "heatmap_pdf"}
+    missing_labels = required_labels - labels
+    if missing_labels:
+        raise ValueError(f"SmallRNA report asset manifest is missing existing assets: {sorted(missing_labels)}")
     _, summary_rows = read_tsv(reports / "summaries/summary_manifest.tsv", schemas["summaries/summary_manifest.tsv"])
     for row in summary_rows:
         require_path(row["summary_html"], reports / "summaries/summary_manifest.tsv", "summary_html")
