@@ -50,6 +50,9 @@ REPORT_COLUMNS = [
     "target_feature_set_manifest",
     "target_feature_set_results",
     "target_feature_set_plot",
+    "residual_manifest",
+    "residual_biotype_counts",
+    "residual_feature_counts",
     "volcano_pdf",
     "pca_pdf",
     "heatmap_pdf",
@@ -68,6 +71,9 @@ def parse_args() -> argparse.Namespace:
         default="",
         help="Optional target-gene feature-set enrichment manifest TSV",
     )
+    parser.add_argument("--residual-manifest", default="", help="Optional residual-genome alignment manifest TSV")
+    parser.add_argument("--residual-biotype-counts", default="", help="Optional residual-genome biotype counts TSV")
+    parser.add_argument("--residual-feature-counts", default="", help="Optional residual-genome feature counts TSV")
     parser.add_argument("--project", required=True, help="Project ID")
     parser.add_argument("--outdir", required=True, help="Report output directory")
     parser.add_argument("--output", required=True, help="Output report plan TSV")
@@ -184,6 +190,9 @@ def planned_row(
         "target_feature_set_manifest": target_feature_set_row.get("target_feature_set_manifest", ""),
         "target_feature_set_results": target_feature_set_row.get("target_feature_set_results", ""),
         "target_feature_set_plot": target_feature_set_row.get("target_feature_set_plot", ""),
+        "residual_manifest": args.residual_manifest,
+        "residual_biotype_counts": args.residual_biotype_counts,
+        "residual_feature_counts": args.residual_feature_counts,
         "volcano_pdf": str(Path(args.outdir) / "plots" / f"{safe_path_id(contrast_id)}.volcano.pdf"),
         "pca_pdf": str(Path(args.outdir) / "plots" / f"{safe_path_id(contrast_id)}.pca.pdf"),
         "heatmap_pdf": str(Path(args.outdir) / "plots" / f"{safe_path_id(contrast_id)}.heatmap.pdf"),

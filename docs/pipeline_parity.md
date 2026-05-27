@@ -44,18 +44,20 @@ one G100 smoke or milestone run.
 | miRBase SAF generation | Implemented | `prepare_smallrna_reference.py` emits SAF from the prepared FASTA | None known |
 | miRBase Bowtie index building | Implemented, config-gated | `build_smallrna_bowtie_index`, `smallrna.build_bowtie_index` | Exercise on first real smallRNA project config |
 | Contaminant depletion | Implemented, config-gated | `build_smallrna_contaminant_index`, `deplete_smallrna_contaminants.py`, `smallrna.depletion_run` | Tune real contaminant FASTA and mismatch settings |
-| miRBase Bowtie alignment | Implemented, config-gated | `align_smallrna_mirbase.py`, `smallrna.alignment_run` | Tune real alignment mismatch/multi-map settings |
+| miRBase Bowtie alignment | Implemented, config-gated | `align_smallrna_mirbase.py`, `smallrna.alignment_run`; miRBase-unmapped reads are retained as FASTQ | Tune real alignment mismatch/multi-map settings |
+| miRBase-unmapped residual genome alignment | Implemented, config-gated | `build_smallrna_residual_genome_index`, `align_smallrna_residual_genome.py`, `smallrna.residual_run`; emits residual manifest plus biotype and feature count matrices | Exercise on first real smallRNA project config and tune annotation biotype reporting |
 | miRNA featureCounts | Implemented, config-gated | `run_smallrna_featurecounts.py`, `smallrna.quantification_run` | Compare count matrix against legacy output on first real dataset |
 | miRNA DESeq2 | Implemented, config-gated | `plan_mirna_differential.py`, `run_mirna_differential_branch.py`, `run_deseq2_feature.R`, `smallrna.differential_run` | Compare real contrasts against legacy output |
 | miRNA name extraction | Obsolete | `prepare_smallrna_reference.py` keeps mature miRBase IDs through SAF generation; `run_smallrna_featurecounts.py` and miRNA DESeq2 preserve those IDs in count and result tables | Do not port legacy `extract_mirna_names.R` unless a real dataset exposes a missing mature-ID field |
 | Target retrieval/cache | Partly replaced | Offline `smallrna.target_enrichment_mode: table` consumes a local target TSV | Optional multimiR/cache mode remains deferred to avoid cluster network dependency by default |
 | Target enrichment | Implemented, table mode | `render_smallrna_target_enrichment.py`, `smallrna.target_enrichment_mode: table` | Optional multimiR/cache mode remains deferred |
 | Target-gene feature-set enrichment | Implemented, local inputs | `render_smallrna_target_featuresets.py`, `smallrna.target_feature_sets`, `smallrna.target_feature_set_tables` | Add project-specific GO/KEGG/Reactome tables as needed |
-| miRNA summary report | Implemented in lightweight form | `plan_smallrna_report.py`, `render_smallrna_report_summary.py`, `render_smallrna_report_index.py` | Compare layout and plot set against preferred legacy outputs |
+| miRNA summary report | Implemented in lightweight form | `plan_smallrna_report.py`, `render_smallrna_report_summary.py`, `render_smallrna_report_index.py`; includes links and counts for residual genome read fate when enabled | Compare layout and plot set against preferred legacy outputs |
 | Real-project G100 entry point | Added | `tests/run_g100_smallrna_project.sh`, `docs/smallrna_real_project.md` | Use on first non-toy smallRNA dataset |
 
 ## Immediate Implementation Order
 
 1. Prepare one real RNA-seq or smallRNA project config from the relevant `config/aspis_*_project.example.yaml` template and dry-run it on G100 with the matching `tests/run_g100_*_project.sh` helper.
-2. Run one small, real project milestone on G100 and compare count matrices, DESeq2 contrasts, enrichment, and reports against the legacy outputs you liked.
-3. Improve the smallRNA and RNA-seq report layer where real-output comparisons show missing labels, plot aesthetics, or summary fields.
+2. For the first real smallRNA project, inspect residual-genome `biotype_counts.tsv` and `feature_counts.tsv` to decide whether the configured contaminant FASTA should be expanded or whether residual classes should be reported separately.
+3. Run one small, real project milestone on G100 and compare count matrices, DESeq2 contrasts, enrichment, residual-read fate, and reports against the legacy outputs you liked.
+4. Improve the smallRNA and RNA-seq report layer where real-output comparisons show missing labels, plot aesthetics, or summary fields.

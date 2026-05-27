@@ -30,6 +30,13 @@ SUMMARY_COLUMNS = {
     "n_targets",
     "n_enrichment_terms",
     "n_target_feature_set_terms",
+    "residual_manifest",
+    "residual_biotype_counts",
+    "residual_feature_counts",
+    "n_residual_input_reads",
+    "n_residual_genome_aligned_reads",
+    "n_residual_genome_unmapped_reads",
+    "n_residual_biotypes",
 }
 
 
@@ -74,6 +81,9 @@ def render_index(path: Path, rows: list[dict[str, str]]) -> None:
                 link(row.get("mirna_targets", ""), "targets"),
                 link(row.get("target_enrichment", ""), "enrichment"),
                 link(row.get("target_feature_set_results", ""), "feature sets"),
+                link(row.get("residual_manifest", ""), "residual manifest"),
+                link(row.get("residual_biotype_counts", ""), "residual biotypes"),
+                link(row.get("residual_feature_counts", ""), "residual features"),
                 link(row.get("volcano_pdf", ""), "volcano"),
                 link(row.get("pca_pdf", ""), "PCA"),
                 link(row.get("heatmap_pdf", ""), "heatmap"),
@@ -94,6 +104,10 @@ def render_index(path: Path, rows: list[dict[str, str]]) -> None:
             row.get("n_targets", ""),
             row.get("n_enrichment_terms", ""),
             row.get("n_target_feature_set_terms", ""),
+            row.get("n_residual_input_reads", ""),
+            row.get("n_residual_genome_aligned_reads", ""),
+            row.get("n_residual_genome_unmapped_reads", ""),
+            row.get("n_residual_biotypes", ""),
             resources,
         ]
         body_rows.append("<tr>" + "".join(f"<td>{value}</td>" if value.startswith("<a ") else f"<td>{html.escape(value)}</td>" for value in cells) + "</tr>")
@@ -112,6 +126,10 @@ def render_index(path: Path, rows: list[dict[str, str]]) -> None:
             "targets",
             "enrichment_terms",
             "feature_set_terms",
+            "residual_reads",
+            "residual_aligned",
+            "residual_unmapped",
+            "residual_biotypes",
             "resources",
         ]
     )
