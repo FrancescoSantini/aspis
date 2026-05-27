@@ -1,0 +1,139 @@
+# ASPIS smallRNA real-project configuration template.
+#
+# Copy this file to config/aspis_smallrna_<project>.yaml and replace all
+# /path/to/... entries before running. This template is intentionally separate
+# from the toy smoke configs under config/aspis_smallrna_*_smoke.yaml.
+
+intake: config/intake_smallrna_project.example.tsv
+
+paths:
+  raw_dir: work/smallrna_project/raw
+  metadata_dir: meta/smallrna_project/materialized
+  manifest: meta/smallrna_project/materialized_manifest.tsv
+  analysis_plan: meta/smallrna_project/analysis_plan.tsv
+  environment_report: meta/smallrna_project/environment_report.tsv
+  sra_cache_dir: cache/smallrna_project/sra
+  scratch_dir: work/smallrna_project/tmp
+  branch_dir: results/smallrna_project/branches
+
+materialization:
+  local_link_mode: symlink
+  sra_max_size: 40G
+  sra_spot_limit: 0
+  validate_sra: true
+  public_metadata_mode: auto
+  ena_api_url: https://www.ebi.ac.uk/ena/portal/api/filereport
+  public_metadata_timeout: 60
+
+planning:
+  allow_unclassified: false
+
+design:
+  condition_col: condition
+  control_label: control
+  covariates:
+    - time_h
+  min_condition_groups: 2
+
+fastq_inspection:
+  max_records: 100000
+
+fastqc:
+  command: fastqc
+  threads: 2
+  extra_args: ""
+
+multiqc:
+  command: multiqc
+  extra_args: ""
+
+smallrna:
+  run: true
+  preprocess_run: true
+  depletion_run: true
+  alignment_run: true
+  quantification_run: true
+  differential_run: true
+
+  adapter: AGATCGGAAGAGCACACGTCTGAACTCC
+  min_length: 15
+  max_length: 30
+  quality_cutoff: 20
+  cutadapt_overlap: 5
+  cutadapt_command: cutadapt
+  cutadapt_extra_args: ""
+  threads: 4
+
+  reference_run: true
+  reference_dir: work/smallrna_project/reference
+  mirbase_fasta: /path/to/mirbase/mature.fa
+  mirbase_species_prefix: hsa
+  mirbase_replace_u_with_t: true
+  prepared_mirbase_fasta: ""
+  prepared_mirbase_saf: ""
+
+  build_bowtie_index: true
+  build_contaminant_index: true
+  bowtie_build_command: bowtie-build
+  bowtie_command: bowtie
+  samtools_command: samtools
+  index_threads: 4
+  bowtie_index_prefix: ""
+  contaminant_fasta: /path/to/smallrna/contaminants.fa
+  contaminant_index_prefix: ""
+  contaminant_mismatches: 1
+  alignment_mismatches: 2
+  alignment_multi_alignments: 10
+  alignment_extra_args: "--best --strata"
+
+  featurecounts_command: featureCounts
+  featurecounts_threads: 4
+  featurecounts_extra_args: ""
+
+  rscript_command: Rscript
+  deseq2_script: workflow/scripts/run_deseq2_feature.R
+  condition_col: condition
+  control_label: control
+  contrast_by:
+    - time_h
+  min_replicates_per_group: 2
+  min_count: 10
+  padj: 0.1
+  log2fc: 1.0
+
+  target_enrichment_mode: table
+  target_table: /path/to/smallrna/mirna_targets.tsv
+  target_min_overlap: 1
+  target_top_n: 20
+  target_feature_sets: ""
+  target_feature_set_tables: /path/to/smallrna/target_feature_sets.tsv
+  target_feature_set_min_overlap: 2
+  target_feature_set_top_n: 20
+
+  reports: true
+  report_top_n: 25
+
+execution:
+  default_partition: g100_usr_prod
+  download_partition: g100_all_serial
+
+environment:
+  required_tools:
+    - python3
+    - snakemake
+    - fastqc
+    - multiqc
+  smallrna_required_tools:
+    - cutadapt
+    - bowtie
+    - bowtie-build
+    - samtools
+    - featureCounts
+    - Rscript
+  sra_required_tools:
+    - prefetch
+    - fasterq-dump
+  sra_limited_required_tools:
+    - fastq-dump
+  optional_tools:
+    - vdb-validate

@@ -83,6 +83,12 @@ which multiqc
 multiqc --version
 which fastp
 fastp --version
+which cutadapt
+cutadapt --version
+which bowtie
+bowtie --version
+which bowtie-build
+bowtie-build --version
 which STAR
 STAR --version
 which hisat2
@@ -617,6 +623,19 @@ On a successful real run, inspect:
 ```bash
 cat results/smallrna_report_smoke/g100_smallrna_smoke_summary.tsv
 ```
+
+After the fixture smoke passes, use `docs/smallrna_real_project.md` for
+non-toy smallRNA projects. Copy the config/intake templates, replace project
+paths, and start with:
+
+```bash
+MODE=dry-run bash tests/run_g100_smallrna_project.sh \
+  your_slurm_account \
+  config/aspis_smallrna_<project>.yaml
+```
+
+That helper runs the real project config through the SLURM profile and does not
+run the toy G100 validator.
 
 Do not use real SLURM submissions for routine development. Keep development and
 fixture tests local with `--cores 1`; reserve SLURM for final dry-runs, account
