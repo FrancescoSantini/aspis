@@ -1,0 +1,7 @@
+set_id	feature_id	source	collection	description
+cell_cycle	GENE_A	example	custom	Cell-cycle marker genes
+cell_cycle	GENE_B	example	custom	Cell-cycle marker genes
+stress_response	GENE_C	example	custom	Stress-response marker genes
+stress_response	GENE_D	example	custom	Stress-response marker genes
+immune_signal	GENE_E	example	custom	Immune signaling marker genes
+immune_signal	GENE_F	example	custom	Immune signaling marker genes

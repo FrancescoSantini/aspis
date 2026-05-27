@@ -23,9 +23,9 @@ one G100 smoke or milestone run.
 | Transcript count matrix | Replaced | `build_stringtie_transcript_matrix` | None known |
 | Gene DESeq2 | Replaced | `plan_feature_differential`, `run_gene_differential_branch`, `run_deseq2_feature.R` | Improve contrast diagnostics |
 | Transcript DESeq2 | Replaced | `plan_feature_differential`, `run_transcript_differential_branch`, `run_deseq2_feature.R` | Improve contrast diagnostics |
-| Isoform-switch analysis | Mostly replaced | `plan_isoform_switch`, `run_isoform_switch_branch`, `run_isoform_switch_contrast.R` | Compare real output shape with legacy expectations |
+| Isoform-switch analysis | Mostly replaced | `plan_isoform_switch`, `run_isoform_switch_branch`, `run_isoform_switch_contrast.R`, `tests/run_isoform_switch_smoke.sh` | Update `aspis-smk9`, then compare real output shape with legacy expectations |
 | Volcano/PCA/heatmap/VST reports | Replaced in lightweight form | `render_rnaseq_differential_plots.R` | Compare aesthetics and labels with preferred legacy plots |
-| Feature-set enrichment | Replaced with offline inputs | `render_rnaseq_differential_enrichment.py` | Add project-specific feature-set examples |
+| Feature-set enrichment | Replaced with offline inputs | `render_rnaseq_differential_enrichment.py`, `examples/rnaseq_feature_sets.example.tsv`, `examples/rnaseq_feature_sets.example.gmt` | Replace example IDs with project-specific GO/KEGG/Reactome/custom exports |
 | Per-contrast HTML summaries | Replaced in lightweight form | `render_rnaseq_differential_summary.py` | Compare with preferred legacy summary layout |
 | Project report index | New replacement | `render_rnaseq_differential_report_index.py` | Add links/sections as real users need them |
 | Real-project G100 entry point | Added | `tests/run_g100_rnaseq_project.sh`, `docs/rnaseq_real_project.md` | Use on first non-toy RNA-seq dataset |
@@ -47,7 +47,7 @@ one G100 smoke or milestone run.
 | miRBase Bowtie alignment | Implemented, config-gated | `align_smallrna_mirbase.py`, `smallrna.alignment_run` | Tune real alignment mismatch/multi-map settings |
 | miRNA featureCounts | Implemented, config-gated | `run_smallrna_featurecounts.py`, `smallrna.quantification_run` | Compare count matrix against legacy output on first real dataset |
 | miRNA DESeq2 | Implemented, config-gated | `plan_mirna_differential.py`, `run_mirna_differential_branch.py`, `run_deseq2_feature.R`, `smallrna.differential_run` | Compare real contrasts against legacy output |
-| miRNA name extraction | Not yet replaced | Legacy `extract_mirna_names.R` only | Decide whether it remains necessary after normalized result schema |
+| miRNA name extraction | Obsolete | `prepare_smallrna_reference.py` keeps mature miRBase IDs through SAF generation; `run_smallrna_featurecounts.py` and miRNA DESeq2 preserve those IDs in count and result tables | Do not port legacy `extract_mirna_names.R` unless a real dataset exposes a missing mature-ID field |
 | Target retrieval/cache | Partly replaced | Offline `smallrna.target_enrichment_mode: table` consumes a local target TSV | Optional multimiR/cache mode remains deferred to avoid cluster network dependency by default |
 | Target enrichment | Implemented, table mode | `render_smallrna_target_enrichment.py`, `smallrna.target_enrichment_mode: table` | Optional multimiR/cache mode remains deferred |
 | Target-gene feature-set enrichment | Implemented, local inputs | `render_smallrna_target_featuresets.py`, `smallrna.target_feature_sets`, `smallrna.target_feature_set_tables` | Add project-specific GO/KEGG/Reactome tables as needed |
