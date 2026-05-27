@@ -228,8 +228,20 @@ def write_done(path: Path, rows: list[dict[str, str]], spec: FeatureRunSpec) -> 
         handle.write("status\tcontrasts_ok\tcontrasts_ready\tcontrasts_blocked\tcontrasts_failed\n")
         handle.write(f"{status}\t{ok}\t{ready}\t{blocked}\t{failed}\n")
     if failed:
-        failed_ids = ", ".join(row.get("contrast_id", "") for row in rows if row.get("status") == "failed")
-        raise RuntimeError(f"{spec.failed_message}: {failed_ids}")
+        details = []
+        for row in rows:
+            if row.get("status") != "failed":
+                continue
+            contrast_id = row.get("contrast_id", "")
+            reason = row.get("reason", "").strip()
+            log = row.get("log", "").strip()
+            detail = contrast_id
+            if reason:
+                detail += "\n    " + "\n    ".join(reason.splitlines())
+            if log:
+                detail += f"\n    log: {log}"
+            details.append(detail)
+        raise RuntimeError(f"{spec.failed_message}:\n- " + "\n- ".join(details))
 
 
 def run(args: argparse.Namespace, spec: FeatureRunSpec) -> int:
