@@ -6,7 +6,10 @@ runs first, then one deliberate SLURM smoke run on G100 when rule contracts or
 profile resources have changed. Real-project G100 helpers run a login-node
 preflight by default, so missing FASTQs, missing references, malformed design
 columns, and under-replicated differential contrasts fail before any SLURM job
-is submitted. They also write `logs/preflight/<config-file>.<assay>.tsv`
+is submitted. Public-SRA capped milestone helpers are documented in
+`docs/g100_public_sra_tests.md`; use them when private real data are not
+available but public accession materialization should be exercised on G100.
+Real-project helpers also write `logs/preflight/<config-file>.<assay>.tsv`
 unless `PREFLIGHT_REPORT` is set. Use `PREFLIGHT=0` only for deliberate
 Snakemake debugging.
 
