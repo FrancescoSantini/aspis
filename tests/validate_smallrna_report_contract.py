@@ -70,6 +70,7 @@ def setup_inputs() -> dict[str, Path]:
         "summary_manifest": REPORTS / "summaries" / "summary_manifest.tsv",
         "summary_done": REPORTS / "summaries" / "summary.done",
         "index": REPORTS / "index.html",
+        "asset_manifest": REPORTS / "asset_manifest.tsv",
         "index_done": REPORTS / "report_index.done",
     }
     write_tsv(
@@ -259,6 +260,8 @@ def run_report_contract(paths: dict[str, Path]) -> None:
             "workflow/scripts/render_smallrna_report_index.py",
             "--summary-manifest",
             str(paths["summary_manifest"]),
+            "--asset-manifest",
+            str(paths["asset_manifest"]),
             "--output",
             str(paths["index"]),
             "--done",
@@ -347,6 +350,15 @@ def validate_outputs(paths: dict[str, Path]) -> None:
     index_text = paths["index"].read_text(encoding="utf-8")
     if "treated_vs_control__time_h_24" not in index_text or "feature sets" not in index_text or "volcano" not in index_text:
         raise ValueError("Report index lacks expected contrast/resource links")
+    asset_rows = read_tsv(
+        paths["asset_manifest"],
+        {"project", "assay", "level", "contrast_id", "asset_group", "asset_label", "asset_kind", "path", "exists"},
+    )
+    labels = {row["asset_label"] for row in asset_rows if row.get("exists") == "true"}
+    required_labels = {"summary_html", "results", "target_feature_set_results", "volcano_pdf", "ma_pdf", "pca_pdf", "heatmap_pdf"}
+    missing_labels = required_labels - labels
+    if missing_labels:
+        raise ValueError(f"SmallRNA report asset manifest is missing existing assets: {sorted(missing_labels)}")
     done_rows = read_tsv(paths["index_done"], {"status", "reports_ok", "reports_total"})
     if done_rows[0]["status"] != "ok" or done_rows[0]["reports_ok"] != "1":
         raise ValueError(f"Unexpected report-index done row: {done_rows[0]}")

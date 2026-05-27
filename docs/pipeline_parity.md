@@ -31,7 +31,7 @@ one G100 smoke or milestone run.
 | Gene DESeq2 | Replaced | `plan_feature_differential`, `run_gene_differential_branch`, `run_deseq2_feature.R` | Improve contrast diagnostics |
 | Transcript DESeq2 | Replaced | `plan_feature_differential`, `run_transcript_differential_branch`, `run_deseq2_feature.R` | Improve contrast diagnostics |
 | Isoform-switch analysis | Mostly replaced | `plan_isoform_switch`, `run_isoform_switch_branch`, `run_isoform_switch_contrast.R`, `tests/run_isoform_switch_smoke.sh` | Update `aspis-smk9`, then compare real output shape with legacy expectations |
-| Volcano/MA/PCA/heatmap/VST reports | Replaced in lightweight form | `render_rnaseq_differential_plots.R` writes volcano, MA, PCA, heatmap, and log2-count tables with sample metadata used when available | Compare aesthetics and labels with preferred legacy plots |
+| Volcano/MA/PCA/heatmap/VST reports | Replaced in lightweight form | `render_rnaseq_differential_plots.R` writes volcano, MA, PCA, heatmap, and log2-count tables with sample metadata used when available; report indexes write `asset_manifest.tsv` inventories for parity review | Compare aesthetics and labels with preferred legacy plots |
 | Feature-set enrichment | Replaced with offline inputs | `render_rnaseq_differential_enrichment.py`, `examples/rnaseq_feature_sets.example.tsv`, `examples/rnaseq_feature_sets.example.gmt` | Replace example IDs with project-specific GO/KEGG/Reactome/custom exports |
 | Per-contrast HTML summaries | Replaced in lightweight form | `render_rnaseq_differential_summary.py` | Compare with preferred legacy summary layout |
 | Project report index | New replacement | `render_rnaseq_differential_report_index.py` | Add links/sections as real users need them |
@@ -59,7 +59,7 @@ one G100 smoke or milestone run.
 | Target retrieval/cache | Partly replaced | Offline `smallrna.target_enrichment_mode: table` consumes a local target TSV | Optional multimiR/cache mode remains deferred to avoid cluster network dependency by default |
 | Target enrichment | Implemented, table mode | `render_smallrna_target_enrichment.py`, `smallrna.target_enrichment_mode: table` | Optional multimiR/cache mode remains deferred |
 | Target-gene feature-set enrichment | Implemented, local inputs | `render_smallrna_target_featuresets.py`, `smallrna.target_feature_sets`, `smallrna.target_feature_set_tables` | Add project-specific GO/KEGG/Reactome tables as needed |
-| miRNA summary report | Implemented in lightweight form | `plan_smallrna_report.py`, `render_smallrna_report_summary.py`, `render_smallrna_report_index.py`; includes MA/volcano/PCA/heatmap links and residual genome read fate when enabled | Compare layout and plot set against preferred legacy outputs |
+| miRNA summary report | Implemented in lightweight form | `plan_smallrna_report.py`, `render_smallrna_report_summary.py`, `render_smallrna_report_index.py`; includes MA/volcano/PCA/heatmap links, residual genome read fate when enabled, and `asset_manifest.tsv` inventories for parity review | Compare layout and plot set against preferred legacy outputs |
 | Real-project G100 entry point | Added | `tests/run_g100_smallrna_project.sh`, `docs/smallrna_real_project.md` | Use on first non-toy smallRNA dataset |
 
 ## Immediate Implementation Order

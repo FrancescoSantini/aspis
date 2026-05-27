@@ -133,6 +133,18 @@ REPORT_SCHEMAS = {
         "n_up",
         "n_down",
     },
+    "asset_manifest.tsv": {
+        "project",
+        "assay",
+        "level",
+        "contrast_id",
+        "status",
+        "asset_group",
+        "asset_label",
+        "asset_kind",
+        "path",
+        "exists",
+    },
     "report_index.done": {
         "status",
         "reports_ok",
@@ -279,6 +291,12 @@ def validate_reports() -> str:
         raise ValueError(f"Report plan ready levels are {sorted(observed_levels)}, expected {sorted(expected_levels)}")
     validate_report_html()
     validate_feature_set_results()
+    asset_rows = validate_report_tsv("asset_manifest.tsv", REPORT_SCHEMAS["asset_manifest.tsv"])
+    labels = {row["asset_label"] for row in asset_rows if row.get("exists") == "true"}
+    required_labels = {"summary_html", "results", "volcano_pdf", "ma_pdf", "pca_pdf", "heatmap_pdf"}
+    missing_labels = required_labels - labels
+    if missing_labels:
+        raise ValueError(f"Report asset manifest is missing existing assets: {sorted(missing_labels)}")
     return "gene/transcript MA, volcano, PCA, heatmap, enrichment, summaries, and index present"
 
 

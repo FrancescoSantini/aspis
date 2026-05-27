@@ -81,6 +81,18 @@ SCHEMAS = {
         "n_up",
         "n_down",
     },
+    "asset_manifest.tsv": {
+        "project",
+        "assay",
+        "level",
+        "contrast_id",
+        "status",
+        "asset_group",
+        "asset_label",
+        "asset_kind",
+        "path",
+        "exists",
+    },
     "report_index.done": {
         "status",
         "reports_ok",
@@ -162,6 +174,12 @@ def main() -> int:
             report_dir,
             require_table_adapter=report_dir == Path("results/deseq2_smoke/reports"),
         )
+        _, assets = read_tsv(report_dir / "asset_manifest.tsv")
+        labels = {row["asset_label"] for row in assets if row.get("exists") == "true"}
+        required_labels = {"summary_html", "results", "volcano_pdf", "ma_pdf", "pca_pdf", "heatmap_pdf"}
+        missing_labels = required_labels - labels
+        if missing_labels:
+            raise ValueError(f"{report_dir} asset manifest is missing existing assets: {sorted(missing_labels)}")
     return 0
 
 

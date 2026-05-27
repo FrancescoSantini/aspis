@@ -44,6 +44,7 @@ SUMMARY_COLUMNS = {
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--summary-manifest", required=True, help="SmallRNA summary manifest TSV")
+    parser.add_argument("--asset-manifest", required=True, help="Report asset inventory TSV")
     parser.add_argument("--output", required=True, help="Output index HTML")
     parser.add_argument("--done", required=True, help="Completion sentinel")
     return parser.parse_args()
@@ -65,6 +66,67 @@ def link(path_text: str, label: str) -> str:
         return ""
     escaped = html.escape(path_text)
     return f'<a href="{escaped}">{html.escape(label)}</a>'
+
+
+ASSET_COLUMNS = [
+    "project",
+    "assay",
+    "level",
+    "contrast_id",
+    "status",
+    "asset_group",
+    "asset_label",
+    "asset_kind",
+    "path",
+    "exists",
+]
+ASSET_FIELDS = [
+    ("summary", "summary_html", "html", "summary_html"),
+    ("results", "results", "table", "results"),
+    ("results", "filtered", "table", "filtered"),
+    ("results", "vst_tsv", "table", "vst_tsv"),
+    ("targets", "target_manifest", "manifest", "target_manifest"),
+    ("targets", "mirna_targets", "table", "mirna_targets"),
+    ("targets", "target_enrichment", "table", "target_enrichment"),
+    ("targets", "target_summary", "table", "target_summary"),
+    ("targets", "target_enrichment_plot", "plot", "target_enrichment_plot"),
+    ("target_feature_sets", "target_feature_set_manifest", "manifest", "target_feature_set_manifest"),
+    ("target_feature_sets", "target_feature_set_results", "table", "target_feature_set_results"),
+    ("target_feature_sets", "target_feature_set_plot", "plot", "target_feature_set_plot"),
+    ("residual", "residual_manifest", "manifest", "residual_manifest"),
+    ("residual", "residual_biotype_counts", "table", "residual_biotype_counts"),
+    ("residual", "residual_feature_counts", "table", "residual_feature_counts"),
+    ("plots", "volcano_pdf", "plot", "volcano_pdf"),
+    ("plots", "ma_pdf", "plot", "ma_pdf"),
+    ("plots", "pca_pdf", "plot", "pca_pdf"),
+    ("plots", "heatmap_pdf", "plot", "heatmap_pdf"),
+]
+
+
+def write_asset_manifest(path: Path, rows: list[dict[str, str]]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=ASSET_COLUMNS, delimiter="\t", lineterminator="\n")
+        writer.writeheader()
+        for row in rows:
+            for group, label, kind, column in ASSET_FIELDS:
+                asset_path = row.get(column, "")
+                if not asset_path:
+                    continue
+                writer.writerow(
+                    {
+                        "project": row.get("project", ""),
+                        "assay": "smallrna",
+                        "level": row.get("level", "mirna"),
+                        "contrast_id": row.get("contrast_id", ""),
+                        "status": row.get("status", ""),
+                        "asset_group": group,
+                        "asset_label": label,
+                        "asset_kind": kind,
+                        "path": asset_path,
+                        "exists": str(Path(asset_path).exists()).lower(),
+                    }
+                )
 
 
 def render_index(path: Path, rows: list[dict[str, str]]) -> None:
@@ -176,6 +238,7 @@ def main() -> int:
     if not rows:
         raise ValueError("smallRNA summary manifest has no rows")
     render_index(Path(args.output), rows)
+    write_asset_manifest(Path(args.asset_manifest), rows)
     write_done(Path(args.done), rows)
     return 0
 
