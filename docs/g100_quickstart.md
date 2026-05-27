@@ -105,6 +105,8 @@ which gffcompare
 gffcompare --version
 which Rscript
 Rscript --version
+Rscript -e 'suppressPackageStartupMessages(library(DESeq2)); packageVersion("DESeq2")'
+Rscript -e 'suppressPackageStartupMessages(library(IsoformSwitchAnalyzeR)); packageVersion("IsoformSwitchAnalyzeR")'
 ```
 
 Expected major version:

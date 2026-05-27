@@ -58,7 +58,7 @@ if [[ "$MODE" == "run" ]]; then
   echo "==> core smoke output contracts"
   python3 tests/validate_smoke_contract_outputs.py
   echo "==> isoform-switch ready contract smoke"
-  python3 tests/validate_isoform_switch_ready_contract.py
+  bash tests/run_isoform_switch_smoke.sh
   echo "==> differential report smoke output schemas"
   python3 tests/validate_differential_report_smoke_outputs.py
   echo "==> smallRNA parity scaffold smoke"
