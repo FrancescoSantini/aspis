@@ -34,26 +34,27 @@ one G100 smoke or milestone run.
 | Legacy component | New workflow status | Current replacement | Remaining parity work |
 | --- | --- | --- | --- |
 | SRA/local FASTQ materialization | Replaced | Shared `materialize_library` with smallRNA assay detection | Add a public smallRNA accession smoke when needed |
-| Branch sample sheet and design | Replaced | Shared `assay_branch_ready`, `build_branch_design` | Confirm required metadata columns for real smallRNA projects |
+| Branch sample sheet and design | Replaced | Shared `assay_branch_ready`, `build_branch_design` plus `config/intake_smallrna_project.example.tsv` | Confirm project-specific metadata conventions on first real dataset |
 | Initial FastQC/MultiQC | Replaced | Shared `run_branch_fastqc`, `run_branch_multiqc` | None known |
 | SmallRNA parity plan | Added scaffold | `plan_smallrna` writes expected stages and blockers | Convert later planned stages into executable rules incrementally |
-| Adapter trimming with cutadapt | Implemented, config-gated | `preprocess_smallrna_branch.py`, `smallrna.preprocess_run` | Exercise on a real smallRNA config after `cutadapt` is present in the env |
-| Post-trim FastQC/MultiQC | Implemented, config-gated | Shared `inspect_fastqs`, `run_fastqc_branch`, and MultiQC rules over trimmed FASTQs | Exercise on a real smallRNA config after `cutadapt` is present in the env |
-| Local miRBase reference preparation | Implemented | `prepare_smallrna_reference.py`, `smallrna.reference_run` | Add real project config examples |
+| Adapter trimming with cutadapt | Implemented, config-gated | `preprocess_smallrna_branch.py`, `smallrna.preprocess_run` | Exercise on first real smallRNA project config |
+| Post-trim FastQC/MultiQC | Implemented, config-gated | Shared `inspect_fastqs`, `run_fastqc_branch`, and MultiQC rules over trimmed FASTQs | Exercise on first real smallRNA project config |
+| Local miRBase reference preparation | Implemented | `prepare_smallrna_reference.py`, `smallrna.reference_run`, `config/aspis_smallrna_project.example.yaml` | Exercise with real miRBase mature FASTA |
 | miRBase SAF generation | Implemented | `prepare_smallrna_reference.py` emits SAF from the prepared FASTA | None known |
-| miRBase Bowtie index building | Implemented, config-gated | `build_smallrna_bowtie_index`, `smallrna.build_bowtie_index` | Exercise after `bowtie-build` is present in the env |
-| Contaminant depletion | Implemented, config-gated | `build_smallrna_contaminant_index`, `deplete_smallrna_contaminants.py`, `smallrna.depletion_run` | Exercise after `cutadapt`, `bowtie-build`, and `bowtie` are present in the env |
-| miRBase Bowtie alignment | Implemented, config-gated | `align_smallrna_mirbase.py`, `smallrna.alignment_run` | Exercise after `cutadapt`, `bowtie-build`, `bowtie`, and `samtools` are present in the env |
-| miRNA featureCounts | Implemented, config-gated | `run_smallrna_featurecounts.py`, `smallrna.quantification_run` | Exercise after `cutadapt`, `bowtie-build`, `bowtie`, `samtools`, and `featureCounts` are present in the env |
-| miRNA DESeq2 | Implemented, config-gated | `plan_mirna_differential.py`, `run_mirna_differential_branch.py`, `run_deseq2_feature.R`, `smallrna.differential_run` | Exercise after the smallRNA alignment/counting toolchain and R DESeq2 are present in the env |
+| miRBase Bowtie index building | Implemented, config-gated | `build_smallrna_bowtie_index`, `smallrna.build_bowtie_index` | Exercise on first real smallRNA project config |
+| Contaminant depletion | Implemented, config-gated | `build_smallrna_contaminant_index`, `deplete_smallrna_contaminants.py`, `smallrna.depletion_run` | Tune real contaminant FASTA and mismatch settings |
+| miRBase Bowtie alignment | Implemented, config-gated | `align_smallrna_mirbase.py`, `smallrna.alignment_run` | Tune real alignment mismatch/multi-map settings |
+| miRNA featureCounts | Implemented, config-gated | `run_smallrna_featurecounts.py`, `smallrna.quantification_run` | Compare count matrix against legacy output on first real dataset |
+| miRNA DESeq2 | Implemented, config-gated | `plan_mirna_differential.py`, `run_mirna_differential_branch.py`, `run_deseq2_feature.R`, `smallrna.differential_run` | Compare real contrasts against legacy output |
 | miRNA name extraction | Not yet replaced | Legacy `extract_mirna_names.R` only | Decide whether it remains necessary after normalized result schema |
 | Target retrieval/cache | Partly replaced | Offline `smallrna.target_enrichment_mode: table` consumes a local target TSV | Optional multimiR/cache mode remains deferred to avoid cluster network dependency by default |
 | Target enrichment | Implemented, table mode | `render_smallrna_target_enrichment.py`, `smallrna.target_enrichment_mode: table` | Optional multimiR/cache mode remains deferred |
 | Target-gene feature-set enrichment | Implemented, local inputs | `render_smallrna_target_featuresets.py`, `smallrna.target_feature_sets`, `smallrna.target_feature_set_tables` | Add project-specific GO/KEGG/Reactome tables as needed |
 | miRNA summary report | Implemented in lightweight form | `plan_smallrna_report.py`, `render_smallrna_report_summary.py`, `render_smallrna_report_index.py` | Compare layout and plot set against preferred legacy outputs |
+| Real-project G100 entry point | Added | `tests/run_g100_smallrna_project.sh`, `docs/smallrna_real_project.md` | Use on first non-toy smallRNA dataset |
 
 ## Immediate Implementation Order
 
-1. Update the env and exercise smallRNA adapter trimming/post-trim QC plus Bowtie index, contaminant depletion, miRBase alignment, miRNA featureCounts, and miRNA DESeq2 execution.
-2. Compare smallRNA and RNA-seq report plots/summaries against the legacy outputs you liked, then improve the new report layer.
-3. Add project-specific GO/KEGG/Reactome target-gene feature-set tables and compare the new smallRNA report outputs against the legacy outputs you liked.
+1. Prepare a real smallRNA project config from `config/aspis_smallrna_project.example.yaml` and dry-run it on G100 with `tests/run_g100_smallrna_project.sh`.
+2. Run one small, real smallRNA project milestone on G100 and compare count matrices, DESeq2 contrasts, target enrichment, and reports against the legacy outputs you liked.
+3. Improve the smallRNA and RNA-seq report layer where real-output comparisons show missing labels, plot aesthetics, or summary fields.
