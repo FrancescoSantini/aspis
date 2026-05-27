@@ -89,6 +89,7 @@ def parse_args() -> argparse.Namespace:
         help="Differential enrichment manifest TSV",
     )
     parser.add_argument("--summary-manifest", required=True, help="Differential summary manifest TSV")
+    parser.add_argument("--asset-manifest", required=True, help="Report asset inventory TSV")
     parser.add_argument("--output", required=True, help="Report index HTML")
     parser.add_argument("--done", required=True, help="Completion sentinel")
     return parser.parse_args()
@@ -355,6 +356,63 @@ def render_html(rows: list[dict[str, str]], output: Path) -> str:
 """
 
 
+ASSET_COLUMNS = [
+    "project",
+    "assay",
+    "level",
+    "contrast_id",
+    "status",
+    "asset_group",
+    "asset_label",
+    "asset_kind",
+    "path",
+    "exists",
+]
+ASSET_FIELDS = [
+    ("summary", "summary_html", "html", "summary_html"),
+    ("results", "results", "table", "results"),
+    ("results", "filtered", "table", "filtered"),
+    ("results", "vst_tsv", "table", "vst_tsv"),
+    ("plots", "volcano_pdf", "plot", "volcano_pdf"),
+    ("plots", "ma_pdf", "plot", "ma_pdf"),
+    ("plots", "pca_pdf", "plot", "pca_pdf"),
+    ("plots", "heatmap_pdf", "plot", "heatmap_pdf"),
+    ("enrichment", "enrichment_manifest", "manifest", "enrichment_manifest"),
+    ("enrichment", "ranked_features", "table", "ranked_features"),
+    ("enrichment", "significant_features", "table", "significant_features"),
+    ("enrichment", "up_features", "table", "up_features"),
+    ("enrichment", "down_features", "table", "down_features"),
+    ("enrichment", "feature_set_results", "table", "feature_set_results"),
+    ("enrichment", "feature_set_plot", "plot", "feature_set_plot"),
+]
+
+
+def write_asset_manifest(path: Path, rows: list[dict[str, str]]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=ASSET_COLUMNS, delimiter="\t", lineterminator="\n")
+        writer.writeheader()
+        for row in rows:
+            for group, label, kind, column in ASSET_FIELDS:
+                asset_path = row.get(column, "")
+                if not asset_path:
+                    continue
+                writer.writerow(
+                    {
+                        "project": row["project"],
+                        "assay": "rnaseq",
+                        "level": row["level"],
+                        "contrast_id": row["contrast_id"],
+                        "status": row["status"],
+                        "asset_group": group,
+                        "asset_label": label,
+                        "asset_kind": kind,
+                        "path": asset_path,
+                        "exists": str(Path(asset_path).exists()).lower(),
+                    }
+                )
+
+
 def write_done(path: Path, rows: list[dict[str, str]]) -> None:
     ok = sum(1 for row in rows if row["status"] == "ok")
     blocked = sum(1 for row in rows if row["status"] == "blocked")
@@ -384,6 +442,7 @@ def main() -> int:
     output = Path(args.output)
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(render_html(rows, output), encoding="utf-8")
+    write_asset_manifest(Path(args.asset_manifest), rows)
     write_done(Path(args.done), rows)
     return 0
 
