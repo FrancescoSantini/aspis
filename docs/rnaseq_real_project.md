@@ -162,6 +162,13 @@ gene count metadata, and point `report_feature_set_tables` or
 
 Start with a dry-run:
 
+The G100 helper first runs a login-node preflight against the project
+config and intake sheet. It checks local FASTQ/reference paths, assay
+labels, path-safe IDs, configured design columns, differential replicate
+counts, aligner/index settings, and optional report feature-set files
+before submitting Snakemake jobs. Set `PREFLIGHT=0` only when you need to
+debug Snakemake itself despite a known preflight warning.
+
 ```bash
 conda activate aspis-smk9
 cd ~/aspis
