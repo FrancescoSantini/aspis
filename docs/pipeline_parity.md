@@ -6,6 +6,12 @@ separate from this map; a legacy component should only be removed after its
 replacement is implemented and covered by a local smoke test, and where relevant
 one G100 smoke or milestone run.
 
+## Shared Infrastructure
+
+| Legacy component | New workflow status | Current replacement | Remaining parity work |
+| --- | --- | --- | --- |
+| Environment/tool checks | Replaced | check_environment.py writes executable and R-package paths, detected versions, configured minimum/recommended versions, and fail-fast status for every workflow and branch environment report | Keep version policy updated as dependencies change |
+
 ## RNA-seq
 
 | Legacy component | New workflow status | Current replacement | Remaining parity work |

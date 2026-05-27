@@ -108,6 +108,17 @@ def configured_tool_list(key, default):
     return list(value)
 
 
+def configured_version_args(key):
+    value = ENVIRONMENT.get(key, {})
+    if not value:
+        return []
+    if isinstance(value, str):
+        return value.split()
+    if isinstance(value, dict):
+        return [f"{tool}={version}" for tool, version in value.items() if str(version).strip()]
+    return [str(item).strip() for item in value if str(item).strip()]
+
+
 SUPPORTED_RNASEQ_DIFFERENTIAL_LEVELS = {"gene", "transcript", "isoform_switch"}
 _raw_rnaseq_differential_levels = RNASEQ_DIFFERENTIAL.get("levels", ["gene"])
 if isinstance(_raw_rnaseq_differential_levels, str):
@@ -331,6 +342,8 @@ if SMALLRNA_TARGET_ENRICHMENT_RUN and not SMALLRNA.get("target_table", ""):
 if (SMALLRNA_TARGET_FEATURE_SET_FILES or SMALLRNA_TARGET_FEATURE_SET_TABLES) and not SMALLRNA_TARGET_ENRICHMENT_RUN:
     raise ValueError("smallrna target feature sets require smallrna.target_enrichment_mode: table")
 OPTIONAL_TOOLS = configured_tool_list("optional_tools", ["vdb-validate"])
+MINIMUM_VERSION_ARGS = configured_version_args("minimum_versions")
+RECOMMENDED_VERSION_ARGS = configured_version_args("recommended_versions")
 ACTIVE_SRA_REQUIRED_TOOLS = (
     SRA_LIMITED_REQUIRED_TOOLS if USES_INSDC and USES_SRA_SPOT_LIMIT
     else SRA_REQUIRED_TOOLS if USES_INSDC
@@ -749,7 +762,9 @@ rule check_environment:
         ENVIRONMENT_REPORT
     params:
         required_tools=REQUIRED_TOOLS,
-        optional_tools=REPORTED_OPTIONAL_TOOLS
+        optional_tools=REPORTED_OPTIONAL_TOOLS,
+        minimum_versions=MINIMUM_VERSION_ARGS,
+        recommended_versions=RECOMMENDED_VERSION_ARGS
     log:
         "logs/environment_report.log"
     shell:
@@ -759,6 +774,8 @@ rule check_environment:
           --output {output:q} \
           --required-tools {params.required_tools:q} \
           --optional-tools {params.optional_tools:q} \
+          --minimum-versions {params.minimum_versions:q} \
+          --recommended-versions {params.recommended_versions:q} \
           > {log:q} 2>&1
         """
 
@@ -1169,7 +1186,9 @@ rule check_smallrna_environment:
         f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/environment_report.tsv"
     params:
         required_tools=SMALLRNA_REQUIRED_TOOLS,
-        optional_tools=[]
+        optional_tools=[],
+        minimum_versions=MINIMUM_VERSION_ARGS,
+        recommended_versions=RECOMMENDED_VERSION_ARGS
     log:
         "logs/branches/smallrna/{project}.environment.log"
     shell:
@@ -1179,6 +1198,8 @@ rule check_smallrna_environment:
           --output {output:q} \
           --required-tools {params.required_tools:q} \
           --optional-tools {params.optional_tools:q} \
+          --minimum-versions {params.minimum_versions:q} \
+          --recommended-versions {params.recommended_versions:q} \
           > {log:q} 2>&1
         """
 
@@ -1917,7 +1938,9 @@ rule check_rnaseq_preprocess_environment:
         f"{BRANCH_DIR}" + "/rnaseq/{project}/preprocess/environment_report.tsv"
     params:
         required_tools=RNASEQ_REQUIRED_TOOLS,
-        optional_tools=[]
+        optional_tools=[],
+        minimum_versions=MINIMUM_VERSION_ARGS,
+        recommended_versions=RECOMMENDED_VERSION_ARGS
     log:
         "logs/branches/rnaseq/{project}.preprocess.environment.log"
     shell:
@@ -1927,6 +1950,8 @@ rule check_rnaseq_preprocess_environment:
           --output {output:q} \
           --required-tools {params.required_tools:q} \
           --optional-tools {params.optional_tools:q} \
+          --minimum-versions {params.minimum_versions:q} \
+          --recommended-versions {params.recommended_versions:q} \
           > {log:q} 2>&1
         """
 
@@ -2099,7 +2124,9 @@ rule check_rnaseq_alignment_environment:
         f"{BRANCH_DIR}" + "/rnaseq/{project}/alignment/environment_report.tsv"
     params:
         required_tools=RNASEQ_ALIGNMENT_REQUIRED_TOOLS,
-        optional_tools=[]
+        optional_tools=[],
+        minimum_versions=MINIMUM_VERSION_ARGS,
+        recommended_versions=RECOMMENDED_VERSION_ARGS
     log:
         "logs/branches/rnaseq/{project}.alignment.environment.log"
     shell:
@@ -2109,6 +2136,8 @@ rule check_rnaseq_alignment_environment:
           --output {output:q} \
           --required-tools {params.required_tools:q} \
           --optional-tools {params.optional_tools:q} \
+          --minimum-versions {params.minimum_versions:q} \
+          --recommended-versions {params.recommended_versions:q} \
           > {log:q} 2>&1
         """
 
@@ -2273,7 +2302,9 @@ rule check_rnaseq_quantification_environment:
         f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/environment_report.tsv"
     params:
         required_tools=RNASEQ_QUANTIFICATION_REQUIRED_TOOLS,
-        optional_tools=[]
+        optional_tools=[],
+        minimum_versions=MINIMUM_VERSION_ARGS,
+        recommended_versions=RECOMMENDED_VERSION_ARGS
     log:
         "logs/branches/rnaseq/{project}.quantification.environment.log"
     shell:
@@ -2283,6 +2314,8 @@ rule check_rnaseq_quantification_environment:
           --output {output:q} \
           --required-tools {params.required_tools:q} \
           --optional-tools {params.optional_tools:q} \
+          --minimum-versions {params.minimum_versions:q} \
+          --recommended-versions {params.recommended_versions:q} \
           > {log:q} 2>&1
         """
 
@@ -2589,7 +2622,9 @@ rule check_rnaseq_differential_environment:
         f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/environment_report.tsv"
     params:
         required_tools=RNASEQ_DIFFERENTIAL_REQUIRED_TOOLS,
-        optional_tools=[]
+        optional_tools=[],
+        minimum_versions=MINIMUM_VERSION_ARGS,
+        recommended_versions=RECOMMENDED_VERSION_ARGS
     log:
         "logs/branches/rnaseq/{project}.differential.environment.log"
     shell:
@@ -2599,6 +2634,8 @@ rule check_rnaseq_differential_environment:
           --output {output:q} \
           --required-tools {params.required_tools:q} \
           --optional-tools {params.optional_tools:q} \
+          --minimum-versions {params.minimum_versions:q} \
+          --recommended-versions {params.recommended_versions:q} \
           > {log:q} 2>&1
         """
 
@@ -3093,7 +3130,9 @@ rule check_deseq2_smoke_environment:
         f"{DESEQ2_SMOKE_DIR}/environment_report.tsv"
     params:
         required_tools=DESEQ2_SMOKE.get("required_tools", RNASEQ_DIFFERENTIAL_REQUIRED_TOOLS),
-        optional_tools=[]
+        optional_tools=[],
+        minimum_versions=MINIMUM_VERSION_ARGS,
+        recommended_versions=RECOMMENDED_VERSION_ARGS
     log:
         f"{DESEQ2_SMOKE_DIR}/logs/environment_report.log"
     shell:
@@ -3103,6 +3142,8 @@ rule check_deseq2_smoke_environment:
           --output {output:q} \
           --required-tools {params.required_tools:q} \
           --optional-tools {params.optional_tools:q} \
+          --minimum-versions {params.minimum_versions:q} \
+          --recommended-versions {params.recommended_versions:q} \
           > {log:q} 2>&1
         """
 

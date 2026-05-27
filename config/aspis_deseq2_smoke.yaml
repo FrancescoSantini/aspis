@@ -38,3 +38,4 @@ deseq2_smoke:
   log2fc: 1.0
   required_tools:
     - Rscript
+    - R::DESeq2
