@@ -1,0 +1,5 @@
+library_id	biospecimen_id	project	input_1	input_2	assay_hint	condition	treatment	dose	dose_unit	time_h	replicate	batch
+control_1	specimen_001	MY_SMALLRNA_PROJECT	/path/to/fastq/control_1.fastq.gz		smallrna	control	vehicle	0	uM	24	1	batch1
+control_2	specimen_002	MY_SMALLRNA_PROJECT	/path/to/fastq/control_2.fastq.gz		smallrna	control	vehicle	0	uM	24	2	batch1
+treated_1	specimen_003	MY_SMALLRNA_PROJECT	/path/to/fastq/treated_1.fastq.gz		smallrna	treated	compound	10	uM	24	1	batch1
+treated_2	specimen_004	MY_SMALLRNA_PROJECT	/path/to/fastq/treated_2.fastq.gz		smallrna	treated	compound	10	uM	24	2	batch1
