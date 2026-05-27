@@ -53,8 +53,8 @@ def validate_processing() -> str:
     for relative, columns in [
         ("smallrna_plan.tsv", {"stage", "status", "reason"}),
         ("preprocess/cutadapt_manifest.tsv", {"library_id", "status", "trimmed_fastq_1"}),
-        ("depletion/depletion_manifest.tsv", {"library_id", "status", "kept_fastq_1"}),
-        ("alignment/alignment_manifest.tsv", {"library_id", "status", "bam", "bai"}),
+        ("depletion/depletion_manifest.tsv", {"library_id", "status", "depleted_fastq_1"}),
+        ("alignment/alignment_manifest.tsv", {"library_id", "status", "bam", "flagstat"}),
     ]:
         path = SMALLRNA / relative
         _, rows = read_tsv(path, columns)
@@ -72,7 +72,7 @@ def validate_processing() -> str:
 
 def validate_quantification_and_deseq2() -> str:
     read_tsv(SMALLRNA / "quantification/mirna_counts.tsv", {"Geneid"})
-    read_tsv(SMALLRNA / "quantification/mirna_metadata.tsv", {"Geneid", "feature_type"})
+    read_tsv(SMALLRNA / "quantification/mirna_metadata.tsv", {"Geneid", "Chr", "Start", "End", "Strand", "Length"})
     _, quant_rows = read_tsv(
         SMALLRNA / "quantification/featurecounts_manifest.tsv",
         {"library_id", "status", "featurecounts_output", "featurecounts_summary"},
