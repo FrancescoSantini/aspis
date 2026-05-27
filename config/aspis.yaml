@@ -127,6 +127,7 @@ smallrna:
   preprocess_run: false
   depletion_run: false
   alignment_run: false
+  quantification_run: false
   adapter: AGATCGGAAGAGCACACGTCTGAACTCC
   min_length: 15
   max_length: 30
@@ -151,6 +152,9 @@ smallrna:
   alignment_mismatches: 2
   alignment_multi_alignments: 10
   alignment_extra_args: "--best --strata"
+  featurecounts_command: featureCounts
+  featurecounts_threads: 1
+  featurecounts_extra_args: ""
   mirbase_fasta: ""
   mirbase_saf: ""
   bowtie_index_prefix: ""

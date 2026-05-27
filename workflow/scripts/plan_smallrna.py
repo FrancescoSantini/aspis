@@ -327,11 +327,15 @@ def build_rows(args: argparse.Namespace) -> list[dict[str, str]]:
             stage="featurecounts_mirna",
             status=quant_status,
             reason=quant_reason,
-            runner_status="planned",
+            runner_status="implemented",
             libraries=libraries,
             key_inputs=[args.mirbase_saf],
-            expected_outputs=["quantification/mirna_counts.tsv", "quantification/mirna_metadata.tsv"],
-            parameters=[],
+            expected_outputs=[
+                "quantification/mirna_counts.tsv",
+                "quantification/mirna_metadata.tsv",
+                "quantification/featurecounts_manifest.tsv",
+            ],
+            parameters=["featureCounts=-F SAF"],
         ),
         row(
             args=args,
