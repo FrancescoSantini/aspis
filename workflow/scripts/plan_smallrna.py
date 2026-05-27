@@ -316,7 +316,7 @@ def build_rows(args: argparse.Namespace) -> list[dict[str, str]]:
             stage="mirbase_alignment",
             status=alignment_status,
             reason=alignment_reason,
-            runner_status="planned",
+            runner_status="implemented",
             libraries=libraries,
             key_inputs=[args.mirbase_fasta, args.bowtie_index_prefix],
             expected_outputs=["alignment/aligned_samples.tsv", "alignment/alignment_manifest.tsv"],
