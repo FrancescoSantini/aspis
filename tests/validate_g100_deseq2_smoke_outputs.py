@@ -77,6 +77,7 @@ REPORT_SCHEMAS = {
         "deseq2_summary",
         "feature_metadata",
         "volcano_pdf",
+        "ma_pdf",
         "pca_pdf",
         "heatmap_pdf",
         "vst_tsv",
@@ -90,6 +91,7 @@ REPORT_SCHEMAS = {
         "status",
         "reason",
         "volcano_pdf",
+        "ma_pdf",
         "pca_pdf",
         "heatmap_pdf",
         "vst_tsv",
@@ -125,6 +127,7 @@ REPORT_SCHEMAS = {
         "summary_html",
         "results",
         "filtered",
+        "ma_pdf",
         "n_features",
         "n_significant",
         "n_up",
@@ -276,7 +279,7 @@ def validate_reports() -> str:
         raise ValueError(f"Report plan ready levels are {sorted(observed_levels)}, expected {sorted(expected_levels)}")
     validate_report_html()
     validate_feature_set_results()
-    return "gene/transcript report plots, enrichment, summaries, and index present"
+    return "gene/transcript MA, volcano, PCA, heatmap, enrichment, summaries, and index present"
 
 
 def run_check(name: str, checks: list[dict[str, str]], func) -> None:

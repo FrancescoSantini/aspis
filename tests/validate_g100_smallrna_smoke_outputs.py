@@ -148,12 +148,13 @@ def validate_reports() -> str:
             "results",
             "filtered",
             "volcano_pdf",
+            "ma_pdf",
             "pca_pdf",
             "heatmap_pdf",
             "vst_tsv",
             "summary_html",
         },
-        "plots/plots_manifest.tsv": {"contrast_id", "status", "volcano_pdf", "pca_pdf", "heatmap_pdf", "vst_tsv"},
+        "plots/plots_manifest.tsv": {"contrast_id", "status", "volcano_pdf", "ma_pdf", "pca_pdf", "heatmap_pdf", "vst_tsv"},
         "summaries/summary_manifest.tsv": {
             "contrast_id",
             "status",
@@ -167,6 +168,7 @@ def validate_reports() -> str:
             "n_residual_genome_aligned_reads",
             "n_residual_biotypes",
             "volcano_pdf",
+            "ma_pdf",
             "pca_pdf",
             "heatmap_pdf",
             "vst_tsv",
@@ -182,7 +184,7 @@ def validate_reports() -> str:
 
     _, plot_rows = read_tsv(reports / "plots/plots_manifest.tsv", schemas["plots/plots_manifest.tsv"])
     for row in plot_rows:
-        for column in ["volcano_pdf", "pca_pdf", "heatmap_pdf", "vst_tsv"]:
+        for column in ["volcano_pdf", "ma_pdf", "pca_pdf", "heatmap_pdf", "vst_tsv"]:
             require_path(row[column], reports / "plots/plots_manifest.tsv", column)
 
     _, summary_rows = read_tsv(reports / "summaries/summary_manifest.tsv", schemas["summaries/summary_manifest.tsv"])
@@ -194,7 +196,7 @@ def validate_reports() -> str:
     text = index.read_text(encoding="utf-8")
     if "smallRNA differential reports" not in text or "volcano" not in text or "</html>" not in text:
         raise ValueError(f"{index} does not look like a complete smallRNA report index")
-    return "smallRNA report plots, residual read fate, target enrichment, feature sets, summaries, and index present"
+    return "smallRNA MA, volcano, PCA, heatmap, residual read fate, target enrichment, feature sets, summaries, and index present"
 
 
 def run_check(name: str, checks: list[dict[str, str]], func) -> None:

@@ -285,6 +285,7 @@ def validate_outputs(paths: dict[str, Path]) -> None:
             "mirna_targets",
             "target_feature_set_results",
             "volcano_pdf",
+            "ma_pdf",
             "pca_pdf",
             "heatmap_pdf",
             "vst_tsv",
@@ -294,11 +295,11 @@ def validate_outputs(paths: dict[str, Path]) -> None:
         raise ValueError(f"Expected one ready report-plan row, got {plan_rows}")
     plot_rows = read_tsv(
         paths["plots_manifest"],
-        {"contrast_id", "status", "volcano_pdf", "pca_pdf", "heatmap_pdf", "vst_tsv"},
+        {"contrast_id", "status", "volcano_pdf", "ma_pdf", "pca_pdf", "heatmap_pdf", "vst_tsv"},
     )
     if len(plot_rows) != 1 or plot_rows[0]["status"] != "ok":
         raise ValueError(f"Expected one ok plot row, got {plot_rows}")
-    for column in ["volcano_pdf", "pca_pdf", "heatmap_pdf", "vst_tsv"]:
+    for column in ["volcano_pdf", "ma_pdf", "pca_pdf", "heatmap_pdf", "vst_tsv"]:
         path = Path(plot_rows[0][column])
         if not path.exists():
             raise FileNotFoundError(f"Missing smallRNA report plot artifact from {column}: {path}")
@@ -317,6 +318,7 @@ def validate_outputs(paths: dict[str, Path]) -> None:
             "n_enrichment_terms",
             "n_target_feature_set_terms",
             "volcano_pdf",
+            "ma_pdf",
             "pca_pdf",
             "heatmap_pdf",
             "vst_tsv",

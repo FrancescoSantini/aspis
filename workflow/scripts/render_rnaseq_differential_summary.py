@@ -20,6 +20,7 @@ REQUIRED_PLAN_COLUMNS = {
     "filtered",
     "deseq2_summary",
     "volcano_pdf",
+    "ma_pdf",
     "pca_pdf",
     "heatmap_pdf",
     "enrichment_manifest",
@@ -34,6 +35,7 @@ MANIFEST_COLUMNS = [
     "summary_html",
     "results",
     "filtered",
+    "ma_pdf",
     "n_features",
     "n_significant",
     "n_up",
@@ -181,6 +183,7 @@ def render_html(
     plots = "\n".join(
         [
             plot_panel("Volcano", row["volcano_pdf"], output),
+            plot_panel("MA", row["ma_pdf"], output),
             plot_panel("PCA", row["pca_pdf"], output),
             plot_panel("Heatmap", row["heatmap_pdf"], output),
             enrichment_panel(resources, output),
@@ -273,6 +276,7 @@ def render_ready_row(row: dict[str, str], top_n: int) -> dict[str, str]:
         "summary_html": str(output),
         "results": row["results"],
         "filtered": row["filtered"],
+        "ma_pdf": row.get("ma_pdf", ""),
         "n_features": str(len(result_rows)),
         "n_significant": str(len(filtered_rows)),
         "n_up": str(n_up),
@@ -294,6 +298,7 @@ def render_rows(plan_rows: list[dict[str, str]], top_n: int) -> list[dict[str, s
                     "summary_html": row["summary_html"],
                     "results": row["results"],
                     "filtered": row["filtered"],
+                    "ma_pdf": row.get("ma_pdf", ""),
                     "n_features": "0",
                     "n_significant": "0",
                     "n_up": "0",
@@ -311,6 +316,7 @@ def render_rows(plan_rows: list[dict[str, str]], top_n: int) -> list[dict[str, s
             failed["n_significant"] = "0"
             failed["n_up"] = "0"
             failed["n_down"] = "0"
+            failed["ma_pdf"] = row.get("ma_pdf", "")
             output_rows.append(failed)
     return output_rows
 
