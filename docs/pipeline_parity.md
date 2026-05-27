@@ -42,7 +42,7 @@ one G100 smoke or milestone run.
 | Local miRBase reference preparation | Implemented | `prepare_smallrna_reference.py`, `smallrna.reference_run` | Add real project config examples |
 | miRBase SAF generation | Implemented | `prepare_smallrna_reference.py` emits SAF from the prepared FASTA | None known |
 | miRBase Bowtie index building | Implemented, config-gated | `build_smallrna_bowtie_index`, `smallrna.build_bowtie_index` | Exercise after `bowtie-build` is present in the env |
-| Contaminant depletion | Planned | `smallrna_plan.tsv` stage `contaminant_depletion` | Implement Bowtie depletion with explicit local contaminant reference inputs |
+| Contaminant depletion | Implemented, config-gated | `build_smallrna_contaminant_index`, `deplete_smallrna_contaminants.py`, `smallrna.depletion_run` | Exercise after `cutadapt`, `bowtie-build`, and `bowtie` are present in the env |
 | miRBase Bowtie alignment | Planned | `smallrna_plan.tsv` stage `mirbase_alignment` | Implement Bowtie alignment against configured miRBase FASTA/index |
 | miRNA featureCounts | Planned | `smallrna_plan.tsv` stage `featurecounts_mirna` | Implement SAF-based featureCounts and count matrix normalization |
 | miRNA DESeq2 | Planned | `smallrna_plan.tsv` stage `deseq2_mirna` | Reuse generic feature DESeq2 runner with miRNA feature column |
@@ -53,9 +53,8 @@ one G100 smoke or milestone run.
 
 ## Immediate Implementation Order
 
-1. Update the env and exercise smallRNA adapter trimming/post-trim QC plus Bowtie index building.
-2. Implement contaminant depletion with explicit configured FASTA/index inputs.
-3. Implement miRBase alignment and featureCounts count matrix generation.
-4. Reuse the generic DESeq2 runner for miRNA counts.
-5. Add offline miRNA target table enrichment before any network-backed target cache.
-6. Compare report plots and summaries against the legacy outputs you liked, then improve the new report layer.
+1. Update the env and exercise smallRNA adapter trimming/post-trim QC plus Bowtie index and contaminant-depletion execution.
+2. Implement miRBase alignment and featureCounts count matrix generation.
+3. Reuse the generic DESeq2 runner for miRNA counts.
+4. Add offline miRNA target table enrichment before any network-backed target cache.
+5. Compare report plots and summaries against the legacy outputs you liked, then improve the new report layer.

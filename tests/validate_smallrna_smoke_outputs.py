@@ -15,7 +15,7 @@ EXPECTED_STAGES = {
     "initial_fastqc_multiqc": ("ready", "implemented"),
     "adapter_trim": ("ready", "implemented"),
     "post_trim_fastqc_multiqc": ("ready", "implemented"),
-    "contaminant_depletion": ("blocked", "planned"),
+    "contaminant_depletion": ("blocked", "implemented"),
     "mirbase_alignment": ("blocked", "planned"),
     "featurecounts_mirna": ("blocked", "planned"),
     "deseq2_mirna": ("blocked", "planned"),
