@@ -1,0 +1,5 @@
+library_id	biospecimen_id	project	input_1	input_2	assay_hint	condition	treatment	dose	dose_unit	time_h	replicate	batch
+public_rnaseq_control_1	SAMD00004023	ASPIS_PUBLIC_RNASEQ_SRA	DRR001175		rnaseq	control	0mM	0	mM	24	1	PRJDA69989
+public_rnaseq_control_2	SAMD00004026	ASPIS_PUBLIC_RNASEQ_SRA	DRR001176		rnaseq	control	0mM	0	mM	24	2	PRJDA69989
+public_rnaseq_treated_1	SAMD00004024	ASPIS_PUBLIC_RNASEQ_SRA	DRR001173		rnaseq	treated	25mM	25	mM	24	1	PRJDA69989
+public_rnaseq_treated_2	SAMD00004025	ASPIS_PUBLIC_RNASEQ_SRA	DRR001174		rnaseq	treated	25mM	25	mM	24	2	PRJDA69989

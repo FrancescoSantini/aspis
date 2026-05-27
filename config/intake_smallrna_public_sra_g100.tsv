@@ -1,0 +1,5 @@
+library_id	biospecimen_id	project	input_1	input_2	assay_hint	condition	tissue_state	dose	dose_unit	time_h	replicate	batch
+public_smallrna_normal_1	SAMD00012836	ASPIS_PUBLIC_SMALLRNA_SRA	DRR013035		smallrna	control	normal	0	none	0	1	PRJDB2583
+public_smallrna_normal_2	SAMD00012843	ASPIS_PUBLIC_SMALLRNA_SRA	DRR013036		smallrna	control	normal	0	none	0	2	PRJDB2583
+public_smallrna_cancer_1	SAMD00012839	ASPIS_PUBLIC_SMALLRNA_SRA	DRR013040		smallrna	cancer	cancer	0	none	0	1	PRJDB2583
+public_smallrna_cancer_2	SAMD00012842	ASPIS_PUBLIC_SMALLRNA_SRA	DRR013042		smallrna	cancer	cancer	0	none	0	2	PRJDB2583
