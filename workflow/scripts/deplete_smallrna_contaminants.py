@@ -130,6 +130,13 @@ def gzip_fastq(source: Path, target: Path) -> None:
     source.unlink()
 
 
+def log_tail(path: Path, max_lines: int = 20) -> str:
+    if not path.exists():
+        return ""
+    lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+    return "\n".join(lines[-max_lines:])
+
+
 def run_bowtie(row: dict[str, str], outputs: dict[str, Path], args: argparse.Namespace) -> None:
     executable = shutil.which(args.bowtie)
     if executable is None:
@@ -161,7 +168,9 @@ def run_bowtie(row: dict[str, str], outputs: dict[str, Path], args: argparse.Nam
             text=True,
         )
     if completed.returncode != 0:
-        raise RuntimeError(f"{row['library_id']}: bowtie exited with status {completed.returncode}")
+        message = log_tail(outputs["contaminant_log"])
+        detail = f"\n{message}" if message else ""
+        raise RuntimeError(f"{row['library_id']}: bowtie exited with status {completed.returncode}{detail}")
     if not outputs["tmp_fastq_1"].exists():
         raise RuntimeError(f"{row['library_id']}: Bowtie did not create unaligned FASTQ")
 

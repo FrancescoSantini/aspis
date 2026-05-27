@@ -69,7 +69,18 @@ if (any(is.na(coldata[[opt$condition_col]]))) {
 
 design_formula <- as.formula(paste("~", opt$condition_col))
 dds <- DESeqDataSetFromMatrix(countData = counts_filtered, colData = coldata, design = design_formula)
-dds <- DESeq(dds)
+dds <- tryCatch(
+  DESeq(dds),
+  error = function(err) {
+    message <- conditionMessage(err)
+    if (!grepl("all gene-wise dispersion estimates are within 2 orders of magnitude", message, fixed = TRUE)) {
+      stop(err)
+    }
+    dds <- estimateDispersionsGeneEst(dds)
+    dispersions(dds) <- mcols(dds)$dispGeneEst
+    nbinomWaldTest(dds)
+  }
+)
 
 res <- results(dds, contrast = c(opt$condition_col, opt$test_label, opt$control_label))
 res <- as.data.frame(res)
