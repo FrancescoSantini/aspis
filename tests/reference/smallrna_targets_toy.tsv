@@ -1,0 +1,6 @@
+mirna_id	target_id	target_symbol	target_entrez	database	evidence
+hsa-miR-1-3p	GENE1	GENE1	1001	miRTarBase	strong
+hsa-miR-1-3p	GENE2	GENE2	1002	miRTarBase	strong
+hsa-miR-2-3p	GENE1	GENE1	1001	miRTarBase	strong
+hsa-miR-2-3p	GENE3	GENE3	1003	TargetScan	predicted
+hsa-miR-3-3p	GENE4	GENE4	1004	TargetScan	predicted

@@ -15,12 +15,14 @@ MODE=dry-run bash tests/run_local_smokes.sh
 ```
 
 Dry-run mode also plans the smallRNA Bowtie index, contaminant-depletion,
-miRBase-alignment, miRNA featureCounts, and miRNA DESeq2 contracts with
+miRBase-alignment, miRNA featureCounts, miRNA DESeq2, and offline target-table
+enrichment contracts with
 `config/aspis_smallrna_bowtie_index_smoke.yaml`,
 `config/aspis_smallrna_depletion_smoke.yaml`,
 `config/aspis_smallrna_alignment_smoke.yaml`,
-`config/aspis_smallrna_featurecounts_smoke.yaml`, and
-`config/aspis_smallrna_deseq2_smoke.yaml`. Run mode skips those configs
+`config/aspis_smallrna_featurecounts_smoke.yaml`,
+`config/aspis_smallrna_deseq2_smoke.yaml`, and
+`config/aspis_smallrna_target_enrichment_smoke.yaml`. Run mode skips those configs
 so development machines without `cutadapt`, Bowtie, samtools, featureCounts, or Rscript
 can still execute the local suite.
 
@@ -36,8 +38,7 @@ planning, the blocked isoform-switch execution contract, smallRNA
 materialization/branch QC/design plus local reference FASTA-to-SAF preparation,
 the explicit smallRNA parity plan, and the config-gated cutadapt/post-trim-QC,
 Bowtie-index, contaminant-depletion, miRBase-alignment, miRNA featureCounts,
-and miRNA DESeq2
-rule contracts,
+miRNA DESeq2, and offline miRNA target-table enrichment rule contracts,
 gene/transcript DESeq2 execution, and the lightweight differential report layer
 with volcano, PCA, heatmap, transformed-count, optional GMT or exported-TSV
 feature-set enrichment, and embedded HTML summary artifacts plus a project-level

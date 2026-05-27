@@ -47,12 +47,12 @@ one G100 smoke or milestone run.
 | miRNA featureCounts | Implemented, config-gated | `run_smallrna_featurecounts.py`, `smallrna.quantification_run` | Exercise after `cutadapt`, `bowtie-build`, `bowtie`, `samtools`, and `featureCounts` are present in the env |
 | miRNA DESeq2 | Implemented, config-gated | `plan_mirna_differential.py`, `run_mirna_differential_branch.py`, `run_deseq2_feature.R`, `smallrna.differential_run` | Exercise after the smallRNA alignment/counting toolchain and R DESeq2 are present in the env |
 | miRNA name extraction | Not yet replaced | Legacy `extract_mirna_names.R` only | Decide whether it remains necessary after normalized result schema |
-| Target retrieval/cache | Planned | `smallrna_plan.tsv` stage `mirna_target_enrichment` | Prefer local target table mode; avoid cluster network dependency by default |
-| Target enrichment | Planned | `smallrna_plan.tsv` stage `mirna_target_enrichment` | Implement offline target enrichment and optional multimiR mode |
+| Target retrieval/cache | Partly replaced | Offline `smallrna.target_enrichment_mode: table` consumes a local target TSV | Optional multimiR/cache mode remains deferred to avoid cluster network dependency by default |
+| Target enrichment | Implemented, table mode | `render_smallrna_target_enrichment.py`, `smallrna.target_enrichment_mode: table` | Add optional GO/KEGG/Reactome enrichment from local feature-set inputs if needed |
 | miRNA summary report | Planned | `smallrna_plan.tsv` stage `summary_report` | Reuse or adapt report rendering once miRNA DESeq2/enrichment outputs exist |
 
 ## Immediate Implementation Order
 
 1. Update the env and exercise smallRNA adapter trimming/post-trim QC plus Bowtie index, contaminant depletion, miRBase alignment, miRNA featureCounts, and miRNA DESeq2 execution.
-2. Add offline miRNA target table enrichment before any network-backed target cache.
-3. Compare report plots and summaries against the legacy outputs you liked, then improve the new report layer.
+2. Compare report plots and summaries against the legacy outputs you liked, then improve the new report layer.
+3. Decide whether target-gene GO/KEGG/Reactome enrichment should be added from local tables before any network-backed cache.
