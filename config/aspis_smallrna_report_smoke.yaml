@@ -66,7 +66,7 @@ smallrna:
   featurecounts_extra_args: ""
   rscript_command: Rscript
   deseq2_script: workflow/scripts/run_deseq2_feature.R
-  min_count: 10
+  min_count: 2
   mirbase_fasta: tests/reference/smallrna_mirbase_toy.fa
   mirbase_saf: ""
   bowtie_index_prefix: ""

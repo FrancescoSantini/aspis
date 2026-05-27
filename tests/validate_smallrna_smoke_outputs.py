@@ -53,8 +53,8 @@ def validate_materialization() -> None:
         META / "materialized_manifest.tsv",
         {"library_id", "project", "assay", "layout", "fastq_1"},
     )
-    if len(rows) != 2:
-        raise ValueError(f"Expected 2 smallRNA fixture libraries, got {len(rows)}")
+    if len(rows) != 4:
+        raise ValueError(f"Expected 4 smallRNA fixture libraries, got {len(rows)}")
     for row in rows:
         if row["project"] != PROJECT or row["assay"] != "smallrna" or row["layout"] != "single":
             raise ValueError(f"Unexpected materialized smallRNA row: {row}")
@@ -64,14 +64,14 @@ def validate_materialization() -> None:
     plan = plan_rows[0]
     if plan["project"] != PROJECT or plan["assay"] != "smallrna" or plan["status"] != "ready":
         raise ValueError(f"Unexpected smallRNA analysis plan row: {plan}")
-    if plan["n_libraries"] != "2":
+    if plan["n_libraries"] != "4":
         raise ValueError(f"Unexpected smallRNA analysis plan library count: {plan}")
 
 
 def validate_branch() -> None:
     _, rows = read_tsv(BRANCH / "samples.tsv", {"library_id", "project", "assay", "layout", "fastq_1", "condition"})
-    if len(rows) != 2:
-        raise ValueError(f"Expected 2 smallRNA branch sample rows, got {len(rows)}")
+    if len(rows) != 4:
+        raise ValueError(f"Expected 4 smallRNA branch sample rows, got {len(rows)}")
     conditions = {row["condition"] for row in rows}
     if conditions != {"control", "treated"}:
         raise ValueError(f"Expected control/treated smallRNA branch samples, got {sorted(conditions)}")
@@ -96,8 +96,8 @@ def validate_reference() -> None:
     manifest = rows[0]
     if manifest["species_prefix"] != "hsa" or manifest["replace_u_with_t"] != "true":
         raise ValueError(f"Unexpected smallRNA reference manifest: {manifest}")
-    if manifest["n_records"] != "2":
-        raise ValueError(f"Expected 2 human miRNA reference records, got {manifest}")
+    if manifest["n_records"] != "8":
+        raise ValueError(f"Expected 8 human miRNA reference records, got {manifest}")
     require_path(manifest["source_fasta"], REFERENCE / "reference_manifest.tsv", "source_fasta")
     require_path(manifest["output_fasta"], REFERENCE / "reference_manifest.tsv", "output_fasta")
     require_path(manifest["saf"], REFERENCE / "reference_manifest.tsv", "saf")
@@ -107,7 +107,17 @@ def validate_reference() -> None:
     if ">mmu-" in fasta_text or "U" in fasta_text:
         raise ValueError("Prepared smallRNA FASTA should be human-filtered and U-to-T normalized")
     _, saf_rows = read_tsv(Path(manifest["saf"]), {"GeneID", "Chr", "Start", "End", "Strand"})
-    if {row["GeneID"] for row in saf_rows} != {"hsa-miR-1-3p", "hsa-miR-2-3p"}:
+    expected_ids = {
+        "hsa-miR-1-3p",
+        "hsa-miR-2-3p",
+        "hsa-miR-3-3p",
+        "hsa-miR-4-5p",
+        "hsa-miR-5-5p",
+        "hsa-miR-6-5p",
+        "hsa-miR-7-5p",
+        "hsa-miR-8-3p",
+    }
+    if {row["GeneID"] for row in saf_rows} != expected_ids:
         raise ValueError(f"Unexpected SAF miRNA IDs: {saf_rows}")
 
 
@@ -129,8 +139,8 @@ def validate_plan() -> None:
                 f"SmallRNA stage {stage!r} expected {status}/{runner_status}, got "
                 f"{row['status']}/{row['runner_status']}: {row}"
             )
-        if row["n_libraries"] != "2":
-            raise ValueError(f"SmallRNA stage {stage!r} expected 2 libraries, got {row}")
+        if row["n_libraries"] != "4":
+            raise ValueError(f"SmallRNA stage {stage!r} expected 4 libraries, got {row}")
     if "miRBase Bowtie index prefix" in by_stage["mirbase_alignment"]["reason"]:
         raise ValueError(
             "mirbase_alignment should use the prepared FASTA as a buildable reference, "

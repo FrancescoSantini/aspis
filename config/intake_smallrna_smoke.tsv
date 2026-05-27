@@ -1,3 +1,5 @@
 library_id	biospecimen_id	project	input_1	input_2	assay_hint	condition	treatment	dose	dose_unit	time_h	replicate	batch
-smallrna_control	specimen_sm_01	ASPIS_SMALLRNA_TEST	tests/data/example_se.fastq		smallrna	control	vehicle	0	uM	24	1	test
-smallrna_treated	specimen_sm_02	ASPIS_SMALLRNA_TEST	tests/data/example_R1.fastq		smallrna	treated	compound	10	uM	24	1	test
+smallrna_control_1	specimen_sm_01	ASPIS_SMALLRNA_TEST	tests/data/smallrna/control_1.fastq		smallrna	control	vehicle	0	uM	24	1	test
+smallrna_control_2	specimen_sm_02	ASPIS_SMALLRNA_TEST	tests/data/smallrna/control_2.fastq		smallrna	control	vehicle	0	uM	24	2	test
+smallrna_treated_1	specimen_sm_03	ASPIS_SMALLRNA_TEST	tests/data/smallrna/treated_1.fastq		smallrna	treated	compound	10	uM	24	1	test
+smallrna_treated_2	specimen_sm_04	ASPIS_SMALLRNA_TEST	tests/data/smallrna/treated_2.fastq		smallrna	treated	compound	10	uM	24	2	test

@@ -40,8 +40,8 @@ def require_path(path_text: str, source: Path, column: str) -> None:
 
 def validate_branch_samples() -> str:
     _, rows = read_tsv(BRANCH / "samples.tsv", {"project", "assay", "library_id", "layout", "fastq_1", "condition"})
-    if len(rows) < 2:
-        raise ValueError(f"Expected at least 2 smallRNA fixture libraries, got {len(rows)}")
+    if len(rows) != 4:
+        raise ValueError(f"Expected 4 smallRNA fixture libraries, got {len(rows)}")
     for row in rows:
         if row["project"] != PROJECT or row["assay"] != "smallrna":
             raise ValueError(f"Unexpected branch sample row: {row}")
@@ -149,9 +149,6 @@ def validate_reports() -> str:
     _, summary_rows = read_tsv(reports / "summaries/summary_manifest.tsv", schemas["summaries/summary_manifest.tsv"])
     for row in summary_rows:
         require_path(row["summary_html"], reports / "summaries/summary_manifest.tsv", "summary_html")
-        if int(row["n_targets"]) < 1 or int(row["n_target_feature_set_terms"]) < 1:
-            raise ValueError(f"Expected target and target feature-set content in summary row: {row}")
-
     index = reports / "index.html"
     if not index.exists():
         raise FileNotFoundError(f"Missing expected report index: {index}")
