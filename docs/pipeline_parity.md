@@ -49,10 +49,10 @@ one G100 smoke or milestone run.
 | miRNA name extraction | Not yet replaced | Legacy `extract_mirna_names.R` only | Decide whether it remains necessary after normalized result schema |
 | Target retrieval/cache | Partly replaced | Offline `smallrna.target_enrichment_mode: table` consumes a local target TSV | Optional multimiR/cache mode remains deferred to avoid cluster network dependency by default |
 | Target enrichment | Implemented, table mode | `render_smallrna_target_enrichment.py`, `smallrna.target_enrichment_mode: table` | Add optional GO/KEGG/Reactome enrichment from local feature-set inputs if needed |
-| miRNA summary report | Planned | `smallrna_plan.tsv` stage `summary_report` | Reuse or adapt report rendering once miRNA DESeq2/enrichment outputs exist |
+| miRNA summary report | Implemented in lightweight form | `plan_smallrna_report.py`, `render_smallrna_report_summary.py`, `render_smallrna_report_index.py` | Compare layout and plot set against preferred legacy outputs |
 
 ## Immediate Implementation Order
 
 1. Update the env and exercise smallRNA adapter trimming/post-trim QC plus Bowtie index, contaminant depletion, miRBase alignment, miRNA featureCounts, and miRNA DESeq2 execution.
-2. Compare report plots and summaries against the legacy outputs you liked, then improve the new report layer.
+2. Compare smallRNA and RNA-seq report plots/summaries against the legacy outputs you liked, then improve the new report layer.
 3. Decide whether target-gene GO/KEGG/Reactome enrichment should be added from local tables before any network-backed cache.

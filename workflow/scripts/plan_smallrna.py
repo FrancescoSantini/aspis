@@ -373,10 +373,14 @@ def build_rows(args: argparse.Namespace) -> list[dict[str, str]]:
             stage="summary_report",
             status=report_status,
             reason=report_reason,
-            runner_status="planned",
+            runner_status="implemented",
             libraries=libraries,
             key_inputs=["differential/mirna_deseq2/deseq2_manifest.tsv"],
-            expected_outputs=["differential/reports/index.html"],
+            expected_outputs=[
+                "differential/reports/report_plan.tsv",
+                "differential/reports/summaries/summary_manifest.tsv",
+                "differential/reports/index.html",
+            ],
             parameters=[f"reports={args.reports}"],
         ),
     ]

@@ -15,14 +15,15 @@ MODE=dry-run bash tests/run_local_smokes.sh
 ```
 
 Dry-run mode also plans the smallRNA Bowtie index, contaminant-depletion,
-miRBase-alignment, miRNA featureCounts, miRNA DESeq2, and offline target-table
-enrichment contracts with
+miRBase-alignment, miRNA featureCounts, miRNA DESeq2, offline target-table
+enrichment, and miRNA report contracts with
 `config/aspis_smallrna_bowtie_index_smoke.yaml`,
 `config/aspis_smallrna_depletion_smoke.yaml`,
 `config/aspis_smallrna_alignment_smoke.yaml`,
 `config/aspis_smallrna_featurecounts_smoke.yaml`,
 `config/aspis_smallrna_deseq2_smoke.yaml`, and
-`config/aspis_smallrna_target_enrichment_smoke.yaml`. Run mode skips those configs
+`config/aspis_smallrna_target_enrichment_smoke.yaml`, and
+`config/aspis_smallrna_report_smoke.yaml`. Run mode skips those configs
 so development machines without `cutadapt`, Bowtie, samtools, featureCounts, or Rscript
 can still execute the local suite.
 
@@ -38,7 +39,7 @@ planning, the blocked isoform-switch execution contract, smallRNA
 materialization/branch QC/design plus local reference FASTA-to-SAF preparation,
 the explicit smallRNA parity plan, and the config-gated cutadapt/post-trim-QC,
 Bowtie-index, contaminant-depletion, miRBase-alignment, miRNA featureCounts,
-miRNA DESeq2, and offline miRNA target-table enrichment rule contracts,
+miRNA DESeq2, offline miRNA target-table enrichment, and miRNA report rule contracts,
 gene/transcript DESeq2 execution, and the lightweight differential report layer
 with volcano, PCA, heatmap, transformed-count, optional GMT or exported-TSV
 feature-set enrichment, and embedded HTML summary artifacts plus a project-level
@@ -47,8 +48,9 @@ be mapped back to gene IDs for gene-level feature-set enrichment. In run mode,
 the suite also validates core materialization, branch, alignment,
 quantification, smallRNA scaffold, and differential output contracts, exercises
 the ready isoform-switch runner handoff with a tiny mock R contrast script, then
-validates the report plan, plot, enrichment, summary, feature-set result, and
-index schemas emitted by the smoke fixtures.
+validates the RNA-seq report plan, plot, enrichment, summary, feature-set result,
+and index schemas plus the smallRNA target-enrichment and report contracts emitted
+by the smoke fixtures.
 It is a local confidence gate only; it does not replace a deliberate G100 SLURM
 smoke run after local contracts are stable. Use `tests/run_g100_smoke.sh` for
 that G100 check.

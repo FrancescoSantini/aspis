@@ -201,6 +201,11 @@ SMALLRNA_QUANTIFICATION_RUN = as_bool(SMALLRNA.get("quantification_run", False),
 SMALLRNA_DIFFERENTIAL_RUN = as_bool(SMALLRNA.get("differential_run", False), False)
 SMALLRNA_TARGET_ENRICHMENT_MODE = str(SMALLRNA.get("target_enrichment_mode", "disabled")).strip().lower()
 SMALLRNA_TARGET_ENRICHMENT_RUN = SMALLRNA_TARGET_ENRICHMENT_MODE == "table"
+SMALLRNA_REPORTS_RUN = (
+    as_bool(SMALLRNA.get("reports", True), True)
+    and SMALLRNA_DIFFERENTIAL_RUN
+)
+SMALLRNA_REPORT_TOP_N = SMALLRNA.get("report_top_n", SMALLRNA.get("target_top_n", 25))
 SMALLRNA_REFERENCE_RUN = as_bool(SMALLRNA.get("reference_run", False), False)
 SMALLRNA_BUILD_BOWTIE_INDEX = as_bool(SMALLRNA.get("build_bowtie_index", False), False)
 SMALLRNA_BUILD_CONTAMINANT_INDEX = as_bool(SMALLRNA.get("build_contaminant_index", False), False)
@@ -374,6 +379,23 @@ def deseq2_smoke_report_manifest_arg(level):
         return ""
     flag = "--gene-manifest" if level == "gene" else "--transcript-manifest"
     return optional_shell_arg(flag, deseq2_smoke_report_manifest(level))
+
+
+def smallrna_target_enrichment_manifest(project):
+    return f"{BRANCH_DIR}/smallrna/{project}/smallrna/differential/target_enrichment/target_manifest.tsv"
+
+
+def smallrna_target_enrichment_done(project):
+    return f"{BRANCH_DIR}/smallrna/{project}/smallrna/differential/target_enrichment/target_enrichment.done"
+
+
+def smallrna_target_manifest_flag(wildcards):
+    if not SMALLRNA_TARGET_ENRICHMENT_RUN:
+        return ""
+    return optional_shell_arg(
+        "--target-manifest",
+        smallrna_target_enrichment_manifest(wildcards.project),
+    )
 
 
 def local_fastq_inputs(wildcards):
@@ -575,6 +597,17 @@ def planned_branch_targets(wildcards):
                         [
                             f"{BRANCH_DIR}/{assay}/{project}/smallrna/differential/target_enrichment/target_manifest.tsv",
                             f"{BRANCH_DIR}/{assay}/{project}/smallrna/differential/target_enrichment/target_enrichment.done",
+                        ]
+                    )
+                if SMALLRNA_REPORTS_RUN:
+                    targets.extend(
+                        [
+                            f"{BRANCH_DIR}/{assay}/{project}/smallrna/differential/reports/report_plan.tsv",
+                            f"{BRANCH_DIR}/{assay}/{project}/smallrna/differential/reports/report_plan.done",
+                            f"{BRANCH_DIR}/{assay}/{project}/smallrna/differential/reports/summaries/summary_manifest.tsv",
+                            f"{BRANCH_DIR}/{assay}/{project}/smallrna/differential/reports/summaries/summary.done",
+                            f"{BRANCH_DIR}/{assay}/{project}/smallrna/differential/reports/index.html",
+                            f"{BRANCH_DIR}/{assay}/{project}/smallrna/differential/reports/report_index.done",
                         ]
                     )
     return targets
@@ -1496,6 +1529,87 @@ rule render_smallrna_target_enrichment:
           --done {output.done:q} \
           --min-overlap {params.min_overlap:q} \
           --top-n {params.top_n:q} \
+          > {log:q} 2>&1
+        """
+
+
+rule plan_smallrna_report:
+    input:
+        plan=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/smallrna_plan.tsv",
+        deseq2_manifest=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/differential/mirna_deseq2/deseq2_manifest.tsv",
+        deseq2_done=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/differential/mirna_deseq2/deseq2.done",
+        target_manifest=lambda wildcards: (
+            [smallrna_target_enrichment_manifest(wildcards.project)]
+            if SMALLRNA_TARGET_ENRICHMENT_RUN
+            else []
+        ),
+        target_done=lambda wildcards: (
+            [smallrna_target_enrichment_done(wildcards.project)]
+            if SMALLRNA_TARGET_ENRICHMENT_RUN
+            else []
+        )
+    output:
+        plan=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/differential/reports/report_plan.tsv",
+        done=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/differential/reports/report_plan.done"
+    params:
+        outdir=lambda wildcards: f"{BRANCH_DIR}/smallrna/{wildcards.project}/smallrna/differential/reports",
+        target_manifest_flag=smallrna_target_manifest_flag
+    log:
+        "logs/branches/smallrna/{project}.smallrna_report_plan.log"
+    shell:
+        r"""
+        mkdir -p logs/branches/smallrna
+        python3 workflow/scripts/plan_smallrna_report.py \
+          --smallrna-plan {input.plan:q} \
+          --deseq2-manifest {input.deseq2_manifest:q} \
+          {params.target_manifest_flag} \
+          --project {wildcards.project:q} \
+          --outdir {params.outdir:q} \
+          --output {output.plan:q} \
+          --done {output.done:q} \
+          > {log:q} 2>&1
+        """
+
+
+rule render_smallrna_report_summaries:
+    input:
+        plan=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/differential/reports/report_plan.tsv",
+        plan_done=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/differential/reports/report_plan.done"
+    output:
+        manifest=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/differential/reports/summaries/summary_manifest.tsv",
+        done=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/differential/reports/summaries/summary.done"
+    params:
+        top_n=SMALLRNA_REPORT_TOP_N
+    log:
+        "logs/branches/smallrna/{project}.smallrna_report_summaries.log"
+    shell:
+        r"""
+        mkdir -p logs/branches/smallrna
+        python3 workflow/scripts/render_smallrna_report_summary.py \
+          --report-plan {input.plan:q} \
+          --manifest {output.manifest:q} \
+          --done {output.done:q} \
+          --top-n {params.top_n:q} \
+          > {log:q} 2>&1
+        """
+
+
+rule render_smallrna_report_index:
+    input:
+        manifest=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/differential/reports/summaries/summary_manifest.tsv",
+        summaries_done=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/differential/reports/summaries/summary.done"
+    output:
+        index=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/differential/reports/index.html",
+        done=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/differential/reports/report_index.done"
+    log:
+        "logs/branches/smallrna/{project}.smallrna_report_index.log"
+    shell:
+        r"""
+        mkdir -p logs/branches/smallrna
+        python3 workflow/scripts/render_smallrna_report_index.py \
+          --summary-manifest {input.manifest:q} \
+          --output {output.index:q} \
+          --done {output.done:q} \
           > {log:q} 2>&1
         """
 

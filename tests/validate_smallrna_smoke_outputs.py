@@ -20,7 +20,7 @@ EXPECTED_STAGES = {
     "featurecounts_mirna": ("blocked", "implemented"),
     "deseq2_mirna": ("blocked", "implemented"),
     "mirna_target_enrichment": ("blocked", "planned"),
-    "summary_report": ("blocked", "planned"),
+    "summary_report": ("blocked", "implemented"),
 }
 
 
