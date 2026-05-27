@@ -107,6 +107,14 @@ GMT files.
 
 Start with a dry-run:
 
+The G100 helper first runs a login-node preflight against the project
+config and intake sheet. It checks local FASTQ/reference paths, assay
+labels, path-safe IDs, single-end smallRNA layout, configured design
+columns, differential replicate counts, miRBase/contaminant/residual
+reference settings, and optional target/feature-set files before
+submitting Snakemake jobs. Set `PREFLIGHT=0` only when you need to debug
+Snakemake itself despite a known preflight warning.
+
 ```bash
 conda activate aspis-smk9
 cd ~/aspis
