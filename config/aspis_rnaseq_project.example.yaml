@@ -1,0 +1,155 @@
+# ASPIS RNA-seq real-project configuration template.
+#
+# Copy this file to config/aspis_rnaseq_<project>.yaml and replace all
+# /path/to/... entries before running. This template is intentionally separate
+# from the toy smoke configs under config/aspis_*_smoke.yaml.
+
+intake: config/intake_rnaseq_project.example.tsv
+
+paths:
+  raw_dir: work/rnaseq_project/raw
+  metadata_dir: meta/rnaseq_project/materialized
+  manifest: meta/rnaseq_project/materialized_manifest.tsv
+  analysis_plan: meta/rnaseq_project/analysis_plan.tsv
+  environment_report: meta/rnaseq_project/environment_report.tsv
+  sra_cache_dir: cache/rnaseq_project/sra
+  scratch_dir: work/rnaseq_project/tmp
+  branch_dir: results/rnaseq_project/branches
+
+materialization:
+  local_link_mode: symlink
+  sra_max_size: 80G
+  sra_spot_limit: 0
+  validate_sra: true
+  public_metadata_mode: auto
+  ena_api_url: https://www.ebi.ac.uk/ena/portal/api/filereport
+  public_metadata_timeout: 60
+
+planning:
+  allow_unclassified: false
+
+design:
+  condition_col: condition
+  control_label: control
+  covariates:
+    - time_h
+  min_condition_groups: 2
+
+fastq_inspection:
+  max_records: 100000
+
+fastqc:
+  command: fastqc
+  threads: 2
+  extra_args: ""
+
+multiqc:
+  command: multiqc
+  extra_args: ""
+
+rnaseq_preprocess:
+  command: fastp
+  threads: 4
+  extra_args: ""
+
+rnaseq_alignment:
+  run: true
+  aligner: star
+  hisat2_command: hisat2
+  hisat2_build_command: hisat2-build
+  star_command: STAR
+  samtools_command: samtools
+  # Set this empty when using a prebuilt STAR/HISAT2 index.
+  reference_fasta: /path/to/genome.fa
+  hisat2_index_prefix: ""
+  star_genome_dir: work/rnaseq_project/reference/star
+  annotation_gtf: /path/to/annotation.gtf
+  strandness: ""
+  threads: 8
+  index_threads: 16
+  extra_args: ""
+  star_sjdb_overhang: 99
+  star_genome_sa_index_nbases: ""
+  star_extra_index_args: ""
+  star_tmp_dir: ""
+
+rnaseq_quantification:
+  run: true
+  transcriptome_mode: reference_guided_novel
+  gene_counter: featurecounts
+  featurecounts_command: featureCounts
+  stringtie_command: stringtie
+  gffcompare_command: gffcompare
+  reference_fasta: /path/to/genome.fa
+  annotation_gtf: /path/to/annotation.gtf
+  read_length: 100
+  threads: 8
+  featurecounts_threads: 8
+  stringtie_threads: 8
+  featurecounts_single_extra_args: ""
+  featurecounts_paired_extra_args: "-p --countReadPairs"
+  featurecounts_extra_args: ""
+  stringtie_strandness: ""
+  stringtie_assembly_extra_args: ""
+  stringtie_merge_extra_args: ""
+  stringtie_quant_extra_args: ""
+  known_codes_strict: "=,j"
+  known_codes_lenient: "=,j,c,o"
+  gene_type_view: strict
+
+rnaseq_differential:
+  run: true
+  method: deseq2
+  levels:
+    - gene
+    - transcript
+  reports: true
+  report_top_n: 50
+  report_feature_sets: ""
+  report_feature_set_tables: ""
+  report_feature_set_min_overlap: 2
+  report_feature_set_top_n: 20
+  rscript_command: Rscript
+  deseq2_script: workflow/scripts/run_deseq2_feature.R
+  isoform_switch_script: workflow/scripts/run_isoform_switch_contrast.R
+  isoform_switch_gene_expr: 1.0
+  isoform_switch_isoform_expr: 1.0
+  isoform_switch_padj: 0.1
+  isoform_switch_dif: 0.1
+  isoform_switch_max_genes: 30
+  isoform_switch_genome_object: ""
+  condition_col: condition
+  control_label: control
+  contrast_by:
+    - time_h
+  min_replicates_per_group: 2
+  min_count: 10
+  padj: 0.1
+  log2fc: 1.0
+
+execution:
+  default_partition: g100_usr_prod
+  download_partition: g100_all_serial
+
+environment:
+  required_tools:
+    - python3
+    - snakemake
+    - fastqc
+    - multiqc
+  rnaseq_required_tools:
+    - fastp
+  rnaseq_alignment_required_tools: auto
+  rnaseq_quantification_required_tools:
+    - featureCounts
+    - stringtie
+    - gffcompare
+  rnaseq_differential_required_tools:
+    - Rscript
+  sra_required_tools:
+    - prefetch
+    - fasterq-dump
+  sra_limited_required_tools:
+    - fastq-dump
+  optional_tools:
+    - vdb-validate
