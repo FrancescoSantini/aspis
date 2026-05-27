@@ -586,6 +586,38 @@ On a successful real run, inspect the compact summary:
 cat results/deseq2_smoke/g100_deseq2_smoke_summary.tsv
 ```
 
+Use the smallRNA G100 helper when the miRNA path or report layer changes. It is
+a dry-run contract gate by default: it plans the tiny smallRNA fixture through
+cutadapt, contaminant depletion, miRBase Bowtie alignment, miRNA featureCounts,
+miRNA DESeq2, target enrichment, target-gene feature-set enrichment, report
+plots, summaries, and the report index without submitting jobs:
+
+```bash
+bash tests/run_g100_smallrna_smoke.sh ELIX6_santini
+```
+
+The smallRNA helper target is:
+
+```text
+results/smallrna_report_smoke/branches/smallrna/ASPIS_SMALLRNA_TEST/smallrna/differential/reports/report_index.done
+```
+
+By default, this helper uses `MODE=dry-run` and `FORCE_MODE=plan` for the
+canonical target. That reruns the cheap smallRNA/report planning rules in the
+planned DAG, so stale report contracts from older checkouts are not silently
+accepted. Use a real run only after confirming the G100 environment has the
+smallRNA tools (`cutadapt`, Bowtie, samtools, featureCounts, Rscript/DESeq2):
+
+```bash
+MODE=run bash tests/run_g100_smallrna_smoke.sh ELIX6_santini
+```
+
+On a successful real run, inspect:
+
+```bash
+cat results/smallrna_report_smoke/g100_smallrna_smoke_summary.tsv
+```
+
 Do not use real SLURM submissions for routine development. Keep development and
 fixture tests local with `--cores 1`; reserve SLURM for final dry-runs, account
 and partition checks, and milestone smoke tests.

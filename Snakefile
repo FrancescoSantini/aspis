@@ -1655,10 +1655,39 @@ rule plan_smallrna_report:
         """
 
 
-rule render_smallrna_report_summaries:
+rule render_smallrna_report_plots:
     input:
         plan=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/differential/reports/report_plan.tsv",
         plan_done=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/differential/reports/report_plan.done"
+    output:
+        manifest=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/differential/reports/plots/plots_manifest.tsv",
+        done=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/differential/reports/plots/plots.done"
+    params:
+        rscript=SMALLRNA.get("rscript_command", "Rscript"),
+        top_n=SMALLRNA_REPORT_TOP_N,
+        padj=SMALLRNA.get("padj", 0.1),
+        log2fc=SMALLRNA.get("log2fc", 1.0)
+    log:
+        "logs/branches/smallrna/{project}.smallrna_report_plots.log"
+    shell:
+        r"""
+        mkdir -p logs/branches/smallrna
+        {params.rscript:q} workflow/scripts/render_rnaseq_differential_plots.R \
+          --plan {input.plan:q} \
+          --manifest {output.manifest:q} \
+          --done {output.done:q} \
+          --top-n {params.top_n:q} \
+          --padj {params.padj:q} \
+          --log2fc {params.log2fc:q} \
+          > {log:q} 2>&1
+        """
+
+
+rule render_smallrna_report_summaries:
+    input:
+        plan=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/differential/reports/report_plan.tsv",
+        plan_done=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/differential/reports/report_plan.done",
+        plots_done=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/differential/reports/plots/plots.done"
     output:
         manifest=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/differential/reports/summaries/summary_manifest.tsv",
         done=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/differential/reports/summaries/summary.done"
