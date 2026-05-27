@@ -1,9 +1,9 @@
 # ASPIS local smallRNA report contract smoke-test configuration.
 #
 # This config is intended for dry-runs: it proves the cutadapt -> contaminant
-# depletion -> miRBase alignment -> miRNA DESeq2 -> target enrichment -> report
-# rule chain without requiring external smallRNA tools on every development
-# machine.
+# depletion -> miRBase alignment -> miRNA DESeq2 -> target enrichment ->
+# target-gene feature-set enrichment -> report rule chain without requiring
+# external smallRNA tools on every development machine.
 
 intake: config/intake_smallrna_smoke.tsv
 
@@ -76,6 +76,9 @@ smallrna:
   target_table: tests/reference/smallrna_targets_toy.tsv
   target_min_overlap: 1
   target_top_n: 20
+  target_feature_set_tables: tests/reference/smallrna_target_featuresets_toy.tsv
+  target_feature_set_min_overlap: 1
+  target_feature_set_top_n: 20
   reports: true
   report_top_n: 20
   condition_col: condition
