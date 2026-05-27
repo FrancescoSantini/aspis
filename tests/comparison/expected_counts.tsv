@@ -1,0 +1,4 @@
+Geneid	description	control_1	control_2	treated_1
+geneA	alpha	10	11	24
+geneB	beta	0	1	2
+geneC	gamma	5	5	5
