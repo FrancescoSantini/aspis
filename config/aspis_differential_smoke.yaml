@@ -125,6 +125,9 @@ rnaseq_differential:
   isoform_switch_dif: 0.1
   isoform_switch_max_genes: 30
   isoform_switch_genome_object: ""
+  isoform_switch_reports: true
+  isoform_switch_report_top_n: 10
+  isoform_switch_functional_annotation_tables: []
   condition_col: condition
   control_label: control
   design_formula: ""
