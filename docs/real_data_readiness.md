@@ -190,3 +190,9 @@ Then inspect branch-level reports under the project result directory. They
 record executable paths, detected versions, configured minimum/recommended
 versions, and fail-fast status. A missing required tool should block the
 corresponding rule before expensive work starts.
+
+ASPIS writes a provenance bundle for each real-project branch under the branch
+`provenance/` directory. Inspect `biological_context.tsv` after a dry-run
+or partial run has completed enough upstream outputs; it summarizes the
+design, configured biological references, quantification layers, and
+differential/report manifests without duplicating large data files.

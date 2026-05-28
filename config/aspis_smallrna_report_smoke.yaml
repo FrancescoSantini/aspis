@@ -97,6 +97,10 @@ smallrna:
   padj: 0.1
   log2fc: 1.0
 
+provenance:
+  # Build a lightweight per-branch bundle with run, design, and biological context.
+  run: true
+
 environment:
   required_tools:
     - python3

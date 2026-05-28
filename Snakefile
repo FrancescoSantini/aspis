@@ -27,6 +27,7 @@ RNASEQ_DIFFERENTIAL = config.get("rnaseq_differential", {})
 SMALLRNA = config.get("smallrna", {})
 DESEQ2_SMOKE = config.get("deseq2_smoke", {})
 EXECUTION = config.get("execution", {})
+PROVENANCE = config.get("provenance", {})
 ENVIRONMENT = config.get("environment", {})
 
 
@@ -58,6 +59,8 @@ MANIFEST = PATHS.get("manifest", "meta/materialized_manifest.tsv")
 ANALYSIS_PLAN = PATHS.get("analysis_plan", "meta/analysis_plan.tsv")
 ENVIRONMENT_REPORT = PATHS.get("environment_report", "meta/environment_report.tsv")
 EXECUTION_REPORT = PATHS.get("execution_report", "meta/execution_report.tsv")
+RUN_CONFIGFILE = os.environ.get("ASPIS_CONFIGFILE", "config/aspis.yaml")
+PREFLIGHT_REPORT = os.environ.get("ASPIS_PREFLIGHT_REPORT", "")
 BRANCH_DIR = PATHS.get("branch_dir", "results/branches")
 SRA_CACHE_DIR = PATHS.get("sra_cache_dir", "cache/sra")
 SCRATCH_DIR = PATHS.get("scratch_dir", "work/tmp")
@@ -70,6 +73,7 @@ DESEQ2_SMOKE_REPORT_DIR = DESEQ2_SMOKE.get(
     "report_outdir",
     "results/deseq2_smoke/reports",
 )
+PROVENANCE_RUN = as_bool(PROVENANCE.get("run", True), True)
 RNASEQ_ALIGNER = RNASEQ_ALIGNMENT.get("aligner", "star").strip().lower()
 RNASEQ_ALIGNMENT_REFERENCE_FASTA = RNASEQ_ALIGNMENT.get("reference_fasta", "")
 RNASEQ_HISAT2_INDEX_PREFIX = RNASEQ_ALIGNMENT.get("hisat2_index_prefix", "")
@@ -524,6 +528,229 @@ def local_fastq_inputs(wildcards):
     return files
 
 
+
+def branch_provenance_outputs(assay, project):
+    outdir = f"{BRANCH_DIR}/{assay}/{project}/provenance"
+    return [
+        f"{outdir}/provenance_manifest.tsv",
+        f"{outdir}/biological_context.tsv",
+        f"{outdir}/config_snapshot.yaml",
+        f"{outdir}/intake_snapshot.tsv",
+        f"{outdir}/provenance.done",
+    ]
+
+
+def branch_provenance_inputs(wildcards):
+    assay = wildcards.assay
+    project = wildcards.project
+    base = f"{BRANCH_DIR}/{assay}/{project}"
+    inputs = [
+        INTAKE,
+        MANIFEST,
+        ANALYSIS_PLAN,
+        ENVIRONMENT_REPORT,
+        EXECUTION_REPORT,
+        f"{base}/samples.tsv",
+        f"{base}/materialized_manifest.tsv",
+        f"{base}/fastq_inspection.tsv",
+        f"{base}/fastqc/fastqc_manifest.tsv",
+        f"{base}/multiqc/multiqc.done",
+        f"{base}/design.tsv",
+    ]
+    if Path(RUN_CONFIGFILE).is_file():
+        inputs.append(RUN_CONFIGFILE)
+    if assay == "rnaseq":
+        inputs.extend(
+            [
+                f"{base}/preprocess/environment_report.tsv",
+                f"{base}/preprocess/preprocessed_samples.tsv",
+                f"{base}/preprocess/preprocess.done",
+                f"{base}/preprocess/fastq_inspection.tsv",
+                f"{base}/preprocess/fastqc/fastqc_manifest.tsv",
+                f"{base}/preprocess/multiqc/multiqc.done",
+                f"{base}/alignment/alignment_plan.tsv",
+            ]
+        )
+        if RNASEQ_ALIGNMENT.get("run", False):
+            inputs.extend(
+                [
+                    f"{base}/alignment/environment_report.tsv",
+                    f"{base}/alignment/aligned_samples.tsv",
+                    f"{base}/alignment/alignment.done",
+                    f"{base}/alignment/qc/alignment_qc_manifest.tsv",
+                    f"{base}/alignment/qc/alignment_qc.done",
+                    f"{base}/alignment/qc/multiqc/multiqc.done",
+                ]
+            )
+            if RNASEQ_QUANTIFICATION.get("run", False):
+                inputs.extend(
+                    [
+                        f"{base}/quantification/environment_report.tsv",
+                        f"{base}/quantification/quantification_plan.tsv",
+                        f"{base}/quantification/featurecounts/gene_counts.tsv",
+                        f"{base}/quantification/featurecounts/gene_metadata.tsv",
+                        f"{base}/quantification/featurecounts/featurecounts_manifest.tsv",
+                        f"{base}/quantification/featurecounts/featurecounts.done",
+                        f"{base}/quantification/stringtie/assembly_manifest.tsv",
+                        f"{base}/quantification/stringtie/assembly.done",
+                        f"{base}/quantification/stringtie/merge/merged.gtf",
+                        f"{base}/quantification/stringtie/merge/merge.done",
+                        f"{base}/quantification/gffcompare/annotated.gtf",
+                        f"{base}/quantification/gffcompare/tracking.tsv",
+                        f"{base}/quantification/gffcompare/merged.tmap",
+                        f"{base}/quantification/gffcompare/gffcompare.done",
+                        f"{base}/quantification/stringtie/quant_manifest.tsv",
+                        f"{base}/quantification/stringtie/quantification.done",
+                        f"{base}/quantification/counts/transcript_counts.tsv",
+                        f"{base}/quantification/counts/transcript_metadata.tsv",
+                        f"{base}/quantification/counts/transcript_counts.done",
+                        f"{base}/quantification/counts/quantification.done",
+                    ]
+                )
+                if RNASEQ_DIFFERENTIAL.get("run", False):
+                    inputs.extend(
+                        [
+                            f"{base}/differential/environment_report.tsv",
+                            f"{base}/differential/differential_plan.tsv",
+                        ]
+                    )
+                    if "gene" in RNASEQ_DIFFERENTIAL_LEVELS:
+                        inputs.extend(
+                            [
+                                f"{base}/differential/gene_deseq2/contrast_plan.tsv",
+                                f"{base}/differential/gene_deseq2/deseq2_manifest.tsv",
+                                f"{base}/differential/gene_deseq2/deseq2.done",
+                            ]
+                        )
+                    if "transcript" in RNASEQ_DIFFERENTIAL_LEVELS:
+                        inputs.extend(
+                            [
+                                f"{base}/differential/transcript_deseq2/contrast_plan.tsv",
+                                f"{base}/differential/transcript_deseq2/deseq2_manifest.tsv",
+                                f"{base}/differential/transcript_deseq2/deseq2.done",
+                            ]
+                        )
+                    if "isoform_switch" in RNASEQ_DIFFERENTIAL_LEVELS:
+                        inputs.extend(
+                            [
+                                f"{base}/differential/isoform_switch/contrast_plan.tsv",
+                                f"{base}/differential/isoform_switch/isoform_switch_manifest.tsv",
+                                f"{base}/differential/isoform_switch/isoform_switch.done",
+                            ]
+                        )
+                    if RNASEQ_DIFFERENTIAL_REPORTS_ENABLED:
+                        inputs.extend(
+                            [
+                                f"{base}/differential/reports/report_plan.tsv",
+                                f"{base}/differential/reports/report_plan.done",
+                                f"{base}/differential/reports/plots/plots_manifest.tsv",
+                                f"{base}/differential/reports/plots/plots.done",
+                                f"{base}/differential/reports/enrichment/enrichment_manifest.tsv",
+                                f"{base}/differential/reports/enrichment/enrichment.done",
+                                f"{base}/differential/reports/summaries/summary_manifest.tsv",
+                                f"{base}/differential/reports/summaries/summary.done",
+                                f"{base}/differential/reports/asset_manifest.tsv",
+                                f"{base}/differential/reports/report_index.done",
+                            ]
+                        )
+    if assay == "smallrna" and SMALLRNA.get("run", False):
+        small = f"{base}/smallrna"
+        inputs.extend(
+            [
+                f"{small}/environment_report.tsv",
+                f"{small}/smallrna_plan.tsv",
+            ]
+        )
+        inputs.extend(SMALLRNA_REFERENCE_TARGETS)
+        for reference_artifact in (
+            SMALLRNA_BOWTIE_INDEX_DONE,
+            SMALLRNA_CONTAMINANT_INDEX_DONE,
+            SMALLRNA_RESIDUAL_GENOME_INDEX_DONE,
+        ):
+            if reference_artifact:
+                inputs.append(reference_artifact)
+        if SMALLRNA_PREPROCESS_RUN:
+            inputs.extend(
+                [
+                    f"{small}/preprocess/trimmed_samples.tsv",
+                    f"{small}/preprocess/cutadapt_manifest.tsv",
+                    f"{small}/preprocess/preprocess.done",
+                    f"{small}/preprocess/fastq_inspection.tsv",
+                    f"{small}/preprocess/fastqc/fastqc_manifest.tsv",
+                    f"{small}/preprocess/multiqc/multiqc.done",
+                ]
+            )
+        if SMALLRNA_DEPLETION_RUN:
+            inputs.extend(
+                [
+                    f"{small}/depletion/depleted_samples.tsv",
+                    f"{small}/depletion/depletion_manifest.tsv",
+                    f"{small}/depletion/depletion.done",
+                ]
+            )
+        if SMALLRNA_ALIGNMENT_RUN:
+            inputs.extend(
+                [
+                    f"{small}/alignment/aligned_samples.tsv",
+                    f"{small}/alignment/alignment_manifest.tsv",
+                    f"{small}/alignment/alignment.done",
+                ]
+            )
+        if SMALLRNA_RESIDUAL_RUN:
+            inputs.extend(
+                [
+                    f"{small}/residual_genome/residual_samples.tsv",
+                    f"{small}/residual_genome/residual_manifest.tsv",
+                    f"{small}/residual_genome/biotype_counts.tsv",
+                    f"{small}/residual_genome/feature_counts.tsv",
+                    f"{small}/residual_genome/residual.done",
+                ]
+            )
+        if SMALLRNA_QUANTIFICATION_RUN:
+            inputs.extend(
+                [
+                    f"{small}/quantification/mirna_counts.tsv",
+                    f"{small}/quantification/mirna_metadata.tsv",
+                    f"{small}/quantification/featurecounts_manifest.tsv",
+                    f"{small}/quantification/featurecounts.done",
+                ]
+            )
+        if SMALLRNA_DIFFERENTIAL_RUN:
+            inputs.extend(
+                [
+                    f"{small}/differential/mirna_deseq2/contrast_plan.tsv",
+                    f"{small}/differential/mirna_deseq2/deseq2_manifest.tsv",
+                    f"{small}/differential/mirna_deseq2/deseq2.done",
+                ]
+            )
+        if SMALLRNA_TARGET_ENRICHMENT_RUN:
+            inputs.extend(
+                [
+                    smallrna_target_enrichment_manifest(project),
+                    smallrna_target_enrichment_done(project),
+                ]
+            )
+        if SMALLRNA_TARGET_FEATURE_SET_RUN:
+            inputs.extend(
+                [
+                    smallrna_target_feature_set_manifest(project),
+                    smallrna_target_feature_set_done(project),
+                ]
+            )
+        if SMALLRNA_REPORTS_RUN:
+            inputs.extend(
+                [
+                    f"{small}/differential/reports/report_plan.tsv",
+                    f"{small}/differential/reports/report_plan.done",
+                    f"{small}/differential/reports/summaries/summary_manifest.tsv",
+                    f"{small}/differential/reports/summaries/summary.done",
+                    f"{small}/differential/reports/asset_manifest.tsv",
+                    f"{small}/differential/reports/report_index.done",
+                ]
+            )
+    return inputs
+
+
 def planned_branch_targets(wildcards):
     plan_path = checkpoints.build_analysis_plan.get().output[0]
     targets = []
@@ -747,6 +974,8 @@ def planned_branch_targets(wildcards):
                             f"{BRANCH_DIR}/{assay}/{project}/smallrna/differential/reports/report_index.done",
                         ]
                     )
+            if PROVENANCE_RUN:
+                targets.extend(branch_provenance_outputs(assay, project))
     return targets
 
 
@@ -796,7 +1025,7 @@ def workflow_targets(wildcards):
     return targets
 
 
-localrules: all, check_environment, check_execution_config, assay_branch_ready, build_branch_design
+localrules: all, check_environment, check_execution_config, assay_branch_ready, build_branch_design, build_branch_provenance_bundle
 
 
 rule all:
@@ -856,6 +1085,42 @@ rule check_execution_config:
           --runtime {params.runtime:q} --runtime-source {params.runtime_source:q} \
           --mem-mb {params.mem_mb:q} --mem-mb-source {params.mem_mb_source:q} \
           --disk-mb {params.disk_mb:q} --disk-mb-source {params.disk_mb_source:q} \
+          > {log:q} 2>&1
+        """
+
+
+rule build_branch_provenance_bundle:
+    input:
+        branch_provenance_inputs
+    output:
+        manifest=f"{BRANCH_DIR}" + "/{assay}/{project}/provenance/provenance_manifest.tsv",
+        summary=f"{BRANCH_DIR}" + "/{assay}/{project}/provenance/biological_context.tsv",
+        config_snapshot=f"{BRANCH_DIR}" + "/{assay}/{project}/provenance/config_snapshot.yaml",
+        intake_snapshot=f"{BRANCH_DIR}" + "/{assay}/{project}/provenance/intake_snapshot.tsv",
+        done=f"{BRANCH_DIR}" + "/{assay}/{project}/provenance/provenance.done"
+    params:
+        outdir=f"{BRANCH_DIR}" + "/{assay}/{project}/provenance",
+        configfile=RUN_CONFIGFILE,
+        intake=INTAKE,
+        preflight_report=PREFLIGHT_REPORT
+    log:
+        "logs/branches/{assay}/{project}.provenance.log"
+    shell:
+        r"""
+        mkdir -p logs/branches/{wildcards.assay}
+        python3 workflow/scripts/build_run_provenance_bundle.py \
+          --outdir {params.outdir:q} \
+          --manifest {output.manifest:q} \
+          --summary {output.summary:q} \
+          --config-snapshot {output.config_snapshot:q} \
+          --intake-snapshot {output.intake_snapshot:q} \
+          --done {output.done:q} \
+          --assay {wildcards.assay:q} \
+          --project {wildcards.project:q} \
+          --configfile {params.configfile:q} \
+          --intake {params.intake:q} \
+          --preflight-report {params.preflight_report:q} \
+          --artifacts {input:q} \
           > {log:q} 2>&1
         """
 
