@@ -145,6 +145,12 @@ manifest before the downstream branch DAG is known. After materialization has
 completed or existing materialized outputs are present, rerun the dry-run to see
 the full smallRNA DAG.
 
+ASPIS writes a provenance bundle for each smallRNA branch under the branch
+`provenance/` directory. Inspect `biological_context.tsv` after a dry-run
+or partial run has completed enough upstream outputs; it summarizes the
+design, configured biological references, quantification layers, and
+differential/report manifests without duplicating large data files.
+
 Run only after the DAG and resource requests look correct:
 
 ```bash
