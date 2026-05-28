@@ -226,6 +226,11 @@ def merged_rows(
                 "volcano_pdf": first_value(plots.get("volcano_pdf", ""), plan.get("volcano_pdf", "")),
                 "ma_pdf": first_value(plots.get("ma_pdf", ""), summary.get("ma_pdf", ""), plan.get("ma_pdf", "")),
                 "pca_pdf": first_value(plots.get("pca_pdf", ""), plan.get("pca_pdf", "")),
+                "sample_distance_pdf": first_value(
+                    plots.get("sample_distance_pdf", ""),
+                    summary.get("sample_distance_pdf", ""),
+                    plan.get("sample_distance_pdf", ""),
+                ),
                 "heatmap_pdf": first_value(plots.get("heatmap_pdf", ""), plan.get("heatmap_pdf", "")),
                 "vst_tsv": first_value(plots.get("vst_tsv", ""), plan.get("vst_tsv", "")),
                 "enrichment_manifest": first_value(
@@ -273,6 +278,7 @@ def render_table(rows: list[dict[str, str]], output: Path) -> str:
                 ("volcano", row["volcano_pdf"]),
                 ("MA", row["ma_pdf"]),
                 ("pca", row["pca_pdf"]),
+                ("sample distance", row.get("sample_distance_pdf", "")),
                 ("heatmap", row["heatmap_pdf"]),
             ],
             output,
@@ -418,6 +424,7 @@ ASSET_FIELDS = [
     ("plots", "volcano_pdf", "plot", "volcano_pdf"),
     ("plots", "ma_pdf", "plot", "ma_pdf"),
     ("plots", "pca_pdf", "plot", "pca_pdf"),
+    ("plots", "sample_distance_pdf", "plot", "sample_distance_pdf"),
     ("plots", "heatmap_pdf", "plot", "heatmap_pdf"),
     ("enrichment", "enrichment_manifest", "manifest", "enrichment_manifest"),
     ("enrichment", "ranked_features", "table", "ranked_features"),

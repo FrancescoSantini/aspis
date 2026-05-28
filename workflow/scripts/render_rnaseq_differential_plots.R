@@ -311,6 +311,29 @@ plot_pca <- function(transformed, path, title, coldata = NULL) {
   grDevices::dev.off()
 }
 
+plot_sample_distance <- function(transformed, path, title, coldata = NULL) {
+  if (ncol(transformed) < 2 || nrow(transformed) < 2) {
+    blank_pdf(path, title, "Sample-distance heatmap requires at least two samples and two features")
+    return()
+  }
+  distances <- as.matrix(stats::dist(t(transformed)))
+  if (!is.null(coldata) && "condition" %in% colnames(coldata)) {
+    order_index <- order(coldata[colnames(distances), "condition"], colnames(distances))
+    distances <- distances[order_index, order_index, drop = FALSE]
+  }
+  ensure_parent(path)
+  grDevices::pdf(path)
+  stats::heatmap(
+    distances,
+    symm = TRUE,
+    margins = c(8, 8),
+    main = title,
+    xlab = "sample",
+    ylab = "sample"
+  )
+  grDevices::dev.off()
+}
+
 plot_heatmap_panel <- function(transformed, title, top_n, coldata = NULL) {
   if (ncol(transformed) < 2 || nrow(transformed) < 2) {
     blank_panel(title, "Heatmap requires at least two samples and two features")
@@ -340,6 +363,14 @@ plot_heatmap <- function(transformed, groups, path, title, top_n, coldata = NULL
   }
 }
 
+optional_plot_path <- function(row, column, fallback_name) {
+  value <- row[[column]]
+  if (!is.null(value) && !is.na(value) && value != "") {
+    return(value)
+  }
+  file.path(dirname(row[["pca_pdf"]]), fallback_name)
+}
+
 manifest_columns <- c(
   "project",
   "level",
@@ -349,6 +380,7 @@ manifest_columns <- c(
   "volcano_pdf",
   "ma_pdf",
   "pca_pdf",
+  "sample_distance_pdf",
   "heatmap_pdf",
   "vst_tsv",
   "n_features",
@@ -366,6 +398,7 @@ render_row <- function(row, top_n, padj_cutoff, log2fc_cutoff, transcript_plot_g
       volcano_pdf = row[["volcano_pdf"]],
       ma_pdf = row[["ma_pdf"]],
       pca_pdf = row[["pca_pdf"]],
+      sample_distance_pdf = optional_plot_path(row, "sample_distance_pdf", "sample_distance.pdf"),
       heatmap_pdf = row[["heatmap_pdf"]],
       vst_tsv = row[["vst_tsv"]],
       n_features = 0,
@@ -379,10 +412,12 @@ render_row <- function(row, top_n, padj_cutoff, log2fc_cutoff, transcript_plot_g
   filtered <- read_tsv(row[["filtered"]])
   transformed <- transformed_counts_for_row(row)
   coldata <- read_coldata(row[["coldata"]], colnames(transformed))
+  sample_distance_pdf <- optional_plot_path(row, "sample_distance_pdf", "sample_distance.pdf")
   plot_groups <- plot_groups_for_results(results, transcript_plot_groups)
   plot_volcano(plot_groups, row[["volcano_pdf"]], paste(title, "volcano"), padj_cutoff, log2fc_cutoff)
   plot_ma(results, row[["ma_pdf"]], paste(title, "MA"), padj_cutoff, log2fc_cutoff)
   plot_pca(transformed, row[["pca_pdf"]], paste(title, "PCA"), coldata)
+  plot_sample_distance(transformed, sample_distance_pdf, paste(title, "sample distance"), coldata)
   plot_heatmap(transformed, plot_groups, row[["heatmap_pdf"]], paste(title, "heatmap"), top_n, coldata)
 
   data.frame(
@@ -394,6 +429,7 @@ render_row <- function(row, top_n, padj_cutoff, log2fc_cutoff, transcript_plot_g
     volcano_pdf = row[["volcano_pdf"]],
     ma_pdf = row[["ma_pdf"]],
     pca_pdf = row[["pca_pdf"]],
+    sample_distance_pdf = sample_distance_pdf,
     heatmap_pdf = row[["heatmap_pdf"]],
     vst_tsv = row[["vst_tsv"]],
     n_features = nrow(results),
@@ -460,6 +496,7 @@ main <- function() {
           volcano_pdf = row[["volcano_pdf"]],
           ma_pdf = row[["ma_pdf"]],
           pca_pdf = row[["pca_pdf"]],
+          sample_distance_pdf = optional_plot_path(row, "sample_distance_pdf", "sample_distance.pdf"),
           heatmap_pdf = row[["heatmap_pdf"]],
           vst_tsv = row[["vst_tsv"]],
           n_features = 0,
