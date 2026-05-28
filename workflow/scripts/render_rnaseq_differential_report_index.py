@@ -54,12 +54,15 @@ REQUIRED_ENRICHMENT_COLUMNS = {
     "down_features",
     "feature_set_results",
     "feature_set_plot",
+    "ranked_feature_set_results",
+    "ranked_feature_set_plot",
     "n_ranked",
     "n_significant",
     "n_up",
     "n_down",
     "n_feature_sets",
     "n_feature_set_terms",
+    "n_ranked_feature_set_terms",
 }
 REQUIRED_SUMMARY_COLUMNS = {
     "project",
@@ -89,6 +92,8 @@ def parse_args() -> argparse.Namespace:
         help="Differential enrichment manifest TSV",
     )
     parser.add_argument("--summary-manifest", required=True, help="Differential summary manifest TSV")
+    parser.add_argument("--biotype-html", default="", help="Optional RNA-seq biotype summary HTML")
+    parser.add_argument("--warnings-html", default="", help="Optional biological warnings HTML")
     parser.add_argument("--asset-manifest", required=True, help="Report asset inventory TSV")
     parser.add_argument("--output", required=True, help="Report index HTML")
     parser.add_argument("--done", required=True, help="Completion sentinel")
@@ -208,6 +213,7 @@ def merged_rows(
                 "n_down": first_value(summary.get("n_down", ""), enrichment.get("n_down", "")),
                 "n_feature_sets": enrichment.get("n_feature_sets", ""),
                 "n_feature_set_terms": enrichment.get("n_feature_set_terms", ""),
+                "n_ranked_feature_set_terms": enrichment.get("n_ranked_feature_set_terms", ""),
                 "summary_html": first_value(summary.get("summary_html", ""), plan.get("summary_html", "")),
                 "results": first_value(summary.get("results", ""), plan.get("results", "")),
                 "filtered": first_value(summary.get("filtered", ""), plan.get("filtered", "")),
@@ -226,6 +232,8 @@ def merged_rows(
                 "down_features": enrichment.get("down_features", ""),
                 "feature_set_results": enrichment.get("feature_set_results", ""),
                 "feature_set_plot": enrichment.get("feature_set_plot", ""),
+                "ranked_feature_set_results": enrichment.get("ranked_feature_set_results", ""),
+                "ranked_feature_set_plot": enrichment.get("ranked_feature_set_plot", ""),
             }
         )
     rows.sort(key=lambda row: (row["project"], row["level"], row["contrast_id"]))
@@ -272,6 +280,8 @@ def render_table(rows: list[dict[str, str]], output: Path) -> str:
                 ("down", row["down_features"]),
                 ("sets", row["feature_set_results"]),
                 ("plot", row["feature_set_plot"]),
+                ("ranked sets", row["ranked_feature_set_results"]),
+                ("ranked plot", row["ranked_feature_set_plot"]),
             ],
             output,
         )
@@ -287,6 +297,7 @@ def render_table(rows: list[dict[str, str]], output: Path) -> str:
             f"<td>{text_cell(row['n_up'])}</td>"
             f"<td>{text_cell(row['n_down'])}</td>"
             f"<td>{text_cell(row['n_feature_set_terms'])}</td>"
+            f"<td>{text_cell(row['n_ranked_feature_set_terms'])}</td>"
             f"<td>{artifacts}</td>"
             f"<td>{plots}</td>"
             f"<td>{enrichment}</td>"
@@ -296,7 +307,7 @@ def render_table(rows: list[dict[str, str]], output: Path) -> str:
     return "\n".join(body)
 
 
-def render_html(rows: list[dict[str, str]], output: Path) -> str:
+def render_html(rows: list[dict[str, str]], output: Path, biotype_html: str = "", warnings_html: str = "") -> str:
     project_names = sorted({row["project"] for row in rows})
     title = "RNA-seq differential report index"
     if len(project_names) == 1:
@@ -304,6 +315,14 @@ def render_html(rows: list[dict[str, str]], output: Path) -> str:
     ok = sum(1 for row in rows if row["status"] == "ok")
     blocked = sum(1 for row in rows if row["status"] == "blocked")
     failed = sum(1 for row in rows if row["status"] == "failed")
+    project_links = link_list(
+        [
+            ("biotype summary", biotype_html),
+            ("biological warnings", warnings_html),
+        ],
+        output,
+    )
+    project_links_html = f'<div class="counts">project resources: {project_links}</div>' if project_links else ""
     return f"""<!doctype html>
 <html lang="en">
 <head>
@@ -329,6 +348,7 @@ def render_html(rows: list[dict[str, str]], output: Path) -> str:
 <body>
   <h1>{html.escape(title)}</h1>
   <div class="counts">contrasts: {len(rows)}; ok: {ok}; blocked: {blocked}; failed: {failed}</div>
+  {project_links_html}
   <table>
     <thead>
       <tr>
@@ -340,7 +360,8 @@ def render_html(rows: list[dict[str, str]], output: Path) -> str:
         <th>significant</th>
         <th>up</th>
         <th>down</th>
-        <th>enriched terms</th>
+        <th>ORA terms</th>
+        <th>ranked terms</th>
         <th>artifacts</th>
         <th>plots</th>
         <th>enrichment</th>
@@ -384,6 +405,8 @@ ASSET_FIELDS = [
     ("enrichment", "down_features", "table", "down_features"),
     ("enrichment", "feature_set_results", "table", "feature_set_results"),
     ("enrichment", "feature_set_plot", "plot", "feature_set_plot"),
+    ("enrichment", "ranked_feature_set_results", "table", "ranked_feature_set_results"),
+    ("enrichment", "ranked_feature_set_plot", "plot", "ranked_feature_set_plot"),
 ]
 
 
@@ -441,7 +464,7 @@ def main() -> int:
     rows = merged_rows(plan_rows, plots_by_key, enrichment_by_key, summaries_by_key)
     output = Path(args.output)
     output.parent.mkdir(parents=True, exist_ok=True)
-    output.write_text(render_html(rows, output), encoding="utf-8")
+    output.write_text(render_html(rows, output, args.biotype_html, args.warnings_html), encoding="utf-8")
     write_asset_manifest(Path(args.asset_manifest), rows)
     write_done(Path(args.done), rows)
     return 0
