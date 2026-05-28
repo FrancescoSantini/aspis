@@ -127,6 +127,10 @@ execution:
   default_partition: g100_usr_prod
   download_partition: g100_all_serial
 
+provenance:
+  # Build a lightweight per-branch bundle with run, design, and biological context.
+  run: true
+
 environment:
   required_tools:
     - python3
