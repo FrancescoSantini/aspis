@@ -128,6 +128,16 @@ rnaseq_differential:
     - novel_locus
     - ambiguous
     - artifact
+  report_pca_color_columns:
+    - condition
+    - time
+    - time_h
+    - batch
+    - batch_id
+    - biospecimen
+    - biospecimen_id
+    - replicate
+    - replicate_id
   rscript_command: Rscript
   deseq2_script: workflow/scripts/run_deseq2_feature.R
   isoform_switch_script: workflow/scripts/run_isoform_switch_contrast.R
@@ -157,6 +167,7 @@ rnaseq_differential:
   min_count: 10
   padj: 0.1
   log2fc: 1.0
+  lfc_shrinkage: none
 
 rnaseq_dtu:
   # Optional event-level / differential transcript usage companion layer.

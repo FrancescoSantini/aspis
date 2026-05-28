@@ -22,6 +22,7 @@ REQUIRED_PLAN_COLUMNS = {
     "volcano_pdf",
     "ma_pdf",
     "pca_pdf",
+    "sample_distance_pdf",
     "heatmap_pdf",
     "enrichment_manifest",
     "summary_html",
@@ -36,6 +37,7 @@ MANIFEST_COLUMNS = [
     "results",
     "filtered",
     "ma_pdf",
+    "sample_distance_pdf",
     "n_features",
     "n_significant",
     "n_up",
@@ -184,15 +186,20 @@ def render_html(
         for key, value in metrics.items()
     )
     output = Path(row["summary_html"])
-    plots = "\n".join(
+    plot_panels = [
+        plot_panel("Volcano", row["volcano_pdf"], output),
+        plot_panel("MA", row["ma_pdf"], output),
+        plot_panel("PCA", row["pca_pdf"], output),
+    ]
+    if row.get("sample_distance_pdf", ""):
+        plot_panels.append(plot_panel("Sample Distance", row["sample_distance_pdf"], output))
+    plot_panels.extend(
         [
-            plot_panel("Volcano", row["volcano_pdf"], output),
-            plot_panel("MA", row["ma_pdf"], output),
-            plot_panel("PCA", row["pca_pdf"], output),
             plot_panel("Heatmap", row["heatmap_pdf"], output),
             enrichment_panel(resources, output),
         ]
     )
+    plots = "\n".join(plot_panels)
     artifacts = [
         ("Full DESeq2 results", row["results"]),
         ("Filtered DESeq2 results", row["filtered"]),
@@ -284,6 +291,7 @@ def render_ready_row(row: dict[str, str], top_n: int) -> dict[str, str]:
         "results": row["results"],
         "filtered": row["filtered"],
         "ma_pdf": row.get("ma_pdf", ""),
+        "sample_distance_pdf": row.get("sample_distance_pdf", ""),
         "n_features": str(len(result_rows)),
         "n_significant": str(len(filtered_rows)),
         "n_up": str(n_up),
@@ -306,6 +314,7 @@ def render_rows(plan_rows: list[dict[str, str]], top_n: int) -> list[dict[str, s
                     "results": row["results"],
                     "filtered": row["filtered"],
                     "ma_pdf": row.get("ma_pdf", ""),
+                    "sample_distance_pdf": row.get("sample_distance_pdf", ""),
                     "n_features": "0",
                     "n_significant": "0",
                     "n_up": "0",
