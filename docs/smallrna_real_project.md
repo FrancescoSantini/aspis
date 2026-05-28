@@ -37,9 +37,13 @@ Edit `config/aspis_smallrna_<project>.yaml`:
   protein-coding, unassigned, or other GTF biotypes.
 - `smallrna.target_table`: provide an offline miRNA-to-target TSV if target
   enrichment should run.
+- `smallrna.target_tables`: optionally provide additional target TSVs, for
+  example validated, predicted, conserved, and expressed target subsets.
 - `smallrna.target_feature_set_tables` or `smallrna.target_feature_sets`:
   provide local target-gene feature sets if report feature-set enrichment should
   run.
+- `mirna_mrna_integration.run`: enable only when the same project also has a
+  matched RNA-seq branch and shared sample identifiers for matching.
 - `design.model_formula` or `smallrna.design_formula`: use a DESeq2 formula
   such as `~ patient + condition` or `~ batch + condition` when the experiment
   is paired or batch-structured. Leave empty for `~ condition`.
@@ -102,7 +106,11 @@ before trusting differential contrasts.
 
 ## Target Tables
 
-`smallrna.target_table` must be a TSV. The miRNA column can be named one of:
+`smallrna.target_table` and `smallrna.target_tables` are local TSV contracts.
+Use `target_table` for one source, or `target_tables` for a list of sources.
+Each table may represent validated targets, predicted targets, conserved
+targets, or targets filtered to expressed RNA-seq genes. The miRNA column can be
+named one of:
 
 ```text
 mirna_id, mature_mirna_id, miRNA, mirna, mature_id
@@ -118,8 +126,12 @@ Optional target columns are:
 
 ```text
 target_symbol, target_gene, gene_symbol, target_entrez, EntrezID, entrez_id,
-database, db, source, evidence, support
+database, db, source, source_type, target_source_type, evidence_type, evidence,
+support
 ```
+
+`source` and `source_type` are propagated into target enrichment summaries and
+reports, so mixed target sources remain auditable.
 
 `smallrna.target_feature_set_tables` must be one or more comma-separated TSV
 files with required columns:
@@ -136,6 +148,30 @@ source, collection, description
 
 `smallrna.target_feature_sets` can instead point to one or more comma-separated
 GMT files.
+
+## miRNA-mRNA Integration
+
+When a project has both `smallrna` and `rnaseq` branches with the same project
+ID, ASPIS can add an optional inverse target-expression layer:
+
+```yaml
+mirna_mrna_integration:
+  run: true
+  match_columns:
+    - biospecimen_id
+  min_pairs: 2
+  min_abs_correlation: 0.0
+```
+
+The integration joins miRNA DESeq2 results, RNA-seq gene DESeq2 results,
+miRNA-target mappings, and normalized counts. It reports target pairs such as
+upregulated miRNA with downregulated target genes, plus sample-level Pearson
+correlations when the two assays can be matched. If no `match_columns` are
+present in both sample sheets, ASPIS falls back to shared `condition`,
+`replicate`, and `time_h` where available.
+
+This layer should be considered biologically interpretable only after real-data
+validation confirms the sample matching and target source choices.
 
 ## G100 Run
 
@@ -234,6 +270,8 @@ Important intermediate manifests are:
 <branch_dir>/smallrna/<PROJECT>/smallrna/quantification/sample_qc/sample_qc_metrics.tsv
 <branch_dir>/smallrna/<PROJECT>/smallrna/quantification/sample_qc/sample_correlations.tsv
 <branch_dir>/smallrna/<PROJECT>/smallrna/differential/mirna_deseq2/deseq2_manifest.tsv
+<branch_dir>/smallrna/<PROJECT>/smallrna/differential/target_enrichment/target_manifest.tsv
+<branch_dir>/smallrna/<PROJECT>/smallrna/differential/mirna_mrna_integration/mirna_mrna_manifest.tsv
 ```
 
 ## Legacy Comparison
