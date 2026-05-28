@@ -138,6 +138,16 @@ rnaseq_differential:
   # feature_id/feature_name/start_aa/end_aa/description. These can be
   # InterProScan, Pfam/hmmscan, SignalP/TM/localization, or user-curated tables.
   isoform_switch_functional_annotation_tables: []
+  # Optional command templates for advanced annotation tools. Templates may use
+  # {aa_fasta}, {nt_fasta}, {outdir}, and {tool_name}. Leave empty to only
+  # report tool availability and import precomputed annotation TSVs.
+  isoform_switch_interproscan_command: ""
+  isoform_switch_pfam_command: ""
+  isoform_switch_coding_potential_command: ""
+  isoform_switch_signalp_command: ""
+  isoform_switch_tm_command: ""
+  isoform_switch_localization_command: ""
+  isoform_switch_disorder_command: ""
   condition_col: condition
   control_label: control
   design_formula: ""

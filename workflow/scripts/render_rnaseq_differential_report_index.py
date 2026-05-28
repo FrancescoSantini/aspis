@@ -99,6 +99,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--isoform-switch-candidates", default="", help="Optional isoform-switch candidate table")
     parser.add_argument("--isoform-switch-events", default="", help="Optional isoform-switch event table")
     parser.add_argument("--isoform-switch-plots", default="", help="Optional isoform-switch plot manifest")
+    parser.add_argument("--isoform-switch-plots-pdf", default="", help="Optional isoform-switch multi-page plot PDF")
     parser.add_argument("--asset-manifest", required=True, help="Report asset inventory TSV")
     parser.add_argument("--output", required=True, help="Report index HTML")
     parser.add_argument("--done", required=True, help="Completion sentinel")
@@ -321,6 +322,7 @@ def render_html(
     isoform_switch_candidates: str = "",
     isoform_switch_events: str = "",
     isoform_switch_plots: str = "",
+    isoform_switch_plots_pdf: str = "",
 ) -> str:
     project_names = sorted({row["project"] for row in rows})
     title = "RNA-seq differential report index"
@@ -337,6 +339,7 @@ def render_html(
             ("isoform switch candidates", isoform_switch_candidates),
             ("isoform switch events", isoform_switch_events),
             ("isoform switch plots", isoform_switch_plots),
+            ("isoform switch PDF", isoform_switch_plots_pdf),
         ],
         output,
     )
@@ -515,6 +518,7 @@ def main() -> int:
             args.isoform_switch_candidates,
             args.isoform_switch_events,
             args.isoform_switch_plots,
+            args.isoform_switch_plots_pdf,
         ),
         encoding="utf-8",
     )
@@ -523,6 +527,7 @@ def main() -> int:
         ("candidate_table", "table", args.isoform_switch_candidates, "ok"),
         ("event_summary", "table", args.isoform_switch_events, "ok"),
         ("plot_manifest", "manifest", args.isoform_switch_plots, "ok"),
+        ("plots_pdf", "plot", args.isoform_switch_plots_pdf, "ok"),
     ]
     write_asset_manifest(Path(args.asset_manifest), rows, project_assets)
     write_done(Path(args.done), rows)
