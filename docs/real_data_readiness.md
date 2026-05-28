@@ -70,17 +70,29 @@ Preflight should fail before job submission when:
 
 ## 3. Dry-Run In Stages
 
+Set the SLURM account for the current user before using the G100 helpers:
+
+```bash
+export SLURM_ACCOUNT=<SLURM_ACCOUNT>
+export SLURM_PARTITION="${SLURM_PARTITION:-g100_usr_prod}"
+```
+
+`<SLURM_ACCOUNT>` must be the account allocated to the person running the job.
+The helpers also accept the account as their first positional argument. The
+partition defaults to `g100_usr_prod` for G100; set `SLURM_PARTITION` when a
+different partition is required.
+
 Start with dry-runs:
 
 ```bash
 MODE=dry-run bash tests/run_g100_rnaseq_project.sh \
-  your_slurm_account \
+  <SLURM_ACCOUNT> \
   config/aspis_rnaseq_<project>.yaml
 ```
 
 ```bash
 MODE=dry-run bash tests/run_g100_smallrna_project.sh \
-  your_slurm_account \
+  <SLURM_ACCOUNT> \
   config/aspis_smallrna_<project>.yaml
 ```
 
@@ -93,14 +105,14 @@ Use explicit targets to limit compute while checking a new project:
 ```bash
 TARGET=results/<project>/branches/rnaseq/<PROJECT>/preprocess/preprocess.done \
 MODE=run bash tests/run_g100_rnaseq_project.sh \
-  your_slurm_account \
+  <SLURM_ACCOUNT> \
   config/aspis_rnaseq_<project>.yaml
 ```
 
 ```bash
 TARGET=results/<project>/branches/smallrna/<PROJECT>/smallrna/preprocess/preprocess.done \
 MODE=run bash tests/run_g100_smallrna_project.sh \
-  your_slurm_account \
+  <SLURM_ACCOUNT> \
   config/aspis_smallrna_<project>.yaml
 ```
 

@@ -100,6 +100,6 @@ cluster dry-run is needed, keep it as a dry run:
 ```bash
 snakemake -n --workflow-profile profiles/slurm \
   --configfile config/aspis_sra_smoke.yaml \
-  --default-resources slurm_account=your_slurm_account \
+  --default-resources slurm_account=<SLURM_ACCOUNT> \
   --printshellcmds
 ```

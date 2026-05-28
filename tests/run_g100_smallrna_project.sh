@@ -6,11 +6,12 @@ MODE="${MODE:-dry-run}"
 FORCE_MODE="${FORCE_MODE:-none}"
 TARGET="${TARGET:-}"
 ACCOUNT="${SLURM_ACCOUNT:-}"
+PARTITION="${SLURM_PARTITION:-g100_usr_prod}"
 CONFIGFILE="${CONFIGFILE:-}"
 PREFLIGHT="${PREFLIGHT:-1}"
 PREFLIGHT_REPORT="${PREFLIGHT_REPORT:-}"
 
-if [[ $# -gt 0 && "${1}" != -* ]]; then
+if [[ $# -gt 0 && "${1}" != -* && ( -z "$ACCOUNT" || "${1}" == "$ACCOUNT" ) ]]; then
   ACCOUNT="$1"
   shift
 fi
@@ -65,6 +66,7 @@ fi
 
 echo "==> G100 smallRNA real-project run"
 echo "==> account: $ACCOUNT"
+echo "==> partition: $PARTITION"
 echo "==> config: $CONFIGFILE"
 echo "==> target: ${TARGET:-rule all}"
 echo "==> mode: $MODE"
@@ -86,7 +88,7 @@ fi
   "${EXTRA_ARGS[@]}" \
   --default-resources \
     "slurm_account=$ACCOUNT" \
-    slurm_partition=g100_usr_prod \
+    "slurm_partition=$PARTITION" \
     runtime=240 \
     mem_mb=8000 \
     disk_mb=50000 \

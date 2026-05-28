@@ -9,11 +9,12 @@ DEFAULT_RAW_TARGET="results/rnaseq_public_sra_g100/branches/rnaseq/ASPIS_PUBLIC_
 DEFAULT_PREPROCESS_TARGET="results/rnaseq_public_sra_g100/branches/rnaseq/ASPIS_PUBLIC_RNASEQ_SRA/preprocess/multiqc/multiqc.done"
 TARGET="${TARGET:-}"
 ACCOUNT="${SLURM_ACCOUNT:-}"
+PARTITION="${SLURM_PARTITION:-g100_usr_prod}"
 VALIDATE="${VALIDATE:-auto}"
 PREFLIGHT="${PREFLIGHT:-1}"
 PREFLIGHT_REPORT="${PREFLIGHT_REPORT:-logs/preflight/aspis_rnaseq_public_sra_g100.rnaseq.tsv}"
 
-if [[ $# -gt 0 && "${1}" != -* ]]; then
+if [[ $# -gt 0 && "${1}" != -* && ( -z "$ACCOUNT" || "${1}" == "$ACCOUNT" ) ]]; then
   ACCOUNT="$1"
   shift
 fi
@@ -61,6 +62,7 @@ fi
 
 echo "==> G100 public-SRA RNA-seq ingestion/preprocess milestone"
 echo "==> account: $ACCOUNT"
+echo "==> partition: $PARTITION"
 echo "==> config: $CONFIGFILE"
 echo "==> targets: ${TARGET_ARGS[*]}"
 echo "==> mode: $MODE"
@@ -82,7 +84,7 @@ fi
   "${EXTRA_ARGS[@]}" \
   --default-resources \
     "slurm_account=$ACCOUNT" \
-    slurm_partition=g100_usr_prod \
+    "slurm_partition=$PARTITION" \
     runtime=60 \
     mem_mb=4000 \
     disk_mb=10000 \
