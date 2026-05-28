@@ -493,6 +493,19 @@ account:
 saldo -b "$USER"
 ```
 
+In this documentation, `<SLURM_ACCOUNT>` is a placeholder for the active
+account returned by your allocation tooling. Do not copy another user's account
+name into a project config or helper command. You can pass the account as the
+first helper argument, or set it once in the shell:
+
+```bash
+export SLURM_ACCOUNT=<SLURM_ACCOUNT>
+export SLURM_PARTITION="${SLURM_PARTITION:-g100_usr_prod}"
+```
+
+The G100 helpers default to `g100_usr_prod`. Override `SLURM_PARTITION` only
+when your allocation or site policy requires a different submit partition.
+
 Then pass it at runtime. When using `--default-resources` on the command line,
 repeat the profile defaults as well as the account; otherwise Snakemake can
 replace the profile's partition/runtime/memory/disk defaults:
@@ -500,7 +513,7 @@ replace the profile's partition/runtime/memory/disk defaults:
 ```bash
 snakemake --workflow-profile profiles/slurm \
   --default-resources \
-    slurm_account=ELIX6_santini \
+    slurm_account=<SLURM_ACCOUNT> \
     slurm_partition=g100_usr_prod \
     runtime=60 \
     mem_mb=4000 \
@@ -524,7 +537,7 @@ Use `sbatch --test-only` for account/partition validation when possible. It asks
 SLURM whether the submission is valid without starting a job:
 
 ```bash
-sbatch --test-only -A ELIX6_santini -p g100_usr_prod \
+sbatch --test-only -A <SLURM_ACCOUNT> -p g100_usr_prod \
   -t 00:05:00 --mem=1000 --wrap="hostname"
 ```
 
@@ -533,7 +546,7 @@ For real SLURM execution:
 ```bash
 snakemake --workflow-profile profiles/slurm \
   --default-resources \
-    slurm_account=ELIX6_santini \
+    slurm_account=<SLURM_ACCOUNT> \
     slurm_partition=g100_usr_prod \
     runtime=60 \
     mem_mb=4000 \
@@ -546,8 +559,15 @@ sentinel, restores the full default resource set, and keeps the tiny STAR index
 resources small enough for a smoke test:
 
 ```bash
-MODE=dry-run bash tests/run_g100_smoke.sh ELIX6_santini
-bash tests/run_g100_smoke.sh ELIX6_santini
+MODE=dry-run bash tests/run_g100_smoke.sh <SLURM_ACCOUNT>
+bash tests/run_g100_smoke.sh <SLURM_ACCOUNT>
+```
+
+or, after exporting `SLURM_ACCOUNT`:
+
+```bash
+MODE=dry-run bash tests/run_g100_smoke.sh
+bash tests/run_g100_smoke.sh
 ```
 
 The helper target is:
@@ -591,7 +611,7 @@ and reference files, choose STAR or HISAT2, and start with:
 
 ```bash
 MODE=dry-run bash tests/run_g100_rnaseq_project.sh \
-  ELIX6_santini \
+  <SLURM_ACCOUNT> \
   config/aspis_rnaseq_<project>.yaml
 ```
 
@@ -604,8 +624,8 @@ or quantification. It runs the gene/transcript DESeq2 smoke and the lightweight
 report renderer through the SLURM profile:
 
 ```bash
-MODE=dry-run bash tests/run_g100_deseq2_smoke.sh ELIX6_santini
-bash tests/run_g100_deseq2_smoke.sh ELIX6_santini
+MODE=dry-run bash tests/run_g100_deseq2_smoke.sh <SLURM_ACCOUNT>
+bash tests/run_g100_deseq2_smoke.sh <SLURM_ACCOUNT>
 ```
 
 The DESeq2/report helper target is:
@@ -634,7 +654,7 @@ miRNA DESeq2, target enrichment, target-gene feature-set enrichment, report
 plots, summaries, and the report index without submitting jobs:
 
 ```bash
-bash tests/run_g100_smallrna_smoke.sh ELIX6_santini
+bash tests/run_g100_smallrna_smoke.sh <SLURM_ACCOUNT>
 ```
 
 The smallRNA helper target is:
@@ -650,7 +670,7 @@ accepted. Use a real run only after confirming the G100 environment has the
 smallRNA tools (`cutadapt`, Bowtie, samtools, featureCounts, Rscript/DESeq2):
 
 ```bash
-MODE=run bash tests/run_g100_smallrna_smoke.sh ELIX6_santini
+MODE=run bash tests/run_g100_smallrna_smoke.sh <SLURM_ACCOUNT>
 ```
 
 On a successful real run, inspect:
@@ -665,7 +685,7 @@ paths, and start with:
 
 ```bash
 MODE=dry-run bash tests/run_g100_smallrna_project.sh \
-  ELIX6_santini \
+  <SLURM_ACCOUNT> \
   config/aspis_smallrna_<project>.yaml
 ```
 

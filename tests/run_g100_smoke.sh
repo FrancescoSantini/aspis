@@ -6,10 +6,11 @@ MODE="${MODE:-run}"
 DEFAULT_TARGET="results/differential_smoke/branches/rnaseq/ASPIS_TEST/differential/differential_plan.tsv"
 TARGET="${TARGET:-$DEFAULT_TARGET}"
 ACCOUNT="${SLURM_ACCOUNT:-}"
+PARTITION="${SLURM_PARTITION:-g100_usr_prod}"
 VALIDATE="${VALIDATE:-auto}"
 FORCE_MODE="${FORCE_MODE:-plan}"
 
-if [[ $# -gt 0 && "${1}" != -* ]]; then
+if [[ $# -gt 0 && "${1}" != -* && ( -z "$ACCOUNT" || "${1}" == "$ACCOUNT" ) ]]; then
   ACCOUNT="$1"
   shift
 fi
@@ -48,6 +49,7 @@ esac
 
 echo "==> G100 RNA-seq differential contract smoke"
 echo "==> account: $ACCOUNT"
+echo "==> partition: $PARTITION"
 echo "==> target: $TARGET"
 echo "==> force mode: $FORCE_MODE"
 if [[ ${#FORCE_ARGS[@]} -gt 0 ]]; then
@@ -62,7 +64,7 @@ fi
   "${EXTRA_ARGS[@]}" \
   --default-resources \
     "slurm_account=$ACCOUNT" \
-    slurm_partition=g100_usr_prod \
+    "slurm_partition=$PARTITION" \
     runtime=60 \
     mem_mb=4000 \
     disk_mb=10000 \
@@ -70,7 +72,7 @@ fi
     build_rnaseq_star_index:runtime=30 \
     build_rnaseq_star_index:mem_mb=8000 \
     build_rnaseq_star_index:disk_mb=10000 \
-    build_rnaseq_star_index:slurm_partition=g100_usr_prod
+    "build_rnaseq_star_index:slurm_partition=$PARTITION"
 
 if [[ "$MODE" == "run" ]]; then
   if [[ "$VALIDATE" == "1" || "$VALIDATE" == "true" || ( "$VALIDATE" == "auto" && "$TARGET" == "$DEFAULT_TARGET" ) ]]; then

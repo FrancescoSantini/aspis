@@ -173,11 +173,19 @@ before submitting Snakemake jobs. The default report is written to
 `PREFLIGHT_REPORT=/path/to/report.tsv` when needed. Set `PREFLIGHT=0` only
 when you need to debug Snakemake itself despite a known preflight warning.
 
+`<SLURM_ACCOUNT>` is the account assigned to the user submitting the job. You
+can also set it once instead of passing it positionally:
+
+```bash
+export SLURM_ACCOUNT=<SLURM_ACCOUNT>
+export SLURM_PARTITION="${SLURM_PARTITION:-g100_usr_prod}"
+```
+
 ```bash
 conda activate aspis-smk9
 cd ~/aspis
 MODE=dry-run bash tests/run_g100_rnaseq_project.sh \
-  ELIX6_santini \
+  <SLURM_ACCOUNT> \
   config/aspis_rnaseq_<project>.yaml
 ```
 
@@ -191,7 +199,7 @@ Run only after the DAG and resource requests look correct:
 
 ```bash
 MODE=run bash tests/run_g100_rnaseq_project.sh \
-  ELIX6_santini \
+  <SLURM_ACCOUNT> \
   config/aspis_rnaseq_<project>.yaml
 ```
 
@@ -200,7 +208,7 @@ To run or resume a specific output, set `TARGET`:
 ```bash
 TARGET=results/rnaseq_<project>/branches/rnaseq/<PROJECT>/differential/reports/report_index.done \
 MODE=run bash tests/run_g100_rnaseq_project.sh \
-  ELIX6_santini \
+  <SLURM_ACCOUNT> \
   config/aspis_rnaseq_<project>.yaml
 ```
 
