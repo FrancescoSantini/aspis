@@ -274,7 +274,7 @@ read_coldata <- function(path, sample_ids) {
   matched
 }
 
-pca_color_columns <- function(coldata, requested_columns) {
+usable_pca_color_columns <- function(coldata, requested_columns) {
   if (is.null(coldata)) {
     return(character())
   }
@@ -358,7 +358,7 @@ plot_pca <- function(transformed, path, title, coldata = NULL, color_columns = c
     return()
   }
   variance <- round(100 * (pca$sdev^2 / sum(pca$sdev^2)), 1)
-  pca_columns <- pca_color_columns(coldata, color_columns)
+  pca_columns <- usable_pca_color_columns(coldata, color_columns)
   ensure_parent(path)
   grDevices::pdf(path)
   on.exit(grDevices::dev.off(), add = TRUE)
@@ -431,6 +431,21 @@ optional_plot_path <- function(row, column, fallback_name) {
   file.path(dirname(row[["pca_pdf"]]), fallback_name)
 }
 
+write_pca_metrics <- function(path, status, reason, variance = c(NA, NA), transformed = NULL, color_columns = character()) {
+  ensure_parent(path)
+  metrics <- data.frame(
+    status = status,
+    reason = reason,
+    pc1_variance_percent = ifelse(length(variance) >= 1, variance[[1]], NA),
+    pc2_variance_percent = ifelse(length(variance) >= 2, variance[[2]], NA),
+    n_features = ifelse(is.null(transformed), 0, nrow(transformed)),
+    n_samples = ifelse(is.null(transformed), 0, ncol(transformed)),
+    pca_color_columns = paste(color_columns, collapse = ","),
+    check.names = FALSE
+  )
+  write.table(metrics, path, sep = "\t", quote = FALSE, row.names = FALSE)
+}
+
 manifest_columns <- c(
   "project",
   "level",
@@ -440,6 +455,7 @@ manifest_columns <- c(
   "volcano_pdf",
   "ma_pdf",
   "pca_pdf",
+  "pca_metrics_tsv",
   "sample_distance_pdf",
   "heatmap_pdf",
   "vst_tsv",
@@ -458,6 +474,7 @@ render_row <- function(row, top_n, padj_cutoff, log2fc_cutoff, transcript_plot_g
       volcano_pdf = row[["volcano_pdf"]],
       ma_pdf = row[["ma_pdf"]],
       pca_pdf = row[["pca_pdf"]],
+      pca_metrics_tsv = optional_plot_path(row, "pca_metrics_tsv", "pca_metrics.tsv"),
       sample_distance_pdf = optional_plot_path(row, "sample_distance_pdf", "sample_distance.pdf"),
       heatmap_pdf = row[["heatmap_pdf"]],
       vst_tsv = row[["vst_tsv"]],
@@ -472,11 +489,23 @@ render_row <- function(row, top_n, padj_cutoff, log2fc_cutoff, transcript_plot_g
   filtered <- read_tsv(row[["filtered"]])
   transformed <- transformed_counts_for_row(row)
   coldata <- read_coldata(row[["coldata"]], colnames(transformed))
+  pca_metrics_tsv <- optional_plot_path(row, "pca_metrics_tsv", "pca_metrics.tsv")
   sample_distance_pdf <- optional_plot_path(row, "sample_distance_pdf", "sample_distance.pdf")
   plot_groups <- plot_groups_for_results(results, transcript_plot_groups)
   plot_volcano(plot_groups, row[["volcano_pdf"]], paste(title, "volcano"), padj_cutoff, log2fc_cutoff)
   plot_ma(results, row[["ma_pdf"]], paste(title, "MA"), padj_cutoff, log2fc_cutoff)
   plot_pca(transformed, row[["pca_pdf"]], paste(title, "PCA"), coldata, pca_color_columns)
+  if (ncol(transformed) < 2 || nrow(transformed) < 2) {
+    write_pca_metrics(pca_metrics_tsv, "blocked", "PCA requires at least two samples and two features", transformed = transformed)
+  } else {
+    pca <- stats::prcomp(t(transformed), center = TRUE, scale. = FALSE)
+    if (ncol(pca$x) < 2 || sum(pca$sdev^2) == 0) {
+      write_pca_metrics(pca_metrics_tsv, "blocked", "PCA requires at least two variable dimensions", transformed = transformed)
+    } else {
+      variance <- round(100 * (pca$sdev^2 / sum(pca$sdev^2)), 1)
+      write_pca_metrics(pca_metrics_tsv, "ok", "", variance, transformed, usable_pca_color_columns(coldata, pca_color_columns))
+    }
+  }
   plot_sample_distance(transformed, sample_distance_pdf, paste(title, "sample distance"), coldata)
   plot_heatmap(transformed, plot_groups, row[["heatmap_pdf"]], paste(title, "heatmap"), top_n, coldata)
 
@@ -489,6 +518,7 @@ render_row <- function(row, top_n, padj_cutoff, log2fc_cutoff, transcript_plot_g
     volcano_pdf = row[["volcano_pdf"]],
     ma_pdf = row[["ma_pdf"]],
     pca_pdf = row[["pca_pdf"]],
+    pca_metrics_tsv = pca_metrics_tsv,
     sample_distance_pdf = sample_distance_pdf,
     heatmap_pdf = row[["heatmap_pdf"]],
     vst_tsv = row[["vst_tsv"]],
@@ -548,6 +578,8 @@ main <- function() {
     rows[[i]] <- tryCatch(
       render_row(row, top_n, padj_cutoff, log2fc_cutoff, transcript_plot_groups, pca_color_columns),
       error = function(err) {
+        pca_metrics_tsv <- optional_plot_path(row, "pca_metrics_tsv", "pca_metrics.tsv")
+        try(write_pca_metrics(pca_metrics_tsv, "failed", conditionMessage(err)), silent = TRUE)
         data.frame(
           project = row[["project"]],
           level = row[["level"]],
@@ -557,6 +589,7 @@ main <- function() {
           volcano_pdf = row[["volcano_pdf"]],
           ma_pdf = row[["ma_pdf"]],
           pca_pdf = row[["pca_pdf"]],
+          pca_metrics_tsv = pca_metrics_tsv,
           sample_distance_pdf = optional_plot_path(row, "sample_distance_pdf", "sample_distance.pdf"),
           heatmap_pdf = row[["heatmap_pdf"]],
           vst_tsv = row[["vst_tsv"]],

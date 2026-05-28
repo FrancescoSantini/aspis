@@ -150,11 +150,21 @@ def validate_reports() -> str:
             "volcano_pdf",
             "ma_pdf",
             "pca_pdf",
+            "pca_metrics_tsv",
             "heatmap_pdf",
             "vst_tsv",
             "summary_html",
         },
-        "plots/plots_manifest.tsv": {"contrast_id", "status", "volcano_pdf", "ma_pdf", "pca_pdf", "heatmap_pdf", "vst_tsv"},
+        "plots/plots_manifest.tsv": {
+            "contrast_id",
+            "status",
+            "volcano_pdf",
+            "ma_pdf",
+            "pca_pdf",
+            "pca_metrics_tsv",
+            "heatmap_pdf",
+            "vst_tsv",
+        },
         "summaries/summary_manifest.tsv": {
             "contrast_id",
             "status",
@@ -170,6 +180,7 @@ def validate_reports() -> str:
             "volcano_pdf",
             "ma_pdf",
             "pca_pdf",
+            "pca_metrics_tsv",
             "heatmap_pdf",
             "vst_tsv",
         },
@@ -196,12 +207,21 @@ def validate_reports() -> str:
 
     _, plot_rows = read_tsv(reports / "plots/plots_manifest.tsv", schemas["plots/plots_manifest.tsv"])
     for row in plot_rows:
-        for column in ["volcano_pdf", "ma_pdf", "pca_pdf", "heatmap_pdf", "vst_tsv"]:
+        for column in ["volcano_pdf", "ma_pdf", "pca_pdf", "pca_metrics_tsv", "heatmap_pdf", "vst_tsv"]:
             require_path(row[column], reports / "plots/plots_manifest.tsv", column)
 
     _, asset_rows = read_tsv(reports / "asset_manifest.tsv", schemas["asset_manifest.tsv"])
     labels = {row["asset_label"] for row in asset_rows if row.get("exists") == "true"}
-    required_labels = {"summary_html", "results", "target_feature_set_results", "volcano_pdf", "ma_pdf", "pca_pdf", "heatmap_pdf"}
+    required_labels = {
+        "summary_html",
+        "results",
+        "target_feature_set_results",
+        "volcano_pdf",
+        "ma_pdf",
+        "pca_pdf",
+        "pca_metrics_tsv",
+        "heatmap_pdf",
+    }
     missing_labels = required_labels - labels
     if missing_labels:
         raise ValueError(f"SmallRNA report asset manifest is missing existing assets: {sorted(missing_labels)}")

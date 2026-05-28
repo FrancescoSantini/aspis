@@ -22,6 +22,7 @@ REQUIRED_PLAN_COLUMNS = {
     "volcano_pdf",
     "ma_pdf",
     "pca_pdf",
+    "pca_metrics_tsv",
     "sample_distance_pdf",
     "heatmap_pdf",
     "enrichment_manifest",
@@ -37,6 +38,7 @@ MANIFEST_COLUMNS = [
     "results",
     "filtered",
     "ma_pdf",
+    "pca_metrics_tsv",
     "sample_distance_pdf",
     "n_features",
     "n_significant",
@@ -104,6 +106,16 @@ def count_direction(rows: list[dict[str, str]]) -> tuple[int, int]:
 
 
 def first_summary_row(path: Path) -> dict[str, str]:
+    _, rows = read_table(path)
+    return rows[0] if rows else {}
+
+
+def first_existing_row(path_text: str) -> dict[str, str]:
+    if not path_text:
+        return {}
+    path = Path(path_text)
+    if not path.exists():
+        return {}
     _, rows = read_table(path)
     return rows[0] if rows else {}
 
@@ -203,6 +215,7 @@ def render_html(
     artifacts = [
         ("Full DESeq2 results", row["results"]),
         ("Filtered DESeq2 results", row["filtered"]),
+        ("PCA metrics", row.get("pca_metrics_tsv", "")),
         ("Enrichment manifest", row["enrichment_manifest"]),
     ]
     feature_set_results = resources.get("feature_set_results", {}).get("path", "")
@@ -263,11 +276,15 @@ def render_ready_row(row: dict[str, str], top_n: int) -> dict[str, str]:
     _, result_rows = read_table(results_path)
     _, filtered_rows = read_table(filtered_path)
     summary = first_summary_row(summary_path)
+    pca_metrics = first_existing_row(row.get("pca_metrics_tsv", ""))
     n_up, n_down = count_direction(filtered_rows)
     metrics = {
         "project": row["project"],
         "level": row["level"],
         "contrast_id": row["contrast_id"],
+        "pca_status": pca_metrics.get("status", ""),
+        "pc1_variance_percent": pca_metrics.get("pc1_variance_percent", ""),
+        "pc2_variance_percent": pca_metrics.get("pc2_variance_percent", ""),
         "features_tested": str(len(result_rows)),
         "significant_features": str(len(filtered_rows)),
         "up_features": str(n_up),
@@ -291,6 +308,7 @@ def render_ready_row(row: dict[str, str], top_n: int) -> dict[str, str]:
         "results": row["results"],
         "filtered": row["filtered"],
         "ma_pdf": row.get("ma_pdf", ""),
+        "pca_metrics_tsv": row.get("pca_metrics_tsv", ""),
         "sample_distance_pdf": row.get("sample_distance_pdf", ""),
         "n_features": str(len(result_rows)),
         "n_significant": str(len(filtered_rows)),
@@ -314,6 +332,7 @@ def render_rows(plan_rows: list[dict[str, str]], top_n: int) -> list[dict[str, s
                     "results": row["results"],
                     "filtered": row["filtered"],
                     "ma_pdf": row.get("ma_pdf", ""),
+                    "pca_metrics_tsv": row.get("pca_metrics_tsv", ""),
                     "sample_distance_pdf": row.get("sample_distance_pdf", ""),
                     "n_features": "0",
                     "n_significant": "0",
@@ -333,6 +352,7 @@ def render_rows(plan_rows: list[dict[str, str]], top_n: int) -> list[dict[str, s
             failed["n_up"] = "0"
             failed["n_down"] = "0"
             failed["ma_pdf"] = row.get("ma_pdf", "")
+            failed["pca_metrics_tsv"] = row.get("pca_metrics_tsv", "")
             output_rows.append(failed)
     return output_rows
 
