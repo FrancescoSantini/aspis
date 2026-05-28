@@ -3,6 +3,7 @@
 configfile: "config/aspis.yaml"
 
 import csv
+import os
 import re
 import shlex
 from pathlib import Path
@@ -56,6 +57,7 @@ METADATA_DIR = PATHS.get("metadata_dir", "meta/materialized")
 MANIFEST = PATHS.get("manifest", "meta/materialized_manifest.tsv")
 ANALYSIS_PLAN = PATHS.get("analysis_plan", "meta/analysis_plan.tsv")
 ENVIRONMENT_REPORT = PATHS.get("environment_report", "meta/environment_report.tsv")
+EXECUTION_REPORT = PATHS.get("execution_report", "meta/execution_report.tsv")
 BRANCH_DIR = PATHS.get("branch_dir", "results/branches")
 SRA_CACHE_DIR = PATHS.get("sra_cache_dir", "cache/sra")
 SCRATCH_DIR = PATHS.get("scratch_dir", "work/tmp")
@@ -95,6 +97,47 @@ if RNASEQ_QUANTIFICATION.get("run", False) and not RNASEQ_ALIGNMENT.get("run", F
     raise ValueError("rnaseq_quantification.run requires rnaseq_alignment.run: true")
 if RNASEQ_DIFFERENTIAL.get("run", False) and not RNASEQ_QUANTIFICATION.get("run", False):
     raise ValueError("rnaseq_differential.run requires rnaseq_quantification.run: true")
+
+
+def execution_setting(env_key, config_key, default=""):
+    env_value = os.environ.get(env_key, "").strip()
+    if env_value:
+        return env_value, "environment"
+    config_value = EXECUTION.get(config_key, "")
+    if str(config_value or "").strip():
+        return str(config_value).strip(), "config"
+    return str(default), "default"
+
+
+def execution_resource_setting(env_key, config_key, default):
+    resources = EXECUTION.get("default_resources", {}) or {}
+    env_value = os.environ.get(env_key, "").strip()
+    if env_value:
+        return env_value, "environment"
+    config_value = resources.get(config_key, "")
+    if str(config_value or "").strip():
+        return str(config_value).strip(), "config"
+    return str(default), "default"
+
+
+EXECUTION_SLURM_ACCOUNT, EXECUTION_SLURM_ACCOUNT_SOURCE = execution_setting(
+    "SLURM_ACCOUNT", "slurm_account", ""
+)
+EXECUTION_DEFAULT_PARTITION, EXECUTION_DEFAULT_PARTITION_SOURCE = execution_setting(
+    "SLURM_PARTITION", "default_partition", "g100_usr_prod"
+)
+EXECUTION_DOWNLOAD_PARTITION, EXECUTION_DOWNLOAD_PARTITION_SOURCE = execution_setting(
+    "SLURM_DOWNLOAD_PARTITION", "download_partition", "g100_all_serial"
+)
+EXECUTION_DEFAULT_RUNTIME, EXECUTION_DEFAULT_RUNTIME_SOURCE = execution_resource_setting(
+    "ASPIS_DEFAULT_RUNTIME", "runtime", 60
+)
+EXECUTION_DEFAULT_MEM_MB, EXECUTION_DEFAULT_MEM_MB_SOURCE = execution_resource_setting(
+    "ASPIS_DEFAULT_MEM_MB", "mem_mb", 4000
+)
+EXECUTION_DEFAULT_DISK_MB, EXECUTION_DEFAULT_DISK_MB_SOURCE = execution_resource_setting(
+    "ASPIS_DEFAULT_DISK_MB", "disk_mb", 10000
+)
 
 
 def configured_tool_list(key, default):
@@ -359,8 +402,8 @@ REPORTED_OPTIONAL_TOOLS = OPTIONAL_TOOLS + [
 def materialization_partition(wildcards):
     input_1 = INTAKE_BY_LIBRARY[wildcards.library_id].get("input_1", "")
     if INSDC_RUN_RE.match(input_1):
-        return EXECUTION.get("download_partition", "g100_all_serial")
-    return EXECUTION.get("default_partition", "g100_usr_prod")
+        return EXECUTION_DOWNLOAD_PARTITION
+    return EXECUTION_DEFAULT_PARTITION
 
 
 def shell_arg(flag, value):
@@ -748,11 +791,12 @@ def workflow_targets(wildcards):
     if not DESEQ2_SMOKE.get("only", False):
         targets.extend(planned_branch_targets(wildcards))
         targets.append(ENVIRONMENT_REPORT)
+        targets.append(EXECUTION_REPORT)
     targets.extend(deseq2_smoke_targets())
     return targets
 
 
-localrules: all, check_environment, assay_branch_ready, build_branch_design
+localrules: all, check_environment, check_execution_config, assay_branch_ready, build_branch_design
 
 
 rule all:
@@ -779,6 +823,39 @@ rule check_environment:
           --optional-tools {params.optional_tools:q} \
           --minimum-versions {params.minimum_versions:q} \
           --recommended-versions {params.recommended_versions:q} \
+          > {log:q} 2>&1
+        """
+
+
+rule check_execution_config:
+    output:
+        EXECUTION_REPORT
+    params:
+        account=EXECUTION_SLURM_ACCOUNT,
+        account_source=EXECUTION_SLURM_ACCOUNT_SOURCE,
+        default_partition=EXECUTION_DEFAULT_PARTITION,
+        default_partition_source=EXECUTION_DEFAULT_PARTITION_SOURCE,
+        download_partition=EXECUTION_DOWNLOAD_PARTITION,
+        download_partition_source=EXECUTION_DOWNLOAD_PARTITION_SOURCE,
+        runtime=EXECUTION_DEFAULT_RUNTIME,
+        runtime_source=EXECUTION_DEFAULT_RUNTIME_SOURCE,
+        mem_mb=EXECUTION_DEFAULT_MEM_MB,
+        mem_mb_source=EXECUTION_DEFAULT_MEM_MB_SOURCE,
+        disk_mb=EXECUTION_DEFAULT_DISK_MB,
+        disk_mb_source=EXECUTION_DEFAULT_DISK_MB_SOURCE
+    log:
+        "logs/execution_report.log"
+    shell:
+        r"""
+        mkdir -p logs
+        python3 workflow/scripts/write_execution_report.py \
+          --output {output:q} \
+          --slurm-account {params.account:q} --slurm-account-source {params.account_source:q} \
+          --default-partition {params.default_partition:q} --default-partition-source {params.default_partition_source:q} \
+          --download-partition {params.download_partition:q} --download-partition-source {params.download_partition_source:q} \
+          --runtime {params.runtime:q} --runtime-source {params.runtime_source:q} \
+          --mem-mb {params.mem_mb:q} --mem-mb-source {params.mem_mb_source:q} \
+          --disk-mb {params.disk_mb:q} --disk-mb-source {params.disk_mb_source:q} \
           > {log:q} 2>&1
         """
 

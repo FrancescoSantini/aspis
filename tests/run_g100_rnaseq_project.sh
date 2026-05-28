@@ -1,12 +1,18 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+source tests/lib/g100_execution.sh
+
 SNAKEMAKE="${SNAKEMAKE:-snakemake}"
 MODE="${MODE:-dry-run}"
 FORCE_MODE="${FORCE_MODE:-none}"
 TARGET="${TARGET:-}"
 ACCOUNT="${SLURM_ACCOUNT:-}"
 PARTITION="${SLURM_PARTITION:-g100_usr_prod}"
+DOWNLOAD_PARTITION="${SLURM_DOWNLOAD_PARTITION:-}"
+DEFAULT_RUNTIME="${ASPIS_DEFAULT_RUNTIME:-${SLURM_DEFAULT_RUNTIME:-240}}"
+DEFAULT_MEM_MB="${ASPIS_DEFAULT_MEM_MB:-${SLURM_DEFAULT_MEM_MB:-16000}}"
+DEFAULT_DISK_MB="${ASPIS_DEFAULT_DISK_MB:-${SLURM_DEFAULT_DISK_MB:-100000}}"
 CONFIGFILE="${CONFIGFILE:-}"
 PREFLIGHT="${PREFLIGHT:-1}"
 PREFLIGHT_REPORT="${PREFLIGHT_REPORT:-}"
@@ -31,6 +37,11 @@ fi
 if [[ ! -f "$CONFIGFILE" ]]; then
   echo "Config file does not exist: $CONFIGFILE" >&2
   exit 2
+fi
+
+if [[ -z "$EXECUTION_REPORT" ]]; then
+  CONFIG_BASENAME="$(basename "$CONFIGFILE")"
+  EXECUTION_REPORT="logs/execution/${CONFIG_BASENAME}.execution.tsv"
 fi
 
 if [[ -z "$PREFLIGHT_REPORT" ]]; then
@@ -74,6 +85,8 @@ echo "==> force mode: $FORCE_MODE"
 echo "==> preflight: $PREFLIGHT"
 echo "==> preflight report: $PREFLIGHT_REPORT"
 
+g100_report_execution_context "$(basename "$0")" "$CONFIGFILE" "$MODE" "${TARGET:-rule all}"
+
 if [[ "$PREFLIGHT" != "0" && "$PREFLIGHT" != "false" && "$PREFLIGHT" != "no" ]]; then
   mkdir -p "$(dirname "$PREFLIGHT_REPORT")"
   python3 workflow/scripts/validate_project_inputs.py \
@@ -89,9 +102,9 @@ fi
   --default-resources \
     "slurm_account=$ACCOUNT" \
     "slurm_partition=$PARTITION" \
-    runtime=240 \
-    mem_mb=16000 \
-    disk_mb=100000 \
+    "runtime=$DEFAULT_RUNTIME" \
+    "mem_mb=$DEFAULT_MEM_MB" \
+    "disk_mb=$DEFAULT_DISK_MB" \
   --set-resources \
     materialize_library:runtime=360 \
     materialize_library:mem_mb=8000 \

@@ -10,6 +10,7 @@ paths:
   metadata_dir: meta/materialized
   manifest: meta/materialized_manifest.tsv
   environment_report: meta/environment_report.tsv
+  execution_report: meta/execution_report.tsv
   sra_cache_dir: cache/sra
   scratch_dir: work/tmp
   branch_dir: results/branches
@@ -189,8 +190,17 @@ smallrna:
   log2fc: 1.0
 
 execution:
+  # Leave empty for shared configs. G100 helpers set SLURM_ACCOUNT at runtime.
+  slurm_account: ""
+  # Default submit partition for ordinary compute jobs.
   default_partition: g100_usr_prod
+  # Partition for public INSDC/SRA materialization jobs.
   download_partition: g100_all_serial
+  # Baseline Snakemake default resources used by helpers and reports.
+  default_resources:
+    runtime: 60
+    mem_mb: 4000
+    disk_mb: 10000
 
 environment:
   required_tools:

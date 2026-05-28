@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+source tests/lib/g100_execution.sh
+
 SNAKEMAKE="${SNAKEMAKE:-snakemake}"
 MODE="${MODE:-dry-run}"
 FORCE_MODE="${FORCE_MODE:-none}"
@@ -10,6 +12,11 @@ DEFAULT_PREPROCESS_TARGET="results/rnaseq_public_sra_g100/branches/rnaseq/ASPIS_
 TARGET="${TARGET:-}"
 ACCOUNT="${SLURM_ACCOUNT:-}"
 PARTITION="${SLURM_PARTITION:-g100_usr_prod}"
+DOWNLOAD_PARTITION="${SLURM_DOWNLOAD_PARTITION:-}"
+DEFAULT_RUNTIME="${ASPIS_DEFAULT_RUNTIME:-${SLURM_DEFAULT_RUNTIME:-60}}"
+DEFAULT_MEM_MB="${ASPIS_DEFAULT_MEM_MB:-${SLURM_DEFAULT_MEM_MB:-4000}}"
+DEFAULT_DISK_MB="${ASPIS_DEFAULT_DISK_MB:-${SLURM_DEFAULT_DISK_MB:-10000}}"
+EXECUTION_REPORT="${EXECUTION_REPORT:-logs/execution/g100_public_sra_rnaseq_execution.tsv}"
 VALIDATE="${VALIDATE:-auto}"
 PREFLIGHT="${PREFLIGHT:-1}"
 PREFLIGHT_REPORT="${PREFLIGHT_REPORT:-logs/preflight/aspis_rnaseq_public_sra_g100.rnaseq.tsv}"
@@ -70,6 +77,8 @@ echo "==> force mode: $FORCE_MODE"
 echo "==> preflight: $PREFLIGHT"
 echo "==> preflight report: $PREFLIGHT_REPORT"
 
+g100_report_execution_context "$(basename "$0")" "$CONFIGFILE" "$MODE" "${TARGET_ARGS[*]}"
+
 if [[ "$PREFLIGHT" != "0" && "$PREFLIGHT" != "false" && "$PREFLIGHT" != "no" ]]; then
   mkdir -p "$(dirname "$PREFLIGHT_REPORT")"
   python3 workflow/scripts/validate_project_inputs.py \
@@ -85,9 +94,9 @@ fi
   --default-resources \
     "slurm_account=$ACCOUNT" \
     "slurm_partition=$PARTITION" \
-    runtime=60 \
-    mem_mb=4000 \
-    disk_mb=10000 \
+    "runtime=$DEFAULT_RUNTIME" \
+    "mem_mb=$DEFAULT_MEM_MB" \
+    "disk_mb=$DEFAULT_DISK_MB" \
   --set-resources \
     materialize_library:runtime=60 \
     materialize_library:mem_mb=4000 \
