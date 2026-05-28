@@ -219,10 +219,10 @@ plot_ma <- function(results, path, title, padj_cutoff, log2fc_cutoff) {
   grDevices::dev.off()
 }
 
-read_normalized_counts <- function(path) {
+read_feature_matrix <- function(path, label) {
   counts <- read_tsv(path)
   if (ncol(counts) < 2) {
-    stop("Normalized counts table needs one feature column and at least one sample column: ", path)
+    stop(label, " table needs one feature column and at least one sample column: ", path)
   }
   feature_id_column <- colnames(counts)[[1]]
   feature_ids <- counts[[feature_id_column]]
@@ -232,12 +232,27 @@ read_normalized_counts <- function(path) {
   matrix
 }
 
-write_transformed_counts <- function(matrix, path) {
-  transformed <- log2(matrix + 1)
-  output <- data.frame(feature_id = rownames(transformed), transformed, check.names = FALSE)
+write_feature_matrix <- function(matrix, path) {
+  output <- data.frame(feature_id = rownames(matrix), matrix, check.names = FALSE)
   ensure_parent(path)
   write.table(output, path, sep = "\t", quote = FALSE, row.names = FALSE)
+}
+
+write_transformed_counts <- function(matrix, path) {
+  transformed <- log2(matrix + 1)
+  write_feature_matrix(transformed, path)
   transformed
+}
+
+transformed_counts_for_row <- function(row) {
+  transformed_path <- row[["transformed_counts"]]
+  if (!is.null(transformed_path) && !is.na(transformed_path) && transformed_path != "" && file.exists(transformed_path)) {
+    transformed <- read_feature_matrix(transformed_path, "DESeq2 transformed counts")
+    write_feature_matrix(transformed, row[["vst_tsv"]])
+    return(transformed)
+  }
+  normalized <- read_feature_matrix(row[["normalized_counts"]], "Normalized counts")
+  write_transformed_counts(normalized, row[["vst_tsv"]])
 }
 
 read_coldata <- function(path, sample_ids) {
@@ -362,8 +377,7 @@ render_row <- function(row, top_n, padj_cutoff, log2fc_cutoff, transcript_plot_g
   title <- paste(row[["project"]], row[["level"]], row[["contrast_id"]])
   results <- read_tsv(row[["results"]])
   filtered <- read_tsv(row[["filtered"]])
-  normalized <- read_normalized_counts(row[["normalized_counts"]])
-  transformed <- write_transformed_counts(normalized, row[["vst_tsv"]])
+  transformed <- transformed_counts_for_row(row)
   coldata <- read_coldata(row[["coldata"]], colnames(transformed))
   plot_groups <- plot_groups_for_results(results, transcript_plot_groups)
   plot_volcano(plot_groups, row[["volcano_pdf"]], paste(title, "volcano"), padj_cutoff, log2fc_cutoff)
