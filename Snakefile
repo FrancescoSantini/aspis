@@ -24,7 +24,9 @@ RNASEQ_PREPROCESS = config.get("rnaseq_preprocess", {})
 RNASEQ_ALIGNMENT = config.get("rnaseq_alignment", {})
 RNASEQ_QUANTIFICATION = config.get("rnaseq_quantification", {})
 RNASEQ_DIFFERENTIAL = config.get("rnaseq_differential", {})
+RNASEQ_DTU = config.get("rnaseq_dtu", {})
 SMALLRNA = config.get("smallrna", {})
+MIRNA_MRNA_INTEGRATION = config.get("mirna_mrna_integration", {})
 DESEQ2_SMOKE = config.get("deseq2_smoke", {})
 EXECUTION = config.get("execution", {})
 PROVENANCE = config.get("provenance", {})
@@ -107,10 +109,30 @@ RNASEQ_STAR_INDEX_DONE = (
 RNASEQ_ALIGNMENT_INDEX_INPUTS = RNASEQ_HISAT2_INDEX_FILES + (
     [RNASEQ_STAR_INDEX_DONE] if RNASEQ_STAR_INDEX_DONE else []
 )
+RNASEQ_STRANDEDNESS_INFERENCE_RUN = RNASEQ_ALIGNMENT.get("run", False) and as_bool(
+    RNASEQ_ALIGNMENT.get("infer_strandedness", False),
+    False,
+)
+RNASEQ_BIOTYPE_SUMMARY_RUN = RNASEQ_QUANTIFICATION.get("run", False) and as_bool(
+    RNASEQ_QUANTIFICATION.get("biotype_summary", True),
+    True,
+)
+RNASEQ_DTU_RUN = RNASEQ_QUANTIFICATION.get("run", False) and as_bool(
+    RNASEQ_DTU.get("run", False),
+    False,
+)
 if RNASEQ_QUANTIFICATION.get("run", False) and not RNASEQ_ALIGNMENT.get("run", False):
     raise ValueError("rnaseq_quantification.run requires rnaseq_alignment.run: true")
 if RNASEQ_DIFFERENTIAL.get("run", False) and not RNASEQ_QUANTIFICATION.get("run", False):
     raise ValueError("rnaseq_differential.run requires rnaseq_quantification.run: true")
+if RNASEQ_STRANDEDNESS_INFERENCE_RUN and not (
+    RNASEQ_QUANTIFICATION.get("annotation_gtf", "") or RNASEQ_ALIGNMENT.get("annotation_gtf", "")
+):
+    raise ValueError("rnaseq_alignment.infer_strandedness requires an RNA-seq annotation GTF")
+if RNASEQ_DTU_RUN and not (
+    RNASEQ_QUANTIFICATION.get("annotation_gtf", "") or RNASEQ_ALIGNMENT.get("annotation_gtf", "")
+):
+    raise ValueError("rnaseq_dtu.run requires an RNA-seq annotation GTF")
 
 
 def execution_setting(env_key, config_key, default=""):
@@ -281,6 +303,10 @@ SMALLRNA_QUANTIFICATION_RUN = as_bool(SMALLRNA.get("quantification_run", False),
 SMALLRNA_DIFFERENTIAL_RUN = as_bool(SMALLRNA.get("differential_run", False), False)
 SMALLRNA_TARGET_ENRICHMENT_MODE = str(SMALLRNA.get("target_enrichment_mode", "disabled")).strip().lower()
 SMALLRNA_TARGET_ENRICHMENT_RUN = SMALLRNA_TARGET_ENRICHMENT_MODE == "table"
+SMALLRNA_TARGET_TABLE_INPUTS = []
+if SMALLRNA.get("target_table", ""):
+    SMALLRNA_TARGET_TABLE_INPUTS.append(SMALLRNA.get("target_table", ""))
+SMALLRNA_TARGET_TABLE_INPUTS.extend(config_value_list(SMALLRNA.get("target_tables", "")))
 SMALLRNA_TARGET_FEATURE_SET_FILES = config_value_list(SMALLRNA.get("target_feature_sets", ""))
 SMALLRNA_TARGET_FEATURE_SET_TABLES = config_value_list(SMALLRNA.get("target_feature_set_tables", ""))
 SMALLRNA_TARGET_FEATURE_SET_RUN = SMALLRNA_TARGET_ENRICHMENT_RUN and bool(
@@ -296,6 +322,13 @@ SMALLRNA_BUILD_BOWTIE_INDEX = as_bool(SMALLRNA.get("build_bowtie_index", False),
 SMALLRNA_BUILD_CONTAMINANT_INDEX = as_bool(SMALLRNA.get("build_contaminant_index", False), False)
 SMALLRNA_RESIDUAL_RUN = as_bool(SMALLRNA.get("residual_run", False), False)
 SMALLRNA_BUILD_RESIDUAL_GENOME_INDEX = as_bool(SMALLRNA.get("build_residual_genome_index", False), False)
+MIRNA_MRNA_INTEGRATION_RUN = (
+    as_bool(MIRNA_MRNA_INTEGRATION.get("run", False), False)
+    and SMALLRNA_TARGET_ENRICHMENT_RUN
+    and SMALLRNA_DIFFERENTIAL_RUN
+    and RNASEQ_DIFFERENTIAL.get("run", False)
+    and "gene" in RNASEQ_DIFFERENTIAL_LEVELS
+)
 SMALLRNA_REFERENCE_DIR = SMALLRNA.get("reference_dir", "work/smallrna_reference")
 SMALLRNA_CONFIGURED_MIRBASE_FASTA = SMALLRNA.get("mirbase_fasta", "")
 SMALLRNA_CONFIGURED_MIRBASE_SAF = SMALLRNA.get("mirbase_saf", "")
@@ -394,8 +427,8 @@ if SMALLRNA_DIFFERENTIAL_RUN and not SMALLRNA_QUANTIFICATION_RUN:
     raise ValueError("smallrna.differential_run requires smallrna.quantification_run: true")
 if SMALLRNA_TARGET_ENRICHMENT_RUN and not SMALLRNA_DIFFERENTIAL_RUN:
     raise ValueError("smallrna.target_enrichment_mode: table requires smallrna.differential_run: true")
-if SMALLRNA_TARGET_ENRICHMENT_RUN and not SMALLRNA.get("target_table", ""):
-    raise ValueError("smallrna.target_enrichment_mode: table requires smallrna.target_table")
+if SMALLRNA_TARGET_ENRICHMENT_RUN and not SMALLRNA_TARGET_TABLE_INPUTS:
+    raise ValueError("smallrna.target_enrichment_mode: table requires smallrna.target_table or smallrna.target_tables")
 if (SMALLRNA_TARGET_FEATURE_SET_FILES or SMALLRNA_TARGET_FEATURE_SET_TABLES) and not SMALLRNA_TARGET_ENRICHMENT_RUN:
     raise ValueError("smallrna target feature sets require smallrna.target_enrichment_mode: table")
 OPTIONAL_TOOLS = configured_tool_list("optional_tools", ["vdb-validate"])
@@ -510,6 +543,14 @@ def smallrna_target_feature_set_done(project):
     return f"{BRANCH_DIR}/smallrna/{project}/smallrna/differential/target_feature_sets/target_feature_sets.done"
 
 
+def smallrna_mirna_mrna_manifest(project):
+    return f"{BRANCH_DIR}/smallrna/{project}/smallrna/differential/mirna_mrna_integration/mirna_mrna_manifest.tsv"
+
+
+def smallrna_mirna_mrna_done(project):
+    return f"{BRANCH_DIR}/smallrna/{project}/smallrna/differential/mirna_mrna_integration/mirna_mrna.done"
+
+
 def smallrna_target_manifest_flag(wildcards):
     if not SMALLRNA_TARGET_ENRICHMENT_RUN:
         return ""
@@ -525,6 +566,15 @@ def smallrna_target_feature_set_manifest_flag(wildcards):
     return optional_shell_arg(
         "--target-feature-set-manifest",
         smallrna_target_feature_set_manifest(wildcards.project),
+    )
+
+
+def smallrna_mirna_mrna_manifest_flag(wildcards):
+    if not MIRNA_MRNA_INTEGRATION_RUN:
+        return ""
+    return optional_shell_arg(
+        "--mirna-mrna-manifest",
+        smallrna_mirna_mrna_manifest(wildcards.project),
     )
 
 
@@ -617,6 +667,30 @@ def branch_provenance_inputs(wildcards):
                         f"{base}/quantification/counts/quantification.done",
                     ]
                 )
+                if RNASEQ_STRANDEDNESS_INFERENCE_RUN:
+                    inputs.extend(
+                        [
+                            f"{base}/alignment/strandedness/strandedness_report.tsv",
+                            f"{base}/alignment/strandedness/strandedness.done",
+                        ]
+                    )
+                if RNASEQ_BIOTYPE_SUMMARY_RUN:
+                    inputs.extend(
+                        [
+                            f"{base}/quantification/biotypes/biotype_manifest.tsv",
+                            f"{base}/quantification/biotypes/count_biotype_summary.tsv",
+                            f"{base}/quantification/biotypes/differential_biotype_summary.tsv",
+                            f"{base}/quantification/biotypes/biotype_summary.html",
+                            f"{base}/quantification/biotypes/biotype_summary.done",
+                        ]
+                    )
+                if RNASEQ_DTU_RUN:
+                    inputs.extend(
+                        [
+                            f"{base}/differential/dtu/dtu_plan.tsv",
+                            f"{base}/differential/dtu/dtu.done",
+                        ]
+                    )
                 if RNASEQ_SAMPLE_QC_RUN:
                     inputs.extend(
                         [
@@ -765,6 +839,13 @@ def branch_provenance_inputs(wildcards):
                     smallrna_target_feature_set_done(project),
                 ]
             )
+        if MIRNA_MRNA_INTEGRATION_RUN:
+            inputs.extend(
+                [
+                    smallrna_mirna_mrna_manifest(project),
+                    smallrna_mirna_mrna_done(project),
+                ]
+            )
         if SMALLRNA_REPORTS_RUN:
             inputs.extend(
                 [
@@ -859,6 +940,30 @@ def planned_branch_targets(wildcards):
                                 f"{BRANCH_DIR}/{assay}/{project}/quantification/counts/quantification.done",
                             ]
                         )
+                        if RNASEQ_STRANDEDNESS_INFERENCE_RUN:
+                            targets.extend(
+                                [
+                                    f"{BRANCH_DIR}/{assay}/{project}/alignment/strandedness/strandedness_report.tsv",
+                                    f"{BRANCH_DIR}/{assay}/{project}/alignment/strandedness/strandedness.done",
+                                ]
+                            )
+                        if RNASEQ_BIOTYPE_SUMMARY_RUN:
+                            targets.extend(
+                                [
+                                    f"{BRANCH_DIR}/{assay}/{project}/quantification/biotypes/biotype_manifest.tsv",
+                                    f"{BRANCH_DIR}/{assay}/{project}/quantification/biotypes/count_biotype_summary.tsv",
+                                    f"{BRANCH_DIR}/{assay}/{project}/quantification/biotypes/differential_biotype_summary.tsv",
+                                    f"{BRANCH_DIR}/{assay}/{project}/quantification/biotypes/biotype_summary.html",
+                                    f"{BRANCH_DIR}/{assay}/{project}/quantification/biotypes/biotype_summary.done",
+                                ]
+                            )
+                        if RNASEQ_DTU_RUN:
+                            targets.extend(
+                                [
+                                    f"{BRANCH_DIR}/{assay}/{project}/differential/dtu/dtu_plan.tsv",
+                                    f"{BRANCH_DIR}/{assay}/{project}/differential/dtu/dtu.done",
+                                ]
+                            )
                         if RNASEQ_SAMPLE_QC_RUN:
                             targets.extend(
                                 [
@@ -1012,6 +1117,13 @@ def planned_branch_targets(wildcards):
                         [
                             f"{BRANCH_DIR}/{assay}/{project}/smallrna/differential/target_feature_sets/target_feature_set_manifest.tsv",
                             f"{BRANCH_DIR}/{assay}/{project}/smallrna/differential/target_feature_sets/target_feature_sets.done",
+                        ]
+                    )
+                if MIRNA_MRNA_INTEGRATION_RUN:
+                    targets.extend(
+                        [
+                            f"{BRANCH_DIR}/{assay}/{project}/smallrna/differential/mirna_mrna_integration/mirna_mrna_manifest.tsv",
+                            f"{BRANCH_DIR}/{assay}/{project}/smallrna/differential/mirna_mrna_integration/mirna_mrna.done",
                         ]
                     )
                 if SMALLRNA_REPORTS_RUN:
@@ -2166,12 +2278,16 @@ rule render_smallrna_target_enrichment:
         plan=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/smallrna_plan.tsv",
         deseq2_manifest=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/differential/mirna_deseq2/deseq2_manifest.tsv",
         deseq2_done=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/differential/mirna_deseq2/deseq2.done",
-        target_table=([SMALLRNA.get("target_table", "")] if SMALLRNA_TARGET_ENRICHMENT_RUN else [])
+        target_tables=SMALLRNA_TARGET_TABLE_INPUTS
     output:
         manifest=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/differential/target_enrichment/target_manifest.tsv",
         done=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/differential/target_enrichment/target_enrichment.done"
     params:
         outdir=lambda wildcards: f"{BRANCH_DIR}/smallrna/{wildcards.project}/smallrna/differential/target_enrichment",
+        target_tables_flag=optional_shell_arg(
+            "--target-tables",
+            joined_config_values(SMALLRNA_TARGET_TABLE_INPUTS),
+        ),
         min_overlap=SMALLRNA.get("target_min_overlap", 1),
         top_n=SMALLRNA.get("target_top_n", 20)
     log:
@@ -2182,7 +2298,7 @@ rule render_smallrna_target_enrichment:
         python3 workflow/scripts/render_smallrna_target_enrichment.py \
           --smallrna-plan {input.plan:q} \
           --deseq2-manifest {input.deseq2_manifest:q} \
-          --target-table {input.target_table:q} \
+          {params.target_tables_flag} \
           --outdir {params.outdir:q} \
           --manifest {output.manifest:q} \
           --done {output.done:q} \
@@ -2226,6 +2342,50 @@ rule render_smallrna_target_featuresets:
           {params.feature_sets} \
           {params.feature_set_tables} \
           --min-overlap {params.min_overlap:q} \
+          --top-n {params.top_n:q} \
+          > {log:q} 2>&1
+        """
+
+
+rule render_mirna_mrna_integration:
+    input:
+        smallrna_samples=f"{BRANCH_DIR}" + "/smallrna/{project}/samples.tsv",
+        rnaseq_samples=f"{BRANCH_DIR}" + "/rnaseq/{project}/samples.tsv",
+        smallrna_manifest=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/differential/mirna_deseq2/deseq2_manifest.tsv",
+        smallrna_done=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/differential/mirna_deseq2/deseq2.done",
+        rnaseq_gene_manifest=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/gene_deseq2/deseq2_manifest.tsv",
+        rnaseq_gene_done=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/gene_deseq2/deseq2.done",
+        target_manifest=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/differential/target_enrichment/target_manifest.tsv",
+        target_done=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/differential/target_enrichment/target_enrichment.done"
+    output:
+        manifest=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/differential/mirna_mrna_integration/mirna_mrna_manifest.tsv",
+        done=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/differential/mirna_mrna_integration/mirna_mrna.done"
+    params:
+        outdir=lambda wildcards: f"{BRANCH_DIR}/smallrna/{wildcards.project}/smallrna/differential/mirna_mrna_integration",
+        match_columns=lambda wildcards: " ".join(
+            shlex.quote(str(value))
+            for value in config_value_list(MIRNA_MRNA_INTEGRATION.get("match_columns", ["biospecimen_id"]))
+        ),
+        min_pairs=MIRNA_MRNA_INTEGRATION.get("min_pairs", 2),
+        min_abs_correlation=MIRNA_MRNA_INTEGRATION.get("min_abs_correlation", 0.0),
+        top_n=MIRNA_MRNA_INTEGRATION.get("top_n", 40)
+    log:
+        "logs/branches/smallrna/{project}.mirna_mrna_integration.log"
+    shell:
+        r"""
+        mkdir -p logs/branches/smallrna
+        python3 workflow/scripts/render_mirna_mrna_integration.py \
+          --smallrna-samples {input.smallrna_samples:q} \
+          --rnaseq-samples {input.rnaseq_samples:q} \
+          --smallrna-deseq2-manifest {input.smallrna_manifest:q} \
+          --rnaseq-gene-manifest {input.rnaseq_gene_manifest:q} \
+          --target-manifest {input.target_manifest:q} \
+          --outdir {params.outdir:q} \
+          --manifest {output.manifest:q} \
+          --done {output.done:q} \
+          --match-columns {params.match_columns} \
+          --min-pairs {params.min_pairs:q} \
+          --min-abs-correlation {params.min_abs_correlation:q} \
           --top-n {params.top_n:q} \
           > {log:q} 2>&1
         """
@@ -2275,6 +2435,16 @@ rule plan_smallrna_report:
             [smallrna_target_feature_set_done(wildcards.project)]
             if SMALLRNA_TARGET_FEATURE_SET_RUN
             else []
+        ),
+        mirna_mrna_manifest=lambda wildcards: (
+            [smallrna_mirna_mrna_manifest(wildcards.project)]
+            if MIRNA_MRNA_INTEGRATION_RUN
+            else []
+        ),
+        mirna_mrna_done=lambda wildcards: (
+            [smallrna_mirna_mrna_done(wildcards.project)]
+            if MIRNA_MRNA_INTEGRATION_RUN
+            else []
         )
     output:
         plan=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/differential/reports/report_plan.tsv",
@@ -2300,7 +2470,8 @@ rule plan_smallrna_report:
             else "",
         ),
         target_manifest_flag=smallrna_target_manifest_flag,
-        target_feature_set_manifest_flag=smallrna_target_feature_set_manifest_flag
+        target_feature_set_manifest_flag=smallrna_target_feature_set_manifest_flag,
+        mirna_mrna_manifest_flag=smallrna_mirna_mrna_manifest_flag
     log:
         "logs/branches/smallrna/{project}.smallrna_report_plan.log"
     shell:
@@ -2314,6 +2485,7 @@ rule plan_smallrna_report:
           {params.residual_feature_counts_flag} \
           {params.target_manifest_flag} \
           {params.target_feature_set_manifest_flag} \
+          {params.mirna_mrna_manifest_flag} \
           --project {wildcards.project:q} \
           --outdir {params.outdir:q} \
           --output {output.plan:q} \
@@ -2716,12 +2888,53 @@ rule run_rnaseq_alignment_multiqc:
         """
 
 
+rule infer_rnaseq_strandedness:
+    input:
+        samples=f"{BRANCH_DIR}" + "/rnaseq/{project}/alignment/aligned_samples.tsv",
+        alignment_done=f"{BRANCH_DIR}" + "/rnaseq/{project}/alignment/alignment.done",
+        annotation=lambda wildcards: RNASEQ_QUANTIFICATION.get(
+            "annotation_gtf",
+            RNASEQ_ALIGNMENT.get("annotation_gtf", ""),
+        )
+    output:
+        report=f"{BRANCH_DIR}" + "/rnaseq/{project}/alignment/strandedness/strandedness_report.tsv",
+        done=f"{BRANCH_DIR}" + "/rnaseq/{project}/alignment/strandedness/strandedness.done"
+    params:
+        samtools=RNASEQ_ALIGNMENT.get("samtools_command", "samtools"),
+        configured=RNASEQ_ALIGNMENT.get("strandness", ""),
+        max_reads=RNASEQ_ALIGNMENT.get("strandedness_inference_max_reads", 200000),
+        min_reads=RNASEQ_ALIGNMENT.get("strandedness_min_informative_reads", 100),
+        agreement=RNASEQ_ALIGNMENT.get("strandedness_agreement_threshold", 0.8)
+    log:
+        "logs/branches/rnaseq/{project}.strandedness.log"
+    shell:
+        r"""
+        mkdir -p logs/branches/rnaseq
+        python3 workflow/scripts/infer_rnaseq_strandedness.py \
+          --samples {input.samples:q} \
+          --annotation-gtf {input.annotation:q} \
+          --report {output.report:q} \
+          --done {output.done:q} \
+          --samtools {params.samtools:q} \
+          --configured-strandness {params.configured:q} \
+          --max-reads {params.max_reads:q} \
+          --min-informative-reads {params.min_reads:q} \
+          --agreement-threshold {params.agreement:q} \
+          > {log:q} 2>&1
+        """
+
+
 rule plan_rnaseq_quantification:
     input:
         samples=f"{BRANCH_DIR}" + "/rnaseq/{project}/alignment/aligned_samples.tsv",
         alignment_plan=f"{BRANCH_DIR}" + "/rnaseq/{project}/alignment/alignment_plan.tsv",
         alignment_qc_done=f"{BRANCH_DIR}" + "/rnaseq/{project}/alignment/qc/alignment_qc.done",
-        alignment_multiqc_done=f"{BRANCH_DIR}" + "/rnaseq/{project}/alignment/qc/multiqc/multiqc.done"
+        alignment_multiqc_done=f"{BRANCH_DIR}" + "/rnaseq/{project}/alignment/qc/multiqc/multiqc.done",
+        strandedness_done=lambda wildcards: (
+            [f"{BRANCH_DIR}/rnaseq/{wildcards.project}/alignment/strandedness/strandedness.done"]
+            if RNASEQ_STRANDEDNESS_INFERENCE_RUN
+            else []
+        )
     output:
         f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/quantification_plan.tsv"
     params:
@@ -3407,6 +3620,105 @@ rule run_gene_deseq2:
           --padj {params.padj:q} \
           --log2fc {params.log2fc:q} \
           --min-count {params.min_count:q} \
+          > {log:q} 2>&1
+        """
+
+
+rule render_rnaseq_biotype_summary:
+    input:
+        gene_counts=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/featurecounts/gene_counts.tsv",
+        gene_metadata=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/featurecounts/gene_metadata.tsv",
+        transcript_counts=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/counts/transcript_counts.tsv",
+        transcript_metadata=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/counts/transcript_metadata.tsv",
+        quantification_done=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/counts/quantification.done",
+        gene_manifest=lambda wildcards: (
+            [f"{BRANCH_DIR}/rnaseq/{wildcards.project}/differential/gene_deseq2/deseq2_manifest.tsv"]
+            if RNASEQ_DIFFERENTIAL.get("run", False) and "gene" in RNASEQ_DIFFERENTIAL_LEVELS
+            else []
+        ),
+        transcript_manifest=lambda wildcards: (
+            [f"{BRANCH_DIR}/rnaseq/{wildcards.project}/differential/transcript_deseq2/deseq2_manifest.tsv"]
+            if RNASEQ_DIFFERENTIAL.get("run", False) and "transcript" in RNASEQ_DIFFERENTIAL_LEVELS
+            else []
+        )
+    output:
+        manifest=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/biotypes/biotype_manifest.tsv",
+        count_summary=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/biotypes/count_biotype_summary.tsv",
+        differential_summary=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/biotypes/differential_biotype_summary.tsv",
+        html=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/biotypes/biotype_summary.html",
+        done=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/biotypes/biotype_summary.done"
+    params:
+        outdir=lambda wildcards: f"{BRANCH_DIR}/rnaseq/{wildcards.project}/quantification/biotypes",
+        annotation_gtf=lambda wildcards: RNASEQ_QUANTIFICATION.get(
+            "annotation_gtf",
+            RNASEQ_ALIGNMENT.get("annotation_gtf", ""),
+        ),
+        gene_manifest_flag=lambda wildcards: optional_shell_arg(
+            "--gene-deseq2-manifest",
+            f"{BRANCH_DIR}/rnaseq/{wildcards.project}/differential/gene_deseq2/deseq2_manifest.tsv"
+            if RNASEQ_DIFFERENTIAL.get("run", False) and "gene" in RNASEQ_DIFFERENTIAL_LEVELS
+            else "",
+        ),
+        transcript_manifest_flag=lambda wildcards: optional_shell_arg(
+            "--transcript-deseq2-manifest",
+            f"{BRANCH_DIR}/rnaseq/{wildcards.project}/differential/transcript_deseq2/deseq2_manifest.tsv"
+            if RNASEQ_DIFFERENTIAL.get("run", False) and "transcript" in RNASEQ_DIFFERENTIAL_LEVELS
+            else "",
+        )
+    log:
+        "logs/branches/rnaseq/{project}.biotype_summary.log"
+    shell:
+        r"""
+        mkdir -p logs/branches/rnaseq
+        python3 workflow/scripts/render_rnaseq_biotype_summary.py \
+          --annotation-gtf {params.annotation_gtf:q} \
+          --gene-counts {input.gene_counts:q} \
+          --gene-metadata {input.gene_metadata:q} \
+          --transcript-counts {input.transcript_counts:q} \
+          --transcript-metadata {input.transcript_metadata:q} \
+          {params.gene_manifest_flag} \
+          {params.transcript_manifest_flag} \
+          --outdir {params.outdir:q} \
+          --manifest {output.manifest:q} \
+          --count-summary {output.count_summary:q} \
+          --differential-summary {output.differential_summary:q} \
+          --html {output.html:q} \
+          --done {output.done:q} \
+          > {log:q} 2>&1
+        """
+
+
+rule plan_rnaseq_dtu:
+    input:
+        samples=f"{BRANCH_DIR}" + "/rnaseq/{project}/samples.tsv",
+        transcript_counts=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/counts/transcript_counts.tsv",
+        transcript_metadata=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/counts/transcript_metadata.tsv",
+        quantification_done=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/counts/quantification.done"
+    output:
+        plan=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/dtu/dtu_plan.tsv",
+        done=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/dtu/dtu.done"
+    params:
+        annotation_gtf=lambda wildcards: RNASEQ_QUANTIFICATION.get(
+            "annotation_gtf",
+            RNASEQ_ALIGNMENT.get("annotation_gtf", ""),
+        ),
+        method=RNASEQ_DTU.get("method", "planned"),
+        candidate_methods=joined_config_values(RNASEQ_DTU.get("candidate_methods", "DRIMSeq,DEXSeq,SUPPA2,rMATS"))
+    log:
+        "logs/branches/rnaseq/{project}.dtu_plan.log"
+    shell:
+        r"""
+        mkdir -p logs/branches/rnaseq
+        python3 workflow/scripts/plan_rnaseq_dtu.py \
+          --samples {input.samples:q} \
+          --transcript-counts {input.transcript_counts:q} \
+          --transcript-metadata {input.transcript_metadata:q} \
+          --annotation-gtf {params.annotation_gtf:q} \
+          --output {output.plan:q} \
+          --done {output.done:q} \
+          --project {wildcards.project:q} \
+          --method {params.method:q} \
+          --candidate-methods {params.candidate_methods:q} \
           > {log:q} 2>&1
         """
 

@@ -20,6 +20,7 @@ MANIFEST_COLUMNS = [
     "mirna_targets",
     "target_enrichment",
     "target_summary",
+    "target_source_summary",
     "target_enrichment_plot",
     "n_mirnas_significant",
     "n_target_rows",
@@ -38,6 +39,9 @@ TARGET_MAPPING_COLUMNS = [
     "target_entrez",
     "database",
     "source",
+    "target_source_table",
+    "target_source",
+    "target_source_type",
     "evidence",
 ]
 TARGET_ENRICHMENT_COLUMNS = [
@@ -47,6 +51,8 @@ TARGET_ENRICHMENT_COLUMNS = [
     "target_symbol",
     "target_entrez",
     "databases",
+    "target_sources",
+    "target_source_types",
     "overlap",
     "target_mirna_count",
     "query_size",
@@ -55,7 +61,15 @@ TARGET_ENRICHMENT_COLUMNS = [
     "padj",
     "mirnas",
 ]
-SUMMARY_COLUMNS = ["contrast_id", "collection", "n_mirnas", "n_target_rows", "n_targets"]
+SUMMARY_COLUMNS = [
+    "contrast_id",
+    "collection",
+    "target_source",
+    "target_source_type",
+    "n_mirnas",
+    "n_target_rows",
+    "n_targets",
+]
 STAT_COLUMNS = {
     "baseMean",
     "log2FoldChange",
@@ -72,7 +86,12 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--smallrna-plan", required=True, help="SmallRNA stage plan TSV")
     parser.add_argument("--deseq2-manifest", required=True, help="miRNA DESeq2 manifest TSV")
-    parser.add_argument("--target-table", required=True, help="Local miRNA target table TSV")
+    parser.add_argument("--target-table", default="", help="Legacy single local miRNA target table TSV")
+    parser.add_argument(
+        "--target-tables",
+        default="",
+        help="Comma-separated local miRNA target table TSVs. Each table may carry source/source_type columns.",
+    )
     parser.add_argument("--outdir", required=True, help="Output directory")
     parser.add_argument("--manifest", required=True, help="Output target-enrichment manifest TSV")
     parser.add_argument("--done", required=True, help="Completion sentinel")
@@ -143,6 +162,10 @@ def direction(row: dict[str, str]) -> str:
     return "up" if log2fc > 0 else "down"
 
 
+def split_paths(text: str) -> list[Path]:
+    return [Path(item.strip()) for item in text.split(",") if item.strip()]
+
+
 def read_target_table(path: Path) -> list[dict[str, str]]:
     columns, rows = read_table(path)
     mirna_col = detect_column(columns, MIRNA_COLUMNS, "miRNA identifier", path)
@@ -151,6 +174,7 @@ def read_target_table(path: Path) -> list[dict[str, str]]:
     entrez_col = optional_column(columns, ["target_entrez", "EntrezID", "entrez_id"])
     database_col = optional_column(columns, ["database", "db"])
     source_col = optional_column(columns, ["source"])
+    source_type_col = optional_column(columns, ["source_type", "target_source_type", "evidence_type"])
     evidence_col = optional_column(columns, ["evidence", "support"])
 
     target_rows = []
@@ -169,9 +193,36 @@ def read_target_table(path: Path) -> list[dict[str, str]]:
                 "target_entrez": row.get(entrez_col, "") if entrez_col else "",
                 "database": row.get(database_col, "") if database_col else "",
                 "source": row.get(source_col, "") if source_col else "",
+                "target_source": row.get(source_col, "") if source_col else path.stem,
+                "target_source_type": row.get(source_type_col, "") if source_type_col else "unspecified",
                 "evidence": row.get(evidence_col, "") if evidence_col else "",
             }
         )
+    return target_rows
+
+
+def read_target_tables(single_table: str, table_list: str) -> list[dict[str, str]]:
+    paths: list[Path] = []
+    if single_table:
+        paths.append(Path(single_table))
+    paths.extend(split_paths(table_list))
+    unique_paths: list[Path] = []
+    seen = set()
+    for path in paths:
+        key = str(path)
+        if key not in seen:
+            unique_paths.append(path)
+            seen.add(key)
+    if not unique_paths:
+        raise ValueError("No target tables were provided")
+    target_rows = []
+    for path in unique_paths:
+        if not path.exists():
+            raise FileNotFoundError(f"Target table does not exist: {path}")
+        rows = read_target_table(path)
+        for row in rows:
+            row["target_source_table"] = str(path)
+        target_rows.extend(rows)
     return target_rows
 
 
@@ -284,6 +335,8 @@ def enrichment_rows(
             symbols = {entry.get("target_symbol", "") for entry in entries}
             entrez = {entry.get("target_entrez", "") for entry in entries}
             databases = {entry.get("database", "") for entry in entries}
+            target_sources = {entry.get("target_source", "") for entry in entries}
+            source_types = {entry.get("target_source_type", "") for entry in entries}
             rows.append(
                 {
                     "contrast_id": contrast_id,
@@ -292,6 +345,8 @@ def enrichment_rows(
                     "target_symbol": joined(symbols),
                     "target_entrez": joined(entrez),
                     "databases": joined(databases),
+                    "target_sources": joined(target_sources),
+                    "target_source_types": joined(source_types),
                     "overlap": str(len(overlap)),
                     "target_mirna_count": str(len(target_mirnas)),
                     "query_size": str(len(query)),
@@ -326,15 +381,25 @@ def summary_rows(
     rows = []
     for collection, mirnas in collections.items():
         target_rows = [row for row in mapping if row["mirna_id"] in mirnas]
-        rows.append(
-            {
-                "contrast_id": contrast_id,
-                "collection": collection,
-                "n_mirnas": str(len(mirnas)),
-                "n_target_rows": str(len(target_rows)),
-                "n_targets": str(len({row["target_id"] for row in target_rows})),
-            }
-        )
+        source_groups = {("*", "*"): target_rows}
+        for target_row in target_rows:
+            key = (
+                target_row.get("target_source", "") or "unspecified",
+                target_row.get("target_source_type", "") or "unspecified",
+            )
+            source_groups.setdefault(key, []).append(target_row)
+        for (target_source, target_source_type), grouped_rows in sorted(source_groups.items()):
+            rows.append(
+                {
+                    "contrast_id": contrast_id,
+                    "collection": collection,
+                    "target_source": target_source,
+                    "target_source_type": target_source_type,
+                    "n_mirnas": str(len({row["mirna_id"] for row in grouped_rows}) if grouped_rows else len(mirnas)),
+                    "n_target_rows": str(len(grouped_rows)),
+                    "n_targets": str(len({row["target_id"] for row in grouped_rows})),
+                }
+            )
     return rows
 
 
@@ -415,6 +480,7 @@ def blocked_output(row: dict[str, str], outdir: Path, reason: str) -> dict[str, 
             ("mirna_targets", "blocked", reason, "", 0),
             ("target_enrichment", "blocked", reason, "", 0),
             ("target_summary", "blocked", reason, "", 0),
+            ("target_source_summary", "blocked", reason, "", 0),
             ("target_enrichment_plot", "blocked", reason, "", 0),
         ],
     )
@@ -426,6 +492,7 @@ def blocked_output(row: dict[str, str], outdir: Path, reason: str) -> dict[str, 
         "mirna_targets": "",
         "target_enrichment": "",
         "target_summary": "",
+        "target_source_summary": "",
         "target_enrichment_plot": "",
         "n_mirnas_significant": "0",
         "n_target_rows": "0",
@@ -449,6 +516,7 @@ def render_contrast(
         "mirna_targets": contrast_dir / "mirna_targets.tsv",
         "target_enrichment": contrast_dir / "target_enrichment.tsv",
         "target_summary": contrast_dir / "target_summary.tsv",
+        "target_source_summary": contrast_dir / "target_source_summary.tsv",
         "target_enrichment_plot": contrast_dir / "target_enrichment.svg",
     }
     try:
@@ -463,6 +531,7 @@ def render_contrast(
         write_table(paths["mirna_targets"], TARGET_MAPPING_COLUMNS, mapping)
         write_table(paths["target_enrichment"], TARGET_ENRICHMENT_COLUMNS, enriched)
         write_table(paths["target_summary"], SUMMARY_COLUMNS, summary)
+        write_table(paths["target_source_summary"], SUMMARY_COLUMNS, summary)
         write_enrichment_svg(paths["target_enrichment_plot"], enriched, top_n)
         write_contrast_manifest(
             paths["target_manifest"],
@@ -471,6 +540,7 @@ def render_contrast(
                 ("mirna_targets", "ok", "", str(paths["mirna_targets"]), len(mapping)),
                 ("target_enrichment", "ok", "", str(paths["target_enrichment"]), len(enriched)),
                 ("target_summary", "ok", "", str(paths["target_summary"]), len(summary)),
+                ("target_source_summary", "ok", "", str(paths["target_source_summary"]), len(summary)),
                 ("target_enrichment_plot", "ok", "", str(paths["target_enrichment_plot"]), len(enriched)),
             ],
         )
@@ -482,6 +552,7 @@ def render_contrast(
             "mirna_targets": str(paths["mirna_targets"]),
             "target_enrichment": str(paths["target_enrichment"]),
             "target_summary": str(paths["target_summary"]),
+            "target_source_summary": str(paths["target_source_summary"]),
             "target_enrichment_plot": str(paths["target_enrichment_plot"]),
             "n_mirnas_significant": str(len(selected)),
             "n_target_rows": str(len(mapping)),
@@ -529,7 +600,7 @@ def main() -> int:
         raise ValueError("DESeq2 manifest has no rows")
     outdir = Path(args.outdir)
     stage_blocker = target_stage_blocker(Path(args.smallrna_plan))
-    target_rows = read_target_table(Path(args.target_table))
+    target_rows = read_target_tables(args.target_table, args.target_tables)
     if stage_blocker:
         rows = [blocked_output(row, outdir, stage_blocker) for row in deseq2_rows]
     else:
