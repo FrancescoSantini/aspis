@@ -224,10 +224,12 @@ def exercise_biotype_and_dtu(paths: dict[str, Path]) -> None:
     gene_metadata = INPUT / "gene_metadata.tsv"
     transcript_counts = INPUT / "transcript_counts.tsv"
     transcript_metadata = INPUT / "transcript_metadata.tsv"
+    aligned_samples = INPUT / "aligned_samples.tsv"
     write_tsv(gene_counts, ["Geneid", "s1", "s2"], [{"Geneid": "GENE1", "s1": "10", "s2": "20"}, {"Geneid": "GENE2", "s1": "3", "s2": "0"}])
     write_tsv(gene_metadata, ["Geneid", "feature_type"], [{"Geneid": "GENE1", "feature_type": "protein_coding"}, {"Geneid": "GENE2", "feature_type": "lncRNA"}])
     write_tsv(transcript_counts, ["transcript_id", "s1", "s2"], [{"transcript_id": "TX1", "s1": "10", "s2": "20"}, {"transcript_id": "TX2", "s1": "3", "s2": "0"}])
     write_tsv(transcript_metadata, ["transcript_id", "gene_id"], [{"transcript_id": "TX1", "gene_id": "GENE1"}, {"transcript_id": "TX2", "gene_id": "GENE2"}])
+    write_tsv(aligned_samples, ["library_id", "bam"], [{"library_id": "s1", "bam": "s1.bam"}, {"library_id": "s2", "bam": "s2.bam"}])
     biotype_dir = BASE / "biotypes"
     run_command(
         [
@@ -291,6 +293,38 @@ def exercise_biotype_and_dtu(paths: dict[str, Path]) -> None:
     dtu_rows = read_tsv(dtu_dir / "dtu_plan.tsv", {"status", "candidate_methods"})
     if dtu_rows[0]["status"] != "planned" or "DRIMSeq" not in dtu_rows[0]["candidate_methods"]:
         raise ValueError(f"unexpected DTU plan row: {dtu_rows[0]}")
+    run_command(
+        [
+            sys.executable,
+            "workflow/scripts/run_rnaseq_dtu_methods.py",
+            "--plan",
+            str(dtu_dir / "dtu_plan.tsv"),
+            "--samples",
+            str(paths["rnaseq_samples"]),
+            "--aligned-samples",
+            str(aligned_samples),
+            "--transcript-counts",
+            str(transcript_counts),
+            "--transcript-metadata",
+            str(transcript_metadata),
+            "--annotation-gtf",
+            str(gtf),
+            "--outdir",
+            str(dtu_dir / "methods"),
+            "--manifest",
+            str(dtu_dir / "dtu_method_manifest.tsv"),
+            "--done",
+            str(dtu_dir / "dtu_methods.done"),
+            "--project",
+            "ASPIS_CONTRACT",
+        ]
+    )
+    method_rows = read_tsv(dtu_dir / "dtu_method_manifest.tsv", {"method", "status", "reason"})
+    methods = {row["method"] for row in method_rows}
+    if not {"DRIMSeq", "DEXSeq", "SUPPA2", "rMATS"} <= methods:
+        raise ValueError(f"unexpected DTU method rows: {method_rows}")
+    if {row["status"] for row in method_rows} != {"planned"}:
+        raise ValueError(f"unconfigured DTU methods should be planned: {method_rows}")
 
 
 def main() -> int:
