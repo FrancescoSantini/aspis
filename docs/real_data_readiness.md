@@ -248,3 +248,24 @@ ASPIS writes a provenance bundle for each real-project branch under the branch
 or partial run has completed enough upstream outputs; it summarizes the
 design, configured biological references, sample-level QC, quantification
 layers, and differential/report manifests without duplicating large data files.
+
+## 9. Validate New Biological Layers On Real Data
+
+These layers are implemented as workflow contracts, but their biological
+interpretation needs the real datasets and project metadata:
+
+- Multi-source miRNA targets: confirm each target TSV source is documented
+  as validated, predicted, conserved, expressed, or another explicit class.
+- miRNA-mRNA integration: confirm the same project has both `smallrna` and
+  `rnaseq` branches, and that `mirna_mrna_integration.match_columns` identify
+  true matched biospecimens.
+- RNA-seq strandedness inference: inspect
+  `<branch>/alignment/strandedness/strandedness_report.tsv` and resolve any
+  warning before trusting featureCounts/StringTie output.
+- RNA-seq biotype summaries: inspect
+  `<branch>/quantification/biotypes/biotype_summary.html` for unexpected
+  rRNA, pseudogene, lncRNA, unclassified, or other dominant classes.
+- DTU/event-level planning: inspect
+  `<branch>/differential/dtu/dtu_plan.tsv`; choose a real engine only after
+  seeing the transcript-count structure, replicate depth, annotation quality,
+  and whether event-level or transcript-usage output is more appropriate.

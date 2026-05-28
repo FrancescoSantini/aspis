@@ -68,6 +68,10 @@ rnaseq_alignment:
   star_genome_dir: ""
   annotation_gtf: ""
   strandness: ""
+  infer_strandedness: false
+  strandedness_inference_max_reads: 200000
+  strandedness_min_informative_reads: 100
+  strandedness_agreement_threshold: 0.8
   threads: 4
   index_threads: 8
   extra_args: ""
@@ -99,6 +103,7 @@ rnaseq_quantification:
   known_codes_strict: "=,j"
   known_codes_lenient: "=,j,c,o"
   gene_type_view: strict
+  biotype_summary: true
 
 rnaseq_differential:
   run: false
@@ -128,6 +133,16 @@ rnaseq_differential:
   min_count: 10
   padj: 0.1
   log2fc: 1.0
+
+rnaseq_dtu:
+  # Contract-only planning hook for later event-level differential transcript usage.
+  run: false
+  method: planned
+  candidate_methods:
+    - DRIMSeq
+    - DEXSeq
+    - SUPPA2
+    - rMATS
 
 smallrna:
   run: false
@@ -181,6 +196,7 @@ smallrna:
   contaminant_index_prefix: ""
   target_enrichment_mode: disabled
   target_table: ""
+  target_tables: []
   target_min_overlap: 1
   target_top_n: 20
   target_feature_sets: ""
@@ -195,6 +211,15 @@ smallrna:
   min_replicates_per_group: 2
   padj: 0.1
   log2fc: 1.0
+
+mirna_mrna_integration:
+  # Optional joint layer for projects that contain matched RNA-seq and smallRNA branches.
+  run: false
+  match_columns:
+    - biospecimen_id
+  min_pairs: 2
+  min_abs_correlation: 0.0
+  top_n: 40
 
 execution:
   # Leave empty for shared configs. G100 helpers set SLURM_ACCOUNT at runtime.

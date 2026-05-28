@@ -242,6 +242,11 @@ def validate_target_table(errors: list[str], value: Any, label: str) -> None:
         errors.append(f"{label} is missing a target-gene column; accepted names: {sorted(TARGET_GENE_COLUMNS)}")
 
 
+def validate_target_tables(errors: list[str], value: Any, label: str) -> None:
+    for item in clean_list(value):
+        validate_target_table(errors, item, label)
+
+
 def bowtie_index_exists(prefix: Any) -> bool:
     path = resolve_path(prefix)
     if path is None:
@@ -430,6 +435,7 @@ def validate_rnaseq_config(config: dict[str, Any]) -> list[str]:
     alignment = config.get("rnaseq_alignment", {}) or {}
     quant = config.get("rnaseq_quantification", {}) or {}
     diff = config.get("rnaseq_differential", {}) or {}
+    dtu = config.get("rnaseq_dtu", {}) or {}
     alignment_run = truthy(alignment.get("run"), True)
     quant_run = truthy(quant.get("run"), False)
     diff_run = truthy(diff.get("run"), False)
@@ -455,6 +461,8 @@ def validate_rnaseq_config(config: dict[str, Any]) -> list[str]:
                 require_fasta_shape(errors, alignment.get("reference_fasta"), "rnaseq_alignment.reference_fasta")
             elif not hisat2_index_exists(alignment.get("hisat2_index_prefix")):
                 errors.append("rnaseq_alignment needs reference_fasta for HISAT2 index building or an existing hisat2_index_prefix")
+        if truthy(alignment.get("infer_strandedness"), False) and not (alignment.get("annotation_gtf") or quant.get("annotation_gtf")):
+            errors.append("rnaseq_alignment.infer_strandedness=true requires rnaseq_alignment.annotation_gtf or rnaseq_quantification.annotation_gtf")
 
     if quant_run:
         if not alignment_run:
@@ -476,6 +484,8 @@ def validate_rnaseq_config(config: dict[str, Any]) -> list[str]:
         require_existing_files(errors, diff.get("report_feature_set_tables"), "rnaseq_differential.report_feature_set_tables")
         validate_gmt_files(errors, diff.get("report_feature_sets"), "rnaseq_differential.report_feature_sets")
         validate_feature_set_tables(errors, diff.get("report_feature_set_tables"), "rnaseq_differential.report_feature_set_tables")
+    if truthy(dtu.get("run"), False) and not quant_run:
+        errors.append("rnaseq_dtu.run=true requires rnaseq_quantification.run=true")
     return errors
 
 
@@ -544,10 +554,16 @@ def validate_smallrna_config(config: dict[str, Any]) -> list[str]:
     if differential_run and not quantification_run:
         errors.append("smallrna.differential_run=true requires smallrna.quantification_run=true")
 
+    if str(small.get("target_enrichment_mode", "disabled")).strip().lower() == "table" and not (
+        small.get("target_table") or clean_list(small.get("target_tables"))
+    ):
+        errors.append("smallrna.target_enrichment_mode=table requires smallrna.target_table or smallrna.target_tables")
     require_existing_optional_file(errors, small.get("target_table"), "smallrna.target_table")
+    require_existing_files(errors, small.get("target_tables"), "smallrna.target_tables")
     require_existing_files(errors, small.get("target_feature_sets"), "smallrna.target_feature_sets")
     require_existing_files(errors, small.get("target_feature_set_tables"), "smallrna.target_feature_set_tables")
     validate_target_table(errors, small.get("target_table"), "smallrna.target_table")
+    validate_target_tables(errors, small.get("target_tables"), "smallrna.target_tables")
     validate_gmt_files(errors, small.get("target_feature_sets"), "smallrna.target_feature_sets")
     validate_feature_set_tables(errors, small.get("target_feature_set_tables"), "smallrna.target_feature_set_tables")
     return errors
