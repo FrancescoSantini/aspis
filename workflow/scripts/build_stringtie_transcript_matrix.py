@@ -24,8 +24,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--counts", required=True, help="Transcript count matrix TSV")
     parser.add_argument("--metadata", required=True, help="Transcript metadata TSV")
     parser.add_argument("--done", required=True, help="Completion sentinel")
-    parser.add_argument("--known-codes-strict", default="=,j")
-    parser.add_argument("--known-codes-lenient", default="=,j,c,o")
+    parser.add_argument("--known-codes-strict", default="=")
+    parser.add_argument("--known-codes-lenient", default="=,c,k,m,n,y")
     parser.add_argument("--gene-type-view", default="strict", choices=("strict", "lenient"))
     return parser.parse_args()
 
@@ -71,7 +71,7 @@ def mode(values: list[str]) -> str:
 
 
 def class_code_rank(code: str) -> int:
-    order = ["=", "j", "c", "o", "e", "i", "u", "x", "s", "p", "r", "y", "k"]
+    order = ["=", "j", "c", "k", "m", "n", "y", "o", "e", "i", "u", "x", "s", "p", "r"]
     return order.index(code) if code in order else len(order)
 
 
@@ -185,6 +185,108 @@ def classify_gene_type(
     return strict_value, lenient_value, strict_value if view == "strict" else lenient_value
 
 
+def classify_transcript_discovery(gene_id: str, class_code: str) -> tuple[str, str, str, str, str, str]:
+    """Map gffcompare class codes to an explicit transcript discovery class."""
+    if class_code == "=":
+        return (
+            "known_transcript",
+            "known",
+            "no",
+            "known_compatible",
+            "Known/reference-compatible",
+            "exact reference transcript match",
+        )
+    if class_code == "j":
+        return (
+            "novel_isoform_known_gene",
+            "novel_isoform",
+            "yes",
+            "novel_isoform",
+            "Novel isoform",
+            "novel splice junction compatible with a known gene",
+        )
+    if class_code == "u":
+        return (
+            "intergenic_novel_locus",
+            "novel_locus",
+            "yes",
+            "novel_locus",
+            "Novel locus",
+            "intergenic transcript with no reference overlap",
+        )
+    if class_code == "i":
+        return (
+            "intronic_novel_candidate",
+            "ambiguous_overlap",
+            "no",
+            "ambiguous",
+            "Ambiguous overlap",
+            "transcript contained within a reference intron",
+        )
+    if class_code in {"x", "s"}:
+        return (
+            "antisense_novel_candidate",
+            "ambiguous_overlap",
+            "no",
+            "ambiguous",
+            "Ambiguous overlap",
+            "antisense or opposite-strand overlap with reference annotation",
+        )
+    if class_code in {"c", "k", "m", "n", "y"}:
+        return (
+            "reference_contained_or_containing",
+            "reference_overlap",
+            "no",
+            "known_compatible",
+            "Known/reference-compatible",
+            "contained, containing, retained-intron, or reference-compatible overlap",
+        )
+    if class_code in {"o", "e"}:
+        return (
+            "ambiguous_reference_overlap",
+            "ambiguous_overlap",
+            "no",
+            "ambiguous",
+            "Ambiguous overlap",
+            "generic or exonic overlap with reference annotation",
+        )
+    if class_code in {"p", "r"}:
+        return (
+            "likely_artifact_or_repeat",
+            "low_confidence",
+            "no",
+            "artifact",
+            "Artifact/repeat",
+            "possible polymerase run-on, pre-mRNA, or repeat-associated transcript",
+        )
+    if class_code:
+        return (
+            "unclassified_gffcompare_code",
+            "unclassified",
+            "no",
+            "ambiguous",
+            "Ambiguous overlap",
+            f"unmapped gffcompare class code {class_code}",
+        )
+    if gene_id.startswith(("MSTRG", "STRG")):
+        return (
+            "unclassified_novel_candidate",
+            "novel_locus",
+            "yes",
+            "novel_locus",
+            "Novel locus",
+            "StringTie novel gene without gffcompare class code",
+        )
+    return (
+        "unclassified_reference_compatible",
+        "reference_overlap",
+        "no",
+        "known_compatible",
+        "Known/reference-compatible",
+        "no gffcompare class code for reference-like gene id",
+    )
+
+
 def main() -> int:
     args = parse_args()
     plan = read_plan(Path(args.plan))
@@ -233,6 +335,12 @@ def main() -> int:
         "gene_id",
         "gene_name",
         "class_code",
+        "transcript_discovery_class",
+        "transcript_novelty",
+        "true_novel_candidate",
+        "transcript_plot_group",
+        "transcript_plot_label",
+        "gffcompare_description",
         "gene_type_strict",
         "gene_type_lenient",
         "gene_type",
@@ -257,9 +365,16 @@ def main() -> int:
                 lenient_codes,
                 args.gene_type_view,
             )
+            discovery_class, novelty, true_novel, plot_group, plot_label, description = classify_transcript_discovery(row["gene_id"], class_code)
             row.update(
                 {
                     "class_code": class_code,
+                    "transcript_discovery_class": discovery_class,
+                    "transcript_novelty": novelty,
+                    "true_novel_candidate": true_novel,
+                    "transcript_plot_group": plot_group,
+                    "transcript_plot_label": plot_label,
+                    "gffcompare_description": description,
                     "gene_type_strict": strict_value,
                     "gene_type_lenient": lenient_value,
                     "gene_type": selected,

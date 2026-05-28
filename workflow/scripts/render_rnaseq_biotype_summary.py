@@ -16,6 +16,32 @@ STAT_COLUMNS = {"baseMean", "log2FoldChange", "lfcSE", "stat", "pvalue", "padj"}
 MANIFEST_COLUMNS = ["resource", "status", "path", "rows", "detail"]
 COUNT_SUMMARY_COLUMNS = ["level", "biotype", "detected_features", "total_count"]
 DIFF_SUMMARY_COLUMNS = ["level", "contrast_id", "biotype", "tested", "significant", "up", "down"]
+DISCOVERY_SUMMARY_COLUMNS = [
+    "level",
+    "transcript_discovery_class",
+    "transcript_novelty",
+    "true_novel_candidate",
+    "transcript_plot_group",
+    "transcript_plot_label",
+    "detected_features",
+    "detected_feature_fraction",
+    "total_count",
+    "total_count_fraction",
+    "true_novel_reference_fraction",
+]
+DISCOVERY_DIFF_COLUMNS = [
+    "level",
+    "contrast_id",
+    "transcript_discovery_class",
+    "transcript_novelty",
+    "true_novel_candidate",
+    "transcript_plot_group",
+    "transcript_plot_label",
+    "tested",
+    "significant",
+    "up",
+    "down",
+]
 
 
 def parse_args() -> argparse.Namespace:
@@ -31,6 +57,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--manifest", required=True)
     parser.add_argument("--count-summary", required=True)
     parser.add_argument("--differential-summary", required=True)
+    parser.add_argument("--transcript-discovery-summary", required=True)
+    parser.add_argument("--transcript-discovery-differential-summary", required=True)
+    parser.add_argument("--true-novel-reference-fraction", type=float, default=0.2)
     parser.add_argument("--html", required=True)
     parser.add_argument("--done", required=True)
     return parser.parse_args()
@@ -113,7 +142,10 @@ def metadata_biotypes(path_text: str, feature_column: str, gtf_biotypes: dict[st
         return {}
     columns, rows = read_table(Path(path_text))
     feature_column = feature_id_column(columns, feature_column)
-    biotype_column = next((column for column in ["biotype", "gene_biotype", "gene_type", "feature_type"] if column in columns), "")
+    candidates = ["biotype", "gene_biotype", "transcript_biotype", "transcript_type", "feature_type"]
+    if "transcript_discovery_class" not in columns:
+        candidates.append("gene_type")
+    biotype_column = next((column for column in candidates if column in columns), "")
     gene_id_column = next((column for column in ["gene_id", "Geneid"] if column in columns), "")
     result = {}
     for row in rows:
@@ -126,6 +158,26 @@ def metadata_biotypes(path_text: str, feature_column: str, gtf_biotypes: dict[st
         if not biotype:
             biotype = gtf_biotypes.get(feature_id, "unclassified")
         result[feature_id] = biotype or "unclassified"
+    return result
+
+
+def metadata_discovery(path_text: str) -> dict[str, dict[str, str]]:
+    if not path_text:
+        return {}
+    columns, rows = read_table(Path(path_text))
+    feature_column = feature_id_column(columns, "transcript_id")
+    result: dict[str, dict[str, str]] = {}
+    for row in rows:
+        feature_id = row.get(feature_column, "")
+        if not feature_id:
+            continue
+        result[feature_id] = {
+            "transcript_discovery_class": row.get("transcript_discovery_class", "unclassified"),
+            "transcript_novelty": row.get("transcript_novelty", "unclassified"),
+            "true_novel_candidate": row.get("true_novel_candidate", "no") or "no",
+            "transcript_plot_group": row.get("transcript_plot_group", "unclassified") or "unclassified",
+            "transcript_plot_label": row.get("transcript_plot_label", "") or row.get("transcript_plot_group", "unclassified") or "unclassified",
+        }
     return result
 
 
@@ -152,6 +204,68 @@ def count_summary(path_text: str, level: str, feature_column: str, biotypes: dic
     return [
         {"level": level, "biotype": biotype, "detected_features": str(detected[biotype]), "total_count": str(total[biotype])}
         for biotype in sorted(set(detected) | set(total))
+    ]
+
+
+def format_fraction(numerator: int, denominator: int) -> str:
+    if not denominator:
+        return "0"
+    return f"{numerator / denominator:.6g}"
+
+
+def transcript_discovery_summary(path_text: str, discovery: dict[str, dict[str, str]], reference_fraction: float) -> list[dict[str, str]]:
+    if not path_text:
+        return []
+    columns, rows = read_table(Path(path_text))
+    feature_column = feature_id_column(columns, "transcript_id")
+    sample_columns = [column for column in columns if column != feature_column and column not in {"Chr", "Start", "End", "Strand", "Length"}]
+    detected: Counter[tuple[str, str, str, str, str]] = Counter()
+    total: Counter[tuple[str, str, str, str, str]] = Counter()
+    for row in rows:
+        feature_id = row.get(feature_column, "")
+        class_info = discovery.get(
+            feature_id,
+            {
+                "transcript_discovery_class": "unclassified",
+                "transcript_novelty": "unclassified",
+                "true_novel_candidate": "no",
+                "transcript_plot_group": "unclassified",
+                "transcript_plot_label": "unclassified",
+            },
+        )
+        key = (
+            class_info["transcript_discovery_class"],
+            class_info["transcript_novelty"],
+            class_info["true_novel_candidate"],
+            class_info["transcript_plot_group"],
+            class_info["transcript_plot_label"],
+        )
+        values = []
+        for column in sample_columns:
+            try:
+                values.append(int(float(row.get(column, "0") or "0")))
+            except ValueError:
+                values.append(0)
+        if any(value > 0 for value in values):
+            detected[key] += 1
+        total[key] += sum(values)
+    total_detected = sum(detected.values())
+    total_counts = sum(total.values())
+    return [
+        {
+            "level": "transcript",
+            "transcript_discovery_class": key[0],
+            "transcript_novelty": key[1],
+            "true_novel_candidate": key[2],
+            "transcript_plot_group": key[3],
+            "transcript_plot_label": key[4],
+            "detected_features": str(detected[key]),
+            "detected_feature_fraction": format_fraction(detected[key], total_detected),
+            "total_count": str(total[key]),
+            "total_count_fraction": format_fraction(total[key], total_counts),
+            "true_novel_reference_fraction": f"{reference_fraction:.6g}",
+        }
+        for key in sorted(set(detected) | set(total))
     ]
 
 
@@ -212,6 +326,58 @@ def differential_summary(path_text: str, level: str, feature_column: str, biotyp
     return rows
 
 
+def transcript_discovery_differential_summary(path_text: str, discovery: dict[str, dict[str, str]]) -> list[dict[str, str]]:
+    rows = []
+    for manifest_row in manifest_rows(path_text):
+        contrast_id = manifest_row["contrast_id"]
+        result_columns, result_rows = read_table(Path(manifest_row["results"]))
+        filtered_columns, filtered_rows = read_table(Path(manifest_row["filtered"]))
+        result_feature = feature_id_column(result_columns, "transcript_id")
+        filtered_feature = feature_id_column(filtered_columns, "transcript_id")
+
+        def key_for(row: dict[str, str], feature_column: str) -> tuple[str, str, str, str, str]:
+            feature_id = row.get(feature_column, "")
+            class_info = discovery.get(
+                feature_id,
+                {
+                    "transcript_discovery_class": "unclassified",
+                    "transcript_novelty": "unclassified",
+                    "true_novel_candidate": "no",
+                    "transcript_plot_group": "unclassified",
+                    "transcript_plot_label": "unclassified",
+                },
+            )
+            return (
+                class_info["transcript_discovery_class"],
+                class_info["transcript_novelty"],
+                class_info["true_novel_candidate"],
+                class_info["transcript_plot_group"],
+                class_info["transcript_plot_label"],
+            )
+
+        tested = Counter(key_for(row, result_feature) for row in result_rows)
+        significant = Counter(key_for(row, filtered_feature) for row in filtered_rows)
+        up = Counter(key_for(row, filtered_feature) for row in filtered_rows if direction(row) == "up")
+        down = Counter(key_for(row, filtered_feature) for row in filtered_rows if direction(row) == "down")
+        for key in sorted(set(tested) | set(significant) | set(up) | set(down)):
+            rows.append(
+                {
+                    "level": "transcript",
+                    "contrast_id": contrast_id,
+                    "transcript_discovery_class": key[0],
+                    "transcript_novelty": key[1],
+                    "true_novel_candidate": key[2],
+                    "transcript_plot_group": key[3],
+                    "transcript_plot_label": key[4],
+                    "tested": str(tested[key]),
+                    "significant": str(significant[key]),
+                    "up": str(up[key]),
+                    "down": str(down[key]),
+                }
+            )
+    return rows
+
+
 def html_table(rows: list[dict[str, str]], columns: list[str]) -> str:
     if not rows:
         return "<p>No rows.</p>"
@@ -222,7 +388,13 @@ def html_table(rows: list[dict[str, str]], columns: list[str]) -> str:
     return f"<table><thead><tr>{header}</tr></thead><tbody>{''.join(body)}</tbody></table>"
 
 
-def write_html(path: Path, count_rows: list[dict[str, str]], diff_rows: list[dict[str, str]]) -> None:
+def write_html(
+    path: Path,
+    count_rows: list[dict[str, str]],
+    diff_rows: list[dict[str, str]],
+    discovery_rows: list[dict[str, str]],
+    discovery_diff_rows: list[dict[str, str]],
+) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     content = f"""<!doctype html>
 <html lang="en">
@@ -242,17 +414,27 @@ def write_html(path: Path, count_rows: list[dict[str, str]], diff_rows: list[dic
   {html_table(count_rows, COUNT_SUMMARY_COLUMNS)}
   <h2>Differential composition</h2>
   {html_table(diff_rows, DIFF_SUMMARY_COLUMNS)}
+  <h2>Transcript discovery composition</h2>
+  {html_table(discovery_rows, DISCOVERY_SUMMARY_COLUMNS)}
+  <h2>Differential transcript discovery</h2>
+  {html_table(discovery_diff_rows, DISCOVERY_DIFF_COLUMNS)}
 </body>
 </html>
 """
     path.write_text(content, encoding="utf-8")
 
 
-def write_done(path: Path, count_rows: list[dict[str, str]], diff_rows: list[dict[str, str]]) -> None:
+def write_done(
+    path: Path,
+    count_rows: list[dict[str, str]],
+    diff_rows: list[dict[str, str]],
+    discovery_rows: list[dict[str, str]],
+    discovery_diff_rows: list[dict[str, str]],
+) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", encoding="utf-8") as handle:
-        handle.write("status\tcount_biotype_rows\tdifferential_biotype_rows\n")
-        handle.write(f"ok\t{len(count_rows)}\t{len(diff_rows)}\n")
+        handle.write("status\tcount_biotype_rows\tdifferential_biotype_rows\ttranscript_discovery_rows\ttranscript_discovery_differential_rows\n")
+        handle.write(f"ok\t{len(count_rows)}\t{len(diff_rows)}\t{len(discovery_rows)}\t{len(discovery_diff_rows)}\n")
 
 
 def main() -> int:
@@ -260,25 +442,32 @@ def main() -> int:
     gene_gtf, transcript_gtf = read_gtf_biotypes(args.annotation_gtf)
     gene_biotypes = metadata_biotypes(args.gene_metadata, "Geneid", gene_gtf)
     transcript_biotypes = metadata_biotypes(args.transcript_metadata, "transcript_id", transcript_gtf or gene_gtf)
+    transcript_discovery = metadata_discovery(args.transcript_metadata)
     count_rows = []
     count_rows.extend(count_summary(args.gene_counts, "gene", "Geneid", gene_biotypes))
     count_rows.extend(count_summary(args.transcript_counts, "transcript", "transcript_id", transcript_biotypes))
     diff_rows = []
     diff_rows.extend(differential_summary(args.gene_deseq2_manifest, "gene", "Geneid", gene_biotypes))
     diff_rows.extend(differential_summary(args.transcript_deseq2_manifest, "transcript", "transcript_id", transcript_biotypes))
+    discovery_rows = transcript_discovery_summary(args.transcript_counts, transcript_discovery, args.true_novel_reference_fraction)
+    discovery_diff_rows = transcript_discovery_differential_summary(args.transcript_deseq2_manifest, transcript_discovery)
     write_table(Path(args.count_summary), COUNT_SUMMARY_COLUMNS, count_rows)
     write_table(Path(args.differential_summary), DIFF_SUMMARY_COLUMNS, diff_rows)
-    write_html(Path(args.html), count_rows, diff_rows)
+    write_table(Path(args.transcript_discovery_summary), DISCOVERY_SUMMARY_COLUMNS, discovery_rows)
+    write_table(Path(args.transcript_discovery_differential_summary), DISCOVERY_DIFF_COLUMNS, discovery_diff_rows)
+    write_html(Path(args.html), count_rows, diff_rows, discovery_rows, discovery_diff_rows)
     write_table(
         Path(args.manifest),
         MANIFEST_COLUMNS,
         [
             {"resource": "count_biotype_summary", "status": "ok", "path": args.count_summary, "rows": str(len(count_rows)), "detail": ""},
             {"resource": "differential_biotype_summary", "status": "ok", "path": args.differential_summary, "rows": str(len(diff_rows)), "detail": ""},
-            {"resource": "biotype_summary_html", "status": "ok", "path": args.html, "rows": str(len(count_rows) + len(diff_rows)), "detail": ""},
+            {"resource": "transcript_discovery_summary", "status": "ok", "path": args.transcript_discovery_summary, "rows": str(len(discovery_rows)), "detail": ""},
+            {"resource": "transcript_discovery_differential_summary", "status": "ok", "path": args.transcript_discovery_differential_summary, "rows": str(len(discovery_diff_rows)), "detail": ""},
+            {"resource": "biotype_summary_html", "status": "ok", "path": args.html, "rows": str(len(count_rows) + len(diff_rows) + len(discovery_rows) + len(discovery_diff_rows)), "detail": ""},
         ],
     )
-    write_done(Path(args.done), count_rows, diff_rows)
+    write_done(Path(args.done), count_rows, diff_rows, discovery_rows, discovery_diff_rows)
     return 0
 
 
