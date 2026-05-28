@@ -8,6 +8,7 @@ import csv
 import html
 import os
 from pathlib import Path
+from typing import Optional
 
 
 KEY_COLUMNS = ["project", "level", "contrast_id"]
@@ -94,6 +95,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--summary-manifest", required=True, help="Differential summary manifest TSV")
     parser.add_argument("--biotype-html", default="", help="Optional RNA-seq biotype summary HTML")
     parser.add_argument("--warnings-html", default="", help="Optional biological warnings HTML")
+    parser.add_argument("--isoform-switch-html", default="", help="Optional isoform-switch HTML report")
+    parser.add_argument("--isoform-switch-candidates", default="", help="Optional isoform-switch candidate table")
+    parser.add_argument("--isoform-switch-events", default="", help="Optional isoform-switch event table")
+    parser.add_argument("--isoform-switch-plots", default="", help="Optional isoform-switch plot manifest")
     parser.add_argument("--asset-manifest", required=True, help="Report asset inventory TSV")
     parser.add_argument("--output", required=True, help="Report index HTML")
     parser.add_argument("--done", required=True, help="Completion sentinel")
@@ -307,7 +312,16 @@ def render_table(rows: list[dict[str, str]], output: Path) -> str:
     return "\n".join(body)
 
 
-def render_html(rows: list[dict[str, str]], output: Path, biotype_html: str = "", warnings_html: str = "") -> str:
+def render_html(
+    rows: list[dict[str, str]],
+    output: Path,
+    biotype_html: str = "",
+    warnings_html: str = "",
+    isoform_switch_html: str = "",
+    isoform_switch_candidates: str = "",
+    isoform_switch_events: str = "",
+    isoform_switch_plots: str = "",
+) -> str:
     project_names = sorted({row["project"] for row in rows})
     title = "RNA-seq differential report index"
     if len(project_names) == 1:
@@ -319,6 +333,10 @@ def render_html(rows: list[dict[str, str]], output: Path, biotype_html: str = ""
         [
             ("biotype summary", biotype_html),
             ("biological warnings", warnings_html),
+            ("isoform switch report", isoform_switch_html),
+            ("isoform switch candidates", isoform_switch_candidates),
+            ("isoform switch events", isoform_switch_events),
+            ("isoform switch plots", isoform_switch_plots),
         ],
         output,
     )
@@ -410,7 +428,11 @@ ASSET_FIELDS = [
 ]
 
 
-def write_asset_manifest(path: Path, rows: list[dict[str, str]]) -> None:
+def write_asset_manifest(
+    path: Path,
+    rows: list[dict[str, str]],
+    project_assets: Optional[list[tuple[str, str, str, str]]] = None,
+) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", newline="", encoding="utf-8") as handle:
         writer = csv.DictWriter(handle, fieldnames=ASSET_COLUMNS, delimiter="\t", lineterminator="\n")
@@ -428,6 +450,25 @@ def write_asset_manifest(path: Path, rows: list[dict[str, str]]) -> None:
                         "contrast_id": row["contrast_id"],
                         "status": row["status"],
                         "asset_group": group,
+                        "asset_label": label,
+                        "asset_kind": kind,
+                        "path": asset_path,
+                        "exists": str(Path(asset_path).exists()).lower(),
+                    }
+                )
+        if project_assets:
+            project = rows[0]["project"] if rows else ""
+            for label, kind, asset_path, status in project_assets:
+                if not asset_path:
+                    continue
+                writer.writerow(
+                    {
+                        "project": project,
+                        "assay": "rnaseq",
+                        "level": "isoform_switch",
+                        "contrast_id": "project",
+                        "status": status,
+                        "asset_group": "isoform_switch",
                         "asset_label": label,
                         "asset_kind": kind,
                         "path": asset_path,
@@ -464,8 +505,26 @@ def main() -> int:
     rows = merged_rows(plan_rows, plots_by_key, enrichment_by_key, summaries_by_key)
     output = Path(args.output)
     output.parent.mkdir(parents=True, exist_ok=True)
-    output.write_text(render_html(rows, output, args.biotype_html, args.warnings_html), encoding="utf-8")
-    write_asset_manifest(Path(args.asset_manifest), rows)
+    output.write_text(
+        render_html(
+            rows,
+            output,
+            args.biotype_html,
+            args.warnings_html,
+            args.isoform_switch_html,
+            args.isoform_switch_candidates,
+            args.isoform_switch_events,
+            args.isoform_switch_plots,
+        ),
+        encoding="utf-8",
+    )
+    project_assets = [
+        ("report_html", "html", args.isoform_switch_html, "ok"),
+        ("candidate_table", "table", args.isoform_switch_candidates, "ok"),
+        ("event_summary", "table", args.isoform_switch_events, "ok"),
+        ("plot_manifest", "manifest", args.isoform_switch_plots, "ok"),
+    ]
+    write_asset_manifest(Path(args.asset_manifest), rows, project_assets)
     write_done(Path(args.done), rows)
     return 0
 
