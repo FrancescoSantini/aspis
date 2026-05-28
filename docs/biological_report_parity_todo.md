@@ -18,6 +18,8 @@ reproducible modules.
   configurable feature-set ORA, and ranked feature-set enrichment.
 - Differential PCA reports can color samples by configured biological and
   technical metadata columns when available.
+- Differential PCA reports now write PC1/PC2 variance percentages to
+  machine-readable per-contrast metrics TSVs and link them from summaries.
 - SmallRNA reports currently include miRNA DESeq2 plots, target-table
   enrichment, target feature-set enrichment, length/isomiR summaries, residual
   read fate, and optional miRNA-mRNA integration when matched RNA-seq exists.
@@ -60,7 +62,6 @@ Current state:
 
 Remaining work:
 
-- Explicitly report variance explained by PC1/PC2.
 - Add a report note that lack of PCA clustering is not automatically a failure.
   It can reflect weak biological effect, small sample size, strong individual
   variation, or poor design power.

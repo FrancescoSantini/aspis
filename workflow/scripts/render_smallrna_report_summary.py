@@ -20,6 +20,7 @@ PLAN_COLUMNS = {
     "filtered",
     "ma_pdf",
     "summary_html",
+    "pca_metrics_tsv",
 }
 SUMMARY_COLUMNS = [
     "project",
@@ -59,6 +60,7 @@ SUMMARY_COLUMNS = [
     "volcano_pdf",
     "ma_pdf",
     "pca_pdf",
+    "pca_metrics_tsv",
     "sample_distance_pdf",
     "heatmap_pdf",
     "vst_tsv",
@@ -266,6 +268,8 @@ def render_html(
         residual_features,
         key=lambda row: (-numeric_total(row, {"feature_id", "feature_name", "biotype"}), row.get("feature_id", "")),
     )[:top_n]
+    _, pca_metric_rows = read_existing(plan_row.get("pca_metrics_tsv", ""))
+    pca_metrics = pca_metric_rows[0] if pca_metric_rows else {}
     links = [
         html_link(plan_row.get("results", ""), "DESeq2 results"),
         html_link(plan_row.get("filtered", ""), "significant miRNAs"),
@@ -287,6 +291,7 @@ def render_html(
         html_link(plan_row.get("volcano_pdf", ""), "volcano plot"),
         html_link(plan_row.get("ma_pdf", ""), "MA plot"),
         html_link(plan_row.get("pca_pdf", ""), "PCA plot"),
+        html_link(plan_row.get("pca_metrics_tsv", ""), "PCA metrics"),
         html_link(plan_row.get("sample_distance_pdf", ""), "sample-distance heatmap"),
         html_link(plan_row.get("heatmap_pdf", ""), "heatmap"),
         html_link(plan_row.get("vst_tsv", ""), "log2 counts"),
@@ -308,6 +313,9 @@ def render_html(
         ("Significant miRNAs", str(len(filtered_rows))),
         ("Up", str(n_up)),
         ("Down", str(n_down)),
+        ("PCA status", pca_metrics.get("status", "")),
+        ("PC1 variance %", pca_metrics.get("pc1_variance_percent", "")),
+        ("PC2 variance %", pca_metrics.get("pc2_variance_percent", "")),
         ("Target rows", str(len(target_mapping))),
         ("Target genes", str(len({row.get("target_id", "") for row in target_mapping if row.get("target_id", "")}))),
         ("Enrichment terms", str(len(target_enrichment))),
@@ -478,6 +486,7 @@ def blocked_summary(row: dict[str, str]) -> dict[str, str]:
         "volcano_pdf": row.get("volcano_pdf", ""),
         "ma_pdf": row.get("ma_pdf", ""),
         "pca_pdf": row.get("pca_pdf", ""),
+        "pca_metrics_tsv": row.get("pca_metrics_tsv", ""),
         "sample_distance_pdf": row.get("sample_distance_pdf", ""),
         "heatmap_pdf": row.get("heatmap_pdf", ""),
         "vst_tsv": row.get("vst_tsv", ""),
@@ -605,6 +614,7 @@ def render_row(row: dict[str, str], top_n: int) -> dict[str, str]:
             "volcano_pdf": row.get("volcano_pdf", ""),
             "ma_pdf": row.get("ma_pdf", ""),
             "pca_pdf": row.get("pca_pdf", ""),
+            "pca_metrics_tsv": row.get("pca_metrics_tsv", ""),
             "sample_distance_pdf": row.get("sample_distance_pdf", ""),
             "heatmap_pdf": row.get("heatmap_pdf", ""),
             "vst_tsv": row.get("vst_tsv", ""),
