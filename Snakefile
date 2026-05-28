@@ -533,6 +533,8 @@ def rnaseq_isoform_switch_report_outputs(project):
         "sequence_table": f"{base}/switch_sequence_summary.tsv",
         "functional_annotation_table": f"{base}/functional_annotation_summary.tsv",
         "plot_manifest": f"{base}/switch_plot_manifest.tsv",
+        "external_tool_manifest": f"{base}/external_tool_manifest.tsv",
+        "plots_pdf": f"{base}/switch_plots.pdf",
         "html": f"{base}/index.html",
         "done": f"{base}/report.done",
     }
@@ -548,6 +550,8 @@ def rnaseq_isoform_switch_report_inputs(wildcards):
         outputs["sequence_table"],
         outputs["functional_annotation_table"],
         outputs["plot_manifest"],
+        outputs["external_tool_manifest"],
+        outputs["plots_pdf"],
         outputs["html"],
         outputs["done"],
     ]
@@ -869,6 +873,8 @@ def branch_provenance_inputs(wildcards):
                                     outputs["sequence_table"],
                                     outputs["functional_annotation_table"],
                                     outputs["plot_manifest"],
+                                    outputs["external_tool_manifest"],
+                                    outputs["plots_pdf"],
                                     outputs["html"],
                                     outputs["done"],
                                 ]
@@ -1200,6 +1206,8 @@ def planned_branch_targets(wildcards):
                                             outputs["sequence_table"],
                                             outputs["functional_annotation_table"],
                                             outputs["plot_manifest"],
+                                            outputs["external_tool_manifest"],
+                                            outputs["plots_pdf"],
                                             outputs["html"],
                                             outputs["done"],
                                         ]
@@ -4090,6 +4098,8 @@ rule render_isoform_switch_report:
         sequence_table=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/isoform_switch/report/switch_sequence_summary.tsv",
         functional_annotation_table=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/isoform_switch/report/functional_annotation_summary.tsv",
         plot_manifest=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/isoform_switch/report/switch_plot_manifest.tsv",
+        external_tool_manifest=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/isoform_switch/report/external_tool_manifest.tsv",
+        plots_pdf=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/isoform_switch/report/switch_plots.pdf",
         html=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/isoform_switch/report/index.html",
         done=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/isoform_switch/report/report.done"
     params:
@@ -4102,6 +4112,34 @@ rule render_isoform_switch_report:
             joined_config_values(
                 RNASEQ_DIFFERENTIAL.get("isoform_switch_functional_annotation_tables", "")
             ),
+        ),
+        interproscan_command=lambda wildcards: optional_shell_arg(
+            "--interproscan-command",
+            RNASEQ_DIFFERENTIAL.get("isoform_switch_interproscan_command", ""),
+        ),
+        pfam_command=lambda wildcards: optional_shell_arg(
+            "--pfam-command",
+            RNASEQ_DIFFERENTIAL.get("isoform_switch_pfam_command", ""),
+        ),
+        coding_potential_command=lambda wildcards: optional_shell_arg(
+            "--coding-potential-command",
+            RNASEQ_DIFFERENTIAL.get("isoform_switch_coding_potential_command", ""),
+        ),
+        signalp_command=lambda wildcards: optional_shell_arg(
+            "--signalp-command",
+            RNASEQ_DIFFERENTIAL.get("isoform_switch_signalp_command", ""),
+        ),
+        tm_command=lambda wildcards: optional_shell_arg(
+            "--tm-command",
+            RNASEQ_DIFFERENTIAL.get("isoform_switch_tm_command", ""),
+        ),
+        localization_command=lambda wildcards: optional_shell_arg(
+            "--localization-command",
+            RNASEQ_DIFFERENTIAL.get("isoform_switch_localization_command", ""),
+        ),
+        disorder_command=lambda wildcards: optional_shell_arg(
+            "--disorder-command",
+            RNASEQ_DIFFERENTIAL.get("isoform_switch_disorder_command", ""),
         )
     log:
         "logs/branches/rnaseq/{project}.isoform_switch_report.log"
@@ -4118,12 +4156,21 @@ rule render_isoform_switch_report:
           --sequence-table {output.sequence_table:q} \
           --functional-annotation-table {output.functional_annotation_table:q} \
           --plot-manifest {output.plot_manifest:q} \
+          --external-tool-manifest {output.external_tool_manifest:q} \
+          --plots-pdf {output.plots_pdf:q} \
           --html {output.html:q} \
           --done {output.done:q} \
           --padj {params.padj:q} \
           --dif {params.dif:q} \
           --top-n {params.top_n:q} \
           {params.functional_annotation_tables} \
+          {params.interproscan_command} \
+          {params.pfam_command} \
+          {params.coding_potential_command} \
+          {params.signalp_command} \
+          {params.tm_command} \
+          {params.localization_command} \
+          {params.disorder_command} \
           > {log:q} 2>&1
         """
 
@@ -4595,6 +4642,11 @@ rule render_rnaseq_differential_report_index:
             wildcards,
             "plot_manifest",
             "--isoform-switch-plots",
+        ),
+        isoform_switch_plots_pdf=lambda wildcards: rnaseq_isoform_switch_report_arg(
+            wildcards,
+            "plots_pdf",
+            "--isoform-switch-plots-pdf",
         )
     log:
         "logs/branches/rnaseq/{project}.differential_report_index.log"
@@ -4615,6 +4667,7 @@ rule render_rnaseq_differential_report_index:
           {params.isoform_switch_candidates} \
           {params.isoform_switch_events} \
           {params.isoform_switch_plots} \
+          {params.isoform_switch_plots_pdf} \
           > {log:q} 2>&1
         """
 
