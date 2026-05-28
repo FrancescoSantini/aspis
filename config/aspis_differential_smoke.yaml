@@ -96,8 +96,8 @@ rnaseq_quantification:
   stringtie_assembly_extra_args: "-m 30 -c 0.001 -s 0.001"
   stringtie_merge_extra_args: "-m 30 -c 0.001"
   stringtie_quant_extra_args: ""
-  known_codes_strict: "=,j"
-  known_codes_lenient: "=,j,c,o"
+  known_codes_strict: "="
+  known_codes_lenient: "=,c,k,m,n,y"
   gene_type_view: strict
 
 rnaseq_differential:
@@ -109,6 +109,13 @@ rnaseq_differential:
     - isoform_switch
   reports: true
   report_top_n: 20
+  report_transcript_plot_groups:
+    - all
+    - known_compatible
+    - novel_isoform
+    - novel_locus
+    - ambiguous
+    - artifact
   rscript_command: Rscript
   deseq2_script: workflow/scripts/run_deseq2_feature.R
   isoform_switch_script: workflow/scripts/run_isoform_switch_contrast.R
@@ -146,6 +153,8 @@ biological_qc:
   min_library_size: 1
   min_sample_correlation: 0.0
   max_unclassified_biotype_fraction: 0.8
+  true_novel_transcript_reference_fraction: 0.2
+  warn_high_true_novel_transcript_fraction: false
   max_residual_genome_fraction: 0.8
 
 environment:

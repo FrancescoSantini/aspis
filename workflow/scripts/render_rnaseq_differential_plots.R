@@ -5,7 +5,12 @@
 # happened upstream, and this layer should be cheap to run on login/local nodes.
 
 parse_args <- function(argv) {
-  out <- list(top_n = "50", padj = "0.1", log2fc = "1.0")
+  out <- list(
+    top_n = "50",
+    padj = "0.1",
+    log2fc = "1.0",
+    transcript_plot_groups = "all,known_compatible,novel_isoform,novel_locus,ambiguous,artifact"
+  )
   i <- 1
   while (i <= length(argv)) {
     key <- argv[[i]]
@@ -30,6 +35,13 @@ required_arg <- function(args, name) {
   value
 }
 
+parse_list_arg <- function(value) {
+  if (is.null(value) || is.na(value) || value == "") {
+    return(character())
+  }
+  unique(trimws(unlist(strsplit(value, "[,[:space:]]+"))))
+}
+
 read_tsv <- function(path) {
   if (!file.exists(path)) {
     stop("Input does not exist: ", path)
@@ -51,10 +63,14 @@ ensure_parent <- function(path) {
 blank_pdf <- function(path, title, message) {
   ensure_parent(path)
   grDevices::pdf(path)
+  blank_panel(title, message)
+  grDevices::dev.off()
+}
+
+blank_panel <- function(title, message) {
   plot.new()
   title(main = title)
   text(0.5, 0.5, message)
-  grDevices::dev.off()
 }
 
 feature_id_column <- function(table) {
@@ -70,13 +86,67 @@ numeric_column <- function(table, column) {
   suppressWarnings(as.numeric(table[[column]]))
 }
 
-plot_volcano <- function(results, path, title, padj_cutoff, log2fc_cutoff) {
+group_label <- function(results, group_name) {
+  if (group_name == "all") {
+    return("All features")
+  }
+  if ("transcript_plot_label" %in% colnames(results) && nrow(results) > 0) {
+    labels <- unique(results$transcript_plot_label[results$transcript_plot_label != ""])
+    if (length(labels)) {
+      return(labels[[1]])
+    }
+  }
+  labels <- c(
+    known_compatible = "Known/reference-compatible",
+    novel_isoform = "Novel isoform",
+    novel_locus = "Novel locus",
+    ambiguous = "Ambiguous overlap",
+    artifact = "Artifact/repeat"
+  )
+  if (group_name %in% names(labels)) {
+    return(labels[[group_name]])
+  }
+  group_name
+}
+
+plot_groups_for_results <- function(results, requested_groups) {
+  feature_column <- feature_id_column(results)
+  groups <- list(list(
+    name = "all",
+    label = "All features",
+    results = results,
+    feature_ids = as.character(results[[feature_column]])
+  ))
+  if (!("transcript_plot_group" %in% colnames(results))) {
+    return(groups)
+  }
+  requested <- requested_groups[requested_groups != ""]
+  if (!length(requested)) {
+    requested <- unique(results$transcript_plot_group[results$transcript_plot_group != ""])
+  }
+  requested <- unique(requested[requested != "all"])
+  for (group_name in requested) {
+    subset <- results[results$transcript_plot_group == group_name, , drop = FALSE]
+    if (nrow(subset) == 0) {
+      next
+    }
+    groups[[length(groups) + 1]] <- list(
+      name = group_name,
+      label = group_label(subset, group_name),
+      results = subset,
+      feature_ids = as.character(subset[[feature_column]])
+    )
+  }
+  groups
+}
+
+plot_volcano_panel <- function(results, title, padj_cutoff, log2fc_cutoff) {
   ensure_columns(results, c("log2FoldChange", "padj"), "DESeq2 results")
   log2fc <- numeric_column(results, "log2FoldChange")
   padj <- numeric_column(results, "padj")
   keep <- !is.na(log2fc) & !is.na(padj)
   if (!any(keep)) {
-    blank_pdf(path, title, "No valid padj/log2FoldChange rows")
+    blank_panel(title, "No valid padj/log2FoldChange rows")
     return()
   }
   log2fc <- log2fc[keep]
@@ -84,8 +154,6 @@ plot_volcano <- function(results, path, title, padj_cutoff, log2fc_cutoff) {
   significant <- padj[keep] < padj_cutoff & abs(log2fc) >= log2fc_cutoff
   kept_results <- results[keep, , drop = FALSE]
 
-  ensure_parent(path)
-  grDevices::pdf(path)
   plot(
     log2fc,
     y,
@@ -111,7 +179,15 @@ plot_volcano <- function(results, path, title, padj_cutoff, log2fc_cutoff) {
       col = "#111111"
     )
   }
-  grDevices::dev.off()
+}
+
+plot_volcano <- function(groups, path, title, padj_cutoff, log2fc_cutoff) {
+  ensure_parent(path)
+  grDevices::pdf(path)
+  on.exit(grDevices::dev.off(), add = TRUE)
+  for (group in groups) {
+    plot_volcano_panel(group$results, paste(title, "-", group$label), padj_cutoff, log2fc_cutoff)
+  }
 }
 
 plot_ma <- function(results, path, title, padj_cutoff, log2fc_cutoff) {
@@ -220,9 +296,9 @@ plot_pca <- function(transformed, path, title, coldata = NULL) {
   grDevices::dev.off()
 }
 
-plot_heatmap <- function(transformed, path, title, top_n, coldata = NULL) {
+plot_heatmap_panel <- function(transformed, title, top_n, coldata = NULL) {
   if (ncol(transformed) < 2 || nrow(transformed) < 2) {
-    blank_pdf(path, title, "Heatmap requires at least two samples and two features")
+    blank_panel(title, "Heatmap requires at least two samples and two features")
     return()
   }
   variances <- apply(transformed, 1, stats::var)
@@ -232,10 +308,21 @@ plot_heatmap <- function(transformed, path, title, top_n, coldata = NULL) {
     order_index <- order(coldata[colnames(matrix), "condition"], colnames(matrix))
     matrix <- matrix[, order_index, drop = FALSE]
   }
+  stats::heatmap(matrix, scale = "row", margins = c(8, 8), main = title)
+}
+
+plot_heatmap <- function(transformed, groups, path, title, top_n, coldata = NULL) {
   ensure_parent(path)
   grDevices::pdf(path)
-  stats::heatmap(matrix, scale = "row", margins = c(8, 8), main = title)
-  grDevices::dev.off()
+  on.exit(grDevices::dev.off(), add = TRUE)
+  for (group in groups) {
+    group_matrix <- transformed
+    if (group$name != "all") {
+      keep <- intersect(group$feature_ids, rownames(transformed))
+      group_matrix <- transformed[keep, , drop = FALSE]
+    }
+    plot_heatmap_panel(group_matrix, paste(title, "-", group$label), top_n, coldata)
+  }
 }
 
 manifest_columns <- c(
@@ -253,7 +340,7 @@ manifest_columns <- c(
   "n_significant"
 )
 
-render_row <- function(row, top_n, padj_cutoff, log2fc_cutoff) {
+render_row <- function(row, top_n, padj_cutoff, log2fc_cutoff, transcript_plot_groups) {
   if (!identical(row[["status"]], "ready")) {
     return(data.frame(
       project = row[["project"]],
@@ -278,10 +365,11 @@ render_row <- function(row, top_n, padj_cutoff, log2fc_cutoff) {
   normalized <- read_normalized_counts(row[["normalized_counts"]])
   transformed <- write_transformed_counts(normalized, row[["vst_tsv"]])
   coldata <- read_coldata(row[["coldata"]], colnames(transformed))
-  plot_volcano(results, row[["volcano_pdf"]], paste(title, "volcano"), padj_cutoff, log2fc_cutoff)
+  plot_groups <- plot_groups_for_results(results, transcript_plot_groups)
+  plot_volcano(plot_groups, row[["volcano_pdf"]], paste(title, "volcano"), padj_cutoff, log2fc_cutoff)
   plot_ma(results, row[["ma_pdf"]], paste(title, "MA"), padj_cutoff, log2fc_cutoff)
   plot_pca(transformed, row[["pca_pdf"]], paste(title, "PCA"), coldata)
-  plot_heatmap(transformed, row[["heatmap_pdf"]], paste(title, "heatmap"), top_n, coldata)
+  plot_heatmap(transformed, plot_groups, row[["heatmap_pdf"]], paste(title, "heatmap"), top_n, coldata)
 
   data.frame(
     project = row[["project"]],
@@ -317,6 +405,7 @@ main <- function() {
   if (is.na(log2fc_cutoff) || log2fc_cutoff < 0) {
     stop("--log2fc must be a non-negative number")
   }
+  transcript_plot_groups <- parse_list_arg(args[["transcript_plot_groups"]])
 
   plan <- read_tsv(plan_path)
   ensure_columns(
@@ -346,7 +435,7 @@ main <- function() {
   for (i in seq_len(nrow(plan))) {
     row <- as.list(plan[i, , drop = FALSE])
     rows[[i]] <- tryCatch(
-      render_row(row, top_n, padj_cutoff, log2fc_cutoff),
+      render_row(row, top_n, padj_cutoff, log2fc_cutoff, transcript_plot_groups),
       error = function(err) {
         data.frame(
           project = row[["project"]],
