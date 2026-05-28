@@ -31,8 +31,12 @@ planning:
 design:
   condition_col: condition
   control_label: control
+  model_formula: ""
   covariates:
     - time_h
+  batch_factors: []
+  blocking_factors: []
+  interaction_terms: []
   min_condition_groups: 2
 
 fastq_inspection:
@@ -116,6 +120,7 @@ rnaseq_differential:
   isoform_switch_genome_object: ""
   condition_col: condition
   control_label: control
+  design_formula: ""
   contrast_by:
     - time_h
   min_replicates_per_group: 2
@@ -130,6 +135,11 @@ execution:
 provenance:
   # Build a lightweight per-branch bundle with run, design, and biological context.
   run: true
+
+biological_qc:
+  run: true
+  rnaseq_sample_qc: true
+  smallrna_sample_qc: true
 
 environment:
   required_tools:

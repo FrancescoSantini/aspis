@@ -24,6 +24,7 @@ PLAN_COLUMNS = [
     "test_label",
     "contrast_by",
     "contrast_values",
+    "design_formula",
     "n_control",
     "n_test",
     "samples",
@@ -58,6 +59,7 @@ def add_common_arguments(
     parser.add_argument("--condition-col", default="condition", help="Condition column")
     parser.add_argument("--control-label", default="control", help="Control condition label")
     parser.add_argument("--contrast-by", nargs="*", default=[], help="Optional stratifying columns")
+    parser.add_argument("--design-formula", default="", help="Optional DESeq2 design formula")
     parser.add_argument("--min-replicates", type=int, default=2, help="Minimum samples per group")
 
 
@@ -218,6 +220,7 @@ def blocked_row(args: argparse.Namespace, contrast_by: list[str]) -> dict[str, s
         "test_label": "",
         "contrast_by": ",".join(contrast_by),
         "contrast_values": "",
+        "design_formula": args.design_formula,
         "n_control": "0",
         "n_test": "0",
         "samples": "",
@@ -298,6 +301,7 @@ def build_plan_rows(args: argparse.Namespace) -> list[dict[str, str]]:
                     "test_label": condition,
                     "contrast_by": ",".join(contrast_by),
                     "contrast_values": ",".join(values),
+                    "design_formula": args.design_formula,
                     "n_control": str(len(controls)),
                     "n_test": str(len(tested)),
                     "samples": ",".join(selected),

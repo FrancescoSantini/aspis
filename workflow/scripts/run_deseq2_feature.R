@@ -28,6 +28,7 @@ option_list <- list(
   make_option("--condition-col", type = "character", dest = "condition_col", default = "condition"),
   make_option("--control-label", type = "character", dest = "control_label", default = "control"),
   make_option("--test-label", type = "character", dest = "test_label", help = "Condition to compare to control"),
+  make_option("--design-formula", type = "character", dest = "design_formula", default = ""),
   make_option("--padj", type = "double", default = 0.1),
   make_option("--log2fc", type = "double", default = 1.0),
   make_option("--min-count", type = "integer", dest = "min_count", default = 10)
@@ -67,7 +68,24 @@ if (any(is.na(coldata[[opt$condition_col]]))) {
   stop("Unexpected condition labels after contrast subsetting")
 }
 
-design_formula <- as.formula(paste("~", opt$condition_col))
+design_text <- trimws(opt$design_formula)
+if (design_text == "") {
+  design_text <- paste("~", opt$condition_col)
+}
+design_formula <- as.formula(design_text)
+design_variables <- all.vars(design_formula)
+missing_design_variables <- setdiff(design_variables, colnames(coldata))
+if (length(missing_design_variables)) {
+  stop("Design formula references missing coldata column(s): ", paste(missing_design_variables, collapse = ", "))
+}
+if (!(opt$condition_col %in% design_variables)) {
+  stop("Design formula must include condition column: ", opt$condition_col)
+}
+for (column in design_variables) {
+  if (is.character(coldata[[column]])) {
+    coldata[[column]] <- factor(coldata[[column]])
+  }
+}
 dds <- DESeqDataSetFromMatrix(countData = counts_filtered, colData = coldata, design = design_formula)
 dds <- tryCatch(
   DESeq(dds),
@@ -120,6 +138,7 @@ summary_row <- data.frame(
   condition_col = opt$condition_col,
   control_label = opt$control_label,
   test_label = opt$test_label,
+  design_formula = design_text,
   feature_id_column = feature_id_column,
   n_samples = ncol(counts),
   n_features_input = nrow(counts),
