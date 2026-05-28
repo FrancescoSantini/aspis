@@ -744,6 +744,8 @@ def branch_provenance_inputs(wildcards):
                             f"{base}/quantification/biotypes/biotype_manifest.tsv",
                             f"{base}/quantification/biotypes/count_biotype_summary.tsv",
                             f"{base}/quantification/biotypes/differential_biotype_summary.tsv",
+                            f"{base}/quantification/biotypes/transcript_discovery_summary.tsv",
+                            f"{base}/quantification/biotypes/transcript_discovery_differential_summary.tsv",
                             f"{base}/quantification/biotypes/biotype_summary.html",
                             f"{base}/quantification/biotypes/biotype_summary.done",
                         ]
@@ -1057,6 +1059,8 @@ def planned_branch_targets(wildcards):
                                     f"{BRANCH_DIR}/{assay}/{project}/quantification/biotypes/biotype_manifest.tsv",
                                     f"{BRANCH_DIR}/{assay}/{project}/quantification/biotypes/count_biotype_summary.tsv",
                                     f"{BRANCH_DIR}/{assay}/{project}/quantification/biotypes/differential_biotype_summary.tsv",
+                                    f"{BRANCH_DIR}/{assay}/{project}/quantification/biotypes/transcript_discovery_summary.tsv",
+                                    f"{BRANCH_DIR}/{assay}/{project}/quantification/biotypes/transcript_discovery_differential_summary.tsv",
                                     f"{BRANCH_DIR}/{assay}/{project}/quantification/biotypes/biotype_summary.html",
                                     f"{BRANCH_DIR}/{assay}/{project}/quantification/biotypes/biotype_summary.done",
                                 ]
@@ -3623,8 +3627,8 @@ rule build_stringtie_transcript_matrix:
         metadata=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/counts/transcript_metadata.tsv",
         done=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/counts/transcript_counts.done"
     params:
-        known_strict=RNASEQ_QUANTIFICATION.get("known_codes_strict", "=,j"),
-        known_lenient=RNASEQ_QUANTIFICATION.get("known_codes_lenient", "=,j,c,o"),
+        known_strict=RNASEQ_QUANTIFICATION.get("known_codes_strict", "="),
+        known_lenient=RNASEQ_QUANTIFICATION.get("known_codes_lenient", "=,c,k,m,n,y"),
         gene_type_view=RNASEQ_QUANTIFICATION.get("gene_type_view", "strict")
     log:
         "logs/branches/rnaseq/{project}.transcript_matrix.log"
@@ -4056,6 +4060,8 @@ rule render_rnaseq_biotype_summary:
         manifest=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/biotypes/biotype_manifest.tsv",
         count_summary=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/biotypes/count_biotype_summary.tsv",
         differential_summary=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/biotypes/differential_biotype_summary.tsv",
+        discovery_summary=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/biotypes/transcript_discovery_summary.tsv",
+        discovery_differential_summary=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/biotypes/transcript_discovery_differential_summary.tsv",
         html=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/biotypes/biotype_summary.html",
         done=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/biotypes/biotype_summary.done"
     params:
@@ -4075,6 +4081,10 @@ rule render_rnaseq_biotype_summary:
             f"{BRANCH_DIR}/rnaseq/{wildcards.project}/differential/transcript_deseq2/deseq2_manifest.tsv"
             if RNASEQ_DIFFERENTIAL.get("run", False) and "transcript" in RNASEQ_DIFFERENTIAL_LEVELS
             else "",
+        ),
+        true_novel_reference_fraction=BIOLOGICAL_QC.get(
+            "true_novel_transcript_reference_fraction",
+            BIOLOGICAL_QC.get("max_true_novel_transcript_fraction", 0.2),
         )
     log:
         "logs/branches/rnaseq/{project}.biotype_summary.log"
@@ -4093,6 +4103,9 @@ rule render_rnaseq_biotype_summary:
           --manifest {output.manifest:q} \
           --count-summary {output.count_summary:q} \
           --differential-summary {output.differential_summary:q} \
+          --transcript-discovery-summary {output.discovery_summary:q} \
+          --transcript-discovery-differential-summary {output.discovery_differential_summary:q} \
+          --true-novel-reference-fraction {params.true_novel_reference_fraction:q} \
           --html {output.html:q} \
           --done {output.done:q} \
           > {log:q} 2>&1
@@ -4124,6 +4137,16 @@ rule render_rnaseq_biological_warnings:
         ),
         biotype_differential_summary=lambda wildcards: (
             [f"{BRANCH_DIR}/rnaseq/{wildcards.project}/quantification/biotypes/differential_biotype_summary.tsv"]
+            if RNASEQ_BIOTYPE_SUMMARY_RUN
+            else []
+        ),
+        transcript_discovery_summary=lambda wildcards: (
+            [f"{BRANCH_DIR}/rnaseq/{wildcards.project}/quantification/biotypes/transcript_discovery_summary.tsv"]
+            if RNASEQ_BIOTYPE_SUMMARY_RUN
+            else []
+        ),
+        transcript_discovery_differential_summary=lambda wildcards: (
+            [f"{BRANCH_DIR}/rnaseq/{wildcards.project}/quantification/biotypes/transcript_discovery_differential_summary.tsv"]
             if RNASEQ_BIOTYPE_SUMMARY_RUN
             else []
         )
@@ -4164,10 +4187,31 @@ rule render_rnaseq_biological_warnings:
             if RNASEQ_BIOTYPE_SUMMARY_RUN
             else "",
         ),
+        transcript_discovery_summary=lambda wildcards: optional_shell_arg(
+            "--transcript-discovery-summary",
+            f"{BRANCH_DIR}/rnaseq/{wildcards.project}/quantification/biotypes/transcript_discovery_summary.tsv"
+            if RNASEQ_BIOTYPE_SUMMARY_RUN
+            else "",
+        ),
+        transcript_discovery_differential_summary=lambda wildcards: optional_shell_arg(
+            "--transcript-discovery-differential-summary",
+            f"{BRANCH_DIR}/rnaseq/{wildcards.project}/quantification/biotypes/transcript_discovery_differential_summary.tsv"
+            if RNASEQ_BIOTYPE_SUMMARY_RUN
+            else "",
+        ),
         min_detected_features=BIOLOGICAL_QC.get("min_detected_features", 10),
         min_library_size=BIOLOGICAL_QC.get("min_library_size", 100),
         min_sample_correlation=BIOLOGICAL_QC.get("min_sample_correlation", 0.6),
-        max_unclassified_biotype_fraction=BIOLOGICAL_QC.get("max_unclassified_biotype_fraction", 0.5)
+        max_unclassified_biotype_fraction=BIOLOGICAL_QC.get("max_unclassified_biotype_fraction", 0.5),
+        max_true_novel_transcript_fraction=BIOLOGICAL_QC.get(
+            "max_true_novel_transcript_fraction",
+            BIOLOGICAL_QC.get("true_novel_transcript_reference_fraction", 0.2),
+        ),
+        warn_high_true_novel_fraction=(
+            "--warn-high-true-novel-transcript-fraction"
+            if as_bool(BIOLOGICAL_QC.get("warn_high_true_novel_transcript_fraction", False), False)
+            else ""
+        )
     log:
         "logs/branches/rnaseq/{project}.biological_warnings.log"
     shell:
@@ -4182,6 +4226,8 @@ rule render_rnaseq_biological_warnings:
           {params.strandedness_report} \
           {params.biotype_count_summary} \
           {params.biotype_differential_summary} \
+          {params.transcript_discovery_summary} \
+          {params.transcript_discovery_differential_summary} \
           --outdir {params.outdir:q} \
           --warnings {output.warnings:q} \
           --summary-html {output.html:q} \
@@ -4191,6 +4237,8 @@ rule render_rnaseq_biological_warnings:
           --min-library-size {params.min_library_size:q} \
           --min-sample-correlation {params.min_sample_correlation:q} \
           --max-unclassified-biotype-fraction {params.max_unclassified_biotype_fraction:q} \
+          {params.warn_high_true_novel_fraction} \
+          --max-true-novel-transcript-fraction {params.max_true_novel_transcript_fraction:q} \
           > {log:q} 2>&1
         """
 
@@ -4270,7 +4318,13 @@ rule render_rnaseq_differential_plots:
         rscript=RNASEQ_DIFFERENTIAL.get("rscript_command", "Rscript"),
         top_n=RNASEQ_DIFFERENTIAL_REPORT_TOP_N,
         padj=RNASEQ_DIFFERENTIAL.get("padj", 0.1),
-        log2fc=RNASEQ_DIFFERENTIAL.get("log2fc", 1.0)
+        log2fc=RNASEQ_DIFFERENTIAL.get("log2fc", 1.0),
+        transcript_plot_groups=joined_config_values(
+            RNASEQ_DIFFERENTIAL.get(
+                "report_transcript_plot_groups",
+                "all,known_compatible,novel_isoform,novel_locus,ambiguous,artifact",
+            )
+        )
     log:
         "logs/branches/rnaseq/{project}.differential_plots.log"
     shell:
@@ -4283,6 +4337,7 @@ rule render_rnaseq_differential_plots:
           --top-n {params.top_n:q} \
           --padj {params.padj:q} \
           --log2fc {params.log2fc:q} \
+          --transcript-plot-groups {params.transcript_plot_groups:q} \
           > {log:q} 2>&1
         """
 

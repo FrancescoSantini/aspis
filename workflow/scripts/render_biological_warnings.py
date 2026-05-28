@@ -23,6 +23,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--strandedness-report", default="")
     parser.add_argument("--biotype-count-summary", default="")
     parser.add_argument("--biotype-differential-summary", default="")
+    parser.add_argument("--transcript-discovery-summary", default="")
+    parser.add_argument("--transcript-discovery-differential-summary", default="")
     parser.add_argument("--residual-manifest", default="")
     parser.add_argument("--residual-biotype-counts", default="")
     parser.add_argument("--length-stage-summary", default="")
@@ -36,6 +38,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--min-library-size", type=int, default=100)
     parser.add_argument("--min-sample-correlation", type=float, default=0.6)
     parser.add_argument("--max-unclassified-biotype-fraction", type=float, default=0.5)
+    parser.add_argument("--max-true-novel-transcript-fraction", type=float, default=0.2)
+    parser.add_argument("--warn-high-true-novel-transcript-fraction", action="store_true")
     parser.add_argument("--max-residual-genome-fraction", type=float, default=0.5)
     return parser.parse_args()
 
@@ -163,6 +167,43 @@ def biotype_warnings(args: argparse.Namespace, warnings: list[dict[str, str]]) -
         add_warning(warnings, args, "info", "biotype", "rnaseq", "biotype summary is not available", args.biotype_count_summary)
 
 
+def transcript_discovery_warnings(args: argparse.Namespace, warnings: list[dict[str, str]]) -> None:
+    if not args.warn_high_true_novel_transcript_fraction:
+        return
+    _columns, rows = read_table(
+        args.transcript_discovery_summary,
+        {"level", "transcript_discovery_class", "true_novel_candidate", "detected_features"},
+    )
+    if args.assay != "rnaseq" or not rows:
+        return
+    total = 0
+    true_novel = 0
+    by_class: dict[str, int] = {}
+    for row in rows:
+        detected = int(parse_float(row.get("detected_features", "")))
+        total += detected
+        if row.get("true_novel_candidate", "").lower() == "yes":
+            true_novel += detected
+            discovery_class = row.get("transcript_discovery_class", "unclassified")
+            by_class[discovery_class] = by_class.get(discovery_class, 0) + detected
+    fraction = true_novel / total if total else 0.0
+    if total and fraction > args.max_true_novel_transcript_fraction:
+        class_detail = ", ".join(f"{name}={count}" for name, count in sorted(by_class.items())) or "none"
+        add_warning(
+            warnings,
+            args,
+            "warning",
+            "transcript_discovery",
+            "true_novel_fraction",
+            (
+                f"{true_novel}/{total} detected transcripts ({fraction:.1%}) are true-novel candidates; "
+                f"expected upper reference is {args.max_true_novel_transcript_fraction:.1%}. "
+                f"Inspect annotation version, StringTie/gffcompare settings, and read support. Classes: {class_detail}"
+            ),
+            args.transcript_discovery_summary,
+        )
+
+
 def residual_warnings(args: argparse.Namespace, warnings: list[dict[str, str]]) -> None:
     _columns, rows = read_table(args.residual_manifest, {"library_id", "input_reads", "genome_aligned_reads"})
     for row in rows:
@@ -261,6 +302,7 @@ def main() -> int:
     sample_qc_warnings(args, warnings)
     strandedness_warnings(args, warnings)
     biotype_warnings(args, warnings)
+    transcript_discovery_warnings(args, warnings)
     residual_warnings(args, warnings)
     length_warnings(args, warnings)
     write_table(Path(args.warnings), WARNING_COLUMNS, warnings)
