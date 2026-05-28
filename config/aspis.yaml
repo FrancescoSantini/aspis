@@ -132,6 +132,12 @@ rnaseq_differential:
   isoform_switch_dif: 0.1
   isoform_switch_max_genes: 30
   isoform_switch_genome_object: ""
+  isoform_switch_reports: true
+  isoform_switch_report_top_n: 30
+  # Optional TSV(s) with columns such as isoform_id/source/feature_type/
+  # feature_id/feature_name/start_aa/end_aa/description. These can be
+  # InterProScan, Pfam/hmmscan, SignalP/TM/localization, or user-curated tables.
+  isoform_switch_functional_annotation_tables: []
   condition_col: condition
   control_label: control
   design_formula: ""
@@ -277,6 +283,12 @@ environment:
   rnaseq_differential_required_tools:
     - Rscript
     - R::DESeq2
+  rnaseq_isoform_switch_optional_tools:
+    - hmmscan
+    - interproscan.sh
+    - signalp
+    - deeptmhmm
+    - iupred2a.py
   smallrna_required_tools:
     - cutadapt
     - bowtie

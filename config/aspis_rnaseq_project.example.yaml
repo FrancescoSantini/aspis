@@ -114,6 +114,7 @@ rnaseq_differential:
   levels:
     - gene
     - transcript
+    # - isoform_switch
   reports: true
   report_top_n: 50
   report_feature_sets: ""
@@ -136,6 +137,9 @@ rnaseq_differential:
   isoform_switch_dif: 0.1
   isoform_switch_max_genes: 30
   isoform_switch_genome_object: ""
+  isoform_switch_reports: true
+  isoform_switch_report_top_n: 30
+  isoform_switch_functional_annotation_tables: []
   condition_col: condition
   control_label: control
   # Overrides design.model_formula for DESeq2. Leave empty for "~ condition".
@@ -194,6 +198,12 @@ environment:
   rnaseq_differential_required_tools:
     - Rscript
     - R::DESeq2
+  rnaseq_isoform_switch_optional_tools:
+    - hmmscan
+    - interproscan.sh
+    - signalp
+    - deeptmhmm
+    - iupred2a.py
   sra_required_tools:
     - prefetch
     - fasterq-dump
