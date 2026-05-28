@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Plan an event-level differential transcript usage layer."""
+"""Plan an optional event-level differential transcript usage layer."""
 
 from __future__ import annotations
 
@@ -66,15 +66,21 @@ def main() -> int:
             raise FileNotFoundError(path_text)
     transcript_rows = count_rows(Path(args.transcript_counts))
     method = args.method.strip().lower()
-    if method in {"", "planned", "none"}:
+    candidate_methods = args.candidate_methods
+    requested_methods = {
+        item.strip().lower()
+        for item in candidate_methods.split(",")
+        if item.strip()
+    }
+    if method in {"", "planned", "none", "all", "auto"} or method in requested_methods:
         status = "planned"
         reason = (
-            "event-level DTU execution engine is not selected yet; "
-            "candidate engines are recorded for real-data evaluation"
+            "event-level DTU method execution is optional; "
+            "configured command templates are recorded in the method manifest"
         )
     else:
         status = "blocked"
-        reason = f"DTU method {args.method!r} is not implemented in this ASPIS contract yet"
+        reason = f"DTU method {args.method!r} is not among configured candidate methods"
     if transcript_rows == 0:
         status = "blocked"
         reason = "transcript count matrix has no transcript rows"
@@ -89,7 +95,7 @@ def main() -> int:
         "transcript_counts": args.transcript_counts,
         "transcript_metadata": args.transcript_metadata,
         "annotation_gtf": args.annotation_gtf,
-        "candidate_methods": args.candidate_methods,
+        "candidate_methods": candidate_methods,
     }
     write_table(Path(args.output), row)
     write_done(Path(args.done), row)
