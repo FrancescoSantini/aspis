@@ -45,6 +45,12 @@ def add_common_arguments(parser: argparse.ArgumentParser, min_count_help: str) -
     parser.add_argument("--done", required=True, help="Completion sentinel")
     parser.add_argument("--rscript", default="Rscript", help="Rscript executable")
     parser.add_argument("--deseq2-script", required=True, help="R DESeq2 runner script")
+    parser.add_argument(
+        "--lfc-shrinkage",
+        default="none",
+        choices=["none", "normal", "apeglm", "ashr", "auto"],
+        help="Optional DESeq2 log2FC shrinkage method",
+    )
     parser.add_argument("--padj", type=float, default=0.1, help="Adjusted p-value threshold")
     parser.add_argument("--log2fc", type=float, default=1.0, help="Absolute log2FC threshold")
     parser.add_argument("--min-count", type=int, default=10, help=min_count_help)
@@ -123,6 +129,20 @@ def run_rscript(command: list[str], log: Path) -> tuple[int, str]:
     return completed.returncode, "\n".join(lines[-20:])
 
 
+def add_standard_output_paths(row: dict[str, str], lfc_shrinkage: str) -> dict[str, str]:
+    """Add derived DESeq2 output paths while preserving any explicit plan paths."""
+    output_row = dict(row)
+    results_path = Path(output_row["results"])
+    output_row.setdefault("shrunken_results", "")
+    output_row.setdefault("transformed_counts", "")
+    if not output_row["shrunken_results"]:
+        output_row["shrunken_results"] = str(results_path.with_name("deseq2_shrunken_results.tsv"))
+    if not output_row["transformed_counts"]:
+        output_row["transformed_counts"] = str(results_path.with_name("vst_counts.tsv"))
+    output_row["lfc_shrinkage"] = lfc_shrinkage
+    return output_row
+
+
 def run_ready_contrast(
     row: dict[str, str],
     sample_columns: list[str],
@@ -143,6 +163,7 @@ def run_ready_contrast(
     )
     write_contrast_coldata(sample_columns, sample_rows, coldata, samples)
 
+    planned_row = add_standard_output_paths(row, args.lfc_shrinkage)
     command = [
         rscript,
         args.deseq2_script,
@@ -155,13 +176,17 @@ def run_ready_contrast(
         "--feature-id-column",
         spec.feature_id_column,
         "--results",
-        row["results"],
+        planned_row["results"],
         "--filtered",
-        row["filtered"],
+        planned_row["filtered"],
         "--normalized-counts",
-        row["normalized_counts"],
+        planned_row["normalized_counts"],
+        "--shrunken-results",
+        planned_row["shrunken_results"],
+        "--transformed-counts",
+        planned_row["transformed_counts"],
         "--summary",
-        row["summary"],
+        planned_row["summary"],
         "--condition-col",
         row["condition_col"],
         "--control-label",
@@ -178,9 +203,11 @@ def run_ready_contrast(
         str(args.log2fc),
         "--min-count",
         str(args.min_count),
+        "--lfc-shrinkage",
+        args.lfc_shrinkage,
     ])
     status, message = run_rscript(command, Path(row["log"]))
-    output_row = dict(row)
+    output_row = dict(planned_row)
     output_row["feature_metadata"] = getattr(args, spec.metadata_attr)
     if status == 0:
         output_row["status"] = "ok"
@@ -210,6 +237,9 @@ def write_manifest(path: Path, rows: list[dict[str, str]]) -> None:
         "results",
         "filtered",
         "normalized_counts",
+        "shrunken_results",
+        "transformed_counts",
+        "lfc_shrinkage",
         "summary",
         "feature_metadata",
         "log",
@@ -256,7 +286,11 @@ def run(args: argparse.Namespace, spec: FeatureRunSpec) -> int:
         raise ValueError(spec.no_rows_message)
 
     ready_rows = [row for row in plan_rows if row.get("status") == "ready"]
-    output_rows = [dict(row) for row in plan_rows if row.get("status") != "ready"]
+    output_rows = [
+        add_standard_output_paths(row, args.lfc_shrinkage)
+        for row in plan_rows
+        if row.get("status") != "ready"
+    ]
     for row in output_rows:
         row["feature_metadata"] = getattr(args, spec.metadata_attr)
     if ready_rows:

@@ -156,6 +156,7 @@ rnaseq_differential:
   min_count: 10
   padj: 0.1
   log2fc: 1.0
+  lfc_shrinkage: none
 
 rnaseq_dtu:
   # Optional event-level / differential transcript usage companion layer.
@@ -242,6 +243,7 @@ smallrna:
   min_replicates_per_group: 2
   padj: 0.1
   log2fc: 1.0
+  lfc_shrinkage: none
 
 mirna_mrna_integration:
   # Optional joint layer for projects that contain matched RNA-seq and smallRNA branches.

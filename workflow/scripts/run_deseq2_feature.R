@@ -24,11 +24,32 @@ option_list <- list(
     dest = "normalized_counts",
     help = "Normalized counts TSV"
   ),
+  make_option(
+    "--shrunken-results",
+    type = "character",
+    dest = "shrunken_results",
+    default = "",
+    help = "Optional TSV containing DESeq2 results with shrinkage metadata"
+  ),
+  make_option(
+    "--transformed-counts",
+    type = "character",
+    dest = "transformed_counts",
+    default = "",
+    help = "Optional variance-stabilized count matrix TSV"
+  ),
   make_option("--summary", type = "character", help = "Summary TSV"),
   make_option("--condition-col", type = "character", dest = "condition_col", default = "condition"),
   make_option("--control-label", type = "character", dest = "control_label", default = "control"),
   make_option("--test-label", type = "character", dest = "test_label", help = "Condition to compare to control"),
   make_option("--design-formula", type = "character", dest = "design_formula", default = ""),
+  make_option(
+    "--lfc-shrinkage",
+    type = "character",
+    dest = "lfc_shrinkage",
+    default = "none",
+    help = "LFC shrinkage method: none, normal, apeglm, ashr, or auto"
+  ),
   make_option("--padj", type = "double", default = 0.1),
   make_option("--log2fc", type = "double", default = 1.0),
   make_option("--min-count", type = "integer", dest = "min_count", default = 10)
@@ -68,6 +89,123 @@ if (any(is.na(coldata[[opt$condition_col]]))) {
   stop("Unexpected condition labels after contrast subsetting")
 }
 
+sanitize_coef_component <- function(value) {
+  make.names(value)
+}
+
+condition_coef_name <- function(dds, condition_col, test_label, control_label) {
+  names <- resultsNames(dds)
+  candidates <- unique(c(
+    paste0(condition_col, "_", test_label, "_vs_", control_label),
+    paste0(sanitize_coef_component(condition_col), "_", sanitize_coef_component(test_label), "_vs_", sanitize_coef_component(control_label)),
+    paste0(condition_col, test_label),
+    paste0(sanitize_coef_component(condition_col), sanitize_coef_component(test_label))
+  ))
+  matched <- candidates[candidates %in% names]
+  if (length(matched)) {
+    return(matched[[1]])
+  }
+  pattern <- paste0("^", gsub("([\\W])", "\\\\\\1", sanitize_coef_component(condition_col)), ".*", gsub("([\\W])", "\\\\\\1", sanitize_coef_component(test_label)))
+  regex_match <- grep(pattern, names, value = TRUE)
+  regex_match <- regex_match[grepl("vs", regex_match)]
+  if (length(regex_match)) {
+    return(regex_match[[1]])
+  }
+  ""
+}
+
+add_feature_id <- function(result, feature_id_column) {
+  result <- as.data.frame(result)
+  result[[feature_id_column]] <- rownames(result)
+  result[, c(feature_id_column, setdiff(colnames(result), feature_id_column)), drop = FALSE]
+}
+
+merge_metadata <- function(result, metadata_path, feature_id_column) {
+  if (metadata_path != "" && file.exists(metadata_path)) {
+    metadata <- read.table(metadata_path, header = TRUE, sep = "\t", check.names = FALSE)
+    if (feature_id_column %in% colnames(metadata)) {
+      result <- merge(metadata, result, by = feature_id_column, all.y = TRUE, sort = FALSE)
+    }
+  }
+  result
+}
+
+write_feature_matrix <- function(matrix, feature_id_column, path) {
+  output <- as.data.frame(matrix, check.names = FALSE)
+  output[[feature_id_column]] <- rownames(output)
+  output <- output[, c(feature_id_column, setdiff(colnames(output), feature_id_column)), drop = FALSE]
+  dir.create(dirname(path), recursive = TRUE, showWarnings = FALSE)
+  write.table(output, path, sep = "\t", quote = FALSE, row.names = FALSE)
+}
+
+run_shrinkage <- function(dds, contrast_vector, coef_name, requested_method) {
+  requested <- tolower(trimws(requested_method))
+  if (requested == "" || requested == "false") {
+    requested <- "none"
+  }
+  if (requested == "none") {
+    return(list(result = NULL, method = "none", reason = "not requested"))
+  }
+  methods <- switch(
+    requested,
+    auto = c("apeglm", "normal"),
+    apeglm = "apeglm",
+    normal = "normal",
+    ashr = "ashr",
+    stop("Unsupported --lfc-shrinkage method: ", requested_method)
+  )
+  reasons <- character()
+  for (method in methods) {
+    if (method == "apeglm" && !requireNamespace("apeglm", quietly = TRUE)) {
+      reasons <- c(reasons, "apeglm package is not installed")
+      next
+    }
+    if (method == "ashr" && !requireNamespace("ashr", quietly = TRUE)) {
+      reasons <- c(reasons, "ashr package is not installed")
+      next
+    }
+    result <- tryCatch(
+      {
+        if (method %in% c("apeglm", "ashr") && coef_name != "") {
+          lfcShrink(dds, coef = coef_name, type = method)
+        } else if (method == "normal") {
+          lfcShrink(dds, contrast = contrast_vector, type = method)
+        } else {
+          stop("coefficient name is unavailable for ", method)
+        }
+      },
+      error = function(err) {
+        reasons <<- c(reasons, paste(method, conditionMessage(err), sep = ": "))
+        NULL
+      }
+    )
+    if (!is.null(result)) {
+      return(list(result = result, method = method, reason = ""))
+    }
+  }
+  list(result = NULL, method = "none", reason = paste(reasons, collapse = "; "))
+}
+
+make_transformed_counts <- function(dds, feature_id_column, path) {
+  if (path == "") {
+    return(list(method = "", reason = "not requested"))
+  }
+  reason <- ""
+  transformed <- tryCatch(
+    {
+      assay(varianceStabilizingTransformation(dds, blind = FALSE))
+    },
+    error = function(err) {
+      reason <<- conditionMessage(err)
+      normalized <- counts(dds, normalized = TRUE)
+      log2(normalized + 1)
+    }
+  )
+  method <- if (reason == "") "varianceStabilizingTransformation" else "log2_normalized_fallback"
+  write_feature_matrix(transformed, feature_id_column, path)
+  list(method = method, reason = reason)
+}
+
 design_text <- trimws(opt$design_formula)
 if (design_text == "") {
   design_text <- paste("~", opt$condition_col)
@@ -101,22 +239,34 @@ dds <- tryCatch(
   }
 )
 
-res <- results(dds, contrast = c(opt$condition_col, opt$test_label, opt$control_label))
-res <- as.data.frame(res)
+contrast_vector <- c(opt$condition_col, opt$test_label, opt$control_label)
+raw_res <- results(dds, contrast = contrast_vector)
 feature_id_column <- opt$feature_id_column
-res[[feature_id_column]] <- rownames(res)
-res <- res[, c(feature_id_column, setdiff(colnames(res), feature_id_column)), drop = FALSE]
+coef_name <- condition_coef_name(dds, opt$condition_col, opt$test_label, opt$control_label)
+shrinkage <- run_shrinkage(dds, contrast_vector, coef_name, opt$lfc_shrinkage)
+
+raw_table <- add_feature_id(raw_res, feature_id_column)
+res <- raw_table
+res$raw_log2FoldChange <- raw_table$log2FoldChange
+if (!is.null(shrinkage$result)) {
+  shrunken_table <- add_feature_id(shrinkage$result, feature_id_column)
+  shrunken_lfc <- shrunken_table$log2FoldChange[match(res[[feature_id_column]], shrunken_table[[feature_id_column]])]
+  res$shrunken_log2FoldChange <- shrunken_lfc
+  res$log2FoldChange <- shrunken_lfc
+} else {
+  res$shrunken_log2FoldChange <- NA_real_
+}
+res$lfc_shrinkage_method <- shrinkage$method
 res <- res[order(res$padj, na.last = TRUE), , drop = FALSE]
 
-if (opt$metadata != "" && file.exists(opt$metadata)) {
-  metadata <- read.table(opt$metadata, header = TRUE, sep = "\t", check.names = FALSE)
-  if (feature_id_column %in% colnames(metadata)) {
-    res <- merge(metadata, res, by = feature_id_column, all.y = TRUE, sort = FALSE)
-  }
-}
+res <- merge_metadata(res, opt$metadata, feature_id_column)
 
 dir.create(dirname(opt$results), recursive = TRUE, showWarnings = FALSE)
 write.table(res, opt$results, sep = "\t", quote = FALSE, row.names = FALSE)
+
+if (opt$shrunken_results != "") {
+  write.table(res, opt$shrunken_results, sep = "\t", quote = FALSE, row.names = FALSE)
+}
 
 significant <- res[
   !is.na(res$padj) &
@@ -129,9 +279,8 @@ significant <- res[
 write.table(significant, opt$filtered, sep = "\t", quote = FALSE, row.names = FALSE)
 
 normalized <- as.data.frame(counts(dds, normalized = TRUE))
-normalized[[feature_id_column]] <- rownames(normalized)
-normalized <- normalized[, c(feature_id_column, setdiff(colnames(normalized), feature_id_column)), drop = FALSE]
-write.table(normalized, opt$normalized_counts, sep = "\t", quote = FALSE, row.names = FALSE)
+write_feature_matrix(normalized, feature_id_column, opt$normalized_counts)
+transform_info <- make_transformed_counts(dds, feature_id_column, opt$transformed_counts)
 
 summary_row <- data.frame(
   status = "ok",
@@ -139,6 +288,8 @@ summary_row <- data.frame(
   control_label = opt$control_label,
   test_label = opt$test_label,
   design_formula = design_text,
+  contrast = paste(contrast_vector, collapse = ","),
+  coefficient = coef_name,
   feature_id_column = feature_id_column,
   n_samples = ncol(counts),
   n_features_input = nrow(counts),
@@ -146,6 +297,11 @@ summary_row <- data.frame(
   n_genes_input = nrow(counts),
   n_genes_tested = nrow(counts_filtered),
   n_significant = nrow(significant),
+  lfc_shrinkage_requested = opt$lfc_shrinkage,
+  lfc_shrinkage_method = shrinkage$method,
+  lfc_shrinkage_reason = shrinkage$reason,
+  transformed_counts_method = transform_info$method,
+  transformed_counts_reason = transform_info$reason,
   padj_threshold = opt$padj,
   log2fc_threshold = opt$log2fc,
   min_count = opt$min_count
