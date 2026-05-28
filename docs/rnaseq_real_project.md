@@ -27,9 +27,14 @@ Edit `config/aspis_rnaseq_<project>.yaml`:
 - `rnaseq_quantification.annotation_gtf`: use the same annotation GTF.
 - `rnaseq_quantification.read_length`: set the approximate read length after
   trimming.
+- `design.model_formula` or `rnaseq_differential.design_formula`: use a
+  DESeq2 formula such as `~ patient + condition` or `~ batch + condition` when
+  the experiment is paired or batch-structured. Leave empty for `~ condition`.
 - `rnaseq_differential.report_feature_sets` or
   `rnaseq_differential.report_feature_set_tables`: provide local gene set files
   if pathway/feature-set enrichment should run.
+- `biological_qc.rnaseq_sample_qc`: keep enabled for sample-level count QC
+  unless you intentionally need a minimal run.
 
 Edit `config/intake_rnaseq_<project>.tsv`:
 
@@ -57,6 +62,33 @@ Differential-design issues that can still support upstream QC and
 quantification, such as too few replicates per contrast group or a missing
 control label, are written as `differential_status=blocked` in `design.tsv` with
 a concrete `reason`.
+
+## Biological Design And QC
+
+For simple two-group analyses, leave the model formula empty and ASPIS will run
+DESeq2 with `~ condition`. For paired, blocked, or batch-aware designs, set a
+formula explicitly:
+
+```yaml
+design:
+  model_formula: "~ patient + condition"
+  blocking_factors:
+    - patient
+
+rnaseq_differential:
+  design_formula: "~ patient + condition"
+```
+
+Every variable named in the formula must exist in the intake-derived sample
+table. If `contrast_by` is used, ASPIS builds separate contrasts within each
+stratum; avoid also putting a fully confounded stratification variable in the
+formula unless the design matrix still has enough variation inside each
+contrast.
+
+When `biological_qc.rnaseq_sample_qc: true`, ASPIS renders count-level sample
+QC after gene quantification. Inspect the library-size plot, PCA plot,
+correlation heatmap, and metric tables before trusting differential contrasts.
+These outputs are also summarized in the branch provenance bundle.
 
 ## STAR Or HISAT2
 
@@ -252,6 +284,8 @@ Important intermediate manifests are:
 <branch_dir>/rnaseq/<PROJECT>/quantification/stringtie/assembly_manifest.tsv
 <branch_dir>/rnaseq/<PROJECT>/quantification/stringtie/quant_manifest.tsv
 <branch_dir>/rnaseq/<PROJECT>/quantification/counts/transcript_counts.tsv
+<branch_dir>/rnaseq/<PROJECT>/quantification/sample_qc/sample_qc_metrics.tsv
+<branch_dir>/rnaseq/<PROJECT>/quantification/sample_qc/sample_correlations.tsv
 <branch_dir>/rnaseq/<PROJECT>/differential/differential_plan.tsv
 <branch_dir>/rnaseq/<PROJECT>/differential/gene_deseq2/deseq2_manifest.tsv
 <branch_dir>/rnaseq/<PROJECT>/differential/transcript_deseq2/deseq2_manifest.tsv

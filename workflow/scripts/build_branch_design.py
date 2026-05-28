@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import re
 from collections import Counter, defaultdict
 from pathlib import Path
 
@@ -28,6 +29,14 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--covariates", nargs="*", default=[], help="Configured covariate columns")
     parser.add_argument("--contrast-by", nargs="*", default=[], help="Configured contrast stratification columns")
+    parser.add_argument(
+        "--model-formula",
+        default="",
+        help="Optional DESeq2-style design formula, e.g. '~ batch + condition'",
+    )
+    parser.add_argument("--blocking-factors", nargs="*", default=[], help="Paired/repeated-measure factors")
+    parser.add_argument("--batch-factors", nargs="*", default=[], help="Known batch or nuisance factors")
+    parser.add_argument("--interaction-terms", nargs="*", default=[], help="Configured interaction terms")
     parser.add_argument(
         "--min-replicates-per-group",
         type=int,
@@ -56,6 +65,26 @@ def clean_list(values: list[str]) -> list[str]:
     return [value for value in (item.strip() for item in values) if value]
 
 
+def formula_variables(formula: str) -> list[str]:
+    if not formula.strip():
+        return []
+    r_helpers = {
+        "C",
+        "I",
+        "factor",
+        "relevel",
+        "scale",
+        "poly",
+        "ns",
+        "bs",
+        "log",
+        "log2",
+        "log10",
+    }
+    candidates = re.findall(r"[A-Za-z_][A-Za-z0-9_.]*", formula)
+    return [candidate for candidate in candidates if candidate not in r_helpers]
+
+
 def validate_rows(
     rows: list[dict[str, str]],
     assay: str,
@@ -63,6 +92,10 @@ def validate_rows(
     condition_col: str,
     covariates: list[str],
     contrast_by: list[str],
+    model_formula: str,
+    blocking_factors: list[str],
+    batch_factors: list[str],
+    interaction_terms: list[str],
 ) -> None:
     errors = []
     library_ids = [row.get("library_id", "") for row in rows]
@@ -95,12 +128,19 @@ def validate_rows(
         if layout == "paired" and row.get("fastq_2") and not Path(row["fastq_2"]).exists():
             errors.append(f"{library_id}: fastq_2 does not exist: {row['fastq_2']}")
 
-        for column in covariates:
+        for column in sorted(set(covariates + contrast_by + blocking_factors + batch_factors + formula_variables(model_formula))):
             if not row.get(column, ""):
-                errors.append(f"{library_id}: empty covariate column {column!r}")
-        for column in contrast_by:
-            if not row.get(column, ""):
-                errors.append(f"{library_id}: empty contrast-by column {column!r}")
+                errors.append(f"{library_id}: empty design column {column!r}")
+
+    if model_formula and condition_col not in formula_variables(model_formula):
+        errors.append(
+            f"model formula {model_formula!r} must include condition column {condition_col!r}"
+        )
+    for term in interaction_terms:
+        variables = [part for part in term.replace("*", ":").split(":") if part]
+        for variable in variables:
+            if variable not in rows[0]:
+                errors.append(f"interaction term {term!r} references missing column {variable!r}")
 
     if errors:
         raise ValueError("Branch design cannot be built:\n- " + "\n- ".join(errors))
@@ -177,6 +217,10 @@ def write_design(
     control_label: str,
     covariates: list[str],
     contrast_by: list[str],
+    model_formula: str,
+    blocking_factors: list[str],
+    batch_factors: list[str],
+    interaction_terms: list[str],
     min_condition_groups: int,
     min_replicates_per_group: int,
 ) -> None:
@@ -196,6 +240,7 @@ def write_design(
     differential_status = "blocked" if reasons else "ready"
     reason = "; ".join(reasons) if reasons else f"{len(conditions)} condition groups available"
     control_present = control_label in by_condition if control_label else False
+    effective_formula = model_formula or f"~ {condition_col}"
 
     path.parent.mkdir(parents=True, exist_ok=True)
     columns = [
@@ -208,7 +253,11 @@ def write_design(
         "differential_status",
         "control_label",
         "control_present",
+        "model_formula",
         "covariates",
+        "batch_factors",
+        "blocking_factors",
+        "interaction_terms",
         "contrast_by",
         "min_condition_groups",
         "min_replicates_per_group",
@@ -231,7 +280,11 @@ def write_design(
                     "differential_status": differential_status,
                     "control_label": control_label,
                     "control_present": str(control_present).lower(),
+                    "model_formula": effective_formula,
                     "covariates": ",".join(covariates),
+                    "batch_factors": ",".join(batch_factors),
+                    "blocking_factors": ",".join(blocking_factors),
+                    "interaction_terms": ",".join(interaction_terms),
                     "contrast_by": ",".join(contrast_by),
                     "min_condition_groups": str(min_condition_groups),
                     "min_replicates_per_group": str(min_replicates_per_group),
@@ -245,14 +298,31 @@ def main() -> int:
     args = parse_args()
     covariates = clean_list(args.covariates)
     contrast_by = clean_list(args.contrast_by)
+    blocking_factors = clean_list(args.blocking_factors)
+    batch_factors = clean_list(args.batch_factors)
+    interaction_terms = clean_list(args.interaction_terms)
     columns, rows = read_rows(Path(args.samples))
     if not rows:
         raise ValueError("Branch sample sheet contains no libraries")
     required = {"library_id", "project", "assay", "layout", "fastq_1", args.condition_col}
     required.update(covariates)
     required.update(contrast_by)
+    required.update(blocking_factors)
+    required.update(batch_factors)
+    required.update(formula_variables(args.model_formula))
     require_columns(columns, required, args.samples)
-    validate_rows(rows, args.assay, args.project, args.condition_col, covariates, contrast_by)
+    validate_rows(
+        rows,
+        args.assay,
+        args.project,
+        args.condition_col,
+        covariates,
+        contrast_by,
+        args.model_formula,
+        blocking_factors,
+        batch_factors,
+        interaction_terms,
+    )
     write_design(
         Path(args.output),
         rows,
@@ -262,6 +332,10 @@ def main() -> int:
         control_label=args.control_label,
         covariates=covariates,
         contrast_by=contrast_by,
+        model_formula=args.model_formula,
+        blocking_factors=blocking_factors,
+        batch_factors=batch_factors,
+        interaction_terms=interaction_terms,
         min_condition_groups=args.min_condition_groups,
         min_replicates_per_group=args.min_replicates_per_group,
     )

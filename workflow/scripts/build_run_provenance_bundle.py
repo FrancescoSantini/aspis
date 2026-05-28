@@ -151,6 +151,17 @@ def add_context(rows: list[dict[str, str]], section: str, metric: str, value: ob
     )
 
 
+def add_file_context(rows: list[dict[str, str]], section: str, metric: str, path_text: str, source: str) -> None:
+    if not path_text:
+        add_context(rows, section, f"{metric}_status", "not_configured", source)
+        return
+    path = Path(path_text)
+    add_context(rows, section, f"{metric}_path", path_text, source)
+    add_context(rows, section, f"{metric}_status", "present" if path.exists() else "missing", source)
+    if path.exists() and path.is_file():
+        add_context(rows, section, f"{metric}_size_bytes", path.stat().st_size, source)
+
+
 def table_by_name(artifacts: list[Path], suffix: str) -> Path | None:
     matches = [path for path in artifacts if str(path).endswith(suffix)]
     return matches[0] if matches else None
@@ -170,6 +181,9 @@ def summarize_design(rows: list[dict[str, str]], artifacts: list[Path]) -> None:
         add_context(rows, "design", "design_columns", list(design[0].keys()), "design.tsv")
         if "condition" in design[0]:
             add_context(rows, "design", "design_condition_counts", dict_count(design, "condition"), "design.tsv")
+        for key in ("model_formula", "covariates", "batch_factors", "blocking_factors", "interaction_terms", "contrast_by"):
+            if key in design[0]:
+                add_context(rows, "design", key, design[0].get(key, ""), "design.tsv")
 
 
 def dict_count(records: list[dict[str, str]], key: str) -> str:
@@ -226,6 +240,39 @@ def summarize_counts(rows: list[dict[str, str]], artifacts: list[Path]) -> None:
                 add_context(rows, "annotation", f"{path.name}_{key}_counts", dict_count(records, key), str(path))
 
 
+def summarize_sample_qc(rows: list[dict[str, str]], artifacts: list[Path]) -> None:
+    metrics = read_tsv(table_by_name(artifacts, "sample_qc_metrics.tsv") or Path(""))
+    if metrics:
+        add_context(rows, "sample_qc", "sample_count", len(metrics), "sample_qc_metrics.tsv")
+        add_context(rows, "sample_qc", "condition_counts", dict_count(metrics, "condition"), "sample_qc_metrics.tsv")
+        total_counts = 0
+        detected = []
+        for record in metrics:
+            try:
+                total_counts += int(float(record.get("library_size", "0") or "0"))
+            except ValueError:
+                pass
+            try:
+                detected.append(int(float(record.get("detected_features", "0") or "0")))
+            except ValueError:
+                pass
+        add_context(rows, "sample_qc", "total_counts", total_counts, "sample_qc_metrics.tsv")
+        if detected:
+            add_context(rows, "sample_qc", "detected_features_range", f"{min(detected)}-{max(detected)}", "sample_qc_metrics.tsv")
+    correlations = read_tsv(table_by_name(artifacts, "sample_correlations.tsv") or Path(""))
+    if correlations:
+        values = []
+        for record in correlations:
+            if record.get("sample_a") == record.get("sample_b"):
+                continue
+            try:
+                values.append(float(record.get("pearson_log_cpm", "")))
+            except ValueError:
+                pass
+        if values:
+            add_context(rows, "sample_qc", "correlation_range", f"{min(values):.4g}-{max(values):.4g}", "sample_correlations.tsv")
+
+
 def summarize_differential(rows: list[dict[str, str]], artifacts: list[Path]) -> None:
     for path in artifacts:
         if not path.name.endswith("manifest.tsv"):
@@ -278,9 +325,14 @@ def summarize_config(rows: list[dict[str, str]], config: dict, assay: str) -> No
         add_context(rows, "config", "rnaseq_aligner", alignment.get("aligner", ""), "config")
         add_context(rows, "config", "rnaseq_reference_fasta", alignment.get("reference_fasta", ""), "config")
         add_context(rows, "config", "rnaseq_annotation_gtf", alignment.get("annotation_gtf", ""), "config")
+        add_context(rows, "config", "rnaseq_design_formula", diff.get("design_formula", config.get("design", {}).get("model_formula", "")), "config")
         add_context(rows, "config", "transcriptome_mode", quant.get("transcriptome_mode", ""), "config")
         add_context(rows, "config", "differential_levels", diff.get("levels", []), "config")
         add_context(rows, "config", "contrast_by", diff.get("contrast_by", []), "config")
+        add_context(rows, "config", "report_feature_sets", diff.get("report_feature_sets", ""), "config")
+        add_context(rows, "config", "report_feature_set_tables", diff.get("report_feature_set_tables", ""), "config")
+        add_file_context(rows, "reference", "rnaseq_reference_fasta", alignment.get("reference_fasta", ""), "config")
+        add_file_context(rows, "reference", "rnaseq_annotation_gtf", alignment.get("annotation_gtf", ""), "config")
     if assay == "smallrna":
         smallrna = config.get("smallrna", {}) or {}
         add_context(rows, "config", "adapter", smallrna.get("adapter", ""), "config")
@@ -299,6 +351,10 @@ def summarize_config(rows: list[dict[str, str]], config: dict, assay: str) -> No
         add_context(rows, "config", "target_table", smallrna.get("target_table", ""), "config")
         add_context(rows, "config", "target_feature_sets", smallrna.get("target_feature_sets", ""), "config")
         add_context(rows, "config", "target_feature_set_tables", smallrna.get("target_feature_set_tables", ""), "config")
+        add_file_context(rows, "reference", "mirbase_fasta", smallrna.get("mirbase_fasta", ""), "config")
+        add_file_context(rows, "reference", "contaminant_fasta", smallrna.get("contaminant_fasta", ""), "config")
+        add_file_context(rows, "reference", "residual_genome_fasta", smallrna.get("residual_genome_fasta", ""), "config")
+        add_file_context(rows, "reference", "residual_annotation_gtf", smallrna.get("residual_annotation_gtf", ""), "config")
 
 
 def main() -> int:
@@ -345,6 +401,7 @@ def main() -> int:
     summarize_design(context_rows, unique_artifacts)
     summarize_plan(context_rows, unique_artifacts, args.project, args.assay)
     summarize_counts(context_rows, unique_artifacts)
+    summarize_sample_qc(context_rows, unique_artifacts)
     summarize_differential(context_rows, unique_artifacts)
     if args.assay == "smallrna":
         summarize_smallrna_residual(context_rows, unique_artifacts)
