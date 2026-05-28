@@ -160,11 +160,15 @@ def plot_panel(label: str, path: str, html_path: Path) -> str:
 
 
 def enrichment_panel(resources: dict[str, dict[str, str]], html_path: Path) -> str:
-    plot = resources.get("feature_set_plot", {})
-    path = plot.get("path", "")
-    if not path:
-        return ""
-    return "\n" + artifact_panel("Feature-Set Enrichment", path, html_path, "image/svg+xml")
+    panels = []
+    for label, resource in [
+        ("Feature-Set Enrichment", "feature_set_plot"),
+        ("Ranked Feature-Set Enrichment", "ranked_feature_set_plot"),
+    ]:
+        path = resources.get(resource, {}).get("path", "")
+        if path:
+            panels.append(artifact_panel(label, path, html_path, "image/svg+xml"))
+    return "\n" + "\n".join(panels) if panels else ""
 
 
 def render_html(
@@ -197,6 +201,9 @@ def render_html(
     feature_set_results = resources.get("feature_set_results", {}).get("path", "")
     if feature_set_results:
         artifacts.append(("Feature-set enrichment", feature_set_results))
+    ranked_feature_set_results = resources.get("ranked_feature_set_results", {}).get("path", "")
+    if ranked_feature_set_results:
+        artifacts.append(("Ranked feature-set enrichment", ranked_feature_set_results))
     artifact_rows = "\n".join(
         f"<li><a href=\"{html.escape(relative_link(path, output))}\">{html.escape(label)}</a></li>"
         for label, path in artifacts

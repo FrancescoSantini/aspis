@@ -329,6 +329,20 @@ MIRNA_MRNA_INTEGRATION_RUN = (
     and RNASEQ_DIFFERENTIAL.get("run", False)
     and "gene" in RNASEQ_DIFFERENTIAL_LEVELS
 )
+SMALLRNA_LENGTH_QC_RUN = (
+    BIOLOGICAL_QC_RUN
+    and SMALLRNA_QUANTIFICATION_RUN
+    and as_bool(BIOLOGICAL_QC.get("smallrna_length_qc", True), True)
+)
+BIOLOGICAL_WARNINGS_RUN = BIOLOGICAL_QC_RUN and as_bool(
+    BIOLOGICAL_QC.get("biological_warnings", True),
+    True,
+)
+RNASEQ_WARNINGS_RUN = BIOLOGICAL_WARNINGS_RUN and RNASEQ_QUANTIFICATION.get("run", False)
+SMALLRNA_WARNINGS_RUN = BIOLOGICAL_WARNINGS_RUN and SMALLRNA_QUANTIFICATION_RUN
+MIRNA_MRNA_TARGET_FEATURE_SET_RUN = MIRNA_MRNA_INTEGRATION_RUN and bool(
+    SMALLRNA_TARGET_FEATURE_SET_FILES or SMALLRNA_TARGET_FEATURE_SET_TABLES
+)
 SMALLRNA_REFERENCE_DIR = SMALLRNA.get("reference_dir", "work/smallrna_reference")
 SMALLRNA_CONFIGURED_MIRBASE_FASTA = SMALLRNA.get("mirbase_fasta", "")
 SMALLRNA_CONFIGURED_MIRBASE_SAF = SMALLRNA.get("mirbase_saf", "")
@@ -551,6 +565,47 @@ def smallrna_mirna_mrna_done(project):
     return f"{BRANCH_DIR}/smallrna/{project}/smallrna/differential/mirna_mrna_integration/mirna_mrna.done"
 
 
+def smallrna_mirna_mrna_target_feature_set_manifest(project):
+    return f"{BRANCH_DIR}/smallrna/{project}/smallrna/differential/mirna_mrna_target_feature_sets/target_feature_set_manifest.tsv"
+
+
+def smallrna_mirna_mrna_target_feature_set_done(project):
+    return f"{BRANCH_DIR}/smallrna/{project}/smallrna/differential/mirna_mrna_target_feature_sets/target_feature_sets.done"
+
+
+def smallrna_length_qc_outputs(project):
+    outdir = f"{BRANCH_DIR}/smallrna/{project}/smallrna/length_qc"
+    return {
+        "manifest": f"{outdir}/length_qc_manifest.tsv",
+        "length_distribution": f"{outdir}/length_distribution.tsv",
+        "stage_summary": f"{outdir}/stage_summary.tsv",
+        "arm_summary": f"{outdir}/arm_summary.tsv",
+        "isomir_length_summary": f"{outdir}/isomir_length_summary.tsv",
+        "length_plot": f"{outdir}/length_distribution.svg",
+        "done": f"{outdir}/length_qc.done",
+    }
+
+
+def rnaseq_biological_warnings_outputs(project):
+    outdir = f"{BRANCH_DIR}/rnaseq/{project}/biological_warnings"
+    return {
+        "warnings": f"{outdir}/warnings.tsv",
+        "html": f"{outdir}/warnings.html",
+        "manifest": f"{outdir}/warnings_manifest.tsv",
+        "done": f"{outdir}/warnings.done",
+    }
+
+
+def smallrna_biological_warnings_outputs(project):
+    outdir = f"{BRANCH_DIR}/smallrna/{project}/smallrna/biological_warnings"
+    return {
+        "warnings": f"{outdir}/warnings.tsv",
+        "html": f"{outdir}/warnings.html",
+        "manifest": f"{outdir}/warnings_manifest.tsv",
+        "done": f"{outdir}/warnings.done",
+    }
+
+
 def smallrna_target_manifest_flag(wildcards):
     if not SMALLRNA_TARGET_ENRICHMENT_RUN:
         return ""
@@ -575,6 +630,15 @@ def smallrna_mirna_mrna_manifest_flag(wildcards):
     return optional_shell_arg(
         "--mirna-mrna-manifest",
         smallrna_mirna_mrna_manifest(wildcards.project),
+    )
+
+
+def smallrna_mirna_mrna_target_feature_set_manifest_flag(wildcards):
+    if not MIRNA_MRNA_TARGET_FEATURE_SET_RUN:
+        return ""
+    return optional_shell_arg(
+        "--mirna-mrna-target-feature-set-manifest",
+        smallrna_mirna_mrna_target_feature_set_manifest(wildcards.project),
     )
 
 
@@ -700,6 +764,16 @@ def branch_provenance_inputs(wildcards):
                             f"{base}/quantification/sample_qc/sample_qc.done",
                         ]
                     )
+                if RNASEQ_WARNINGS_RUN:
+                    warnings = rnaseq_biological_warnings_outputs(project)
+                    inputs.extend(
+                        [
+                            warnings["warnings"],
+                            warnings["html"],
+                            warnings["manifest"],
+                            warnings["done"],
+                        ]
+                    )
                 if RNASEQ_DIFFERENTIAL.get("run", False):
                     inputs.extend(
                         [
@@ -817,6 +891,19 @@ def branch_provenance_inputs(wildcards):
                         f"{small}/quantification/sample_qc/sample_qc.done",
                     ]
                 )
+            if SMALLRNA_LENGTH_QC_RUN:
+                length_qc = smallrna_length_qc_outputs(project)
+                inputs.extend(
+                    [
+                        length_qc["manifest"],
+                        length_qc["length_distribution"],
+                        length_qc["stage_summary"],
+                        length_qc["arm_summary"],
+                        length_qc["isomir_length_summary"],
+                        length_qc["length_plot"],
+                        length_qc["done"],
+                    ]
+                )
         if SMALLRNA_DIFFERENTIAL_RUN:
             inputs.extend(
                 [
@@ -844,6 +931,23 @@ def branch_provenance_inputs(wildcards):
                 [
                     smallrna_mirna_mrna_manifest(project),
                     smallrna_mirna_mrna_done(project),
+                ]
+            )
+        if MIRNA_MRNA_TARGET_FEATURE_SET_RUN:
+            inputs.extend(
+                [
+                    smallrna_mirna_mrna_target_feature_set_manifest(project),
+                    smallrna_mirna_mrna_target_feature_set_done(project),
+                ]
+            )
+        if SMALLRNA_WARNINGS_RUN:
+            warnings = smallrna_biological_warnings_outputs(project)
+            inputs.extend(
+                [
+                    warnings["warnings"],
+                    warnings["html"],
+                    warnings["manifest"],
+                    warnings["done"],
                 ]
             )
         if SMALLRNA_REPORTS_RUN:
@@ -976,6 +1080,16 @@ def planned_branch_targets(wildcards):
                                     f"{BRANCH_DIR}/{assay}/{project}/quantification/sample_qc/sample_qc.done",
                                 ]
                             )
+                        if RNASEQ_WARNINGS_RUN:
+                            warnings = rnaseq_biological_warnings_outputs(project)
+                            targets.extend(
+                                [
+                                    warnings["warnings"],
+                                    warnings["html"],
+                                    warnings["manifest"],
+                                    warnings["done"],
+                                ]
+                            )
                         if RNASEQ_DIFFERENTIAL.get("run", False):
                             targets.extend(
                                 [
@@ -1097,6 +1211,19 @@ def planned_branch_targets(wildcards):
                                 f"{BRANCH_DIR}/{assay}/{project}/smallrna/quantification/sample_qc/sample_qc.done",
                             ]
                         )
+                    if SMALLRNA_LENGTH_QC_RUN:
+                        length_qc = smallrna_length_qc_outputs(project)
+                        targets.extend(
+                            [
+                                length_qc["manifest"],
+                                length_qc["length_distribution"],
+                                length_qc["stage_summary"],
+                                length_qc["arm_summary"],
+                                length_qc["isomir_length_summary"],
+                                length_qc["length_plot"],
+                                length_qc["done"],
+                            ]
+                        )
                 if SMALLRNA_DIFFERENTIAL_RUN:
                     targets.extend(
                         [
@@ -1124,6 +1251,23 @@ def planned_branch_targets(wildcards):
                         [
                             f"{BRANCH_DIR}/{assay}/{project}/smallrna/differential/mirna_mrna_integration/mirna_mrna_manifest.tsv",
                             f"{BRANCH_DIR}/{assay}/{project}/smallrna/differential/mirna_mrna_integration/mirna_mrna.done",
+                        ]
+                    )
+                if MIRNA_MRNA_TARGET_FEATURE_SET_RUN:
+                    targets.extend(
+                        [
+                            smallrna_mirna_mrna_target_feature_set_manifest(project),
+                            smallrna_mirna_mrna_target_feature_set_done(project),
+                        ]
+                    )
+                if SMALLRNA_WARNINGS_RUN:
+                    warnings = smallrna_biological_warnings_outputs(project)
+                    targets.extend(
+                        [
+                            warnings["warnings"],
+                            warnings["html"],
+                            warnings["manifest"],
+                            warnings["done"],
                         ]
                     )
                 if SMALLRNA_REPORTS_RUN:
@@ -2192,6 +2336,51 @@ rule render_smallrna_sample_qc:
         """
 
 
+rule render_smallrna_length_qc:
+    input:
+        raw_samples=f"{BRANCH_DIR}" + "/smallrna/{project}/samples.tsv",
+        trimmed_samples=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/preprocess/trimmed_samples.tsv",
+        depleted_samples=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/depletion/depleted_samples.tsv",
+        aligned_samples=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/alignment/aligned_samples.tsv",
+        mirna_counts=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/quantification/mirna_counts.tsv",
+        mirna_metadata=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/quantification/mirna_metadata.tsv",
+        featurecounts_done=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/quantification/featurecounts.done"
+    output:
+        manifest=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/length_qc/length_qc_manifest.tsv",
+        length_distribution=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/length_qc/length_distribution.tsv",
+        stage_summary=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/length_qc/stage_summary.tsv",
+        arm_summary=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/length_qc/arm_summary.tsv",
+        isomir_length_summary=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/length_qc/isomir_length_summary.tsv",
+        length_plot=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/length_qc/length_distribution.svg",
+        done=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/length_qc/length_qc.done"
+    params:
+        outdir=lambda wildcards: f"{BRANCH_DIR}/smallrna/{wildcards.project}/smallrna/length_qc",
+        max_reads=BIOLOGICAL_QC.get("smallrna_length_qc_max_reads", 200000)
+    log:
+        "logs/branches/smallrna/{project}.smallrna_length_qc.log"
+    shell:
+        r"""
+        mkdir -p logs/branches/smallrna
+        python3 workflow/scripts/render_smallrna_length_qc.py \
+          --raw-samples {input.raw_samples:q} \
+          --trimmed-samples {input.trimmed_samples:q} \
+          --depleted-samples {input.depleted_samples:q} \
+          --aligned-samples {input.aligned_samples:q} \
+          --mirna-counts {input.mirna_counts:q} \
+          --mirna-metadata {input.mirna_metadata:q} \
+          --outdir {params.outdir:q} \
+          --manifest {output.manifest:q} \
+          --length-distribution {output.length_distribution:q} \
+          --stage-summary {output.stage_summary:q} \
+          --arm-summary {output.arm_summary:q} \
+          --isomir-length-summary {output.isomir_length_summary:q} \
+          --length-plot {output.length_plot:q} \
+          --done {output.done:q} \
+          --max-reads {params.max_reads:q} \
+          > {log:q} 2>&1
+        """
+
+
 rule plan_mirna_differential:
     input:
         samples=f"{BRANCH_DIR}" + "/smallrna/{project}/samples.tsv",
@@ -2391,6 +2580,153 @@ rule render_mirna_mrna_integration:
         """
 
 
+rule render_mirna_mrna_target_featuresets:
+    input:
+        integration_manifest=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/differential/mirna_mrna_integration/mirna_mrna_manifest.tsv",
+        integration_done=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/differential/mirna_mrna_integration/mirna_mrna.done",
+        feature_sets=SMALLRNA_TARGET_FEATURE_SET_FILES,
+        feature_set_tables=SMALLRNA_TARGET_FEATURE_SET_TABLES
+    output:
+        manifest=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/differential/mirna_mrna_target_feature_sets/target_feature_set_manifest.tsv",
+        done=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/differential/mirna_mrna_target_feature_sets/target_feature_sets.done"
+    params:
+        outdir=lambda wildcards: f"{BRANCH_DIR}/smallrna/{wildcards.project}/smallrna/differential/mirna_mrna_target_feature_sets",
+        feature_sets=lambda wildcards: optional_shell_arg(
+            "--feature-sets",
+            joined_config_values(SMALLRNA_TARGET_FEATURE_SET_FILES),
+        ),
+        feature_set_tables=lambda wildcards: optional_shell_arg(
+            "--feature-set-tables",
+            joined_config_values(SMALLRNA_TARGET_FEATURE_SET_TABLES),
+        ),
+        min_overlap=SMALLRNA.get("target_feature_set_min_overlap", 2),
+        top_n=SMALLRNA.get("target_feature_set_top_n", 20)
+    log:
+        "logs/branches/smallrna/{project}.mirna_mrna_target_feature_sets.log"
+    shell:
+        r"""
+        mkdir -p logs/branches/smallrna
+        python3 workflow/scripts/render_mirna_mrna_target_featuresets.py \
+          --integration-manifest {input.integration_manifest:q} \
+          --outdir {params.outdir:q} \
+          --manifest {output.manifest:q} \
+          --done {output.done:q} \
+          {params.feature_sets} \
+          {params.feature_set_tables} \
+          --min-overlap {params.min_overlap:q} \
+          --top-n {params.top_n:q} \
+          > {log:q} 2>&1
+        """
+
+
+rule render_smallrna_biological_warnings:
+    input:
+        design=f"{BRANCH_DIR}" + "/smallrna/{project}/design.tsv",
+        sample_qc_metrics=lambda wildcards: (
+            [f"{BRANCH_DIR}/smallrna/{wildcards.project}/smallrna/quantification/sample_qc/sample_qc_metrics.tsv"]
+            if SMALLRNA_SAMPLE_QC_RUN
+            else []
+        ),
+        sample_qc_correlations=lambda wildcards: (
+            [f"{BRANCH_DIR}/smallrna/{wildcards.project}/smallrna/quantification/sample_qc/sample_correlations.tsv"]
+            if SMALLRNA_SAMPLE_QC_RUN
+            else []
+        ),
+        residual_manifest=lambda wildcards: (
+            [f"{BRANCH_DIR}/smallrna/{wildcards.project}/smallrna/residual_genome/residual_manifest.tsv"]
+            if SMALLRNA_RESIDUAL_RUN
+            else []
+        ),
+        residual_biotype_counts=lambda wildcards: (
+            [f"{BRANCH_DIR}/smallrna/{wildcards.project}/smallrna/residual_genome/biotype_counts.tsv"]
+            if SMALLRNA_RESIDUAL_RUN
+            else []
+        ),
+        length_stage_summary=lambda wildcards: (
+            [smallrna_length_qc_outputs(wildcards.project)["stage_summary"]]
+            if SMALLRNA_LENGTH_QC_RUN
+            else []
+        ),
+        arm_summary=lambda wildcards: (
+            [smallrna_length_qc_outputs(wildcards.project)["arm_summary"]]
+            if SMALLRNA_LENGTH_QC_RUN
+            else []
+        )
+    output:
+        warnings=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/biological_warnings/warnings.tsv",
+        html=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/biological_warnings/warnings.html",
+        manifest=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/biological_warnings/warnings_manifest.tsv",
+        done=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/biological_warnings/warnings.done"
+    params:
+        outdir=lambda wildcards: f"{BRANCH_DIR}/smallrna/{wildcards.project}/smallrna/biological_warnings",
+        sample_qc_metrics=lambda wildcards: optional_shell_arg(
+            "--sample-qc-metrics",
+            f"{BRANCH_DIR}/smallrna/{wildcards.project}/smallrna/quantification/sample_qc/sample_qc_metrics.tsv"
+            if SMALLRNA_SAMPLE_QC_RUN
+            else "",
+        ),
+        sample_correlations=lambda wildcards: optional_shell_arg(
+            "--sample-correlations",
+            f"{BRANCH_DIR}/smallrna/{wildcards.project}/smallrna/quantification/sample_qc/sample_correlations.tsv"
+            if SMALLRNA_SAMPLE_QC_RUN
+            else "",
+        ),
+        residual_manifest=lambda wildcards: optional_shell_arg(
+            "--residual-manifest",
+            f"{BRANCH_DIR}/smallrna/{wildcards.project}/smallrna/residual_genome/residual_manifest.tsv"
+            if SMALLRNA_RESIDUAL_RUN
+            else "",
+        ),
+        residual_biotype_counts=lambda wildcards: optional_shell_arg(
+            "--residual-biotype-counts",
+            f"{BRANCH_DIR}/smallrna/{wildcards.project}/smallrna/residual_genome/biotype_counts.tsv"
+            if SMALLRNA_RESIDUAL_RUN
+            else "",
+        ),
+        length_stage_summary=lambda wildcards: optional_shell_arg(
+            "--length-stage-summary",
+            smallrna_length_qc_outputs(wildcards.project)["stage_summary"]
+            if SMALLRNA_LENGTH_QC_RUN
+            else "",
+        ),
+        arm_summary=lambda wildcards: optional_shell_arg(
+            "--arm-summary",
+            smallrna_length_qc_outputs(wildcards.project)["arm_summary"]
+            if SMALLRNA_LENGTH_QC_RUN
+            else "",
+        ),
+        min_detected_features=BIOLOGICAL_QC.get("min_detected_features", 10),
+        min_library_size=BIOLOGICAL_QC.get("min_library_size", 100),
+        min_sample_correlation=BIOLOGICAL_QC.get("min_sample_correlation", 0.6),
+        max_residual_genome_fraction=BIOLOGICAL_QC.get("max_residual_genome_fraction", 0.5)
+    log:
+        "logs/branches/smallrna/{project}.biological_warnings.log"
+    shell:
+        r"""
+        mkdir -p logs/branches/smallrna
+        python3 workflow/scripts/render_biological_warnings.py \
+          --assay smallrna \
+          --project {wildcards.project:q} \
+          --design {input.design:q} \
+          {params.sample_qc_metrics} \
+          {params.sample_correlations} \
+          {params.residual_manifest} \
+          {params.residual_biotype_counts} \
+          {params.length_stage_summary} \
+          {params.arm_summary} \
+          --outdir {params.outdir:q} \
+          --warnings {output.warnings:q} \
+          --summary-html {output.html:q} \
+          --manifest {output.manifest:q} \
+          --done {output.done:q} \
+          --min-detected-features {params.min_detected_features:q} \
+          --min-library-size {params.min_library_size:q} \
+          --min-sample-correlation {params.min_sample_correlation:q} \
+          --max-residual-genome-fraction {params.max_residual_genome_fraction:q} \
+          > {log:q} 2>&1
+        """
+
+
 rule plan_smallrna_report:
     input:
         plan=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/smallrna_plan.tsv",
@@ -2445,6 +2781,21 @@ rule plan_smallrna_report:
             [smallrna_mirna_mrna_done(wildcards.project)]
             if MIRNA_MRNA_INTEGRATION_RUN
             else []
+        ),
+        mirna_mrna_target_feature_set_manifest=lambda wildcards: (
+            [smallrna_mirna_mrna_target_feature_set_manifest(wildcards.project)]
+            if MIRNA_MRNA_TARGET_FEATURE_SET_RUN
+            else []
+        ),
+        mirna_mrna_target_feature_set_done=lambda wildcards: (
+            [smallrna_mirna_mrna_target_feature_set_done(wildcards.project)]
+            if MIRNA_MRNA_TARGET_FEATURE_SET_RUN
+            else []
+        ),
+        length_qc=lambda wildcards: (
+            list(smallrna_length_qc_outputs(wildcards.project).values())
+            if SMALLRNA_LENGTH_QC_RUN
+            else []
         )
     output:
         plan=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/differential/reports/report_plan.tsv",
@@ -2471,7 +2822,44 @@ rule plan_smallrna_report:
         ),
         target_manifest_flag=smallrna_target_manifest_flag,
         target_feature_set_manifest_flag=smallrna_target_feature_set_manifest_flag,
-        mirna_mrna_manifest_flag=smallrna_mirna_mrna_manifest_flag
+        mirna_mrna_manifest_flag=smallrna_mirna_mrna_manifest_flag,
+        mirna_mrna_target_feature_set_manifest_flag=smallrna_mirna_mrna_target_feature_set_manifest_flag,
+        length_qc_manifest_flag=lambda wildcards: optional_shell_arg(
+            "--length-qc-manifest",
+            smallrna_length_qc_outputs(wildcards.project)["manifest"]
+            if SMALLRNA_LENGTH_QC_RUN
+            else "",
+        ),
+        length_distribution_flag=lambda wildcards: optional_shell_arg(
+            "--length-distribution",
+            smallrna_length_qc_outputs(wildcards.project)["length_distribution"]
+            if SMALLRNA_LENGTH_QC_RUN
+            else "",
+        ),
+        length_stage_summary_flag=lambda wildcards: optional_shell_arg(
+            "--length-stage-summary",
+            smallrna_length_qc_outputs(wildcards.project)["stage_summary"]
+            if SMALLRNA_LENGTH_QC_RUN
+            else "",
+        ),
+        arm_summary_flag=lambda wildcards: optional_shell_arg(
+            "--arm-summary",
+            smallrna_length_qc_outputs(wildcards.project)["arm_summary"]
+            if SMALLRNA_LENGTH_QC_RUN
+            else "",
+        ),
+        isomir_length_summary_flag=lambda wildcards: optional_shell_arg(
+            "--isomir-length-summary",
+            smallrna_length_qc_outputs(wildcards.project)["isomir_length_summary"]
+            if SMALLRNA_LENGTH_QC_RUN
+            else "",
+        ),
+        length_plot_flag=lambda wildcards: optional_shell_arg(
+            "--length-plot",
+            smallrna_length_qc_outputs(wildcards.project)["length_plot"]
+            if SMALLRNA_LENGTH_QC_RUN
+            else "",
+        )
     log:
         "logs/branches/smallrna/{project}.smallrna_report_plan.log"
     shell:
@@ -2486,6 +2874,13 @@ rule plan_smallrna_report:
           {params.target_manifest_flag} \
           {params.target_feature_set_manifest_flag} \
           {params.mirna_mrna_manifest_flag} \
+          {params.mirna_mrna_target_feature_set_manifest_flag} \
+          {params.length_qc_manifest_flag} \
+          {params.length_distribution_flag} \
+          {params.length_stage_summary_flag} \
+          {params.arm_summary_flag} \
+          {params.isomir_length_summary_flag} \
+          {params.length_plot_flag} \
           --project {wildcards.project:q} \
           --outdir {params.outdir:q} \
           --output {output.plan:q} \
@@ -2549,11 +2944,26 @@ rule render_smallrna_report_summaries:
 rule render_smallrna_report_index:
     input:
         manifest=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/differential/reports/summaries/summary_manifest.tsv",
-        summaries_done=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/differential/reports/summaries/summary.done"
+        summaries_done=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/differential/reports/summaries/summary.done",
+        warnings=lambda wildcards: (
+            [
+                smallrna_biological_warnings_outputs(wildcards.project)["html"],
+                smallrna_biological_warnings_outputs(wildcards.project)["done"],
+            ]
+            if SMALLRNA_WARNINGS_RUN
+            else []
+        )
     output:
         index=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/differential/reports/index.html",
         asset_manifest=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/differential/reports/asset_manifest.tsv",
         done=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/differential/reports/report_index.done"
+    params:
+        warnings_html=lambda wildcards: optional_shell_arg(
+            "--warnings-html",
+            smallrna_biological_warnings_outputs(wildcards.project)["html"]
+            if SMALLRNA_WARNINGS_RUN
+            else "",
+        )
     log:
         "logs/branches/smallrna/{project}.smallrna_report_index.log"
     shell:
@@ -2564,6 +2974,7 @@ rule render_smallrna_report_index:
           --asset-manifest {output.asset_manifest:q} \
           --output {output.index:q} \
           --done {output.done:q} \
+          {params.warnings_html} \
           > {log:q} 2>&1
         """
 
@@ -3688,6 +4099,102 @@ rule render_rnaseq_biotype_summary:
         """
 
 
+rule render_rnaseq_biological_warnings:
+    input:
+        design=f"{BRANCH_DIR}" + "/rnaseq/{project}/design.tsv",
+        sample_qc_metrics=lambda wildcards: (
+            [f"{BRANCH_DIR}/rnaseq/{wildcards.project}/quantification/sample_qc/sample_qc_metrics.tsv"]
+            if RNASEQ_SAMPLE_QC_RUN
+            else []
+        ),
+        sample_qc_correlations=lambda wildcards: (
+            [f"{BRANCH_DIR}/rnaseq/{wildcards.project}/quantification/sample_qc/sample_correlations.tsv"]
+            if RNASEQ_SAMPLE_QC_RUN
+            else []
+        ),
+        strandedness_report=lambda wildcards: (
+            [f"{BRANCH_DIR}/rnaseq/{wildcards.project}/alignment/strandedness/strandedness_report.tsv"]
+            if RNASEQ_STRANDEDNESS_INFERENCE_RUN
+            else []
+        ),
+        biotype_count_summary=lambda wildcards: (
+            [f"{BRANCH_DIR}/rnaseq/{wildcards.project}/quantification/biotypes/count_biotype_summary.tsv"]
+            if RNASEQ_BIOTYPE_SUMMARY_RUN
+            else []
+        ),
+        biotype_differential_summary=lambda wildcards: (
+            [f"{BRANCH_DIR}/rnaseq/{wildcards.project}/quantification/biotypes/differential_biotype_summary.tsv"]
+            if RNASEQ_BIOTYPE_SUMMARY_RUN
+            else []
+        )
+    output:
+        warnings=f"{BRANCH_DIR}" + "/rnaseq/{project}/biological_warnings/warnings.tsv",
+        html=f"{BRANCH_DIR}" + "/rnaseq/{project}/biological_warnings/warnings.html",
+        manifest=f"{BRANCH_DIR}" + "/rnaseq/{project}/biological_warnings/warnings_manifest.tsv",
+        done=f"{BRANCH_DIR}" + "/rnaseq/{project}/biological_warnings/warnings.done"
+    params:
+        outdir=lambda wildcards: f"{BRANCH_DIR}/rnaseq/{wildcards.project}/biological_warnings",
+        sample_qc_metrics=lambda wildcards: optional_shell_arg(
+            "--sample-qc-metrics",
+            f"{BRANCH_DIR}/rnaseq/{wildcards.project}/quantification/sample_qc/sample_qc_metrics.tsv"
+            if RNASEQ_SAMPLE_QC_RUN
+            else "",
+        ),
+        sample_correlations=lambda wildcards: optional_shell_arg(
+            "--sample-correlations",
+            f"{BRANCH_DIR}/rnaseq/{wildcards.project}/quantification/sample_qc/sample_correlations.tsv"
+            if RNASEQ_SAMPLE_QC_RUN
+            else "",
+        ),
+        strandedness_report=lambda wildcards: optional_shell_arg(
+            "--strandedness-report",
+            f"{BRANCH_DIR}/rnaseq/{wildcards.project}/alignment/strandedness/strandedness_report.tsv"
+            if RNASEQ_STRANDEDNESS_INFERENCE_RUN
+            else "",
+        ),
+        biotype_count_summary=lambda wildcards: optional_shell_arg(
+            "--biotype-count-summary",
+            f"{BRANCH_DIR}/rnaseq/{wildcards.project}/quantification/biotypes/count_biotype_summary.tsv"
+            if RNASEQ_BIOTYPE_SUMMARY_RUN
+            else "",
+        ),
+        biotype_differential_summary=lambda wildcards: optional_shell_arg(
+            "--biotype-differential-summary",
+            f"{BRANCH_DIR}/rnaseq/{wildcards.project}/quantification/biotypes/differential_biotype_summary.tsv"
+            if RNASEQ_BIOTYPE_SUMMARY_RUN
+            else "",
+        ),
+        min_detected_features=BIOLOGICAL_QC.get("min_detected_features", 10),
+        min_library_size=BIOLOGICAL_QC.get("min_library_size", 100),
+        min_sample_correlation=BIOLOGICAL_QC.get("min_sample_correlation", 0.6),
+        max_unclassified_biotype_fraction=BIOLOGICAL_QC.get("max_unclassified_biotype_fraction", 0.5)
+    log:
+        "logs/branches/rnaseq/{project}.biological_warnings.log"
+    shell:
+        r"""
+        mkdir -p logs/branches/rnaseq
+        python3 workflow/scripts/render_biological_warnings.py \
+          --assay rnaseq \
+          --project {wildcards.project:q} \
+          --design {input.design:q} \
+          {params.sample_qc_metrics} \
+          {params.sample_correlations} \
+          {params.strandedness_report} \
+          {params.biotype_count_summary} \
+          {params.biotype_differential_summary} \
+          --outdir {params.outdir:q} \
+          --warnings {output.warnings:q} \
+          --summary-html {output.html:q} \
+          --manifest {output.manifest:q} \
+          --done {output.done:q} \
+          --min-detected-features {params.min_detected_features:q} \
+          --min-library-size {params.min_library_size:q} \
+          --min-sample-correlation {params.min_sample_correlation:q} \
+          --max-unclassified-biotype-fraction {params.max_unclassified_biotype_fraction:q} \
+          > {log:q} 2>&1
+        """
+
+
 rule plan_rnaseq_dtu:
     input:
         samples=f"{BRANCH_DIR}" + "/rnaseq/{project}/samples.tsv",
@@ -3850,11 +4357,40 @@ rule render_rnaseq_differential_report_index:
         enrichment_manifest=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/reports/enrichment/enrichment_manifest.tsv",
         enrichment_done=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/reports/enrichment/enrichment.done",
         summary_manifest=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/reports/summaries/summary_manifest.tsv",
-        summary_done=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/reports/summaries/summary.done"
+        summary_done=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/reports/summaries/summary.done",
+        biotype=lambda wildcards: (
+            [
+                f"{BRANCH_DIR}/rnaseq/{wildcards.project}/quantification/biotypes/biotype_summary.html",
+                f"{BRANCH_DIR}/rnaseq/{wildcards.project}/quantification/biotypes/biotype_summary.done",
+            ]
+            if RNASEQ_BIOTYPE_SUMMARY_RUN
+            else []
+        ),
+        warnings=lambda wildcards: (
+            [
+                rnaseq_biological_warnings_outputs(wildcards.project)["html"],
+                rnaseq_biological_warnings_outputs(wildcards.project)["done"],
+            ]
+            if RNASEQ_WARNINGS_RUN
+            else []
+        )
     output:
         html=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/reports/index.html",
         asset_manifest=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/reports/asset_manifest.tsv",
         done=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/reports/report_index.done"
+    params:
+        biotype_html=lambda wildcards: optional_shell_arg(
+            "--biotype-html",
+            f"{BRANCH_DIR}/rnaseq/{wildcards.project}/quantification/biotypes/biotype_summary.html"
+            if RNASEQ_BIOTYPE_SUMMARY_RUN
+            else "",
+        ),
+        warnings_html=lambda wildcards: optional_shell_arg(
+            "--warnings-html",
+            rnaseq_biological_warnings_outputs(wildcards.project)["html"]
+            if RNASEQ_WARNINGS_RUN
+            else "",
+        )
     log:
         "logs/branches/rnaseq/{project}.differential_report_index.log"
     shell:
@@ -3868,6 +4404,8 @@ rule render_rnaseq_differential_report_index:
           --asset-manifest {output.asset_manifest:q} \
           --output {output.html:q} \
           --done {output.done:q} \
+          {params.biotype_html} \
+          {params.warnings_html} \
           > {log:q} 2>&1
         """
 

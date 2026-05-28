@@ -243,6 +243,14 @@ biological_qc:
   run: true
   rnaseq_sample_qc: true
   smallrna_sample_qc: true
+  smallrna_length_qc: true
+  smallrna_length_qc_max_reads: 200000
+  biological_warnings: true
+  min_detected_features: 10
+  min_library_size: 100
+  min_sample_correlation: 0.6
+  max_unclassified_biotype_fraction: 0.5
+  max_residual_genome_fraction: 0.5
 
 environment:
   required_tools:
