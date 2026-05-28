@@ -68,7 +68,35 @@ Preflight should fail before job submission when:
   quantification, or DESeq2 sections are enabled in an impossible order;
 - report feature-set or target-table inputs do not expose the required columns.
 
-## 3. Dry-Run In Stages
+## 3. Confirm Biological Design Settings
+
+For a simple two-condition study, leave the formula empty and ASPIS will use
+`~ condition`. For paired, blocked, or batch-aware experiments, configure the
+formula before any full run:
+
+```yaml
+design:
+  model_formula: "~ patient + condition"
+  blocking_factors:
+    - patient
+```
+
+Use the assay-specific override only when one assay needs a different model:
+
+```yaml
+rnaseq_differential:
+  design_formula: "~ batch + condition"
+```
+
+```yaml
+smallrna:
+  design_formula: "~ batch + condition"
+```
+
+Every formula variable must exist in the intake sheet. If `contrast_by` is set,
+remember that the formula is evaluated inside each contrast stratum.
+
+## 4. Dry-Run In Stages
 
 Set the SLURM account for the current user before using the G100 helpers:
 
@@ -121,7 +149,31 @@ MODE=run bash tests/run_g100_smallrna_project.sh \
 
 Then advance to alignment, quantification, differential analysis, and reports.
 
-## 4. Compare Against Legacy Outputs
+## 5. Inspect Sample-Level Biological QC
+
+Keep count-level sample QC enabled for real projects:
+
+```yaml
+biological_qc:
+  run: true
+  rnaseq_sample_qc: true
+  smallrna_sample_qc: true
+```
+
+Review these outputs before interpreting DESeq2:
+
+```text
+<branch>/quantification/sample_qc/sample_qc_metrics.tsv
+<branch>/quantification/sample_qc/sample_correlations.tsv
+<branch>/quantification/sample_qc/library_sizes.svg
+<branch>/quantification/sample_qc/sample_pca.svg
+<branch>/quantification/sample_qc/sample_correlation_heatmap.svg
+```
+
+These are not substitutes for biology, but they expose sample swaps, outliers,
+library-size imbalance, low detected-feature samples, and unexpected clustering.
+
+## 6. Compare Against Legacy Outputs
 
 When legacy outputs exist for the same project, compare key tables before
 judging plot parity. The helper below is intentionally generic so it can compare
@@ -160,7 +212,7 @@ For smallRNA, compare at least:
 - `smallrna/differential/target_enrichment/target_manifest.tsv` when target
   enrichment is enabled.
 
-## 5. Review Residual SmallRNA Reads
+## 7. Review Residual SmallRNA Reads
 
 The smallRNA workflow does not discard reads after miRBase alignment. When
 `smallrna.residual_run: true`, miRBase-unmapped reads are aligned to the
@@ -177,7 +229,7 @@ residual reads are snoRNA, snRNA, rRNA, tRNA, adapter-derived, or another known
 technical class, decide whether to expand the contaminant FASTA or keep that
 class as a reported biological/technical read fate.
 
-## 6. Check Environment Reports
+## 8. Check Environment Reports
 
 Every major workflow layer writes an environment report. Review the global
 report first:
@@ -194,5 +246,5 @@ corresponding rule before expensive work starts.
 ASPIS writes a provenance bundle for each real-project branch under the branch
 `provenance/` directory. Inspect `biological_context.tsv` after a dry-run
 or partial run has completed enough upstream outputs; it summarizes the
-design, configured biological references, quantification layers, and
-differential/report manifests without duplicating large data files.
+design, configured biological references, sample-level QC, quantification
+layers, and differential/report manifests without duplicating large data files.

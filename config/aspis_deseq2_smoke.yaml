@@ -30,6 +30,7 @@ deseq2_smoke:
   deseq2_script: workflow/scripts/run_deseq2_feature.R
   condition_col: condition
   control_label: control
+  design_formula: ""
   contrast_by:
     - time_h
   min_replicates_per_group: 2
