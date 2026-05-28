@@ -16,6 +16,8 @@ reproducible modules.
   normalized counts, and a DESeq2-transformed count matrix for PCA/heatmaps.
 - RNA-seq reports currently include volcano, MA, PCA, heatmap, summary HTML,
   configurable feature-set ORA, and ranked feature-set enrichment.
+- Differential PCA reports can color samples by configured biological and
+  technical metadata columns when available.
 - SmallRNA reports currently include miRNA DESeq2 plots, target-table
   enrichment, target feature-set enrichment, length/isomiR summaries, residual
   read fate, and optional miRNA-mRNA integration when matched RNA-seq exists.
@@ -58,13 +60,6 @@ Current state:
 
 Remaining work:
 
-- Color PCA by available biological and technical variables:
-  - condition;
-  - time;
-  - batch;
-  - biospecimen;
-  - replicate;
-  - user-selected covariates.
 - Explicitly report variance explained by PC1/PC2.
 - Add a report note that lack of PCA clustering is not automatically a failure.
   It can reflect weak biological effect, small sample size, strong individual
