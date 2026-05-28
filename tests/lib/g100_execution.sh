@@ -11,6 +11,10 @@ g100_report_execution_context() {
   export ASPIS_DEFAULT_RUNTIME="$DEFAULT_RUNTIME"
   export ASPIS_DEFAULT_MEM_MB="$DEFAULT_MEM_MB"
   export ASPIS_DEFAULT_DISK_MB="$DEFAULT_DISK_MB"
+  export ASPIS_CONFIGFILE="$configfile"
+  if [[ -n "${PREFLIGHT_REPORT:-}" ]]; then
+    export ASPIS_PREFLIGHT_REPORT="$PREFLIGHT_REPORT"
+  fi
   if [[ -n "$DOWNLOAD_PARTITION" ]]; then
     export SLURM_DOWNLOAD_PARTITION="$DOWNLOAD_PARTITION"
   fi

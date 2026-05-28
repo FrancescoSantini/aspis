@@ -549,6 +549,14 @@ For quick resource overrides, set `ASPIS_DEFAULT_RUNTIME`,
 The helpers also accept the older `SLURM_DEFAULT_RUNTIME`,
 `SLURM_DEFAULT_MEM_MB`, and `SLURM_DEFAULT_DISK_MB` names and forward them
 into the ASPIS execution report.
+
+Each branch also writes a provenance bundle under
+`results/.../branches/<assay>/<project>/provenance/`. The bundle avoids
+copying large FASTQ/BAM files; it records file hashes, config/intake
+snapshots, design and contrast summaries, quantification dimensions,
+differential/report manifests, and smallRNA residual biotype summaries when
+those outputs exist. Disable it with `provenance.run: false` only for
+debugging very small partial runs.
 Local FASTQ materialization and manifest/report planning stay on the default
 partition. Routine development should still use local `--cores 1` runs.
 

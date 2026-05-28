@@ -86,6 +86,10 @@ execution:
     mem_mb: 4000
     disk_mb: 10000
 
+provenance:
+  # Build a lightweight per-branch bundle with run, design, and biological context.
+  run: true
+
 environment:
   required_tools:
     - python3
