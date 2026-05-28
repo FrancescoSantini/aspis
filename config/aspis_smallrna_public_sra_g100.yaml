@@ -13,6 +13,7 @@ paths:
   manifest: meta/smallrna_public_sra_g100/materialized_manifest.tsv
   analysis_plan: meta/smallrna_public_sra_g100/analysis_plan.tsv
   environment_report: meta/smallrna_public_sra_g100/environment_report.tsv
+  execution_report: meta/smallrna_public_sra_g100/execution_report.tsv
   sra_cache_dir: cache/smallrna_public_sra_g100/sra
   scratch_dir: work/smallrna_public_sra_g100/tmp
   branch_dir: results/smallrna_public_sra_g100/branches
@@ -76,8 +77,14 @@ smallrna:
   min_replicates_per_group: 2
 
 execution:
+  # Leave empty for shared configs. G100 helpers set SLURM_ACCOUNT at runtime.
+  slurm_account: ""
   default_partition: g100_usr_prod
   download_partition: g100_all_serial
+  default_resources:
+    runtime: 60
+    mem_mb: 4000
+    disk_mb: 10000
 
 environment:
   required_tools:

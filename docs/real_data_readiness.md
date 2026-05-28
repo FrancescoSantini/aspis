@@ -75,12 +75,15 @@ Set the SLURM account for the current user before using the G100 helpers:
 ```bash
 export SLURM_ACCOUNT=<SLURM_ACCOUNT>
 export SLURM_PARTITION="${SLURM_PARTITION:-g100_usr_prod}"
+export SLURM_DOWNLOAD_PARTITION="${SLURM_DOWNLOAD_PARTITION:-g100_all_serial}"
 ```
 
 `<SLURM_ACCOUNT>` must be the account allocated to the person running the job.
 The helpers also accept the account as their first positional argument. The
 partition defaults to `g100_usr_prod` for G100; set `SLURM_PARTITION` when a
-different partition is required.
+different partition is required. Set `EXECUTION_REPORT=/path/to/report.tsv`
+to choose where the helper records the selected account, partitions, and
+default resources.
 
 Start with dry-runs:
 

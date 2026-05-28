@@ -172,6 +172,9 @@ before submitting Snakemake jobs. The default report is written to
 `logs/preflight/<config-file>.rnaseq.tsv`; override it with
 `PREFLIGHT_REPORT=/path/to/report.tsv` when needed. Set `PREFLIGHT=0` only
 when you need to debug Snakemake itself despite a known preflight warning.
+The helper also writes an execution report to
+`logs/execution/<config-file>.execution.tsv`; set
+`EXECUTION_REPORT=/path/to/report.tsv` to choose another location.
 
 `<SLURM_ACCOUNT>` is the account assigned to the user submitting the job. You
 can also set it once instead of passing it positionally:
@@ -179,6 +182,7 @@ can also set it once instead of passing it positionally:
 ```bash
 export SLURM_ACCOUNT=<SLURM_ACCOUNT>
 export SLURM_PARTITION="${SLURM_PARTITION:-g100_usr_prod}"
+export SLURM_DOWNLOAD_PARTITION="${SLURM_DOWNLOAD_PARTITION:-g100_all_serial}"
 ```
 
 ```bash
