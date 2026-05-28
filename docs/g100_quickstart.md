@@ -501,10 +501,13 @@ first helper argument, or set it once in the shell:
 ```bash
 export SLURM_ACCOUNT=<SLURM_ACCOUNT>
 export SLURM_PARTITION="${SLURM_PARTITION:-g100_usr_prod}"
+export SLURM_DOWNLOAD_PARTITION="${SLURM_DOWNLOAD_PARTITION:-g100_all_serial}"
 ```
 
-The G100 helpers default to `g100_usr_prod`. Override `SLURM_PARTITION` only
-when your allocation or site policy requires a different submit partition.
+The G100 helpers default to `g100_usr_prod` for ordinary jobs and
+`g100_all_serial` for public INSDC/SRA materialization jobs. Override
+`SLURM_PARTITION` or `SLURM_DOWNLOAD_PARTITION` only when your allocation or
+site policy requires different submit partitions.
 
 Then pass it at runtime. When using `--default-resources` on the command line,
 repeat the profile defaults as well as the account; otherwise Snakemake can
@@ -526,10 +529,26 @@ accession to the download partition configured in `config/aspis.yaml`:
 
 ```yaml
 execution:
+  # Shared configs should normally leave this empty; helpers set it at runtime.
+  slurm_account: ""
   default_partition: g100_usr_prod
   download_partition: g100_all_serial
+  default_resources:
+    runtime: 60
+    mem_mb: 4000
+    disk_mb: 10000
 ```
 
+Helpers also write an execution report before calling Snakemake. By default it
+goes under `logs/execution/*.tsv`; set `EXECUTION_REPORT=/path/to/report.tsv`
+to move it. The report records the chosen account, submit partitions, default
+resources, and whether each value came from the helper environment or config.
+
+For quick resource overrides, set `ASPIS_DEFAULT_RUNTIME`,
+`ASPIS_DEFAULT_MEM_MB`, or `ASPIS_DEFAULT_DISK_MB` before running a helper.
+The helpers also accept the older `SLURM_DEFAULT_RUNTIME`,
+`SLURM_DEFAULT_MEM_MB`, and `SLURM_DEFAULT_DISK_MB` names and forward them
+into the ASPIS execution report.
 Local FASTQ materialization and manifest/report planning stay on the default
 partition. Routine development should still use local `--cores 1` runs.
 
