@@ -27,6 +27,22 @@ REQUIRED_PLAN_COLUMNS = {
     "log",
 }
 REQUIRED_SAMPLE_COLUMNS = {"library_id"}
+SUMMARY_MANIFEST_COLUMNS = [
+    "effective_design_formula",
+    "contrast",
+    "coefficient",
+    "n_samples",
+    "n_features_input",
+    "n_features_tested",
+    "n_significant",
+    "padj_threshold",
+    "log2fc_threshold",
+    "min_count",
+    "transformed_counts_method",
+    "transformed_counts_reason",
+    "lfc_shrinkage_method",
+    "lfc_shrinkage_reason",
+]
 
 
 @dataclass(frozen=True)
@@ -66,6 +82,18 @@ def read_table(path: Path, required: set[str]) -> tuple[list[str], list[dict[str
             raise ValueError(f"TSV {path} is missing columns: {sorted(missing)}")
         rows = [{key: (value or "").strip() for key, value in row.items()} for row in reader]
         return list(reader.fieldnames), rows
+
+
+def read_first_row_if_exists(path: Path) -> dict[str, str]:
+    if not path.exists():
+        return {}
+    with path.open(newline="", encoding="utf-8") as handle:
+        reader = csv.DictReader(handle, delimiter="\t")
+        if reader.fieldnames is None:
+            return {}
+        for row in reader:
+            return {key: (value or "").strip() for key, value in row.items()}
+    return {}
 
 
 def executable_path(command: str) -> str:
@@ -143,6 +171,26 @@ def add_standard_output_paths(row: dict[str, str], lfc_shrinkage: str) -> dict[s
     return output_row
 
 
+def add_standard_manifest_fields(row: dict[str, str], args: argparse.Namespace) -> dict[str, str]:
+    summary = read_first_row_if_exists(Path(row.get("summary", ""))) if row.get("summary", "") else {}
+    updated = dict(row)
+    updated["effective_design_formula"] = summary.get("design_formula", row.get("design_formula", ""))
+    updated["contrast"] = summary.get("contrast", "")
+    updated["coefficient"] = summary.get("coefficient", "")
+    updated["n_samples"] = summary.get("n_samples", "")
+    updated["n_features_input"] = summary.get("n_features_input", "")
+    updated["n_features_tested"] = summary.get("n_features_tested", "")
+    updated["n_significant"] = summary.get("n_significant", "")
+    updated["padj_threshold"] = summary.get("padj_threshold", str(args.padj))
+    updated["log2fc_threshold"] = summary.get("log2fc_threshold", str(args.log2fc))
+    updated["min_count"] = summary.get("min_count", str(args.min_count))
+    updated["transformed_counts_method"] = summary.get("transformed_counts_method", "")
+    updated["transformed_counts_reason"] = summary.get("transformed_counts_reason", "")
+    updated["lfc_shrinkage_method"] = summary.get("lfc_shrinkage_method", row.get("lfc_shrinkage", ""))
+    updated["lfc_shrinkage_reason"] = summary.get("lfc_shrinkage_reason", "")
+    return updated
+
+
 def run_ready_contrast(
     row: dict[str, str],
     sample_columns: list[str],
@@ -215,7 +263,7 @@ def run_ready_contrast(
     else:
         output_row["status"] = "failed"
         output_row["reason"] = message or f"DESeq2 exited with status {status}"
-    return output_row
+    return add_standard_manifest_fields(output_row, args)
 
 
 def write_manifest(path: Path, rows: list[dict[str, str]]) -> None:
@@ -229,6 +277,7 @@ def write_manifest(path: Path, rows: list[dict[str, str]]) -> None:
         "contrast_by",
         "contrast_values",
         "design_formula",
+        *SUMMARY_MANIFEST_COLUMNS,
         "n_control",
         "n_test",
         "samples",
@@ -293,6 +342,7 @@ def run(args: argparse.Namespace, spec: FeatureRunSpec) -> int:
     ]
     for row in output_rows:
         row["feature_metadata"] = getattr(args, spec.metadata_attr)
+        row.update(add_standard_manifest_fields(row, args))
     if ready_rows:
         rscript = executable_path(args.rscript)
         if not Path(args.deseq2_script).exists():

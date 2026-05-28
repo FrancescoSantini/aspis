@@ -84,6 +84,11 @@ SUMMARY_COLUMNS = [
     "n_residual_biotypes",
 ]
 STAT_COLUMNS = {"baseMean", "log2FoldChange", "lfcSE", "stat", "pvalue", "padj"}
+PCA_INTERPRETATION_NOTE = (
+    "Lack of clear PCA clustering is not automatically a failed analysis; it can reflect weak "
+    "biological effect, small sample size, strong individual variation, batch or covariate "
+    "structure, or limited design power."
+)
 
 
 def parse_args() -> argparse.Namespace:
@@ -405,6 +410,7 @@ def render_html(
     table {{ border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: 0.92rem; }}
     th, td {{ border: 1px solid #ddd; padding: 0.45rem; text-align: left; vertical-align: top; }}
     th {{ background: #f2f2f2; }}
+    .note {{ background: #f6f8fa; border-left: 4px solid #666; margin: 1rem 0; padding: 0.75rem; }}
     .links {{ margin: 1rem 0; }}
     .svg-panel svg {{ max-width: 100%; height: auto; border: 1px solid #ddd; }}
   </style>
@@ -413,6 +419,7 @@ def render_html(
   <h1>{html.escape(title)}</h1>
   <p class="links">{links_html}</p>
   <section class="metrics">{metric_html}</section>
+  <p class="note">{html.escape(PCA_INTERPRETATION_NOTE)}</p>
   <h2>Top significant miRNAs</h2>
   {html_table(significant, significant_columns)}
   <h2>Target summary</h2>

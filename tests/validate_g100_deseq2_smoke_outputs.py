@@ -51,6 +51,20 @@ DESEQ_MANIFEST_COLUMNS = {
     "test_label",
     "contrast_by",
     "contrast_values",
+    "effective_design_formula",
+    "contrast",
+    "coefficient",
+    "n_samples",
+    "n_features_input",
+    "n_features_tested",
+    "n_significant",
+    "padj_threshold",
+    "log2fc_threshold",
+    "min_count",
+    "transformed_counts_method",
+    "transformed_counts_reason",
+    "lfc_shrinkage_method",
+    "lfc_shrinkage_reason",
     "n_control",
     "n_test",
     "samples",
@@ -63,6 +77,7 @@ DESEQ_MANIFEST_COLUMNS = {
     "feature_metadata",
     "log",
 }
+PCA_NOTE_FRAGMENT = "not automatically a failed analysis"
 REPORT_SCHEMAS = {
     "report_plan.tsv": {
         "project",
@@ -241,6 +256,22 @@ def validate_level(level: str, branch: Path, feature_column: str) -> str:
     summary = summary_rows[0]
     if summary.get("status") != "ok" or summary.get("feature_id_column") != feature_column:
         raise ValueError(f"Unexpected {level} DESeq2 summary row: {summary}")
+    for column in [
+        "n_samples",
+        "n_features_input",
+        "n_features_tested",
+        "n_significant",
+        "padj_threshold",
+        "log2fc_threshold",
+        "min_count",
+    ]:
+        if not manifest.get(column, ""):
+            raise ValueError(f"{level} DESeq2 manifest did not record {column}: {manifest}")
+        if summary.get(column, "") and manifest.get(column, "") != summary.get(column, ""):
+            raise ValueError(
+                f"{level} DESeq2 manifest {column}={manifest.get(column)!r} disagrees with summary "
+                f"{summary.get(column)!r}"
+            )
 
     _, done_rows = read_tsv(branch / "deseq2.done", {"status", "contrasts_ok", "contrasts_failed"})
     done = done_rows[0]
@@ -294,6 +325,12 @@ def validate_reports() -> str:
         raise ValueError(f"Report plan ready levels are {sorted(observed_levels)}, expected {sorted(expected_levels)}")
     validate_report_html()
     validate_feature_set_results()
+    summary_rows = validate_report_tsv("summaries/summary_manifest.tsv", REPORT_SCHEMAS["summaries/summary_manifest.tsv"])
+    for row in summary_rows:
+        summary_html = Path(row["summary_html"])
+        text = summary_html.read_text(encoding="utf-8")
+        if PCA_NOTE_FRAGMENT not in text:
+            raise ValueError(f"{summary_html} is missing the PCA interpretation note")
     asset_rows = validate_report_tsv("asset_manifest.tsv", REPORT_SCHEMAS["asset_manifest.tsv"])
     labels = {row["asset_label"] for row in asset_rows if row.get("exists") == "true"}
     required_labels = {"summary_html", "results", "volcano_pdf", "ma_pdf", "pca_pdf", "pca_metrics_tsv", "heatmap_pdf"}
