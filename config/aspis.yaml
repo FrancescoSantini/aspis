@@ -30,8 +30,13 @@ planning:
 design:
   condition_col: condition
   control_label: control
+  # Optional model metadata. Leave model_formula empty for the default "~ condition".
+  model_formula: ""
   covariates:
     - time_h
+  batch_factors: []
+  blocking_factors: []
+  interaction_terms: []
   min_condition_groups: 2
 
 fastq_inspection:
@@ -117,6 +122,7 @@ rnaseq_differential:
   isoform_switch_genome_object: ""
   condition_col: condition
   control_label: control
+  design_formula: ""
   contrast_by: []
   min_replicates_per_group: 2
   min_count: 10
@@ -184,6 +190,7 @@ smallrna:
   reports: true
   condition_col: condition
   control_label: control
+  design_formula: ""
   contrast_by: []
   min_replicates_per_group: 2
   padj: 0.1
@@ -205,6 +212,12 @@ execution:
 provenance:
   # Build a lightweight per-branch bundle with run, design, and biological context.
   run: true
+
+biological_qc:
+  # Build sample-level count QC plots/tables after RNA-seq and smallRNA quantification.
+  run: true
+  rnaseq_sample_qc: true
+  smallrna_sample_qc: true
 
 environment:
   required_tools:

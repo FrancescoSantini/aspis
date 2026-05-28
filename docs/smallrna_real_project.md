@@ -40,6 +40,11 @@ Edit `config/aspis_smallrna_<project>.yaml`:
 - `smallrna.target_feature_set_tables` or `smallrna.target_feature_sets`:
   provide local target-gene feature sets if report feature-set enrichment should
   run.
+- `design.model_formula` or `smallrna.design_formula`: use a DESeq2 formula
+  such as `~ patient + condition` or `~ batch + condition` when the experiment
+  is paired or batch-structured. Leave empty for `~ condition`.
+- `biological_qc.smallrna_sample_qc`: keep enabled for sample-level miRNA count
+  QC unless you intentionally need a minimal run.
 
 Edit `config/intake_smallrna_<project>.tsv`:
 
@@ -67,6 +72,33 @@ Differential-design issues that can still support upstream QC and alignment,
 such as too few replicates per contrast group or a missing control label, are
 written as `differential_status=blocked` in `design.tsv` with a concrete
 `reason`.
+
+## Biological Design And QC
+
+For simple two-group analyses, leave the model formula empty and ASPIS will run
+miRNA DESeq2 with `~ condition`. For paired, blocked, or batch-aware designs,
+set a formula explicitly:
+
+```yaml
+design:
+  model_formula: "~ patient + condition"
+  blocking_factors:
+    - patient
+
+smallrna:
+  design_formula: "~ patient + condition"
+```
+
+Every variable named in the formula must exist in the intake-derived sample
+table. If `contrast_by` is used, ASPIS builds separate contrasts within each
+stratum; avoid also putting a fully confounded stratification variable in the
+formula unless the design matrix still has enough variation inside each
+contrast.
+
+When `biological_qc.smallrna_sample_qc: true`, ASPIS renders miRNA count-level
+sample QC after featureCounts. Inspect the library-size plot, PCA plot,
+correlation heatmap, and metric tables together with residual-read summaries
+before trusting differential contrasts.
 
 ## Target Tables
 
@@ -199,6 +231,8 @@ Important intermediate manifests are:
 <branch_dir>/smallrna/<PROJECT>/smallrna/residual_genome/biotype_counts.tsv
 <branch_dir>/smallrna/<PROJECT>/smallrna/residual_genome/feature_counts.tsv
 <branch_dir>/smallrna/<PROJECT>/smallrna/quantification/featurecounts_manifest.tsv
+<branch_dir>/smallrna/<PROJECT>/smallrna/quantification/sample_qc/sample_qc_metrics.tsv
+<branch_dir>/smallrna/<PROJECT>/smallrna/quantification/sample_qc/sample_correlations.tsv
 <branch_dir>/smallrna/<PROJECT>/smallrna/differential/mirna_deseq2/deseq2_manifest.tsv
 ```
 

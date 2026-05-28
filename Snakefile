@@ -28,6 +28,7 @@ SMALLRNA = config.get("smallrna", {})
 DESEQ2_SMOKE = config.get("deseq2_smoke", {})
 EXECUTION = config.get("execution", {})
 PROVENANCE = config.get("provenance", {})
+BIOLOGICAL_QC = config.get("biological_qc", {})
 ENVIRONMENT = config.get("environment", {})
 
 
@@ -74,6 +75,15 @@ DESEQ2_SMOKE_REPORT_DIR = DESEQ2_SMOKE.get(
     "results/deseq2_smoke/reports",
 )
 PROVENANCE_RUN = as_bool(PROVENANCE.get("run", True), True)
+BIOLOGICAL_QC_RUN = as_bool(BIOLOGICAL_QC.get("run", True), True)
+RNASEQ_SAMPLE_QC_RUN = BIOLOGICAL_QC_RUN and as_bool(
+    BIOLOGICAL_QC.get("rnaseq_sample_qc", True),
+    True,
+)
+SMALLRNA_SAMPLE_QC_RUN = BIOLOGICAL_QC_RUN and as_bool(
+    BIOLOGICAL_QC.get("smallrna_sample_qc", True),
+    True,
+)
 RNASEQ_ALIGNER = RNASEQ_ALIGNMENT.get("aligner", "star").strip().lower()
 RNASEQ_ALIGNMENT_REFERENCE_FASTA = RNASEQ_ALIGNMENT.get("reference_fasta", "")
 RNASEQ_HISAT2_INDEX_PREFIX = RNASEQ_ALIGNMENT.get("hisat2_index_prefix", "")
@@ -607,6 +617,15 @@ def branch_provenance_inputs(wildcards):
                         f"{base}/quantification/counts/quantification.done",
                     ]
                 )
+                if RNASEQ_SAMPLE_QC_RUN:
+                    inputs.extend(
+                        [
+                            f"{base}/quantification/sample_qc/sample_qc_manifest.tsv",
+                            f"{base}/quantification/sample_qc/sample_qc_metrics.tsv",
+                            f"{base}/quantification/sample_qc/sample_correlations.tsv",
+                            f"{base}/quantification/sample_qc/sample_qc.done",
+                        ]
+                    )
                 if RNASEQ_DIFFERENTIAL.get("run", False):
                     inputs.extend(
                         [
@@ -715,6 +734,15 @@ def branch_provenance_inputs(wildcards):
                     f"{small}/quantification/featurecounts.done",
                 ]
             )
+            if SMALLRNA_SAMPLE_QC_RUN:
+                inputs.extend(
+                    [
+                        f"{small}/quantification/sample_qc/sample_qc_manifest.tsv",
+                        f"{small}/quantification/sample_qc/sample_qc_metrics.tsv",
+                        f"{small}/quantification/sample_qc/sample_correlations.tsv",
+                        f"{small}/quantification/sample_qc/sample_qc.done",
+                    ]
+                )
         if SMALLRNA_DIFFERENTIAL_RUN:
             inputs.extend(
                 [
@@ -831,6 +859,18 @@ def planned_branch_targets(wildcards):
                                 f"{BRANCH_DIR}/{assay}/{project}/quantification/counts/quantification.done",
                             ]
                         )
+                        if RNASEQ_SAMPLE_QC_RUN:
+                            targets.extend(
+                                [
+                                    f"{BRANCH_DIR}/{assay}/{project}/quantification/sample_qc/sample_qc_manifest.tsv",
+                                    f"{BRANCH_DIR}/{assay}/{project}/quantification/sample_qc/sample_qc_metrics.tsv",
+                                    f"{BRANCH_DIR}/{assay}/{project}/quantification/sample_qc/sample_correlations.tsv",
+                                    f"{BRANCH_DIR}/{assay}/{project}/quantification/sample_qc/library_sizes.svg",
+                                    f"{BRANCH_DIR}/{assay}/{project}/quantification/sample_qc/sample_pca.svg",
+                                    f"{BRANCH_DIR}/{assay}/{project}/quantification/sample_qc/sample_correlation_heatmap.svg",
+                                    f"{BRANCH_DIR}/{assay}/{project}/quantification/sample_qc/sample_qc.done",
+                                ]
+                            )
                         if RNASEQ_DIFFERENTIAL.get("run", False):
                             targets.extend(
                                 [
@@ -940,6 +980,18 @@ def planned_branch_targets(wildcards):
                             f"{BRANCH_DIR}/{assay}/{project}/smallrna/quantification/featurecounts.done",
                         ]
                     )
+                    if SMALLRNA_SAMPLE_QC_RUN:
+                        targets.extend(
+                            [
+                                f"{BRANCH_DIR}/{assay}/{project}/smallrna/quantification/sample_qc/sample_qc_manifest.tsv",
+                                f"{BRANCH_DIR}/{assay}/{project}/smallrna/quantification/sample_qc/sample_qc_metrics.tsv",
+                                f"{BRANCH_DIR}/{assay}/{project}/smallrna/quantification/sample_qc/sample_correlations.tsv",
+                                f"{BRANCH_DIR}/{assay}/{project}/smallrna/quantification/sample_qc/library_sizes.svg",
+                                f"{BRANCH_DIR}/{assay}/{project}/smallrna/quantification/sample_qc/sample_pca.svg",
+                                f"{BRANCH_DIR}/{assay}/{project}/smallrna/quantification/sample_qc/sample_correlation_heatmap.svg",
+                                f"{BRANCH_DIR}/{assay}/{project}/smallrna/quantification/sample_qc/sample_qc.done",
+                            ]
+                        )
                 if SMALLRNA_DIFFERENTIAL_RUN:
                     targets.extend(
                         [
@@ -1318,7 +1370,15 @@ rule build_branch_design:
             RNASEQ_DIFFERENTIAL.get("min_replicates_per_group", 2)
             if wildcards.assay == "rnaseq"
             else SMALLRNA.get("min_replicates_per_group", 2)
-        )
+        ),
+        model_formula=lambda wildcards: (
+            RNASEQ_DIFFERENTIAL.get("design_formula", DESIGN.get("model_formula", ""))
+            if wildcards.assay == "rnaseq"
+            else SMALLRNA.get("design_formula", DESIGN.get("model_formula", ""))
+        ),
+        blocking_factors=" ".join(config_value_list(DESIGN.get("blocking_factors", []))),
+        batch_factors=" ".join(config_value_list(DESIGN.get("batch_factors", []))),
+        interaction_terms=" ".join(config_value_list(DESIGN.get("interaction_terms", [])))
     log:
         "logs/branches/{assay}/{project}.design.log"
     shell:
@@ -1335,6 +1395,10 @@ rule build_branch_design:
           --min-replicates-per-group {params.min_replicates_per_group:q} \
           --covariates {params.covariates} \
           --contrast-by {params.contrast_by} \
+          --model-formula {params.model_formula:q} \
+          --blocking-factors {params.blocking_factors} \
+          --batch-factors {params.batch_factors} \
+          --interaction-terms {params.interaction_terms} \
           > {log:q} 2>&1
         """
 
@@ -1978,6 +2042,44 @@ rule featurecounts_smallrna_mirna:
         """
 
 
+rule render_smallrna_sample_qc:
+    input:
+        samples=f"{BRANCH_DIR}" + "/smallrna/{project}/samples.tsv",
+        counts=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/quantification/mirna_counts.tsv",
+        featurecounts_done=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/quantification/featurecounts.done"
+    output:
+        manifest=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/quantification/sample_qc/sample_qc_manifest.tsv",
+        metrics=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/quantification/sample_qc/sample_qc_metrics.tsv",
+        correlations=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/quantification/sample_qc/sample_correlations.tsv",
+        library_sizes=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/quantification/sample_qc/library_sizes.svg",
+        pca=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/quantification/sample_qc/sample_pca.svg",
+        correlation_heatmap=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/quantification/sample_qc/sample_correlation_heatmap.svg",
+        done=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/quantification/sample_qc/sample_qc.done"
+    params:
+        outdir=lambda wildcards: f"{BRANCH_DIR}/smallrna/{wildcards.project}/smallrna/quantification/sample_qc",
+        condition_col=SMALLRNA.get(
+            "condition_col",
+            DESIGN.get("condition_col", "condition"),
+        )
+    log:
+        "logs/branches/smallrna/{project}.smallrna_sample_qc.log"
+    shell:
+        r"""
+        mkdir -p logs/branches/smallrna
+        python3 workflow/scripts/render_count_sample_qc.py \
+          --counts {input.counts:q} \
+          --samples {input.samples:q} \
+          --outdir {params.outdir:q} \
+          --manifest {output.manifest:q} \
+          --done {output.done:q} \
+          --feature-id-column Geneid \
+          --count-metadata-columns Geneid Chr Start End Strand Length feature_type \
+          --condition-col {params.condition_col:q} \
+          --level miRNA \
+          > {log:q} 2>&1
+        """
+
+
 rule plan_mirna_differential:
     input:
         samples=f"{BRANCH_DIR}" + "/smallrna/{project}/samples.tsv",
@@ -1996,6 +2098,7 @@ rule plan_mirna_differential:
             DESIGN.get("control_label", "control"),
         ),
         contrast_by=SMALLRNA.get("contrast_by", DESIGN.get("covariates", [])),
+        design_formula=SMALLRNA.get("design_formula", DESIGN.get("model_formula", "")),
         min_replicates=SMALLRNA.get("min_replicates_per_group", 2)
     log:
         "logs/branches/smallrna/{project}.mirna_differential_plan.log"
@@ -2011,6 +2114,7 @@ rule plan_mirna_differential:
           --condition-col {params.condition_col:q} \
           --control-label {params.control_label:q} \
           --contrast-by {params.contrast_by:q} \
+          --design-formula {params.design_formula:q} \
           --min-replicates {params.min_replicates:q} \
           > {log:q} 2>&1
         """
@@ -2944,6 +3048,44 @@ rule finalize_rnaseq_quantification:
         """
 
 
+rule render_rnaseq_sample_qc:
+    input:
+        samples=f"{BRANCH_DIR}" + "/rnaseq/{project}/samples.tsv",
+        counts=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/featurecounts/gene_counts.tsv",
+        quantification_done=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/counts/quantification.done"
+    output:
+        manifest=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/sample_qc/sample_qc_manifest.tsv",
+        metrics=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/sample_qc/sample_qc_metrics.tsv",
+        correlations=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/sample_qc/sample_correlations.tsv",
+        library_sizes=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/sample_qc/library_sizes.svg",
+        pca=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/sample_qc/sample_pca.svg",
+        correlation_heatmap=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/sample_qc/sample_correlation_heatmap.svg",
+        done=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/sample_qc/sample_qc.done"
+    params:
+        outdir=lambda wildcards: f"{BRANCH_DIR}/rnaseq/{wildcards.project}/quantification/sample_qc",
+        condition_col=RNASEQ_DIFFERENTIAL.get(
+            "condition_col",
+            DESIGN.get("condition_col", "condition"),
+        )
+    log:
+        "logs/branches/rnaseq/{project}.sample_qc.log"
+    shell:
+        r"""
+        mkdir -p logs/branches/rnaseq
+        python3 workflow/scripts/render_count_sample_qc.py \
+          --counts {input.counts:q} \
+          --samples {input.samples:q} \
+          --outdir {params.outdir:q} \
+          --manifest {output.manifest:q} \
+          --done {output.done:q} \
+          --feature-id-column Geneid \
+          --count-metadata-columns Geneid Chr Start End Strand Length \
+          --condition-col {params.condition_col:q} \
+          --level gene \
+          > {log:q} 2>&1
+        """
+
+
 rule plan_rnaseq_differential:
     input:
         samples=f"{BRANCH_DIR}" + "/rnaseq/{project}/samples.tsv",
@@ -3021,6 +3163,7 @@ rule plan_gene_differential:
             DESIGN.get("control_label", "control"),
         ),
         contrast_by=RNASEQ_DIFFERENTIAL.get("contrast_by", DESIGN.get("covariates", [])),
+        design_formula=RNASEQ_DIFFERENTIAL.get("design_formula", DESIGN.get("model_formula", "")),
         min_replicates=RNASEQ_DIFFERENTIAL.get("min_replicates_per_group", 2)
     log:
         "logs/branches/rnaseq/{project}.gene_differential_plan.log"
@@ -3041,6 +3184,7 @@ rule plan_gene_differential:
           --condition-col {params.condition_col:q} \
           --control-label {params.control_label:q} \
           --contrast-by {params.contrast_by:q} \
+          --design-formula {params.design_formula:q} \
           --min-replicates {params.min_replicates:q} \
           > {log:q} 2>&1
         """
@@ -3065,6 +3209,7 @@ rule plan_transcript_differential:
             DESIGN.get("control_label", "control"),
         ),
         contrast_by=RNASEQ_DIFFERENTIAL.get("contrast_by", DESIGN.get("covariates", [])),
+        design_formula=RNASEQ_DIFFERENTIAL.get("design_formula", DESIGN.get("model_formula", "")),
         min_replicates=RNASEQ_DIFFERENTIAL.get("min_replicates_per_group", 2)
     log:
         "logs/branches/rnaseq/{project}.transcript_differential_plan.log"
@@ -3085,6 +3230,7 @@ rule plan_transcript_differential:
           --condition-col {params.condition_col:q} \
           --control-label {params.control_label:q} \
           --contrast-by {params.contrast_by:q} \
+          --design-formula {params.design_formula:q} \
           --min-replicates {params.min_replicates:q} \
           > {log:q} 2>&1
         """
@@ -3425,6 +3571,7 @@ rule plan_deseq2_smoke:
         condition_col=DESEQ2_SMOKE.get("condition_col", "condition"),
         control_label=DESEQ2_SMOKE.get("control_label", "control"),
         contrast_by=DESEQ2_SMOKE.get("contrast_by", ["time_h"]),
+        design_formula=DESEQ2_SMOKE.get("design_formula", ""),
         min_replicates=DESEQ2_SMOKE.get("min_replicates_per_group", 2)
     log:
         f"{DESEQ2_SMOKE_DIR}/logs/contrast_plan.log"
@@ -3444,6 +3591,7 @@ rule plan_deseq2_smoke:
           --condition-col {params.condition_col:q} \
           --control-label {params.control_label:q} \
           --contrast-by {params.contrast_by:q} \
+          --design-formula {params.design_formula:q} \
           --min-replicates {params.min_replicates:q} \
           > {log:q} 2>&1
         """
@@ -3464,6 +3612,7 @@ rule plan_transcript_deseq2_smoke:
         condition_col=DESEQ2_SMOKE.get("condition_col", "condition"),
         control_label=DESEQ2_SMOKE.get("control_label", "control"),
         contrast_by=DESEQ2_SMOKE.get("contrast_by", ["time_h"]),
+        design_formula=DESEQ2_SMOKE.get("design_formula", ""),
         min_replicates=DESEQ2_SMOKE.get("min_replicates_per_group", 2)
     log:
         f"{TRANSCRIPT_DESEQ2_SMOKE_DIR}/logs/contrast_plan.log"
@@ -3483,6 +3632,7 @@ rule plan_transcript_deseq2_smoke:
           --condition-col {params.condition_col:q} \
           --control-label {params.control_label:q} \
           --contrast-by {params.contrast_by:q} \
+          --design-formula {params.design_formula:q} \
           --min-replicates {params.min_replicates:q} \
           > {log:q} 2>&1
         """

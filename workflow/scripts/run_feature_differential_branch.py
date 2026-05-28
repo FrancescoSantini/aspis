@@ -168,13 +168,17 @@ def run_ready_contrast(
         row["control_label"],
         "--test-label",
         row["test_label"],
+    ]
+    if row.get("design_formula", ""):
+        command.extend(["--design-formula", row["design_formula"]])
+    command.extend([
         "--padj",
         str(args.padj),
         "--log2fc",
         str(args.log2fc),
         "--min-count",
         str(args.min_count),
-    ]
+    ])
     status, message = run_rscript(command, Path(row["log"]))
     output_row = dict(row)
     output_row["feature_metadata"] = getattr(args, spec.metadata_attr)
@@ -197,6 +201,7 @@ def write_manifest(path: Path, rows: list[dict[str, str]]) -> None:
         "test_label",
         "contrast_by",
         "contrast_values",
+        "design_formula",
         "n_control",
         "n_test",
         "samples",
