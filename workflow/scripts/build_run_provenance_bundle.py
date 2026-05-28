@@ -313,6 +313,71 @@ def summarize_smallrna_residual(rows: list[dict[str, str]], artifacts: list[Path
         add_context(rows, "smallrna_residual", "feature_count_rows", len(features), "feature_counts.tsv")
 
 
+def summarize_strandedness(rows: list[dict[str, str]], artifacts: list[Path]) -> None:
+    report = read_tsv(table_by_name(artifacts, "strandedness_report.tsv") or Path(""))
+    if not report:
+        return
+    add_context(rows, "strandedness", "sample_count", len(report), "strandedness_report.tsv")
+    if "inferred_strandness" in report[0]:
+        add_context(rows, "strandedness", "inferred_counts", dict_count(report, "inferred_strandness"), "strandedness_report.tsv")
+    warnings = [record for record in report if record.get("warning")]
+    add_context(rows, "strandedness", "warning_count", len(warnings), "strandedness_report.tsv")
+    if warnings:
+        add_context(rows, "strandedness", "warnings", "; ".join(record.get("warning", "") for record in warnings[:5]), "strandedness_report.tsv")
+
+
+def summarize_biotypes(rows: list[dict[str, str]], artifacts: list[Path]) -> None:
+    counts = read_tsv(table_by_name(artifacts, "count_biotype_summary.tsv") or Path(""))
+    if counts:
+        add_context(rows, "biotypes", "count_summary_rows", len(counts), "count_biotype_summary.tsv")
+        for level in sorted({record.get("level", "") for record in counts if record.get("level")}):
+            selected = [record for record in counts if record.get("level") == level]
+            ordered = sorted(
+                selected,
+                key=lambda record: -safe_float(record.get("total_count", "")),
+            )
+            add_context(
+                rows,
+                "biotypes",
+                f"{level}_top_total_counts",
+                ",".join(f"{record.get('biotype', 'unclassified')}:{record.get('total_count', '0')}" for record in ordered[:10]),
+                "count_biotype_summary.tsv",
+            )
+    differential = read_tsv(table_by_name(artifacts, "differential_biotype_summary.tsv") or Path(""))
+    if differential:
+        add_context(rows, "biotypes", "differential_summary_rows", len(differential), "differential_biotype_summary.tsv")
+        add_context(rows, "biotypes", "differential_levels", sorted({record.get("level", "") for record in differential}), "differential_biotype_summary.tsv")
+
+
+def summarize_mirna_mrna(rows: list[dict[str, str]], artifacts: list[Path]) -> None:
+    manifest = read_tsv(table_by_name(artifacts, "mirna_mrna_manifest.tsv") or Path(""))
+    if not manifest:
+        return
+    add_context(rows, "mirna_mrna", "contrast_count", len(manifest), "mirna_mrna_manifest.tsv")
+    if "status" in manifest[0]:
+        add_context(rows, "mirna_mrna", "status_counts", dict_count(manifest, "status"), "mirna_mrna_manifest.tsv")
+    for key in ("n_pairs", "n_inverse_pairs", "n_anticorrelated_pairs"):
+        if key in manifest[0]:
+            add_context(rows, "mirna_mrna", key, sum(int(safe_float(record.get(key, ""))) for record in manifest), "mirna_mrna_manifest.tsv")
+
+
+def summarize_dtu(rows: list[dict[str, str]], artifacts: list[Path]) -> None:
+    plan = read_tsv(table_by_name(artifacts, "dtu_plan.tsv") or Path(""))
+    if not plan:
+        return
+    add_context(rows, "dtu", "plan_rows", len(plan), "dtu_plan.tsv")
+    for key in ("method", "status", "reason", "candidate_methods"):
+        if key in plan[0]:
+            add_context(rows, "dtu", key, plan[0].get(key, ""), "dtu_plan.tsv")
+
+
+def safe_float(value: str) -> float:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return 0.0
+
+
 def summarize_config(rows: list[dict[str, str]], config: dict, assay: str) -> None:
     design = config.get("design", {}) or {}
     add_context(rows, "config", "condition_col", design.get("condition_col", ""), "config")
@@ -325,12 +390,17 @@ def summarize_config(rows: list[dict[str, str]], config: dict, assay: str) -> No
         add_context(rows, "config", "rnaseq_aligner", alignment.get("aligner", ""), "config")
         add_context(rows, "config", "rnaseq_reference_fasta", alignment.get("reference_fasta", ""), "config")
         add_context(rows, "config", "rnaseq_annotation_gtf", alignment.get("annotation_gtf", ""), "config")
+        add_context(rows, "config", "infer_strandedness", alignment.get("infer_strandedness", ""), "config")
         add_context(rows, "config", "rnaseq_design_formula", diff.get("design_formula", config.get("design", {}).get("model_formula", "")), "config")
         add_context(rows, "config", "transcriptome_mode", quant.get("transcriptome_mode", ""), "config")
+        add_context(rows, "config", "biotype_summary", quant.get("biotype_summary", ""), "config")
         add_context(rows, "config", "differential_levels", diff.get("levels", []), "config")
         add_context(rows, "config", "contrast_by", diff.get("contrast_by", []), "config")
         add_context(rows, "config", "report_feature_sets", diff.get("report_feature_sets", ""), "config")
         add_context(rows, "config", "report_feature_set_tables", diff.get("report_feature_set_tables", ""), "config")
+        dtu = config.get("rnaseq_dtu", {}) or {}
+        add_context(rows, "config", "dtu_run", dtu.get("run", ""), "config")
+        add_context(rows, "config", "dtu_candidate_methods", dtu.get("candidate_methods", ""), "config")
         add_file_context(rows, "reference", "rnaseq_reference_fasta", alignment.get("reference_fasta", ""), "config")
         add_file_context(rows, "reference", "rnaseq_annotation_gtf", alignment.get("annotation_gtf", ""), "config")
     if assay == "smallrna":
@@ -349,8 +419,12 @@ def summarize_config(rows: list[dict[str, str]], config: dict, assay: str) -> No
         add_context(rows, "config", "residual_mismatches", smallrna.get("residual_mismatches", ""), "config")
         add_context(rows, "config", "target_enrichment_mode", smallrna.get("target_enrichment_mode", ""), "config")
         add_context(rows, "config", "target_table", smallrna.get("target_table", ""), "config")
+        add_context(rows, "config", "target_tables", smallrna.get("target_tables", ""), "config")
         add_context(rows, "config", "target_feature_sets", smallrna.get("target_feature_sets", ""), "config")
         add_context(rows, "config", "target_feature_set_tables", smallrna.get("target_feature_set_tables", ""), "config")
+        integration = config.get("mirna_mrna_integration", {}) or {}
+        add_context(rows, "config", "mirna_mrna_integration_run", integration.get("run", ""), "config")
+        add_context(rows, "config", "mirna_mrna_match_columns", integration.get("match_columns", ""), "config")
         add_file_context(rows, "reference", "mirbase_fasta", smallrna.get("mirbase_fasta", ""), "config")
         add_file_context(rows, "reference", "contaminant_fasta", smallrna.get("contaminant_fasta", ""), "config")
         add_file_context(rows, "reference", "residual_genome_fasta", smallrna.get("residual_genome_fasta", ""), "config")
@@ -403,6 +477,10 @@ def main() -> int:
     summarize_counts(context_rows, unique_artifacts)
     summarize_sample_qc(context_rows, unique_artifacts)
     summarize_differential(context_rows, unique_artifacts)
+    summarize_strandedness(context_rows, unique_artifacts)
+    summarize_biotypes(context_rows, unique_artifacts)
+    summarize_mirna_mrna(context_rows, unique_artifacts)
+    summarize_dtu(context_rows, unique_artifacts)
     if args.assay == "smallrna":
         summarize_smallrna_residual(context_rows, unique_artifacts)
 

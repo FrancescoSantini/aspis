@@ -19,6 +19,7 @@ TARGET_COLUMNS = {
     "mirna_targets",
     "target_enrichment",
     "target_summary",
+    "target_source_summary",
     "target_enrichment_plot",
 }
 TARGET_FEATURE_SET_COLUMNS = {
@@ -47,7 +48,12 @@ REPORT_COLUMNS = [
     "mirna_targets",
     "target_enrichment",
     "target_summary",
+    "target_source_summary",
     "target_enrichment_plot",
+    "mirna_mrna_manifest",
+    "mirna_mrna_pairs",
+    "mirna_mrna_summary",
+    "mirna_mrna_plot",
     "target_feature_set_manifest",
     "target_feature_set_results",
     "target_feature_set_plot",
@@ -73,6 +79,7 @@ def parse_args() -> argparse.Namespace:
         default="",
         help="Optional target-gene feature-set enrichment manifest TSV",
     )
+    parser.add_argument("--mirna-mrna-manifest", default="", help="Optional integrated miRNA-mRNA manifest TSV")
     parser.add_argument("--residual-manifest", default="", help="Optional residual-genome alignment manifest TSV")
     parser.add_argument("--residual-biotype-counts", default="", help="Optional residual-genome biotype counts TSV")
     parser.add_argument("--residual-feature-counts", default="", help="Optional residual-genome feature counts TSV")
@@ -150,6 +157,27 @@ def target_feature_set_rows_by_contrast(path_text: str) -> dict[str, dict[str, s
     return {row["contrast_id"]: row for row in rows}
 
 
+def integration_rows_by_contrast(path_text: str) -> dict[str, dict[str, str]]:
+    if not path_text:
+        return {}
+    path = Path(path_text)
+    if not path.exists():
+        return {}
+    _, rows = read_table(
+        path,
+        {
+            "contrast_id",
+            "status",
+            "reason",
+            "mirna_mrna_manifest",
+            "mirna_mrna_pairs",
+            "mirna_mrna_summary",
+            "mirna_mrna_plot",
+        },
+    )
+    return {row["contrast_id"]: row for row in rows}
+
+
 def planned_row(
     *,
     args: argparse.Namespace,
@@ -157,6 +185,7 @@ def planned_row(
     deseq2_row: dict[str, str],
     target_row: dict[str, str],
     target_feature_set_row: dict[str, str],
+    integration_row: dict[str, str],
     stage_blocker: str,
 ) -> dict[str, str]:
     contrast_id = deseq2_row["contrast_id"]
@@ -169,6 +198,11 @@ def planned_row(
         blockers.append(
             target_feature_set_row.get("reason")
             or f"target feature-set enrichment is {target_feature_set_row.get('status', 'not ok')}"
+        )
+    if integration_row and integration_row.get("status") != "ok":
+        blockers.append(
+            integration_row.get("reason")
+            or f"miRNA-mRNA integration is {integration_row.get('status', 'not ok')}"
         )
     status = "blocked" if blockers else "ready"
     return {
@@ -189,7 +223,12 @@ def planned_row(
         "mirna_targets": target_row.get("mirna_targets", ""),
         "target_enrichment": target_row.get("target_enrichment", ""),
         "target_summary": target_row.get("target_summary", ""),
+        "target_source_summary": target_row.get("target_source_summary", ""),
         "target_enrichment_plot": target_row.get("target_enrichment_plot", ""),
+        "mirna_mrna_manifest": integration_row.get("mirna_mrna_manifest", ""),
+        "mirna_mrna_pairs": integration_row.get("mirna_mrna_pairs", ""),
+        "mirna_mrna_summary": integration_row.get("mirna_mrna_summary", ""),
+        "mirna_mrna_plot": integration_row.get("mirna_mrna_plot", ""),
         "target_feature_set_manifest": target_feature_set_row.get("target_feature_set_manifest", ""),
         "target_feature_set_results": target_feature_set_row.get("target_feature_set_results", ""),
         "target_feature_set_plot": target_feature_set_row.get("target_feature_set_plot", ""),
@@ -213,6 +252,7 @@ def main() -> int:
     stage_blocker = report_stage_blocker(Path(args.smallrna_plan))
     targets = target_rows_by_contrast(args.target_manifest)
     target_feature_sets = target_feature_set_rows_by_contrast(args.target_feature_set_manifest)
+    integration_rows = integration_rows_by_contrast(args.mirna_mrna_manifest)
     rows = [
         planned_row(
             args=args,
@@ -220,6 +260,7 @@ def main() -> int:
             deseq2_row=row,
             target_row=targets.get(row["contrast_id"], {}),
             target_feature_set_row=target_feature_sets.get(row["contrast_id"], {}),
+            integration_row=integration_rows.get(row["contrast_id"], {}),
             stage_blocker=stage_blocker,
         )
         for row in deseq2_rows

@@ -27,6 +27,12 @@ Edit `config/aspis_rnaseq_<project>.yaml`:
 - `rnaseq_quantification.annotation_gtf`: use the same annotation GTF.
 - `rnaseq_quantification.read_length`: set the approximate read length after
   trimming.
+- `rnaseq_alignment.infer_strandedness`: keep enabled for the first real run
+  unless the protocol is already known and separately verified. ASPIS samples
+  aligned reads against the GTF and warns when the empirical orientation
+  disagrees with `rnaseq_alignment.strandness`.
+- `rnaseq_quantification.biotype_summary`: keep enabled to summarize detected
+  and differential genes/transcripts by GTF biotype.
 - `design.model_formula` or `rnaseq_differential.design_formula`: use a
   DESeq2 formula such as `~ patient + condition` or `~ batch + condition` when
   the experiment is paired or batch-structured. Leave empty for `~ condition`.
@@ -133,6 +139,16 @@ set `hisat2_index_prefix` to the existing prefix and set
 should be set to match the library protocol when known. Leave them empty only
 when the library is unstranded or unknown.
 
+With `rnaseq_alignment.infer_strandedness: true`, ASPIS writes:
+
+```text
+<branch_dir>/rnaseq/<PROJECT>/alignment/strandedness/strandedness_report.tsv
+```
+
+This is an empirical warning layer, not a replacement for protocol metadata:
+paired-end strandedness can be protocol-specific. Use it to catch obvious
+configuration mistakes before quantification.
+
 ## Differential Levels
 
 The real-project template enables gene and transcript DESeq2 by default:
@@ -159,6 +175,42 @@ rnaseq_differential:
 `contrast_by: [time_h]` means ASPIS will build separate control-vs-treated
 contrasts within each time point. Use `contrast_by: []` for a simple global
 control-vs-treated comparison.
+
+## Biotypes And DTU Planning
+
+The RNA-seq branch can summarize count and differential composition by
+annotation biotype:
+
+```yaml
+rnaseq_quantification:
+  biotype_summary: true
+```
+
+Outputs are written under:
+
+```text
+<branch_dir>/rnaseq/<PROJECT>/quantification/biotypes/
+```
+
+Review these tables for implausible signals, such as dominant rRNA,
+pseudogene, or unclassified counts in a library expected to be mRNA-enriched.
+
+Event-level differential transcript usage is currently a planning contract:
+
+```yaml
+rnaseq_dtu:
+  run: true
+  method: planned
+  candidate_methods:
+    - DRIMSeq
+    - DEXSeq
+    - SUPPA2
+    - rMATS
+```
+
+This records the available inputs and candidate engines without claiming an
+implemented DTU analysis. Real-data validation will decide which engine is
+appropriate for the project design and annotation.
 
 ## Feature-Set Tables
 
@@ -284,6 +336,7 @@ Important intermediate manifests are:
 <branch_dir>/rnaseq/<PROJECT>/quantification/stringtie/assembly_manifest.tsv
 <branch_dir>/rnaseq/<PROJECT>/quantification/stringtie/quant_manifest.tsv
 <branch_dir>/rnaseq/<PROJECT>/quantification/counts/transcript_counts.tsv
+<branch_dir>/rnaseq/<PROJECT>/quantification/biotypes/biotype_summary.html
 <branch_dir>/rnaseq/<PROJECT>/quantification/sample_qc/sample_qc_metrics.tsv
 <branch_dir>/rnaseq/<PROJECT>/quantification/sample_qc/sample_correlations.tsv
 <branch_dir>/rnaseq/<PROJECT>/differential/differential_plan.tsv

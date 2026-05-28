@@ -71,6 +71,10 @@ rnaseq_alignment:
   star_genome_dir: work/rnaseq_project/reference/star
   annotation_gtf: /path/to/annotation.gtf
   strandness: ""
+  infer_strandedness: true
+  strandedness_inference_max_reads: 200000
+  strandedness_min_informative_reads: 100
+  strandedness_agreement_threshold: 0.8
   threads: 8
   index_threads: 16
   extra_args: ""
@@ -102,6 +106,7 @@ rnaseq_quantification:
   known_codes_strict: "=,j"
   known_codes_lenient: "=,j,c,o"
   gene_type_view: strict
+  biotype_summary: true
 
 rnaseq_differential:
   run: true
@@ -134,6 +139,16 @@ rnaseq_differential:
   min_count: 10
   padj: 0.1
   log2fc: 1.0
+
+rnaseq_dtu:
+  # Planning-only hook for later event-level DTU engines.
+  run: false
+  method: planned
+  candidate_methods:
+    - DRIMSeq
+    - DEXSeq
+    - SUPPA2
+    - rMATS
 
 execution:
   # Leave empty for shared configs. G100 helpers set SLURM_ACCOUNT at runtime.

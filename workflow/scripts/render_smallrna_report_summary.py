@@ -35,7 +35,12 @@ SUMMARY_COLUMNS = [
     "mirna_targets",
     "target_enrichment",
     "target_summary",
+    "target_source_summary",
     "target_enrichment_plot",
+    "mirna_mrna_manifest",
+    "mirna_mrna_pairs",
+    "mirna_mrna_summary",
+    "mirna_mrna_plot",
     "target_feature_set_manifest",
     "target_feature_set_results",
     "target_feature_set_plot",
@@ -54,6 +59,9 @@ SUMMARY_COLUMNS = [
     "n_target_rows",
     "n_targets",
     "n_enrichment_terms",
+    "n_mirna_mrna_pairs",
+    "n_mirna_mrna_inverse_pairs",
+    "n_mirna_mrna_anticorrelated_pairs",
     "n_target_feature_set_terms",
     "n_residual_input_reads",
     "n_residual_genome_aligned_reads",
@@ -199,6 +207,9 @@ def render_html(
     target_mapping: list[dict[str, str]],
     target_enrichment: list[dict[str, str]],
     target_summary: list[dict[str, str]],
+    target_source_summary: list[dict[str, str]],
+    integration_pairs: list[dict[str, str]],
+    integration_summary: list[dict[str, str]],
     target_feature_sets: list[dict[str, str]],
     residual_manifest: list[dict[str, str]],
     residual_biotypes: list[dict[str, str]],
@@ -215,6 +226,16 @@ def render_html(
     feature_set_preview = sorted(
         target_feature_sets,
         key=lambda row: (parse_float(row.get("padj", "")) or 1.0, row.get("collection", ""), row.get("set_id", "")),
+    )[:top_n]
+    integration_preview = sorted(
+        integration_pairs,
+        key=lambda row: (
+            row.get("regulation_class", ""),
+            parse_float(row.get("target_padj", "")) or 1.0,
+            parse_float(row.get("mirna_padj", "")) or 1.0,
+            row.get("mirna_id", ""),
+            row.get("target_id", ""),
+        ),
     )[:top_n]
     residual_biotype_preview = sorted(
         residual_biotypes,
@@ -234,6 +255,9 @@ def render_html(
         html_link(plan_row.get("residual_feature_counts", ""), "residual features"),
         html_link(plan_row.get("mirna_targets", ""), "miRNA targets"),
         html_link(plan_row.get("target_enrichment", ""), "target enrichment"),
+        html_link(plan_row.get("target_source_summary", ""), "target source summary"),
+        html_link(plan_row.get("mirna_mrna_pairs", ""), "miRNA-mRNA pairs"),
+        html_link(plan_row.get("mirna_mrna_summary", ""), "miRNA-mRNA summary"),
         html_link(plan_row.get("target_feature_set_results", ""), "target feature sets"),
         html_link(plan_row.get("volcano_pdf", ""), "volcano plot"),
         html_link(plan_row.get("ma_pdf", ""), "MA plot"),
@@ -247,6 +271,12 @@ def render_html(
     residual_input_reads = sum(int(row.get("input_reads", "0") or 0) for row in residual_manifest)
     residual_aligned_reads = sum(int(row.get("genome_aligned_reads", "0") or 0) for row in residual_manifest)
     residual_unmapped_reads = sum(int(row.get("genome_unmapped_reads", "0") or 0) for row in residual_manifest)
+    inverse_pairs = [
+        row for row in integration_pairs if row.get("regulation_class") in {"mirna_up_target_down", "mirna_down_target_up"}
+    ]
+    anticorrelated_pairs = [
+        row for row in integration_pairs if (parse_float(row.get("pearson", "")) or 0.0) < 0
+    ]
     metrics = [
         ("Features tested", str(len(result_rows))),
         ("Significant miRNAs", str(len(filtered_rows))),
@@ -255,6 +285,9 @@ def render_html(
         ("Target rows", str(len(target_mapping))),
         ("Target genes", str(len({row.get("target_id", "") for row in target_mapping if row.get("target_id", "")}))),
         ("Enrichment terms", str(len(target_enrichment))),
+        ("miRNA-mRNA pairs", str(len(integration_pairs))),
+        ("Inverse pairs", str(len(inverse_pairs))),
+        ("Anticorrelated pairs", str(len(anticorrelated_pairs))),
         ("Target feature-set terms", str(len(target_feature_sets))),
         ("Residual reads", str(residual_input_reads)),
         ("Residual genome-aligned", str(residual_aligned_reads)),
@@ -273,7 +306,27 @@ def render_html(
         column for column in ["collection", "target_id", "target_symbol", "overlap", "query_size", "padj", "mirnas"] if enrichment_preview and column in enrichment_preview[0]
     ]
     summary_columns = [
-        column for column in ["collection", "n_mirnas", "n_target_rows", "n_targets"] if target_summary and column in target_summary[0]
+        column for column in ["collection", "target_source", "target_source_type", "n_mirnas", "n_target_rows", "n_targets"] if target_summary and column in target_summary[0]
+    ]
+    source_summary_columns = [
+        column for column in ["collection", "target_source", "target_source_type", "n_mirnas", "n_target_rows", "n_targets"] if target_source_summary and column in target_source_summary[0]
+    ]
+    integration_summary_columns = [
+        column for column in ["contrast_id", "collection", "n_pairs", "n_inverse_pairs", "n_anticorrelated_pairs", "median_pearson"] if integration_summary and column in integration_summary[0]
+    ]
+    integration_columns = [
+        column
+        for column in [
+            "mirna_id",
+            "target_id",
+            "target_symbol",
+            "regulation_class",
+            "pearson",
+            "mirna_log2FoldChange",
+            "target_log2FoldChange",
+            "target_source",
+        ]
+        if integration_preview and column in integration_preview[0]
     ]
     feature_set_columns = [
         column
@@ -309,6 +362,12 @@ def render_html(
   {html_table(significant, significant_columns)}
   <h2>Target summary</h2>
   {html_table(target_summary, summary_columns)}
+  <h2>Target source summary</h2>
+  {html_table(target_source_summary, source_summary_columns)}
+  <h2>miRNA-mRNA integration</h2>
+  {embedded_svg(plan_row.get("mirna_mrna_plot", ""))}
+  {html_table(integration_summary, integration_summary_columns)}
+  {html_table(integration_preview, integration_columns)}
   <h2>Target enrichment</h2>
   {embedded_svg(plan_row.get("target_enrichment_plot", ""))}
   {html_table(enrichment_preview, enrichment_columns)}
@@ -340,7 +399,12 @@ def blocked_summary(row: dict[str, str]) -> dict[str, str]:
         "mirna_targets": row.get("mirna_targets", ""),
         "target_enrichment": row.get("target_enrichment", ""),
         "target_summary": row.get("target_summary", ""),
+        "target_source_summary": row.get("target_source_summary", ""),
         "target_enrichment_plot": row.get("target_enrichment_plot", ""),
+        "mirna_mrna_manifest": row.get("mirna_mrna_manifest", ""),
+        "mirna_mrna_pairs": row.get("mirna_mrna_pairs", ""),
+        "mirna_mrna_summary": row.get("mirna_mrna_summary", ""),
+        "mirna_mrna_plot": row.get("mirna_mrna_plot", ""),
         "target_feature_set_manifest": row.get("target_feature_set_manifest", ""),
         "target_feature_set_results": row.get("target_feature_set_results", ""),
         "target_feature_set_plot": row.get("target_feature_set_plot", ""),
@@ -359,6 +423,9 @@ def blocked_summary(row: dict[str, str]) -> dict[str, str]:
         "n_target_rows": "0",
         "n_targets": "0",
         "n_enrichment_terms": "0",
+        "n_mirna_mrna_pairs": "0",
+        "n_mirna_mrna_inverse_pairs": "0",
+        "n_mirna_mrna_anticorrelated_pairs": "0",
         "n_target_feature_set_terms": "0",
         "n_residual_input_reads": "0",
         "n_residual_genome_aligned_reads": "0",
@@ -384,6 +451,9 @@ def render_row(row: dict[str, str], top_n: int) -> dict[str, str]:
         _, target_mapping = read_existing(row.get("mirna_targets", ""), {"target_id"})
         _, target_enrichment = read_existing(row.get("target_enrichment", ""), {"target_id"})
         _, target_summary = read_existing(row.get("target_summary", ""))
+        _, target_source_summary = read_existing(row.get("target_source_summary", ""))
+        _, integration_pairs = read_existing(row.get("mirna_mrna_pairs", ""))
+        _, integration_summary = read_existing(row.get("mirna_mrna_summary", ""))
         _, target_feature_sets = read_existing(row.get("target_feature_set_results", ""), {"set_id"})
         _, residual_manifest = read_existing(
             row.get("residual_manifest", ""),
@@ -398,6 +468,9 @@ def render_row(row: dict[str, str], top_n: int) -> dict[str, str]:
             target_mapping,
             target_enrichment,
             target_summary,
+            target_source_summary,
+            integration_pairs,
+            integration_summary,
             target_feature_sets,
             residual_manifest,
             residual_biotypes,
@@ -409,6 +482,12 @@ def render_row(row: dict[str, str], top_n: int) -> dict[str, str]:
         residual_input_reads = sum(int(item.get("input_reads", "0") or 0) for item in residual_manifest)
         residual_aligned_reads = sum(int(item.get("genome_aligned_reads", "0") or 0) for item in residual_manifest)
         residual_unmapped_reads = sum(int(item.get("genome_unmapped_reads", "0") or 0) for item in residual_manifest)
+        inverse_pairs = [
+            item for item in integration_pairs if item.get("regulation_class") in {"mirna_up_target_down", "mirna_down_target_up"}
+        ]
+        anticorrelated_pairs = [
+            item for item in integration_pairs if (parse_float(item.get("pearson", "")) or 0.0) < 0
+        ]
         return {
             "project": row.get("project", ""),
             "assay": "smallrna",
@@ -423,7 +502,12 @@ def render_row(row: dict[str, str], top_n: int) -> dict[str, str]:
             "mirna_targets": row.get("mirna_targets", ""),
             "target_enrichment": row.get("target_enrichment", ""),
             "target_summary": row.get("target_summary", ""),
+            "target_source_summary": row.get("target_source_summary", ""),
             "target_enrichment_plot": row.get("target_enrichment_plot", ""),
+            "mirna_mrna_manifest": row.get("mirna_mrna_manifest", ""),
+            "mirna_mrna_pairs": row.get("mirna_mrna_pairs", ""),
+            "mirna_mrna_summary": row.get("mirna_mrna_summary", ""),
+            "mirna_mrna_plot": row.get("mirna_mrna_plot", ""),
             "target_feature_set_manifest": row.get("target_feature_set_manifest", ""),
             "target_feature_set_results": row.get("target_feature_set_results", ""),
             "target_feature_set_plot": row.get("target_feature_set_plot", ""),
@@ -442,6 +526,9 @@ def render_row(row: dict[str, str], top_n: int) -> dict[str, str]:
             "n_target_rows": str(len(target_mapping)),
             "n_targets": str(len({item.get("target_id", "") for item in target_mapping if item.get("target_id", "")})),
             "n_enrichment_terms": str(len(target_enrichment)),
+            "n_mirna_mrna_pairs": str(len(integration_pairs)),
+            "n_mirna_mrna_inverse_pairs": str(len(inverse_pairs)),
+            "n_mirna_mrna_anticorrelated_pairs": str(len(anticorrelated_pairs)),
             "n_target_feature_set_terms": str(len(target_feature_sets)),
             "n_residual_input_reads": str(residual_input_reads),
             "n_residual_genome_aligned_reads": str(residual_aligned_reads),

@@ -23,6 +23,14 @@ def touch(path: Path, text: str = "placeholder\n") -> Path:
     return write(path, text)
 
 
+def make_fasta(path: Path) -> Path:
+    return write(path, ">chr1\nACGTACGTACGTACGT\n")
+
+
+def make_gtf(path: Path) -> Path:
+    return write(path, 'chr1\ttoy\tgene\t1\t16\t.\t+\t.\tgene_id "GENE1"; gene_biotype "protein_coding";\n')
+
+
 def make_fastq(path: Path) -> Path:
     return write(path, "@r1\nACGTACGT\n+\nFFFFFFFF\n")
 
@@ -142,10 +150,10 @@ def assert_file_contains(path: Path, expected: str, label: str) -> None:
 def main() -> int:
     with tempfile.TemporaryDirectory() as tmpdir:
         tmp = Path(tmpdir)
-        genome = touch(tmp / "genome.fa")
-        annotation = touch(tmp / "annotation.gtf")
-        mirbase = touch(tmp / "mature.fa")
-        contaminants = touch(tmp / "contaminants.fa")
+        genome = make_fasta(tmp / "genome.fa")
+        annotation = make_gtf(tmp / "annotation.gtf")
+        mirbase = make_fasta(tmp / "mature.fa")
+        contaminants = make_fasta(tmp / "contaminants.fa")
         r1 = [make_fastq(tmp / f"sample_{idx}_R1.fastq") for idx in range(4)]
         r2 = [make_fastq(tmp / f"sample_{idx}_R2.fastq") for idx in range(4)]
 

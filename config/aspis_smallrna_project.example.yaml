@@ -119,6 +119,11 @@ smallrna:
 
   target_enrichment_mode: table
   target_table: /path/to/smallrna/mirna_targets.tsv
+  target_tables:
+    # Optional additional target sources. Tables may expose source/source_type
+    # columns to label validated, predicted, conserved, or expressed targets.
+    - /path/to/smallrna/validated_targets.tsv
+    - /path/to/smallrna/predicted_targets.tsv
   target_min_overlap: 1
   target_top_n: 20
   target_feature_sets: ""
@@ -128,6 +133,15 @@ smallrna:
 
   reports: true
   report_top_n: 25
+
+mirna_mrna_integration:
+  # Enable only when the same project also has a matched RNA-seq branch.
+  run: false
+  match_columns:
+    - biospecimen_id
+  min_pairs: 2
+  min_abs_correlation: 0.0
+  top_n: 40
 
 execution:
   # Leave empty for shared configs. G100 helpers set SLURM_ACCOUNT at runtime.
