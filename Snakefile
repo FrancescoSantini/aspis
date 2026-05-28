@@ -223,9 +223,18 @@ RNASEQ_DIFFERENTIAL_REPORTS_ENABLED = (
     as_bool(RNASEQ_DIFFERENTIAL.get("reports", True), True)
     and bool(RNASEQ_DIFFERENTIAL_REPORT_LEVELS)
 )
+RNASEQ_ISOFORM_SWITCH_REPORTS_ENABLED = (
+    RNASEQ_DIFFERENTIAL.get("run", False)
+    and "isoform_switch" in RNASEQ_DIFFERENTIAL_LEVELS
+    and as_bool(RNASEQ_DIFFERENTIAL.get("isoform_switch_reports", True), True)
+)
 RNASEQ_DIFFERENTIAL_REPORT_TOP_N = RNASEQ_DIFFERENTIAL.get(
     "report_top_n",
     RNASEQ_DIFFERENTIAL.get("plot_top_n", 50),
+)
+RNASEQ_ISOFORM_SWITCH_REPORT_TOP_N = RNASEQ_DIFFERENTIAL.get(
+    "isoform_switch_report_top_n",
+    RNASEQ_DIFFERENTIAL.get("isoform_switch_max_genes", 30),
 )
 
 
@@ -291,6 +300,16 @@ DEFAULT_RNASEQ_DIFFERENTIAL_TOOLS = ["Rscript", "R::DESeq2"] + (
 )
 RNASEQ_DIFFERENTIAL_REQUIRED_TOOLS = configured_tool_list(
     "rnaseq_differential_required_tools", DEFAULT_RNASEQ_DIFFERENTIAL_TOOLS
+)
+if "isoform_switch" in RNASEQ_DIFFERENTIAL_LEVELS and "R::IsoformSwitchAnalyzeR" not in RNASEQ_DIFFERENTIAL_REQUIRED_TOOLS:
+    RNASEQ_DIFFERENTIAL_REQUIRED_TOOLS.append("R::IsoformSwitchAnalyzeR")
+RNASEQ_ISOFORM_SWITCH_OPTIONAL_TOOLS = (
+    configured_tool_list(
+        "rnaseq_isoform_switch_optional_tools",
+        ["hmmscan", "interproscan.sh", "signalp", "deeptmhmm", "iupred2a.py"],
+    )
+    if RNASEQ_ISOFORM_SWITCH_REPORTS_ENABLED
+    else []
 )
 SMALLRNA_REQUIRED_TOOLS = configured_tool_list(
     "smallrna_required_tools",
@@ -457,7 +476,7 @@ ALL_SRA_TOOLS = SRA_REQUIRED_TOOLS + SRA_LIMITED_REQUIRED_TOOLS
 REQUIRED_TOOLS = BASE_REQUIRED_TOOLS + ACTIVE_SRA_REQUIRED_TOOLS
 REPORTED_OPTIONAL_TOOLS = OPTIONAL_TOOLS + [
     tool for tool in ALL_SRA_TOOLS if tool not in ACTIVE_SRA_REQUIRED_TOOLS
-]
+] + RNASEQ_ISOFORM_SWITCH_OPTIONAL_TOOLS
 
 
 def materialization_partition(wildcards):
@@ -504,6 +523,40 @@ def rnaseq_differential_report_manifest_arg(wildcards, level):
         return ""
     flag = "--gene-manifest" if level == "gene" else "--transcript-manifest"
     return optional_shell_arg(flag, rnaseq_differential_report_manifest(wildcards.project, level))
+
+
+def rnaseq_isoform_switch_report_outputs(project):
+    base = f"{BRANCH_DIR}/rnaseq/{project}/differential/isoform_switch/report"
+    return {
+        "candidate_table": f"{base}/switch_candidates.tsv",
+        "event_summary": f"{base}/switch_event_summary.tsv",
+        "sequence_table": f"{base}/switch_sequence_summary.tsv",
+        "functional_annotation_table": f"{base}/functional_annotation_summary.tsv",
+        "plot_manifest": f"{base}/switch_plot_manifest.tsv",
+        "html": f"{base}/index.html",
+        "done": f"{base}/report.done",
+    }
+
+
+def rnaseq_isoform_switch_report_inputs(wildcards):
+    if not RNASEQ_ISOFORM_SWITCH_REPORTS_ENABLED:
+        return []
+    outputs = rnaseq_isoform_switch_report_outputs(wildcards.project)
+    return [
+        outputs["candidate_table"],
+        outputs["event_summary"],
+        outputs["sequence_table"],
+        outputs["functional_annotation_table"],
+        outputs["plot_manifest"],
+        outputs["html"],
+        outputs["done"],
+    ]
+
+
+def rnaseq_isoform_switch_report_arg(wildcards, key, flag):
+    if not RNASEQ_ISOFORM_SWITCH_REPORTS_ENABLED:
+        return ""
+    return optional_shell_arg(flag, rnaseq_isoform_switch_report_outputs(wildcards.project)[key])
 
 
 def deseq2_smoke_report_levels():
@@ -807,6 +860,19 @@ def branch_provenance_inputs(wildcards):
                                 f"{base}/differential/isoform_switch/isoform_switch.done",
                             ]
                         )
+                        if RNASEQ_ISOFORM_SWITCH_REPORTS_ENABLED:
+                            outputs = rnaseq_isoform_switch_report_outputs(project)
+                            inputs.extend(
+                                [
+                                    outputs["candidate_table"],
+                                    outputs["event_summary"],
+                                    outputs["sequence_table"],
+                                    outputs["functional_annotation_table"],
+                                    outputs["plot_manifest"],
+                                    outputs["html"],
+                                    outputs["done"],
+                                ]
+                            )
                     if RNASEQ_DIFFERENTIAL_REPORTS_ENABLED:
                         inputs.extend(
                             [
@@ -1125,6 +1191,19 @@ def planned_branch_targets(wildcards):
                                         f"{BRANCH_DIR}/{assay}/{project}/differential/isoform_switch/isoform_switch.done",
                                     ]
                                 )
+                                if RNASEQ_ISOFORM_SWITCH_REPORTS_ENABLED:
+                                    outputs = rnaseq_isoform_switch_report_outputs(project)
+                                    targets.extend(
+                                        [
+                                            outputs["candidate_table"],
+                                            outputs["event_summary"],
+                                            outputs["sequence_table"],
+                                            outputs["functional_annotation_table"],
+                                            outputs["plot_manifest"],
+                                            outputs["html"],
+                                            outputs["done"],
+                                        ]
+                                    )
                             if RNASEQ_DIFFERENTIAL_REPORTS_ENABLED:
                                 targets.extend(
                                     [
@@ -3999,6 +4078,56 @@ rule run_isoform_switch:
         """
 
 
+rule render_isoform_switch_report:
+    input:
+        manifest=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/isoform_switch/isoform_switch_manifest.tsv",
+        done=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/isoform_switch/isoform_switch.done",
+        transcript_metadata=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/counts/transcript_metadata.tsv",
+        annotated=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/gffcompare/annotated.gtf"
+    output:
+        candidate_table=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/isoform_switch/report/switch_candidates.tsv",
+        event_summary=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/isoform_switch/report/switch_event_summary.tsv",
+        sequence_table=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/isoform_switch/report/switch_sequence_summary.tsv",
+        functional_annotation_table=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/isoform_switch/report/functional_annotation_summary.tsv",
+        plot_manifest=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/isoform_switch/report/switch_plot_manifest.tsv",
+        html=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/isoform_switch/report/index.html",
+        done=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/isoform_switch/report/report.done"
+    params:
+        outdir=lambda wildcards: f"{BRANCH_DIR}/rnaseq/{wildcards.project}/differential/isoform_switch/report",
+        padj=RNASEQ_DIFFERENTIAL.get("isoform_switch_padj", RNASEQ_DIFFERENTIAL.get("padj", 0.1)),
+        dif=RNASEQ_DIFFERENTIAL.get("isoform_switch_dif", 0.1),
+        top_n=RNASEQ_ISOFORM_SWITCH_REPORT_TOP_N,
+        functional_annotation_tables=lambda wildcards: optional_shell_arg(
+            "--functional-annotation-tables",
+            joined_config_values(
+                RNASEQ_DIFFERENTIAL.get("isoform_switch_functional_annotation_tables", "")
+            ),
+        )
+    log:
+        "logs/branches/rnaseq/{project}.isoform_switch_report.log"
+    shell:
+        r"""
+        mkdir -p logs/branches/rnaseq
+        python3 workflow/scripts/render_isoform_switch_report.py \
+          --manifest {input.manifest:q} \
+          --transcript-metadata {input.transcript_metadata:q} \
+          --annotated-gtf {input.annotated:q} \
+          --outdir {params.outdir:q} \
+          --candidate-table {output.candidate_table:q} \
+          --event-summary {output.event_summary:q} \
+          --sequence-table {output.sequence_table:q} \
+          --functional-annotation-table {output.functional_annotation_table:q} \
+          --plot-manifest {output.plot_manifest:q} \
+          --html {output.html:q} \
+          --done {output.done:q} \
+          --padj {params.padj:q} \
+          --dif {params.dif:q} \
+          --top-n {params.top_n:q} \
+          {params.functional_annotation_tables} \
+          > {log:q} 2>&1
+        """
+
+
 rule run_gene_deseq2:
     input:
         plan=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/gene_deseq2/contrast_plan.tsv",
@@ -4428,7 +4557,8 @@ rule render_rnaseq_differential_report_index:
             ]
             if RNASEQ_WARNINGS_RUN
             else []
-        )
+        ),
+        isoform_switch=rnaseq_isoform_switch_report_inputs
     output:
         html=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/reports/index.html",
         asset_manifest=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/reports/asset_manifest.tsv",
@@ -4445,6 +4575,26 @@ rule render_rnaseq_differential_report_index:
             rnaseq_biological_warnings_outputs(wildcards.project)["html"]
             if RNASEQ_WARNINGS_RUN
             else "",
+        ),
+        isoform_switch_html=lambda wildcards: rnaseq_isoform_switch_report_arg(
+            wildcards,
+            "html",
+            "--isoform-switch-html",
+        ),
+        isoform_switch_candidates=lambda wildcards: rnaseq_isoform_switch_report_arg(
+            wildcards,
+            "candidate_table",
+            "--isoform-switch-candidates",
+        ),
+        isoform_switch_events=lambda wildcards: rnaseq_isoform_switch_report_arg(
+            wildcards,
+            "event_summary",
+            "--isoform-switch-events",
+        ),
+        isoform_switch_plots=lambda wildcards: rnaseq_isoform_switch_report_arg(
+            wildcards,
+            "plot_manifest",
+            "--isoform-switch-plots",
         )
     log:
         "logs/branches/rnaseq/{project}.differential_report_index.log"
@@ -4461,6 +4611,10 @@ rule render_rnaseq_differential_report_index:
           --done {output.done:q} \
           {params.biotype_html} \
           {params.warnings_html} \
+          {params.isoform_switch_html} \
+          {params.isoform_switch_candidates} \
+          {params.isoform_switch_events} \
+          {params.isoform_switch_plots} \
           > {log:q} 2>&1
         """
 
