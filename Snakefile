@@ -2997,7 +2997,13 @@ rule render_smallrna_report_plots:
         rscript=SMALLRNA.get("rscript_command", "Rscript"),
         top_n=SMALLRNA_REPORT_TOP_N,
         padj=SMALLRNA.get("padj", 0.1),
-        log2fc=SMALLRNA.get("log2fc", 1.0)
+        log2fc=SMALLRNA.get("log2fc", 1.0),
+        pca_color_columns=joined_config_values(
+            SMALLRNA.get(
+                "report_pca_color_columns",
+                "condition,time,time_h,batch,batch_id,biospecimen,biospecimen_id,replicate,replicate_id",
+            )
+        )
     log:
         "logs/branches/smallrna/{project}.smallrna_report_plots.log"
     shell:
@@ -3010,6 +3016,7 @@ rule render_smallrna_report_plots:
           --top-n {params.top_n:q} \
           --padj {params.padj:q} \
           --log2fc {params.log2fc:q} \
+          --pca-color-columns {params.pca_color_columns:q} \
           > {log:q} 2>&1
         """
 
@@ -4560,6 +4567,12 @@ rule render_rnaseq_differential_plots:
                 "report_transcript_plot_groups",
                 "all,known_compatible,novel_isoform,novel_locus,ambiguous,artifact",
             )
+        ),
+        pca_color_columns=joined_config_values(
+            RNASEQ_DIFFERENTIAL.get(
+                "report_pca_color_columns",
+                "condition,time,time_h,batch,batch_id,biospecimen,biospecimen_id,replicate,replicate_id",
+            )
         )
     log:
         "logs/branches/rnaseq/{project}.differential_plots.log"
@@ -4573,6 +4586,7 @@ rule render_rnaseq_differential_plots:
           --top-n {params.top_n:q} \
           --padj {params.padj:q} \
           --log2fc {params.log2fc:q} \
+          --pca-color-columns {params.pca_color_columns:q} \
           --transcript-plot-groups {params.transcript_plot_groups:q} \
           > {log:q} 2>&1
         """
@@ -4958,7 +4972,13 @@ rule render_deseq2_report_smoke_plots:
         rscript=DESEQ2_SMOKE.get("rscript_command", "Rscript"),
         top_n=DESEQ2_SMOKE.get("report_top_n", DESEQ2_SMOKE.get("plot_top_n", 50)),
         padj=DESEQ2_SMOKE.get("padj", 0.1),
-        log2fc=DESEQ2_SMOKE.get("log2fc", 1.0)
+        log2fc=DESEQ2_SMOKE.get("log2fc", 1.0),
+        pca_color_columns=joined_config_values(
+            DESEQ2_SMOKE.get(
+                "report_pca_color_columns",
+                "condition,time,time_h,batch,batch_id,biospecimen,biospecimen_id,replicate,replicate_id",
+            )
+        )
     log:
         f"{DESEQ2_SMOKE_REPORT_DIR}/logs/plots.log"
     shell:
@@ -4971,6 +4991,7 @@ rule render_deseq2_report_smoke_plots:
           --top-n {params.top_n:q} \
           --padj {params.padj:q} \
           --log2fc {params.log2fc:q} \
+          --pca-color-columns {params.pca_color_columns:q} \
           > {log:q} 2>&1
         """
 

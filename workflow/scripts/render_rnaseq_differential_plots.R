@@ -9,6 +9,7 @@ parse_args <- function(argv) {
     top_n = "50",
     padj = "0.1",
     log2fc = "1.0",
+    pca_color_columns = "condition,time,time_h,batch,batch_id,biospecimen,biospecimen_id,replicate,replicate_id",
     transcript_plot_groups = "all,known_compatible,novel_isoform,novel_locus,ambiguous,artifact"
   )
   i <- 1
@@ -273,7 +274,80 @@ read_coldata <- function(path, sample_ids) {
   matched
 }
 
-plot_pca <- function(transformed, path, title, coldata = NULL) {
+pca_color_columns <- function(coldata, requested_columns) {
+  if (is.null(coldata)) {
+    return(character())
+  }
+  requested <- requested_columns[requested_columns != ""]
+  columns <- requested[requested %in% colnames(coldata)]
+  columns[vapply(
+    columns,
+    function(column) length(unique(na.omit(as.character(coldata[[column]])))) > 1,
+    logical(1)
+  )]
+}
+
+point_colors <- function(values) {
+  if (is.numeric(values)) {
+    if (length(unique(na.omit(values))) < 2) {
+      return(rep("#1f78b4", length(values)))
+    }
+    palette <- grDevices::hcl.colors(100, "Viridis")
+    breaks <- seq(min(values, na.rm = TRUE), max(values, na.rm = TRUE), length.out = 101)
+    index <- findInterval(values, breaks, all.inside = TRUE)
+    colors <- palette[pmax(1, pmin(100, index))]
+    colors[is.na(values)] <- "#bdbdbd"
+    return(colors)
+  }
+  groups <- as.factor(values)
+  palette <- grDevices::hcl.colors(length(levels(groups)), "Dark 3")
+  colors <- palette[as.integer(groups)]
+  colors[is.na(groups)] <- "#bdbdbd"
+  colors
+}
+
+draw_pca_panel <- function(pca, variance, title, color_column = "", coldata = NULL) {
+  values <- NULL
+  colors <- rep("#1f78b4", nrow(pca$x))
+  main <- title
+  if (color_column != "" && !is.null(coldata) && color_column %in% colnames(coldata)) {
+    values <- coldata[rownames(pca$x), color_column]
+    colors <- point_colors(values)
+    main <- paste(title, "-", color_column)
+  }
+  plot(
+    pca$x[, 1],
+    pca$x[, 2],
+    pch = 16,
+    col = colors,
+    xlab = paste0("PC1 (", variance[[1]], "%)"),
+    ylab = paste0("PC2 (", variance[[2]], "%)"),
+    main = main
+  )
+  text(pca$x[, 1], pca$x[, 2], labels = rownames(pca$x), pos = 3, cex = 0.7)
+  if (!is.null(values) && !is.numeric(values)) {
+    groups <- as.factor(values)
+    palette <- grDevices::hcl.colors(length(levels(groups)), "Dark 3")
+    legend("topright", legend = levels(groups), col = palette, pch = 16, bty = "n", cex = 0.8)
+  }
+  if (!is.null(values) && is.numeric(values)) {
+    legend_values <- unique(round(stats::quantile(values, probs = c(0, 0.5, 1), na.rm = TRUE), 3))
+    palette <- grDevices::hcl.colors(100, "Viridis")
+    breaks <- seq(min(values, na.rm = TRUE), max(values, na.rm = TRUE), length.out = 101)
+    index <- findInterval(legend_values, breaks, all.inside = TRUE)
+    legend(
+      "topright",
+      title = color_column,
+      legend = legend_values,
+      col = palette[pmax(1, pmin(100, index))],
+      pch = 16,
+      bty = "n",
+      cex = 0.8
+    )
+  }
+}
+
+plot_pca <- function(transformed, path, title, coldata = NULL, color_columns = character()) {
   if (ncol(transformed) < 2 || nrow(transformed) < 2) {
     blank_pdf(path, title, "PCA requires at least two samples and two features")
     return()
@@ -284,31 +358,17 @@ plot_pca <- function(transformed, path, title, coldata = NULL) {
     return()
   }
   variance <- round(100 * (pca$sdev^2 / sum(pca$sdev^2)), 1)
-  groups <- NULL
-  if (!is.null(coldata) && "condition" %in% colnames(coldata)) {
-    groups <- as.factor(coldata[rownames(pca$x), "condition"])
-  }
-  colors <- rep("#1f78b4", nrow(pca$x))
-  if (!is.null(groups)) {
-    palette <- grDevices::hcl.colors(length(levels(groups)), "Dark 3")
-    colors <- palette[as.integer(groups)]
-  }
+  pca_columns <- pca_color_columns(coldata, color_columns)
   ensure_parent(path)
   grDevices::pdf(path)
-  plot(
-    pca$x[, 1],
-    pca$x[, 2],
-    pch = 16,
-    col = colors,
-    xlab = paste0("PC1 (", variance[[1]], "%)"),
-    ylab = paste0("PC2 (", variance[[2]], "%)"),
-    main = title
-  )
-  text(pca$x[, 1], pca$x[, 2], labels = rownames(pca$x), pos = 3, cex = 0.7)
-  if (!is.null(groups)) {
-    legend("topright", legend = levels(groups), col = palette, pch = 16, bty = "n", cex = 0.8)
+  on.exit(grDevices::dev.off(), add = TRUE)
+  if (!length(pca_columns)) {
+    draw_pca_panel(pca, variance, title)
+    return()
   }
-  grDevices::dev.off()
+  for (column in pca_columns) {
+    draw_pca_panel(pca, variance, title, column, coldata)
+  }
 }
 
 plot_sample_distance <- function(transformed, path, title, coldata = NULL) {
@@ -387,7 +447,7 @@ manifest_columns <- c(
   "n_significant"
 )
 
-render_row <- function(row, top_n, padj_cutoff, log2fc_cutoff, transcript_plot_groups) {
+render_row <- function(row, top_n, padj_cutoff, log2fc_cutoff, transcript_plot_groups, pca_color_columns) {
   if (!identical(row[["status"]], "ready")) {
     return(data.frame(
       project = row[["project"]],
@@ -416,7 +476,7 @@ render_row <- function(row, top_n, padj_cutoff, log2fc_cutoff, transcript_plot_g
   plot_groups <- plot_groups_for_results(results, transcript_plot_groups)
   plot_volcano(plot_groups, row[["volcano_pdf"]], paste(title, "volcano"), padj_cutoff, log2fc_cutoff)
   plot_ma(results, row[["ma_pdf"]], paste(title, "MA"), padj_cutoff, log2fc_cutoff)
-  plot_pca(transformed, row[["pca_pdf"]], paste(title, "PCA"), coldata)
+  plot_pca(transformed, row[["pca_pdf"]], paste(title, "PCA"), coldata, pca_color_columns)
   plot_sample_distance(transformed, sample_distance_pdf, paste(title, "sample distance"), coldata)
   plot_heatmap(transformed, plot_groups, row[["heatmap_pdf"]], paste(title, "heatmap"), top_n, coldata)
 
@@ -456,6 +516,7 @@ main <- function() {
     stop("--log2fc must be a non-negative number")
   }
   transcript_plot_groups <- parse_list_arg(args[["transcript_plot_groups"]])
+  pca_color_columns <- parse_list_arg(args[["pca_color_columns"]])
 
   plan <- read_tsv(plan_path)
   ensure_columns(
@@ -485,7 +546,7 @@ main <- function() {
   for (i in seq_len(nrow(plan))) {
     row <- as.list(plan[i, , drop = FALSE])
     rows[[i]] <- tryCatch(
-      render_row(row, top_n, padj_cutoff, log2fc_cutoff, transcript_plot_groups),
+      render_row(row, top_n, padj_cutoff, log2fc_cutoff, transcript_plot_groups, pca_color_columns),
       error = function(err) {
         data.frame(
           project = row[["project"]],

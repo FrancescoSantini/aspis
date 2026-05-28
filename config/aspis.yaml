@@ -123,6 +123,16 @@ rnaseq_differential:
     - novel_locus
     - ambiguous
     - artifact
+  report_pca_color_columns:
+    - condition
+    - time
+    - time_h
+    - batch
+    - batch_id
+    - biospecimen
+    - biospecimen_id
+    - replicate
+    - replicate_id
   rscript_command: Rscript
   deseq2_script: workflow/scripts/run_deseq2_feature.R
   isoform_switch_script: workflow/scripts/run_isoform_switch_contrast.R
@@ -236,6 +246,16 @@ smallrna:
   target_feature_set_min_overlap: 2
   target_feature_set_top_n: 20
   reports: true
+  report_pca_color_columns:
+    - condition
+    - time
+    - time_h
+    - batch
+    - batch_id
+    - biospecimen
+    - biospecimen_id
+    - replicate
+    - replicate_id
   condition_col: condition
   control_label: control
   design_formula: ""
