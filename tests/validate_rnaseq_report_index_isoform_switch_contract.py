@@ -30,7 +30,8 @@ def main() -> int:
         iso_candidates = tmp / "isoform_switch" / "switch_candidates.tsv"
         iso_events = tmp / "isoform_switch" / "switch_event_summary.tsv"
         iso_plots = tmp / "isoform_switch" / "switch_plot_manifest.tsv"
-        for path in [iso_html, iso_candidates, iso_events, iso_plots]:
+        iso_plots_pdf = tmp / "isoform_switch" / "switch_plots.pdf"
+        for path in [iso_html, iso_candidates, iso_events, iso_plots, iso_plots_pdf]:
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text("ok\n", encoding="utf-8")
 
@@ -186,6 +187,8 @@ def main() -> int:
             str(iso_events),
             "--isoform-switch-plots",
             str(iso_plots),
+            "--isoform-switch-plots-pdf",
+            str(iso_plots_pdf),
             "--asset-manifest",
             str(tmp / "asset_manifest.tsv"),
             "--output",
@@ -202,8 +205,10 @@ def main() -> int:
         asset_text = (tmp / "asset_manifest.tsv").read_text(encoding="utf-8")
         assert "isoform switch report" in index_html
         assert "switch_candidates.tsv" in index_html
+        assert "switch_plots.pdf" in index_html
         assert "isoform_switch" in asset_text
         assert "candidate_table" in asset_text
+        assert "plots_pdf" in asset_text
     print("rnaseq_report_index_isoform_switch\tok\tlinks and assets present")
     return 0
 

@@ -44,13 +44,26 @@ def main() -> int:
         )
         write(
             detailed,
-            "\t".join(["isoform_id", "gene_id", "gene_name", "dIF", "isoform_switch_q_value"])
+            "\t".join(
+                [
+                    "isoform_id",
+                    "gene_id",
+                    "gene_name",
+                    "dIF",
+                    "isoform_switch_q_value",
+                    "isoform_fraction_control",
+                    "isoform_fraction_test",
+                    "ORF_length",
+                    "NMD_status",
+                    "coding_potential",
+                ]
+            )
             + "\n"
-            + "\t".join(["tx_known", "geneA", "GeneA", "-0.42", "0.01"])
+            + "\t".join(["tx_known", "geneA", "GeneA", "-0.42", "0.01", "0.72", "0.30", "4", "not_NMD", "coding"])
             + "\n"
-            + "\t".join(["tx_novel", "geneA", "GeneA", "0.42", "0.01"])
+            + "\t".join(["tx_novel", "geneA", "GeneA", "0.42", "0.01", "0.28", "0.70", "6", "NMD_sensitive", "coding"])
             + "\n"
-            + "\t".join(["tx_context", "geneA", "GeneA", "0.03", "0.8"])
+            + "\t".join(["tx_context", "geneA", "GeneA", "0.03", "0.8", "0.05", "0.06", "3", "not_NMD", "coding"])
             + "\n",
         )
         write(
@@ -90,11 +103,15 @@ def main() -> int:
         )
         write(
             gtf,
-            'chr1\tASPIS\texon\t1\t30\t.\t+\t.\tgene_id "geneA"; transcript_id "tx_known"; gene_name "GeneA";\n'
-            'chr1\tASPIS\texon\t80\t120\t.\t+\t.\tgene_id "geneA"; transcript_id "tx_known"; gene_name "GeneA";\n'
-            'chr1\tASPIS\texon\t1\t30\t.\t+\t.\tgene_id "geneA"; transcript_id "tx_novel"; gene_name "GeneA";\n'
-            'chr1\tASPIS\texon\t150\t210\t.\t+\t.\tgene_id "geneA"; transcript_id "tx_novel"; gene_name "GeneA";\n'
-            'chr1\tASPIS\texon\t1\t30\t.\t+\t.\tgene_id "geneA"; transcript_id "tx_context"; gene_name "GeneA";\n',
+            'chr1\tASPIS\texon\t1\t6\t.\t+\t.\tgene_id "geneA"; transcript_id "tx_known"; gene_name "GeneA";\n'
+            'chr1\tASPIS\texon\t80\t85\t.\t+\t.\tgene_id "geneA"; transcript_id "tx_known"; gene_name "GeneA";\n'
+            'chr1\tASPIS\tCDS\t1\t6\t.\t+\t0\tgene_id "geneA"; transcript_id "tx_known"; gene_name "GeneA";\n'
+            'chr1\tASPIS\tCDS\t80\t85\t.\t+\t0\tgene_id "geneA"; transcript_id "tx_known"; gene_name "GeneA";\n'
+            'chr1\tASPIS\texon\t1\t6\t.\t+\t.\tgene_id "geneA"; transcript_id "tx_novel"; gene_name "GeneA";\n'
+            'chr1\tASPIS\texon\t150\t161\t.\t+\t.\tgene_id "geneA"; transcript_id "tx_novel"; gene_name "GeneA";\n'
+            'chr1\tASPIS\tCDS\t1\t6\t.\t+\t0\tgene_id "geneA"; transcript_id "tx_novel"; gene_name "GeneA";\n'
+            'chr1\tASPIS\tCDS\t150\t161\t.\t+\t0\tgene_id "geneA"; transcript_id "tx_novel"; gene_name "GeneA";\n'
+            'chr1\tASPIS\texon\t1\t6\t.\t+\t.\tgene_id "geneA"; transcript_id "tx_context"; gene_name "GeneA";\n',
         )
         write(
             annotations,
@@ -125,6 +142,10 @@ def main() -> int:
             str(outdir / "functional_annotation_summary.tsv"),
             "--plot-manifest",
             str(outdir / "switch_plot_manifest.tsv"),
+            "--external-tool-manifest",
+            str(outdir / "external_tool_manifest.tsv"),
+            "--plots-pdf",
+            str(outdir / "switch_plots.pdf"),
             "--html",
             str(outdir / "index.html"),
             "--done",
@@ -151,10 +172,18 @@ def main() -> int:
         plots = read_rows(outdir / "switch_plot_manifest.tsv")
         assert len(events) == 1, events
         assert {row["switch_role"] for row in candidates} >= {"switch_in", "switch_out"}, candidates
+        assert candidates[0]["switch_rank"] == "1"
+        assert candidates[0]["reason_selected"]
         assert any(row["isoform_id"] == "tx_novel" and row["aa_sequence"] == "MAMAPG" for row in sequences)
+        assert any(row["isoform_id"] == "tx_novel" and row["gained_exon_coordinates"] for row in sequences)
+        assert any(row["isoform_id"] == "tx_novel" and row["affected_aa_sequence"] for row in sequences)
         assert any(row["feature_name"] == "Catalytic fold" for row in annotation_rows)
         assert Path(plots[0]["plot_svg"]).exists(), plots
         assert Path(plots[0]["event_html"]).exists(), plots
+        assert Path(plots[0]["nt_fasta"]).exists(), plots
+        assert Path(plots[0]["aa_fasta"]).exists(), plots
+        assert (outdir / "switch_plots.pdf").exists()
+        assert (outdir / "external_tool_manifest.tsv").exists()
         assert (outdir / "index.html").exists()
         assert (outdir / "report.done").exists()
     print("isoform_switch_report\tok\tcandidate, sequence, annotation, SVG, and HTML outputs present")
