@@ -58,7 +58,6 @@ Current state:
 
 Remaining work:
 
-- Add sample distance heatmaps to the DESeq2 report layer.
 - Color PCA by available biological and technical variables:
   - condition;
   - time;
