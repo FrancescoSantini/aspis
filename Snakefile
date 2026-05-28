@@ -2535,6 +2535,7 @@ rule run_mirna_deseq2:
         ),
         padj=SMALLRNA.get("padj", 0.1),
         log2fc=SMALLRNA.get("log2fc", 1.0),
+        lfc_shrinkage=SMALLRNA.get("lfc_shrinkage", "none"),
         min_count=SMALLRNA.get("min_count", 10)
     log:
         "logs/branches/smallrna/{project}.mirna_deseq2.log"
@@ -2552,6 +2553,7 @@ rule run_mirna_deseq2:
           --deseq2-script {params.deseq2_script:q} \
           --padj {params.padj:q} \
           --log2fc {params.log2fc:q} \
+          --lfc-shrinkage {params.lfc_shrinkage:q} \
           --min-count {params.min_count:q} \
           > {log:q} 2>&1
         """
@@ -2995,7 +2997,13 @@ rule render_smallrna_report_plots:
         rscript=SMALLRNA.get("rscript_command", "Rscript"),
         top_n=SMALLRNA_REPORT_TOP_N,
         padj=SMALLRNA.get("padj", 0.1),
-        log2fc=SMALLRNA.get("log2fc", 1.0)
+        log2fc=SMALLRNA.get("log2fc", 1.0),
+        pca_color_columns=joined_config_values(
+            SMALLRNA.get(
+                "report_pca_color_columns",
+                "condition,time,time_h,batch,batch_id,biospecimen,biospecimen_id,replicate,replicate_id",
+            )
+        )
     log:
         "logs/branches/smallrna/{project}.smallrna_report_plots.log"
     shell:
@@ -3008,6 +3016,7 @@ rule render_smallrna_report_plots:
           --top-n {params.top_n:q} \
           --padj {params.padj:q} \
           --log2fc {params.log2fc:q} \
+          --pca-color-columns {params.pca_color_columns:q} \
           > {log:q} 2>&1
         """
 
@@ -3973,6 +3982,7 @@ rule run_transcript_deseq2:
         ),
         padj=RNASEQ_DIFFERENTIAL.get("padj", 0.1),
         log2fc=RNASEQ_DIFFERENTIAL.get("log2fc", 1.0),
+        lfc_shrinkage=RNASEQ_DIFFERENTIAL.get("lfc_shrinkage", "none"),
         min_count=RNASEQ_DIFFERENTIAL.get("min_count", 10)
     log:
         "logs/branches/rnaseq/{project}.transcript_deseq2.log"
@@ -3990,6 +4000,7 @@ rule run_transcript_deseq2:
           --deseq2-script {params.deseq2_script:q} \
           --padj {params.padj:q} \
           --log2fc {params.log2fc:q} \
+          --lfc-shrinkage {params.lfc_shrinkage:q} \
           --min-count {params.min_count:q} \
           > {log:q} 2>&1
         """
@@ -4197,6 +4208,7 @@ rule run_gene_deseq2:
         ),
         padj=RNASEQ_DIFFERENTIAL.get("padj", 0.1),
         log2fc=RNASEQ_DIFFERENTIAL.get("log2fc", 1.0),
+        lfc_shrinkage=RNASEQ_DIFFERENTIAL.get("lfc_shrinkage", "none"),
         min_count=RNASEQ_DIFFERENTIAL.get("min_count", 10)
     log:
         "logs/branches/rnaseq/{project}.gene_deseq2.log"
@@ -4214,6 +4226,7 @@ rule run_gene_deseq2:
           --deseq2-script {params.deseq2_script:q} \
           --padj {params.padj:q} \
           --log2fc {params.log2fc:q} \
+          --lfc-shrinkage {params.lfc_shrinkage:q} \
           --min-count {params.min_count:q} \
           > {log:q} 2>&1
         """
@@ -4554,6 +4567,12 @@ rule render_rnaseq_differential_plots:
                 "report_transcript_plot_groups",
                 "all,known_compatible,novel_isoform,novel_locus,ambiguous,artifact",
             )
+        ),
+        pca_color_columns=joined_config_values(
+            RNASEQ_DIFFERENTIAL.get(
+                "report_pca_color_columns",
+                "condition,time,time_h,batch,batch_id,biospecimen,biospecimen_id,replicate,replicate_id",
+            )
         )
     log:
         "logs/branches/rnaseq/{project}.differential_plots.log"
@@ -4567,6 +4586,7 @@ rule render_rnaseq_differential_plots:
           --top-n {params.top_n:q} \
           --padj {params.padj:q} \
           --log2fc {params.log2fc:q} \
+          --pca-color-columns {params.pca_color_columns:q} \
           --transcript-plot-groups {params.transcript_plot_groups:q} \
           > {log:q} 2>&1
         """
@@ -4843,6 +4863,7 @@ rule run_deseq2_smoke:
         deseq2_script=DESEQ2_SMOKE.get("deseq2_script", "workflow/scripts/run_deseq2_feature.R"),
         padj=DESEQ2_SMOKE.get("padj", 0.1),
         log2fc=DESEQ2_SMOKE.get("log2fc", 1.0),
+        lfc_shrinkage=DESEQ2_SMOKE.get("lfc_shrinkage", "none"),
         min_count=DESEQ2_SMOKE.get("min_count", 10)
     log:
         f"{DESEQ2_SMOKE_DIR}/logs/deseq2.log"
@@ -4860,6 +4881,7 @@ rule run_deseq2_smoke:
           --deseq2-script {params.deseq2_script:q} \
           --padj {params.padj:q} \
           --log2fc {params.log2fc:q} \
+          --lfc-shrinkage {params.lfc_shrinkage:q} \
           --min-count {params.min_count:q} \
           > {log:q} 2>&1
         """
@@ -4887,6 +4909,7 @@ rule run_transcript_deseq2_smoke:
         deseq2_script=DESEQ2_SMOKE.get("deseq2_script", "workflow/scripts/run_deseq2_feature.R"),
         padj=DESEQ2_SMOKE.get("padj", 0.1),
         log2fc=DESEQ2_SMOKE.get("log2fc", 1.0),
+        lfc_shrinkage=DESEQ2_SMOKE.get("lfc_shrinkage", "none"),
         min_count=DESEQ2_SMOKE.get("min_count", 10)
     log:
         f"{TRANSCRIPT_DESEQ2_SMOKE_DIR}/logs/deseq2.log"
@@ -4904,6 +4927,7 @@ rule run_transcript_deseq2_smoke:
           --deseq2-script {params.deseq2_script:q} \
           --padj {params.padj:q} \
           --log2fc {params.log2fc:q} \
+          --lfc-shrinkage {params.lfc_shrinkage:q} \
           --min-count {params.min_count:q} \
           > {log:q} 2>&1
         """
@@ -4948,7 +4972,13 @@ rule render_deseq2_report_smoke_plots:
         rscript=DESEQ2_SMOKE.get("rscript_command", "Rscript"),
         top_n=DESEQ2_SMOKE.get("report_top_n", DESEQ2_SMOKE.get("plot_top_n", 50)),
         padj=DESEQ2_SMOKE.get("padj", 0.1),
-        log2fc=DESEQ2_SMOKE.get("log2fc", 1.0)
+        log2fc=DESEQ2_SMOKE.get("log2fc", 1.0),
+        pca_color_columns=joined_config_values(
+            DESEQ2_SMOKE.get(
+                "report_pca_color_columns",
+                "condition,time,time_h,batch,batch_id,biospecimen,biospecimen_id,replicate,replicate_id",
+            )
+        )
     log:
         f"{DESEQ2_SMOKE_REPORT_DIR}/logs/plots.log"
     shell:
@@ -4961,6 +4991,7 @@ rule render_deseq2_report_smoke_plots:
           --top-n {params.top_n:q} \
           --padj {params.padj:q} \
           --log2fc {params.log2fc:q} \
+          --pca-color-columns {params.pca_color_columns:q} \
           > {log:q} 2>&1
         """
 

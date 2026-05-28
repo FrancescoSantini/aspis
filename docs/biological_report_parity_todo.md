@@ -12,8 +12,12 @@ reproducible modules.
 
 - Gene, transcript, and miRNA DESeq2 execution exists through a shared
   feature-level DESeq2 runner.
+- The shared DESeq2 runner emits raw log2FC, optional shrunken log2FC,
+  normalized counts, and a DESeq2-transformed count matrix for PCA/heatmaps.
 - RNA-seq reports currently include volcano, MA, PCA, heatmap, summary HTML,
   configurable feature-set ORA, and ranked feature-set enrichment.
+- Differential PCA reports can color samples by configured biological and
+  technical metadata columns when available.
 - SmallRNA reports currently include miRNA DESeq2 plots, target-table
   enrichment, target feature-set enrichment, length/isomiR summaries, residual
   read fate, and optional miRNA-mRNA integration when matched RNA-seq exists.
@@ -35,8 +39,6 @@ Current state:
 
 Remaining work:
 
-- Add optional log2FC shrinkage, preferably `apeglm` where available.
-- Preserve both raw and shrunken log2FC in outputs.
 - Report the exact design formula, contrast labels, sample counts, feature
   counts before/after filtering, and thresholds in every result manifest.
 - Add warnings for:
@@ -58,17 +60,6 @@ Current state:
 
 Remaining work:
 
-- Use DESeq2 VST or rlog where appropriate for differential-report PCA and
-  heatmaps, rather than relying only on simple log transformed normalized
-  counts.
-- Add sample distance heatmaps to the DESeq2 report layer.
-- Color PCA by available biological and technical variables:
-  - condition;
-  - time;
-  - batch;
-  - biospecimen;
-  - replicate;
-  - user-selected covariates.
 - Explicitly report variance explained by PC1/PC2.
 - Add a report note that lack of PCA clustering is not automatically a failure.
   It can reflect weak biological effect, small sample size, strong individual
@@ -377,7 +368,7 @@ Desired isoform-switch report:
 
 Suggested order:
 
-1. Harden DESeq2 report outputs and shrinkage/VST handling.
+1. Complete DESeq2 report warnings and manifest-level provenance.
 2. Make RNA-seq ORA/GSEA resource handling explicit.
 3. Refine miRNA target universes and source-specific target reports.
 4. Add ncRNA-aware isoform-switch summaries.

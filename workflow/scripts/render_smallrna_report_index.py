@@ -21,6 +21,7 @@ SUMMARY_COLUMNS = {
     "volcano_pdf",
     "ma_pdf",
     "pca_pdf",
+    "sample_distance_pdf",
     "heatmap_pdf",
     "vst_tsv",
     "mirna_mrna_target_feature_set_manifest",
@@ -129,6 +130,7 @@ ASSET_FIELDS = [
     ("plots", "volcano_pdf", "plot", "volcano_pdf"),
     ("plots", "ma_pdf", "plot", "ma_pdf"),
     ("plots", "pca_pdf", "plot", "pca_pdf"),
+    ("plots", "sample_distance_pdf", "plot", "sample_distance_pdf"),
     ("plots", "heatmap_pdf", "plot", "heatmap_pdf"),
 ]
 
@@ -187,6 +189,7 @@ def render_index(path: Path, rows: list[dict[str, str]], warnings_html: str = ""
                 link(row.get("volcano_pdf", ""), "volcano"),
                 link(row.get("ma_pdf", ""), "MA"),
                 link(row.get("pca_pdf", ""), "PCA"),
+                link(row.get("sample_distance_pdf", ""), "sample distance"),
                 link(row.get("heatmap_pdf", ""), "heatmap"),
                 link(row.get("vst_tsv", ""), "log2 counts"),
             ]
