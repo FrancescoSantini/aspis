@@ -34,12 +34,15 @@ MANIFEST_COLUMNS = [
     "down_features",
     "feature_set_results",
     "feature_set_plot",
+    "ranked_feature_set_results",
+    "ranked_feature_set_plot",
     "n_ranked",
     "n_significant",
     "n_up",
     "n_down",
     "n_feature_sets",
     "n_feature_set_terms",
+    "n_ranked_feature_set_terms",
 ]
 CONTRAST_MANIFEST_COLUMNS = [
     "contrast_id",
@@ -64,6 +67,19 @@ FEATURE_SET_COLUMNS = [
     "pvalue",
     "padj",
     "features",
+]
+RANKED_FEATURE_SET_COLUMNS = [
+    "contrast_id",
+    "feature_set_source",
+    "feature_set_collection",
+    "set_id",
+    "description",
+    "set_size",
+    "universe_size",
+    "enrichment_score",
+    "leading_edge_size",
+    "direction",
+    "leading_edge_features",
 ]
 STAT_COLUMNS = {
     "baseMean",
@@ -451,6 +467,112 @@ def write_enrichment_svg(path: Path, rows: list[dict[str, str]], top_n: int) -> 
     path.write_text("\n".join(elements) + "\n", encoding="utf-8")
 
 
+def ranked_feature_set_rows(
+    contrast_id: str,
+    feature_lists: FeatureLists,
+    feature_sets: list[FeatureSet],
+    min_overlap: int,
+) -> list[dict[str, str]]:
+    ranked = [
+        row
+        for row in feature_lists.ranked
+        if row.get("mapped_feature_id") or row.get("feature_id", "")
+    ]
+    universe = [row.get("mapped_feature_id") or row.get("feature_id", "") for row in ranked]
+    universe_set = set(universe)
+    if not ranked or not universe_set:
+        return []
+    scores = [abs(parse_float(row.get("rank_score", "")) or 0.0) for row in ranked]
+    total_weight = sum(scores) or float(len(scores))
+    rows: list[dict[str, str]] = []
+    for feature_set in feature_sets:
+        members = feature_set.features & universe_set
+        if len(members) < min_overlap:
+            continue
+        miss_penalty = 1.0 / max(1, len(universe) - len(members))
+        running = 0.0
+        best_abs = 0.0
+        best_score = 0.0
+        leading_edge_index = -1
+        member_weight = sum(score for feature, score in zip(universe, scores) if feature in members) or float(len(members))
+        for index, (feature, score) in enumerate(zip(universe, scores)):
+            if feature in members:
+                running += score / member_weight
+            else:
+                running -= miss_penalty
+            if abs(running) > best_abs:
+                best_abs = abs(running)
+                best_score = running
+                leading_edge_index = index
+        leading_edge = [feature for feature in universe[: leading_edge_index + 1] if feature in members]
+        direction = "top_enriched" if best_score >= 0 else "bottom_enriched"
+        rows.append(
+            {
+                "contrast_id": contrast_id,
+                "feature_set_source": feature_set.source,
+                "feature_set_collection": feature_set.collection,
+                "set_id": feature_set.set_id,
+                "description": feature_set.description,
+                "set_size": str(len(members)),
+                "universe_size": str(len(universe_set)),
+                "enrichment_score": f"{best_score:.8g}",
+                "leading_edge_size": str(len(leading_edge)),
+                "direction": direction,
+                "leading_edge_features": ",".join(leading_edge),
+            }
+        )
+    rows.sort(
+        key=lambda row: (
+            -(abs(parse_float(row.get("enrichment_score", "")) or 0.0)),
+            row["feature_set_source"],
+            row["feature_set_collection"],
+            row["set_id"],
+        )
+    )
+    return rows
+
+
+def write_ranked_enrichment_svg(path: Path, rows: list[dict[str, str]], top_n: int) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    width = 980
+    row_height = 34
+    margin_left = 330
+    margin_right = 150
+    margin_top = 42
+    margin_bottom = 46
+    selected = rows[:top_n]
+    height = max(220, margin_top + margin_bottom + row_height * max(1, len(selected)))
+    plot_width = width - margin_left - margin_right
+    max_score = max((abs(parse_float(row.get("enrichment_score", "")) or 0.0) for row in selected), default=1.0)
+    max_score = max(max_score, 1.0)
+    elements = [
+        f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}">',
+        '<rect width="100%" height="100%" fill="#ffffff"/>',
+        '<text x="40" y="25" font-family="sans-serif" font-size="18" font-weight="700">Ranked feature-set enrichment</text>',
+        f'<line x1="{margin_left}" y1="{height - margin_bottom}" x2="{width - margin_right}" y2="{height - margin_bottom}" stroke="#777"/>',
+    ]
+    if not selected:
+        elements.append('<text x="40" y="72" font-family="sans-serif" font-size="14">No ranked feature-set terms</text>')
+    for index, row in enumerate(selected):
+        y = margin_top + index * row_height + 18
+        score = parse_float(row.get("enrichment_score", "")) or 0.0
+        x = margin_left + ((score / max_score) + 1.0) * plot_width / 2.0
+        label = f"{row.get('feature_set_collection') or row.get('feature_set_source')}:{row['set_id']}"
+        if len(label) > 48:
+            label = label[:45] + "..."
+        color = "#b2182b" if score >= 0 else "#2166ac"
+        radius = min(16, 4 + int(row.get("leading_edge_size", "1") or "1"))
+        elements.append(f'<text x="40" y="{y + 4}" font-family="sans-serif" font-size="12">{html.escape(label)}</text>')
+        elements.append(f'<line x1="{margin_left}" y1="{y}" x2="{width - margin_right}" y2="{y}" stroke="#eeeeee"/>')
+        elements.append(f'<circle cx="{x:.1f}" cy="{y}" r="{radius}" fill="{color}" fill-opacity="0.82"/>')
+        elements.append(f'<text x="{x + radius + 6:.1f}" y="{y + 4}" font-family="sans-serif" font-size="11">{score:.3g}</text>')
+    elements.append(
+        f'<text x="{margin_left + plot_width / 2 - 30:.1f}" y="{height - 18}" font-family="sans-serif" font-size="12">ranked ES</text>'
+    )
+    elements.append("</svg>")
+    path.write_text("\n".join(elements) + "\n", encoding="utf-8")
+
+
 def write_feature_lists(
     row: dict[str, str],
     feature_sets: list[FeatureSet],
@@ -471,6 +593,8 @@ def write_feature_lists(
         "down_features": outdir / "down_features.tsv",
         "feature_set_results": outdir / "feature_set_enrichment.tsv",
         "feature_set_plot": outdir / "feature_set_enrichment.svg",
+        "ranked_feature_set_results": outdir / "ranked_feature_set_enrichment.tsv",
+        "ranked_feature_set_plot": outdir / "ranked_feature_set_enrichment.svg",
     }
 
     ranked = [feature_row(source_row, result_feature_column, id_map) for source_row in result_rows]
@@ -494,8 +618,11 @@ def write_feature_lists(
     write_table(paths["down_features"], FEATURE_COLUMNS, down)
 
     term_rows = enrichment_rows(row["contrast_id"], feature_lists, feature_sets, min_overlap)
+    ranked_term_rows = ranked_feature_set_rows(row["contrast_id"], feature_lists, feature_sets, min_overlap)
     write_table(paths["feature_set_results"], FEATURE_SET_COLUMNS, term_rows)
     write_enrichment_svg(paths["feature_set_plot"], term_rows, top_n)
+    write_table(paths["ranked_feature_set_results"], RANKED_FEATURE_SET_COLUMNS, ranked_term_rows)
+    write_ranked_enrichment_svg(paths["ranked_feature_set_plot"], ranked_term_rows, top_n)
 
     outputs = {
         "ranked_features": str(paths["ranked_features"]),
@@ -504,12 +631,15 @@ def write_feature_lists(
         "down_features": str(paths["down_features"]),
         "feature_set_results": str(paths["feature_set_results"]),
         "feature_set_plot": str(paths["feature_set_plot"]),
+        "ranked_feature_set_results": str(paths["ranked_feature_set_results"]),
+        "ranked_feature_set_plot": str(paths["ranked_feature_set_plot"]),
         "n_ranked": str(len(ranked)),
         "n_significant": str(len(significant)),
         "n_up": str(len(up)),
         "n_down": str(len(down)),
         "n_feature_sets": str(len(feature_sets)),
         "n_feature_set_terms": str(len(term_rows)),
+        "n_ranked_feature_set_terms": str(len(ranked_term_rows)),
     }
     resources = [
         ("ranked_features", paths["ranked_features"], "ok", "", len(ranked)),
@@ -529,6 +659,20 @@ def write_feature_lists(
             "ok" if feature_sets else "not_configured",
             "" if feature_sets else "No feature set GMT or table configured",
             len(term_rows),
+        ),
+        (
+            "ranked_feature_set_results",
+            paths["ranked_feature_set_results"],
+            "ok" if feature_sets else "not_configured",
+            "" if feature_sets else "No feature set GMT or table configured",
+            len(ranked_term_rows),
+        ),
+        (
+            "ranked_feature_set_plot",
+            paths["ranked_feature_set_plot"],
+            "ok" if feature_sets else "not_configured",
+            "" if feature_sets else "No feature set GMT or table configured",
+            len(ranked_term_rows),
         ),
     ]
     write_table(
@@ -557,6 +701,8 @@ def write_blocked_contrast_manifest(row: dict[str, str], reason: str) -> None:
         "down_features",
         "feature_set_results",
         "feature_set_plot",
+        "ranked_feature_set_results",
+        "ranked_feature_set_plot",
     ]
     write_table(
         Path(row["enrichment_manifest"]),
@@ -587,12 +733,15 @@ def empty_output(row: dict[str, str]) -> dict[str, str]:
         "down_features": "",
         "feature_set_results": "",
         "feature_set_plot": "",
+        "ranked_feature_set_results": "",
+        "ranked_feature_set_plot": "",
         "n_ranked": "0",
         "n_significant": "0",
         "n_up": "0",
         "n_down": "0",
         "n_feature_sets": "0",
         "n_feature_set_terms": "0",
+        "n_ranked_feature_set_terms": "0",
     }
 
 

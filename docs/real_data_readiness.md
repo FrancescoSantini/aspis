@@ -158,6 +158,8 @@ biological_qc:
   run: true
   rnaseq_sample_qc: true
   smallrna_sample_qc: true
+  smallrna_length_qc: true
+  biological_warnings: true
 ```
 
 Review these outputs before interpreting DESeq2:
@@ -170,8 +172,31 @@ Review these outputs before interpreting DESeq2:
 <branch>/quantification/sample_qc/sample_correlation_heatmap.svg
 ```
 
+SmallRNA projects also report read-length and arm summaries after trimming,
+depletion, and miRBase alignment:
+
+```text
+<branch>/smallrna/length_qc/length_distribution.tsv
+<branch>/smallrna/length_qc/stage_summary.tsv
+<branch>/smallrna/length_qc/arm_summary.tsv
+<branch>/smallrna/length_qc/isomir_length_summary.tsv
+<branch>/smallrna/length_qc/length_distribution.svg
+```
+
+Both assays can emit a consolidated warning report:
+
+```text
+<branch>/biological_warnings/warnings.tsv
+<branch>/biological_warnings/warnings.html
+```
+
+For smallRNA, the warning report is under
+`<branch>/smallrna/biological_warnings/`.
+
 These are not substitutes for biology, but they expose sample swaps, outliers,
-library-size imbalance, low detected-feature samples, and unexpected clustering.
+library-size imbalance, low detected-feature samples, unexpected clustering,
+unexpected smallRNA length profiles, strandedness conflicts, and missing or
+implausible biotype annotations.
 
 ## 6. Compare Against Legacy Outputs
 
@@ -259,12 +284,28 @@ interpretation needs the real datasets and project metadata:
 - miRNA-mRNA integration: confirm the same project has both `smallrna` and
   `rnaseq` branches, and that `mirna_mrna_integration.match_columns` identify
   true matched biospecimens.
+- Inverse miRNA-target feature sets: inspect
+  `<branch>/smallrna/differential/mirna_mrna_target_feature_sets/` when both
+  cross-assay integration and target feature sets are enabled. These tables
+  summarize pathway/feature-set support for up-miRNA/down-target and
+  down-miRNA/up-target relationships.
+- SmallRNA length and arm QC: inspect
+  `<branch>/smallrna/length_qc/` to confirm that trimmed reads have plausible
+  smallRNA lengths and that 5p/3p annotations are present when expected.
+- Ranked RNA-seq enrichment: inspect each RNA-seq report enrichment directory
+  for `ranked_feature_set_enrichment.tsv`. This uses all ranked DESeq2
+  features and can be more informative than thresholded over-representation
+  when few genes pass significance cutoffs.
 - RNA-seq strandedness inference: inspect
   `<branch>/alignment/strandedness/strandedness_report.tsv` and resolve any
   warning before trusting featureCounts/StringTie output.
 - RNA-seq biotype summaries: inspect
   `<branch>/quantification/biotypes/biotype_summary.html` for unexpected
   rRNA, pseudogene, lncRNA, unclassified, or other dominant classes.
+- Biological warning reports: inspect `warnings.tsv` and `warnings.html`
+  before interpreting DESeq2 or target-enrichment outputs; warnings are meant
+  to concentrate likely design, QC, strandedness, biotype, and residual-read
+  issues in one place.
 - DTU/event-level planning: inspect
   `<branch>/differential/dtu/dtu_plan.tsv`; choose a real engine only after
   seeing the transcript-count structure, replicate depth, annotation quality,

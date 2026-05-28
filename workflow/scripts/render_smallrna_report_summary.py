@@ -41,12 +41,21 @@ SUMMARY_COLUMNS = [
     "mirna_mrna_pairs",
     "mirna_mrna_summary",
     "mirna_mrna_plot",
+    "mirna_mrna_target_feature_set_manifest",
+    "mirna_mrna_target_feature_set_results",
+    "mirna_mrna_target_feature_set_plot",
     "target_feature_set_manifest",
     "target_feature_set_results",
     "target_feature_set_plot",
     "residual_manifest",
     "residual_biotype_counts",
     "residual_feature_counts",
+    "smallrna_length_manifest",
+    "smallrna_length_distribution",
+    "smallrna_length_stage_summary",
+    "smallrna_arm_summary",
+    "smallrna_isomir_length_summary",
+    "smallrna_length_plot",
     "volcano_pdf",
     "ma_pdf",
     "pca_pdf",
@@ -62,7 +71,10 @@ SUMMARY_COLUMNS = [
     "n_mirna_mrna_pairs",
     "n_mirna_mrna_inverse_pairs",
     "n_mirna_mrna_anticorrelated_pairs",
+    "n_mirna_mrna_target_feature_set_terms",
     "n_target_feature_set_terms",
+    "n_smallrna_length_stages",
+    "n_smallrna_arms",
     "n_residual_input_reads",
     "n_residual_genome_aligned_reads",
     "n_residual_genome_unmapped_reads",
@@ -211,9 +223,13 @@ def render_html(
     integration_pairs: list[dict[str, str]],
     integration_summary: list[dict[str, str]],
     target_feature_sets: list[dict[str, str]],
+    mirna_mrna_target_feature_sets: list[dict[str, str]],
     residual_manifest: list[dict[str, str]],
     residual_biotypes: list[dict[str, str]],
     residual_features: list[dict[str, str]],
+    length_stage_summary: list[dict[str, str]],
+    arm_summary: list[dict[str, str]],
+    isomir_length_summary: list[dict[str, str]],
     top_n: int,
 ) -> None:
     summary_path = Path(plan_row["summary_html"])
@@ -225,6 +241,10 @@ def render_html(
     )[:top_n]
     feature_set_preview = sorted(
         target_feature_sets,
+        key=lambda row: (parse_float(row.get("padj", "")) or 1.0, row.get("collection", ""), row.get("set_id", "")),
+    )[:top_n]
+    mirna_mrna_feature_set_preview = sorted(
+        mirna_mrna_target_feature_sets,
         key=lambda row: (parse_float(row.get("padj", "")) or 1.0, row.get("collection", ""), row.get("set_id", "")),
     )[:top_n]
     integration_preview = sorted(
@@ -258,7 +278,11 @@ def render_html(
         html_link(plan_row.get("target_source_summary", ""), "target source summary"),
         html_link(plan_row.get("mirna_mrna_pairs", ""), "miRNA-mRNA pairs"),
         html_link(plan_row.get("mirna_mrna_summary", ""), "miRNA-mRNA summary"),
+        html_link(plan_row.get("mirna_mrna_target_feature_set_results", ""), "inverse target feature sets"),
         html_link(plan_row.get("target_feature_set_results", ""), "target feature sets"),
+        html_link(plan_row.get("smallrna_length_distribution", ""), "length distribution"),
+        html_link(plan_row.get("smallrna_arm_summary", ""), "arm summary"),
+        html_link(plan_row.get("smallrna_isomir_length_summary", ""), "mapped length spectrum"),
         html_link(plan_row.get("volcano_pdf", ""), "volcano plot"),
         html_link(plan_row.get("ma_pdf", ""), "MA plot"),
         html_link(plan_row.get("pca_pdf", ""), "PCA plot"),
@@ -288,7 +312,10 @@ def render_html(
         ("miRNA-mRNA pairs", str(len(integration_pairs))),
         ("Inverse pairs", str(len(inverse_pairs))),
         ("Anticorrelated pairs", str(len(anticorrelated_pairs))),
+        ("Inverse target feature-set terms", str(len(mirna_mrna_target_feature_sets))),
         ("Target feature-set terms", str(len(target_feature_sets))),
+        ("Length QC stages", str(len({row.get("stage", "") for row in length_stage_summary}))),
+        ("Arm classes", str(len(arm_summary))),
         ("Residual reads", str(residual_input_reads)),
         ("Residual genome-aligned", str(residual_aligned_reads)),
         ("Residual genome-unmapped", str(residual_unmapped_reads)),
@@ -333,6 +360,24 @@ def render_html(
         for column in ["collection", "set_id", "description", "overlap", "query_size", "padj", "targets"]
         if feature_set_preview and column in feature_set_preview[0]
     ]
+    mirna_mrna_feature_set_columns = [
+        column
+        for column in ["collection", "set_id", "description", "overlap", "query_size", "padj", "targets"]
+        if mirna_mrna_feature_set_preview and column in mirna_mrna_feature_set_preview[0]
+    ]
+    length_stage_columns = [
+        column
+        for column in ["stage", "library_id", "total_reads", "modal_length", "mean_length", "min_length", "max_length"]
+        if length_stage_summary and column in length_stage_summary[0]
+    ]
+    arm_columns = [
+        column for column in ["arm", "detected_mirnas", "total_count", "fraction"] if arm_summary and column in arm_summary[0]
+    ]
+    isomir_columns = [
+        column
+        for column in ["length", "estimated_mirbase_mapped_reads", "fraction"]
+        if isomir_length_summary and column in isomir_length_summary[0]
+    ]
     residual_biotype_columns = list(residual_biotype_preview[0]) if residual_biotype_preview else []
     residual_feature_columns = list(residual_feature_preview[0]) if residual_feature_preview else []
     title = f"{plan_row['project']} {plan_row['contrast_id']} miRNA differential report"
@@ -368,6 +413,14 @@ def render_html(
   {embedded_svg(plan_row.get("mirna_mrna_plot", ""))}
   {html_table(integration_summary, integration_summary_columns)}
   {html_table(integration_preview, integration_columns)}
+  <h2>Inverse miRNA-target feature sets</h2>
+  {embedded_svg(plan_row.get("mirna_mrna_target_feature_set_plot", ""))}
+  {html_table(mirna_mrna_feature_set_preview, mirna_mrna_feature_set_columns)}
+  <h2>Read-length and arm QC</h2>
+  {embedded_svg(plan_row.get("smallrna_length_plot", ""))}
+  {html_table(length_stage_summary, length_stage_columns)}
+  {html_table(arm_summary, arm_columns)}
+  {html_table(isomir_length_summary, isomir_columns)}
   <h2>Target enrichment</h2>
   {embedded_svg(plan_row.get("target_enrichment_plot", ""))}
   {html_table(enrichment_preview, enrichment_columns)}
@@ -405,12 +458,21 @@ def blocked_summary(row: dict[str, str]) -> dict[str, str]:
         "mirna_mrna_pairs": row.get("mirna_mrna_pairs", ""),
         "mirna_mrna_summary": row.get("mirna_mrna_summary", ""),
         "mirna_mrna_plot": row.get("mirna_mrna_plot", ""),
+        "mirna_mrna_target_feature_set_manifest": row.get("mirna_mrna_target_feature_set_manifest", ""),
+        "mirna_mrna_target_feature_set_results": row.get("mirna_mrna_target_feature_set_results", ""),
+        "mirna_mrna_target_feature_set_plot": row.get("mirna_mrna_target_feature_set_plot", ""),
         "target_feature_set_manifest": row.get("target_feature_set_manifest", ""),
         "target_feature_set_results": row.get("target_feature_set_results", ""),
         "target_feature_set_plot": row.get("target_feature_set_plot", ""),
         "residual_manifest": row.get("residual_manifest", ""),
         "residual_biotype_counts": row.get("residual_biotype_counts", ""),
         "residual_feature_counts": row.get("residual_feature_counts", ""),
+        "smallrna_length_manifest": row.get("smallrna_length_manifest", ""),
+        "smallrna_length_distribution": row.get("smallrna_length_distribution", ""),
+        "smallrna_length_stage_summary": row.get("smallrna_length_stage_summary", ""),
+        "smallrna_arm_summary": row.get("smallrna_arm_summary", ""),
+        "smallrna_isomir_length_summary": row.get("smallrna_isomir_length_summary", ""),
+        "smallrna_length_plot": row.get("smallrna_length_plot", ""),
         "volcano_pdf": row.get("volcano_pdf", ""),
         "ma_pdf": row.get("ma_pdf", ""),
         "pca_pdf": row.get("pca_pdf", ""),
@@ -426,7 +488,10 @@ def blocked_summary(row: dict[str, str]) -> dict[str, str]:
         "n_mirna_mrna_pairs": "0",
         "n_mirna_mrna_inverse_pairs": "0",
         "n_mirna_mrna_anticorrelated_pairs": "0",
+        "n_mirna_mrna_target_feature_set_terms": "0",
         "n_target_feature_set_terms": "0",
+        "n_smallrna_length_stages": "0",
+        "n_smallrna_arms": "0",
         "n_residual_input_reads": "0",
         "n_residual_genome_aligned_reads": "0",
         "n_residual_genome_unmapped_reads": "0",
@@ -454,7 +519,14 @@ def render_row(row: dict[str, str], top_n: int) -> dict[str, str]:
         _, target_source_summary = read_existing(row.get("target_source_summary", ""))
         _, integration_pairs = read_existing(row.get("mirna_mrna_pairs", ""))
         _, integration_summary = read_existing(row.get("mirna_mrna_summary", ""))
+        _, mirna_mrna_target_feature_sets = read_existing(
+            row.get("mirna_mrna_target_feature_set_results", ""),
+            {"set_id"},
+        )
         _, target_feature_sets = read_existing(row.get("target_feature_set_results", ""), {"set_id"})
+        _, length_stage_summary = read_existing(row.get("smallrna_length_stage_summary", ""), {"stage", "library_id"})
+        _, arm_summary = read_existing(row.get("smallrna_arm_summary", ""), {"arm"})
+        _, isomir_length_summary = read_existing(row.get("smallrna_isomir_length_summary", ""), {"length"})
         _, residual_manifest = read_existing(
             row.get("residual_manifest", ""),
             {"library_id", "input_reads", "genome_aligned_reads", "genome_unmapped_reads"},
@@ -472,9 +544,13 @@ def render_row(row: dict[str, str], top_n: int) -> dict[str, str]:
             integration_pairs,
             integration_summary,
             target_feature_sets,
+            mirna_mrna_target_feature_sets,
             residual_manifest,
             residual_biotypes,
             residual_features,
+            length_stage_summary,
+            arm_summary,
+            isomir_length_summary,
             top_n,
         )
         n_up = sum(1 for item in filtered_rows if direction(item) == "up")
@@ -508,12 +584,21 @@ def render_row(row: dict[str, str], top_n: int) -> dict[str, str]:
             "mirna_mrna_pairs": row.get("mirna_mrna_pairs", ""),
             "mirna_mrna_summary": row.get("mirna_mrna_summary", ""),
             "mirna_mrna_plot": row.get("mirna_mrna_plot", ""),
+            "mirna_mrna_target_feature_set_manifest": row.get("mirna_mrna_target_feature_set_manifest", ""),
+            "mirna_mrna_target_feature_set_results": row.get("mirna_mrna_target_feature_set_results", ""),
+            "mirna_mrna_target_feature_set_plot": row.get("mirna_mrna_target_feature_set_plot", ""),
             "target_feature_set_manifest": row.get("target_feature_set_manifest", ""),
             "target_feature_set_results": row.get("target_feature_set_results", ""),
             "target_feature_set_plot": row.get("target_feature_set_plot", ""),
             "residual_manifest": row.get("residual_manifest", ""),
             "residual_biotype_counts": row.get("residual_biotype_counts", ""),
             "residual_feature_counts": row.get("residual_feature_counts", ""),
+            "smallrna_length_manifest": row.get("smallrna_length_manifest", ""),
+            "smallrna_length_distribution": row.get("smallrna_length_distribution", ""),
+            "smallrna_length_stage_summary": row.get("smallrna_length_stage_summary", ""),
+            "smallrna_arm_summary": row.get("smallrna_arm_summary", ""),
+            "smallrna_isomir_length_summary": row.get("smallrna_isomir_length_summary", ""),
+            "smallrna_length_plot": row.get("smallrna_length_plot", ""),
             "volcano_pdf": row.get("volcano_pdf", ""),
             "ma_pdf": row.get("ma_pdf", ""),
             "pca_pdf": row.get("pca_pdf", ""),
@@ -529,7 +614,10 @@ def render_row(row: dict[str, str], top_n: int) -> dict[str, str]:
             "n_mirna_mrna_pairs": str(len(integration_pairs)),
             "n_mirna_mrna_inverse_pairs": str(len(inverse_pairs)),
             "n_mirna_mrna_anticorrelated_pairs": str(len(anticorrelated_pairs)),
+            "n_mirna_mrna_target_feature_set_terms": str(len(mirna_mrna_target_feature_sets)),
             "n_target_feature_set_terms": str(len(target_feature_sets)),
+            "n_smallrna_length_stages": str(len({item.get("stage", "") for item in length_stage_summary})),
+            "n_smallrna_arms": str(len(arm_summary)),
             "n_residual_input_reads": str(residual_input_reads),
             "n_residual_genome_aligned_reads": str(residual_aligned_reads),
             "n_residual_genome_unmapped_reads": str(residual_unmapped_reads),

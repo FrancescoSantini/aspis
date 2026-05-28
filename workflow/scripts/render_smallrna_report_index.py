@@ -23,6 +23,9 @@ SUMMARY_COLUMNS = {
     "pca_pdf",
     "heatmap_pdf",
     "vst_tsv",
+    "mirna_mrna_target_feature_set_manifest",
+    "mirna_mrna_target_feature_set_results",
+    "mirna_mrna_target_feature_set_plot",
     "n_features",
     "n_significant",
     "n_up",
@@ -33,10 +36,19 @@ SUMMARY_COLUMNS = {
     "n_mirna_mrna_pairs",
     "n_mirna_mrna_inverse_pairs",
     "n_mirna_mrna_anticorrelated_pairs",
+    "n_mirna_mrna_target_feature_set_terms",
     "n_target_feature_set_terms",
+    "n_smallrna_length_stages",
+    "n_smallrna_arms",
     "residual_manifest",
     "residual_biotype_counts",
     "residual_feature_counts",
+    "smallrna_length_manifest",
+    "smallrna_length_distribution",
+    "smallrna_length_stage_summary",
+    "smallrna_arm_summary",
+    "smallrna_isomir_length_summary",
+    "smallrna_length_plot",
     "n_residual_input_reads",
     "n_residual_genome_aligned_reads",
     "n_residual_genome_unmapped_reads",
@@ -47,6 +59,7 @@ SUMMARY_COLUMNS = {
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--summary-manifest", required=True, help="SmallRNA summary manifest TSV")
+    parser.add_argument("--warnings-html", default="", help="Optional biological warnings HTML")
     parser.add_argument("--asset-manifest", required=True, help="Report asset inventory TSV")
     parser.add_argument("--output", required=True, help="Output index HTML")
     parser.add_argument("--done", required=True, help="Completion sentinel")
@@ -98,12 +111,21 @@ ASSET_FIELDS = [
     ("mirna_mrna", "mirna_mrna_pairs", "table", "mirna_mrna_pairs"),
     ("mirna_mrna", "mirna_mrna_summary", "table", "mirna_mrna_summary"),
     ("mirna_mrna", "mirna_mrna_plot", "plot", "mirna_mrna_plot"),
+    ("mirna_mrna", "mirna_mrna_target_feature_set_manifest", "manifest", "mirna_mrna_target_feature_set_manifest"),
+    ("mirna_mrna", "mirna_mrna_target_feature_set_results", "table", "mirna_mrna_target_feature_set_results"),
+    ("mirna_mrna", "mirna_mrna_target_feature_set_plot", "plot", "mirna_mrna_target_feature_set_plot"),
     ("target_feature_sets", "target_feature_set_manifest", "manifest", "target_feature_set_manifest"),
     ("target_feature_sets", "target_feature_set_results", "table", "target_feature_set_results"),
     ("target_feature_sets", "target_feature_set_plot", "plot", "target_feature_set_plot"),
     ("residual", "residual_manifest", "manifest", "residual_manifest"),
     ("residual", "residual_biotype_counts", "table", "residual_biotype_counts"),
     ("residual", "residual_feature_counts", "table", "residual_feature_counts"),
+    ("length_qc", "smallrna_length_manifest", "manifest", "smallrna_length_manifest"),
+    ("length_qc", "smallrna_length_distribution", "table", "smallrna_length_distribution"),
+    ("length_qc", "smallrna_length_stage_summary", "table", "smallrna_length_stage_summary"),
+    ("length_qc", "smallrna_arm_summary", "table", "smallrna_arm_summary"),
+    ("length_qc", "smallrna_isomir_length_summary", "table", "smallrna_isomir_length_summary"),
+    ("length_qc", "smallrna_length_plot", "plot", "smallrna_length_plot"),
     ("plots", "volcano_pdf", "plot", "volcano_pdf"),
     ("plots", "ma_pdf", "plot", "ma_pdf"),
     ("plots", "pca_pdf", "plot", "pca_pdf"),
@@ -137,7 +159,7 @@ def write_asset_manifest(path: Path, rows: list[dict[str, str]]) -> None:
                 )
 
 
-def render_index(path: Path, rows: list[dict[str, str]]) -> None:
+def render_index(path: Path, rows: list[dict[str, str]], warnings_html: str = "") -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     projects = sorted({row.get("project", "") for row in rows if row.get("project", "")})
     title_project = ", ".join(projects) if projects else "smallRNA"
@@ -154,7 +176,11 @@ def render_index(path: Path, rows: list[dict[str, str]]) -> None:
                 link(row.get("target_source_summary", ""), "target sources"),
                 link(row.get("mirna_mrna_pairs", ""), "miRNA-mRNA pairs"),
                 link(row.get("mirna_mrna_summary", ""), "miRNA-mRNA summary"),
+                link(row.get("mirna_mrna_target_feature_set_results", ""), "inverse target feature sets"),
                 link(row.get("target_feature_set_results", ""), "feature sets"),
+                link(row.get("smallrna_length_distribution", ""), "lengths"),
+                link(row.get("smallrna_arm_summary", ""), "arms"),
+                link(row.get("smallrna_isomir_length_summary", ""), "mapped length spectrum"),
                 link(row.get("residual_manifest", ""), "residual manifest"),
                 link(row.get("residual_biotype_counts", ""), "residual biotypes"),
                 link(row.get("residual_feature_counts", ""), "residual features"),
@@ -181,7 +207,10 @@ def render_index(path: Path, rows: list[dict[str, str]]) -> None:
             row.get("n_mirna_mrna_pairs", ""),
             row.get("n_mirna_mrna_inverse_pairs", ""),
             row.get("n_mirna_mrna_anticorrelated_pairs", ""),
+            row.get("n_mirna_mrna_target_feature_set_terms", ""),
             row.get("n_target_feature_set_terms", ""),
+            row.get("n_smallrna_length_stages", ""),
+            row.get("n_smallrna_arms", ""),
             row.get("n_residual_input_reads", ""),
             row.get("n_residual_genome_aligned_reads", ""),
             row.get("n_residual_genome_unmapped_reads", ""),
@@ -206,7 +235,10 @@ def render_index(path: Path, rows: list[dict[str, str]]) -> None:
             "mirna_mrna_pairs",
             "inverse_pairs",
             "anticorrelated_pairs",
+            "inverse_feature_sets",
             "feature_set_terms",
+            "length_stages",
+            "arm_classes",
             "residual_reads",
             "residual_aligned",
             "residual_unmapped",
@@ -214,6 +246,8 @@ def render_index(path: Path, rows: list[dict[str, str]]) -> None:
             "resources",
         ]
     )
+    warnings_link = link(warnings_html, "biological warnings")
+    warnings_block = f"<p>{warnings_link}</p>" if warnings_link else ""
     content = f"""<!doctype html>
 <html lang="en">
 <head>
@@ -228,6 +262,7 @@ def render_index(path: Path, rows: list[dict[str, str]]) -> None:
 </head>
 <body>
   <h1>{html.escape(title_project)} smallRNA differential reports</h1>
+  {warnings_block}
   <table><thead><tr>{header}</tr></thead><tbody>{''.join(body_rows)}</tbody></table>
 </body>
 </html>
@@ -254,7 +289,7 @@ def main() -> int:
     rows = read_table(Path(args.summary_manifest), SUMMARY_COLUMNS)
     if not rows:
         raise ValueError("smallRNA summary manifest has no rows")
-    render_index(Path(args.output), rows)
+    render_index(Path(args.output), rows, args.warnings_html)
     write_asset_manifest(Path(args.asset_manifest), rows)
     write_done(Path(args.done), rows)
     return 0
