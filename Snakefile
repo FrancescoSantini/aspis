@@ -812,6 +812,8 @@ def branch_provenance_inputs(wildcards):
                         [
                             f"{base}/differential/dtu/dtu_plan.tsv",
                             f"{base}/differential/dtu/dtu.done",
+                            f"{base}/differential/dtu/dtu_method_manifest.tsv",
+                            f"{base}/differential/dtu/dtu_methods.done",
                         ]
                     )
                 if RNASEQ_SAMPLE_QC_RUN:
@@ -1142,6 +1144,8 @@ def planned_branch_targets(wildcards):
                                 [
                                     f"{BRANCH_DIR}/{assay}/{project}/differential/dtu/dtu_plan.tsv",
                                     f"{BRANCH_DIR}/{assay}/{project}/differential/dtu/dtu.done",
+                                    f"{BRANCH_DIR}/{assay}/{project}/differential/dtu/dtu_method_manifest.tsv",
+                                    f"{BRANCH_DIR}/{assay}/{project}/differential/dtu/dtu_methods.done",
                                 ]
                             )
                         if RNASEQ_SAMPLE_QC_RUN:
@@ -4450,6 +4454,56 @@ rule plan_rnaseq_dtu:
           --project {wildcards.project:q} \
           --method {params.method:q} \
           --candidate-methods {params.candidate_methods:q} \
+          > {log:q} 2>&1
+        """
+
+
+rule run_rnaseq_dtu_methods:
+    input:
+        plan=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/dtu/dtu_plan.tsv",
+        plan_done=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/dtu/dtu.done",
+        samples=f"{BRANCH_DIR}" + "/rnaseq/{project}/samples.tsv",
+        aligned_samples=f"{BRANCH_DIR}" + "/rnaseq/{project}/alignment/aligned_samples.tsv",
+        transcript_counts=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/counts/transcript_counts.tsv",
+        transcript_metadata=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/counts/transcript_metadata.tsv",
+        quantification_done=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/counts/quantification.done"
+    output:
+        manifest=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/dtu/dtu_method_manifest.tsv",
+        done=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/dtu/dtu_methods.done"
+    params:
+        outdir=lambda wildcards: f"{BRANCH_DIR}/rnaseq/{wildcards.project}/differential/dtu/methods",
+        annotation_gtf=lambda wildcards: RNASEQ_QUANTIFICATION.get(
+            "annotation_gtf",
+            RNASEQ_ALIGNMENT.get("annotation_gtf", ""),
+        ),
+        method=RNASEQ_DTU.get("method", "planned"),
+        candidate_methods=joined_config_values(RNASEQ_DTU.get("candidate_methods", "DRIMSeq,DEXSeq,SUPPA2,rMATS")),
+        drimseq_command=shell_arg("--drimseq-command", RNASEQ_DTU.get("drimseq_command", "")),
+        dexseq_command=shell_arg("--dexseq-command", RNASEQ_DTU.get("dexseq_command", "")),
+        suppa2_command=shell_arg("--suppa2-command", RNASEQ_DTU.get("suppa2_command", "")),
+        rmats_command=shell_arg("--rmats-command", RNASEQ_DTU.get("rmats_command", ""))
+    log:
+        "logs/branches/rnaseq/{project}.dtu_methods.log"
+    shell:
+        r"""
+        mkdir -p logs/branches/rnaseq
+        python3 workflow/scripts/run_rnaseq_dtu_methods.py \
+          --plan {input.plan:q} \
+          --samples {input.samples:q} \
+          --aligned-samples {input.aligned_samples:q} \
+          --transcript-counts {input.transcript_counts:q} \
+          --transcript-metadata {input.transcript_metadata:q} \
+          --annotation-gtf {params.annotation_gtf:q} \
+          --outdir {params.outdir:q} \
+          --manifest {output.manifest:q} \
+          --done {output.done:q} \
+          --project {wildcards.project:q} \
+          --method {params.method:q} \
+          --methods {params.candidate_methods:q} \
+          {params.drimseq_command} \
+          {params.dexseq_command} \
+          {params.suppa2_command} \
+          {params.rmats_command} \
           > {log:q} 2>&1
         """
 

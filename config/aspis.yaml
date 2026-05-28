@@ -158,7 +158,11 @@ rnaseq_differential:
   log2fc: 1.0
 
 rnaseq_dtu:
-  # Contract-only planning hook for later event-level differential transcript usage.
+  # Optional event-level / differential transcript usage companion layer.
+  # Leave command templates empty to record a method-ready manifest without
+  # executing external engines. Templates may use {samples}, {aligned_samples},
+  # {transcript_counts}, {transcript_metadata}, {annotation_gtf}, {outdir},
+  # {project}, and {method}.
   run: false
   method: planned
   candidate_methods:
@@ -166,6 +170,10 @@ rnaseq_dtu:
     - DEXSeq
     - SUPPA2
     - rMATS
+  drimseq_command: ""
+  dexseq_command: ""
+  suppa2_command: ""
+  rmats_command: ""
 
 smallrna:
   run: false
