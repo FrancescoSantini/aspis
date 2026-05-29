@@ -554,11 +554,36 @@ def exercise_ranked_enrichment() -> Path:
             "10",
             "--ranked-feature-set-permutations",
             "50",
+            "--ranked-feature-set-min-mapped",
+            "4",
         ]
     )
-    row = read_tsv(manifest, {"ranked_feature_set_results", "n_ranked_feature_set_terms"})[0]
+    row = read_tsv(
+        manifest,
+        {
+            "feature_set_universe",
+            "ranked_feature_set_results",
+            "n_ranked_feature_set_terms",
+        },
+    )[0]
     if int(row["n_ranked_feature_set_terms"]) < 1:
         raise ValueError(f"ranked enrichment did not produce terms: {row}")
+    universe_rows = read_tsv(
+        Path(row["feature_set_universe"]),
+        {
+            "ranked_min_mapped_features",
+            "ranked_mapping_fraction",
+            "ranked_mapping_status",
+            "ranked_mapping_warning",
+        },
+    )
+    if not any(
+        item["ranked_min_mapped_features"] == "4"
+        and item["ranked_mapping_status"] == "warning"
+        and "only 2 ranked feature(s)" in item["ranked_mapping_warning"]
+        for item in universe_rows
+    ):
+        raise ValueError(f"ranked enrichment universe did not warn on low mapped features: {universe_rows}")
     ranked_rows = read_tsv(
         Path(row["ranked_feature_set_results"]),
         {

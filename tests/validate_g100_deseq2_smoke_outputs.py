@@ -238,6 +238,10 @@ FEATURE_SET_UNIVERSE_COLUMNS = {
     "up_query_size",
     "down_query_size",
     "ranked_query_size",
+    "ranked_min_mapped_features",
+    "ranked_mapping_fraction",
+    "ranked_mapping_status",
+    "ranked_mapping_warning",
     "min_overlap",
 }
 

@@ -186,6 +186,8 @@ Current state:
   resources.
 - Ranked feature-set outputs now use the same resource-specific final universe
   and mapping provenance fields as ORA.
+- Ranked feature-set universe rows now report the ranked mapping fraction and
+  warn when the mapped ranked universe is below the configured minimum.
 - Ranked enrichment metrics are defined as:
   - signed Wald statistic when available;
   - signed `-log10(pvalue)` as fallback;
@@ -202,7 +204,7 @@ Current state:
 
 Remaining work:
 
-- Add warnings when too few ranked genes map to the resource.
+- No remaining RNA-seq ranked enrichment/GSEA parity items in this section.
 
 ## 7. miRNA Target Enrichment
 
