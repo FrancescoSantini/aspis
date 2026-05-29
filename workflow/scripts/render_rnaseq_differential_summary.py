@@ -42,11 +42,37 @@ MANIFEST_COLUMNS = [
     "pca_metrics_tsv",
     "sample_distance_pdf",
     "heatmap_panel_tsv",
+    "novelty_summary_tsv",
     "n_features",
     "n_significant",
     "n_up",
     "n_down",
 ]
+NOVELTY_SUMMARY_COLUMNS = [
+    "project",
+    "level",
+    "contrast_id",
+    "transcript_novelty",
+    "transcript_plot_group",
+    "transcript_plot_label",
+    "class_codes",
+    "n_tested",
+    "fraction_tested",
+    "n_significant",
+    "fraction_significant",
+    "n_up",
+    "n_down",
+    "n_true_novel_candidates",
+    "n_significant_true_novel_candidates",
+]
+NOVELTY_SORT_ORDER = {
+    "known": 0,
+    "novel_isoform": 1,
+    "novel_locus": 2,
+    "ambiguous": 3,
+    "artifact_or_low_confidence": 4,
+    "unclassified": 5,
+}
 PCA_INTERPRETATION_NOTE = (
     "Lack of clear PCA clustering is not automatically a failed analysis; it can reflect weak "
     "biological effect, small sample size, strong individual variation, batch or covariate "
@@ -112,6 +138,112 @@ def count_direction(rows: list[dict[str, str]]) -> tuple[int, int]:
     return n_up, n_down
 
 
+def fraction_text(numerator: int, denominator: int) -> str:
+    if denominator <= 0:
+        return "0.000000"
+    return f"{numerator / denominator:.6f}"
+
+
+def truthy(value: str) -> bool:
+    return value.strip().lower() in {"1", "true", "yes", "y"}
+
+
+def novelty_label(row: dict[str, str], plot_group: str) -> str:
+    label = row.get("transcript_plot_label", "")
+    if label:
+        return label
+    return plot_group.replace("_", " ").title()
+
+
+def write_transcript_novelty_summary(
+    path: Path,
+    row: dict[str, str],
+    result_rows: list[dict[str, str]],
+    filtered_rows: list[dict[str, str]],
+) -> list[dict[str, str]]:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if not result_rows:
+        summary_rows: list[dict[str, str]] = []
+    else:
+        feature_column = first_feature_column(result_rows)
+        filtered_feature_column = first_feature_column(filtered_rows) if filtered_rows else feature_column
+        significant_ids = {filtered.get(filtered_feature_column, "") for filtered in filtered_rows}
+        groups: dict[tuple[str, str, str], dict[str, object]] = {}
+        for result in result_rows:
+            novelty = result.get("transcript_novelty", "") or "unclassified"
+            plot_group = result.get("transcript_plot_group", "") or novelty
+            plot_label = novelty_label(result, plot_group)
+            key = (novelty, plot_group, plot_label)
+            group = groups.setdefault(
+                key,
+                {
+                    "class_codes": set(),
+                    "n_tested": 0,
+                    "n_significant": 0,
+                    "n_up": 0,
+                    "n_down": 0,
+                    "n_true_novel_candidates": 0,
+                    "n_significant_true_novel_candidates": 0,
+                },
+            )
+            group["n_tested"] = int(group["n_tested"]) + 1
+            class_code = result.get("class_code", "")
+            if class_code:
+                group["class_codes"].add(class_code)  # type: ignore[union-attr]
+            is_true_novel = truthy(result.get("true_novel_candidate", ""))
+            if is_true_novel:
+                group["n_true_novel_candidates"] = int(group["n_true_novel_candidates"]) + 1
+            feature_id = result.get(feature_column, "")
+            if feature_id not in significant_ids:
+                continue
+            group["n_significant"] = int(group["n_significant"]) + 1
+            if is_true_novel:
+                group["n_significant_true_novel_candidates"] = int(group["n_significant_true_novel_candidates"]) + 1
+            log2fc = numeric_value(result, "log2FoldChange")
+            if log2fc is None:
+                continue
+            if log2fc > 0:
+                group["n_up"] = int(group["n_up"]) + 1
+            elif log2fc < 0:
+                group["n_down"] = int(group["n_down"]) + 1
+        n_total = len(result_rows)
+        n_significant_total = len(significant_ids)
+        summary_rows = []
+        for novelty, plot_group, plot_label in sorted(
+            groups,
+            key=lambda item: (NOVELTY_SORT_ORDER.get(item[0], 99), item[0], item[1], item[2]),
+        ):
+            group = groups[(novelty, plot_group, plot_label)]
+            class_codes = sorted(group["class_codes"])  # type: ignore[arg-type]
+            n_tested = int(group["n_tested"])
+            n_significant = int(group["n_significant"])
+            summary_rows.append(
+                {
+                    "project": row["project"],
+                    "level": row["level"],
+                    "contrast_id": row["contrast_id"],
+                    "transcript_novelty": novelty,
+                    "transcript_plot_group": plot_group,
+                    "transcript_plot_label": plot_label,
+                    "class_codes": ",".join(class_codes),
+                    "n_tested": str(n_tested),
+                    "fraction_tested": fraction_text(n_tested, n_total),
+                    "n_significant": str(n_significant),
+                    "fraction_significant": fraction_text(n_significant, n_significant_total),
+                    "n_up": str(group["n_up"]),
+                    "n_down": str(group["n_down"]),
+                    "n_true_novel_candidates": str(group["n_true_novel_candidates"]),
+                    "n_significant_true_novel_candidates": str(group["n_significant_true_novel_candidates"]),
+                }
+            )
+    with path.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=NOVELTY_SUMMARY_COLUMNS, delimiter="\t", lineterminator="\n")
+        writer.writeheader()
+        for summary_row in summary_rows:
+            writer.writerow({column: summary_row.get(column, "") for column in NOVELTY_SUMMARY_COLUMNS})
+    return summary_rows
+
+
 def first_summary_row(path: Path) -> dict[str, str]:
     _, rows = read_table(path)
     return rows[0] if rows else {}
@@ -165,6 +297,33 @@ def top_feature_table(rows: list[dict[str, str]], top_n: int) -> str:
   </table>"""
 
 
+def transcript_novelty_section(level: str, novelty_rows: list[dict[str, str]]) -> str:
+    if level != "transcript":
+        return ""
+    if not novelty_rows:
+        return """<h2>Transcript Novelty Summary</h2>
+  <p>No transcript novelty summary rows were available.</p>"""
+    body = "\n".join(
+        "<tr>"
+        f"<td>{html.escape(row['transcript_plot_label'])}</td>"
+        f"<td><code>{html.escape(row['transcript_novelty'])}</code></td>"
+        f"<td>{html.escape(row['class_codes'])}</td>"
+        f"<td>{html.escape(row['n_tested'])}</td>"
+        f"<td>{html.escape(row['fraction_tested'])}</td>"
+        f"<td>{html.escape(row['n_significant'])}</td>"
+        f"<td>{html.escape(row['fraction_significant'])}</td>"
+        f"<td>{html.escape(row['n_up'])}</td>"
+        f"<td>{html.escape(row['n_down'])}</td>"
+        "</tr>"
+        for row in novelty_rows
+    )
+    return f"""<h2>Transcript Novelty Summary</h2>
+  <table>
+    <tr><th>panel</th><th>novelty class</th><th>class codes</th><th>tested</th><th>tested fraction</th><th>significant</th><th>significant fraction</th><th>up</th><th>down</th></tr>
+{body}
+  </table>"""
+
+
 def artifact_panel(label: str, path: str, html_path: Path, mime_type: str) -> str:
     link = html.escape(relative_link(path, html_path))
     title = html.escape(label)
@@ -197,6 +356,7 @@ def render_html(
     metrics: dict[str, str],
     filtered_rows: list[dict[str, str]],
     resources: dict[str, dict[str, str]],
+    novelty_rows: list[dict[str, str]],
     top_n: int,
 ) -> str:
     title = f"{row['project']} {row['level']} {row['contrast_id']}"
@@ -225,6 +385,7 @@ def render_html(
         ("PCA metrics", row.get("pca_metrics_tsv", "")),
         ("Heatmap panels", row.get("heatmap_panel_tsv", "")),
         ("Plot groups", row.get("plot_group_tsv", "")),
+        ("Transcript novelty summary", row.get("novelty_summary_tsv", "")),
         ("Enrichment manifest", row["enrichment_manifest"]),
     ]
     feature_set_results = resources.get("feature_set_results", {}).get("path", "")
@@ -239,6 +400,7 @@ def render_html(
     artifact_rows = "\n".join(
         f"<li><a href=\"{html.escape(relative_link(path, output))}\">{html.escape(label)}</a></li>"
         for label, path in artifacts
+        if path
     )
     return f"""<!doctype html>
 <html lang="en">
@@ -261,6 +423,7 @@ def render_html(
   <table>
 {metric_rows}
   </table>
+  {transcript_novelty_section(row['level'], novelty_rows)}
   <h2>Plots</h2>
   <p class="note">{html.escape(PCA_INTERPRETATION_NOTE)}</p>
   <div class="plots">
@@ -292,6 +455,12 @@ def render_ready_row(row: dict[str, str], top_n: int) -> dict[str, str]:
     summary = first_summary_row(summary_path)
     pca_metrics = first_existing_row(row.get("pca_metrics_tsv", ""))
     n_up, n_down = count_direction(filtered_rows)
+    novelty_summary_tsv = row.get("novelty_summary_tsv", "")
+    novelty_rows = (
+        write_transcript_novelty_summary(Path(novelty_summary_tsv), row, result_rows, filtered_rows)
+        if row["level"] == "transcript" and novelty_summary_tsv
+        else []
+    )
     metrics = {
         "project": row["project"],
         "level": row["level"],
@@ -311,7 +480,7 @@ def render_ready_row(row: dict[str, str], top_n: int) -> dict[str, str]:
 
     output = Path(row["summary_html"])
     output.parent.mkdir(parents=True, exist_ok=True)
-    output.write_text(render_html(row, metrics, filtered_rows, resources, top_n), encoding="utf-8")
+    output.write_text(render_html(row, metrics, filtered_rows, resources, novelty_rows, top_n), encoding="utf-8")
     return {
         "project": row["project"],
         "level": row["level"],
@@ -325,6 +494,7 @@ def render_ready_row(row: dict[str, str], top_n: int) -> dict[str, str]:
         "pca_metrics_tsv": row.get("pca_metrics_tsv", ""),
         "sample_distance_pdf": row.get("sample_distance_pdf", ""),
         "heatmap_panel_tsv": row.get("heatmap_panel_tsv", ""),
+        "novelty_summary_tsv": novelty_summary_tsv,
         "n_features": str(len(result_rows)),
         "n_significant": str(len(filtered_rows)),
         "n_up": str(n_up),
@@ -350,6 +520,7 @@ def render_rows(plan_rows: list[dict[str, str]], top_n: int) -> list[dict[str, s
                     "pca_metrics_tsv": row.get("pca_metrics_tsv", ""),
                     "sample_distance_pdf": row.get("sample_distance_pdf", ""),
                     "heatmap_panel_tsv": row.get("heatmap_panel_tsv", ""),
+                    "novelty_summary_tsv": row.get("novelty_summary_tsv", ""),
                     "n_features": "0",
                     "n_significant": "0",
                     "n_up": "0",

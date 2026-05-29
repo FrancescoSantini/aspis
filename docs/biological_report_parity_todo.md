@@ -116,28 +116,25 @@ Current state:
 - The new pipeline no longer treats every assembled transcript as simply novel.
 - It uses compatibility/novelty classes derived from gffcompare/stringtie
   metadata.
+- Transcript metadata emits detailed internal discovery classes for reference
+  matches, reference-compatible overlaps, novel isoforms of known genes, true
+  novel loci, ambiguous overlaps, and likely artifact/repeat classes.
+- Transcript plots preserve simplified user-facing panels for all features,
+  known-compatible transcripts, novel isoforms, true novel loci, ambiguous
+  overlaps, and likely artifact/repeat classes.
+- Transcript differential reports write a per-contrast `novelty_summary.tsv`
+  with tested/significant/up/down counts and fractions for each novelty class.
+- Contract checks now assert novelty propagation into transcript DESeq2 result
+  metadata, transcript plot-group manifests, isoform-switch reports, and
+  biotype/discovery summaries.
+- The high true-novel transcript fraction warning is configurable and opt-in:
+  `biological_qc.warn_high_true_novel_transcript_fraction` enables it, while
+  `biological_qc.true_novel_transcript_reference_fraction` controls the
+  reference fraction used in summaries and warnings.
 
 Remaining work:
 
-- Keep the detailed novelty classes internally:
-  - known/reference-compatible;
-  - novel isoform of known gene;
-  - true novel locus;
-  - ambiguous overlap;
-  - artifact or low-confidence.
-- Preserve simplified user-facing plot panels:
-  - all;
-  - known-compatible;
-  - novel isoforms;
-  - true novel loci.
-- Add explicit counts/fractions for each novelty class in the report.
-- Keep a configurable threshold/warning for unexpectedly high true-novel
-  fraction, but do not treat the threshold as a biological law.
-- Ensure novelty labels propagate consistently into:
-  - transcript DESeq2 results;
-  - transcript volcano/heatmap reports;
-  - isoform-switch reports;
-  - biotype summaries.
+- No remaining known/novel transcript logic items in this section.
 
 ## 5. RNA-seq ORA
 
