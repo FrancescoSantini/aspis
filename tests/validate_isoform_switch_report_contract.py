@@ -64,6 +64,10 @@ def main() -> int:
             + "\t".join(["tx_novel", "geneA", "GeneA", "0.42", "0.01", "0.28", "0.70", "6", "NMD_sensitive", "coding"])
             + "\n"
             + "\t".join(["tx_context", "geneA", "GeneA", "0.03", "0.8", "0.05", "0.06", "3", "not_NMD", "coding"])
+            + "\n"
+            + "\t".join(["lnc_short", "geneB", "LncB", "-0.31", "0.02", "0.65", "0.34", "", "", "noncoding"])
+            + "\n"
+            + "\t".join(["lnc_long", "geneB", "LncB", "0.31", "0.02", "0.35", "0.66", "", "", "noncoding"])
             + "\n",
         )
         write(
@@ -75,7 +79,7 @@ def main() -> int:
         )
         write(
             nt_fasta,
-            ">tx_known\nATGGCCATGGCC\n>tx_novel\nATGGCCATGGCCCCCGGG\n",
+            ">tx_known\nATGGCCATGGCC\n>tx_novel\nATGGCCATGGCCCCCGGG\n>lnc_short\nATGATGATG\n>lnc_long\nATGATGATGCCCCCCCC\n",
         )
         write(
             aa_fasta,
@@ -91,27 +95,36 @@ def main() -> int:
                     "transcript_novelty",
                     "transcript_plot_group",
                     "gffcompare_class_code",
+                    "gene_biotype",
+                    "transcript_biotype",
                 ]
             )
             + "\n"
-            + "\t".join(["tx_known", "geneA", "reference_compatible", "known", "known_compatible", "="])
+            + "\t".join(["tx_known", "geneA", "reference_compatible", "known", "known_compatible", "=", "protein_coding", "protein_coding"])
             + "\n"
-            + "\t".join(["tx_novel", "geneA", "novel_isoform", "novel", "novel_isoform", "j"])
+            + "\t".join(["tx_novel", "geneA", "novel_isoform", "novel", "novel_isoform", "j", "protein_coding", "protein_coding"])
             + "\n"
-            + "\t".join(["tx_context", "geneA", "reference_compatible", "known", "known_compatible", "c"])
+            + "\t".join(["tx_context", "geneA", "reference_compatible", "known", "known_compatible", "c", "protein_coding", "protein_coding"])
+            + "\n"
+            + "\t".join(["lnc_short", "geneB", "reference_compatible", "known", "known_compatible", "=", "lncRNA", "lncRNA"])
+            + "\n"
+            + "\t".join(["lnc_long", "geneB", "novel_isoform", "novel", "novel_isoform", "j", "lncRNA", "lncRNA"])
             + "\n",
         )
         write(
             gtf,
-            'chr1\tASPIS\texon\t1\t6\t.\t+\t.\tgene_id "geneA"; transcript_id "tx_known"; gene_name "GeneA";\n'
-            'chr1\tASPIS\texon\t80\t85\t.\t+\t.\tgene_id "geneA"; transcript_id "tx_known"; gene_name "GeneA";\n'
-            'chr1\tASPIS\tCDS\t1\t6\t.\t+\t0\tgene_id "geneA"; transcript_id "tx_known"; gene_name "GeneA";\n'
-            'chr1\tASPIS\tCDS\t80\t85\t.\t+\t0\tgene_id "geneA"; transcript_id "tx_known"; gene_name "GeneA";\n'
-            'chr1\tASPIS\texon\t1\t6\t.\t+\t.\tgene_id "geneA"; transcript_id "tx_novel"; gene_name "GeneA";\n'
-            'chr1\tASPIS\texon\t150\t161\t.\t+\t.\tgene_id "geneA"; transcript_id "tx_novel"; gene_name "GeneA";\n'
-            'chr1\tASPIS\tCDS\t1\t6\t.\t+\t0\tgene_id "geneA"; transcript_id "tx_novel"; gene_name "GeneA";\n'
-            'chr1\tASPIS\tCDS\t150\t161\t.\t+\t0\tgene_id "geneA"; transcript_id "tx_novel"; gene_name "GeneA";\n'
-            'chr1\tASPIS\texon\t1\t6\t.\t+\t.\tgene_id "geneA"; transcript_id "tx_context"; gene_name "GeneA";\n',
+            'chr1\tASPIS\texon\t1\t6\t.\t+\t.\tgene_id "geneA"; transcript_id "tx_known"; gene_name "GeneA"; gene_biotype "protein_coding"; transcript_biotype "protein_coding";\n'
+            'chr1\tASPIS\texon\t80\t85\t.\t+\t.\tgene_id "geneA"; transcript_id "tx_known"; gene_name "GeneA"; gene_biotype "protein_coding"; transcript_biotype "protein_coding";\n'
+            'chr1\tASPIS\tCDS\t1\t6\t.\t+\t0\tgene_id "geneA"; transcript_id "tx_known"; gene_name "GeneA"; gene_biotype "protein_coding"; transcript_biotype "protein_coding";\n'
+            'chr1\tASPIS\tCDS\t80\t85\t.\t+\t0\tgene_id "geneA"; transcript_id "tx_known"; gene_name "GeneA"; gene_biotype "protein_coding"; transcript_biotype "protein_coding";\n'
+            'chr1\tASPIS\texon\t1\t6\t.\t+\t.\tgene_id "geneA"; transcript_id "tx_novel"; gene_name "GeneA"; gene_biotype "protein_coding"; transcript_biotype "protein_coding";\n'
+            'chr1\tASPIS\texon\t150\t161\t.\t+\t.\tgene_id "geneA"; transcript_id "tx_novel"; gene_name "GeneA"; gene_biotype "protein_coding"; transcript_biotype "protein_coding";\n'
+            'chr1\tASPIS\tCDS\t1\t6\t.\t+\t0\tgene_id "geneA"; transcript_id "tx_novel"; gene_name "GeneA"; gene_biotype "protein_coding"; transcript_biotype "protein_coding";\n'
+            'chr1\tASPIS\tCDS\t150\t161\t.\t+\t0\tgene_id "geneA"; transcript_id "tx_novel"; gene_name "GeneA"; gene_biotype "protein_coding"; transcript_biotype "protein_coding";\n'
+            'chr1\tASPIS\texon\t1\t6\t.\t+\t.\tgene_id "geneA"; transcript_id "tx_context"; gene_name "GeneA"; gene_biotype "protein_coding"; transcript_biotype "protein_coding";\n'
+            'chr2\tASPIS\texon\t10\t18\t.\t+\t.\tgene_id "geneB"; transcript_id "lnc_short"; gene_name "LncB"; gene_biotype "lncRNA"; transcript_biotype "lncRNA";\n'
+            'chr2\tASPIS\texon\t10\t18\t.\t+\t.\tgene_id "geneB"; transcript_id "lnc_long"; gene_name "LncB"; gene_biotype "lncRNA"; transcript_biotype "lncRNA";\n'
+            'chr2\tASPIS\texon\t80\t86\t.\t+\t.\tgene_id "geneB"; transcript_id "lnc_long"; gene_name "LncB"; gene_biotype "lncRNA"; transcript_biotype "lncRNA";\n',
         )
         write(
             annotations,
@@ -136,6 +149,8 @@ def main() -> int:
             str(outdir / "switch_candidates.tsv"),
             "--event-summary",
             str(outdir / "switch_event_summary.tsv"),
+            "--ncrna-switch-table",
+            str(outdir / "ncrna_switch_interpretation.tsv"),
             "--sequence-table",
             str(outdir / "switch_sequence_summary.tsv"),
             "--functional-annotation-table",
@@ -167,13 +182,18 @@ def main() -> int:
 
         candidates = read_rows(outdir / "switch_candidates.tsv")
         events = read_rows(outdir / "switch_event_summary.tsv")
+        ncrna_rows = read_rows(outdir / "ncrna_switch_interpretation.tsv")
         sequences = read_rows(outdir / "switch_sequence_summary.tsv")
         annotation_rows = read_rows(outdir / "functional_annotation_summary.tsv")
         plots = read_rows(outdir / "switch_plot_manifest.tsv")
-        assert len(events) == 1, events
+        assert len(events) == 2, events
+        assert {row["switch_biotype_class"] for row in events} >= {"coding", "noncoding"}, events
         assert {row["switch_role"] for row in candidates} >= {"switch_in", "switch_out"}, candidates
+        assert any(row["gene_biotype"] == "lncRNA" and row["switch_biotype_class"] == "noncoding" for row in candidates)
         assert candidates[0]["switch_rank"] == "1"
         assert candidates[0]["reason_selected"]
+        assert any(row["gene_id"] == "geneB" and row["interpretation_label"] == "noncoding_structure_change" for row in ncrna_rows), ncrna_rows
+        assert any(row["gene_id"] == "geneB" and row["transcript_length_change"] for row in ncrna_rows), ncrna_rows
         assert any(row["isoform_id"] == "tx_novel" and row["aa_sequence"] == "MAMAPG" for row in sequences)
         assert any(row["isoform_id"] == "tx_novel" and row["gained_exon_coordinates"] for row in sequences)
         assert any(row["isoform_id"] == "tx_novel" and row["affected_aa_sequence"] for row in sequences)

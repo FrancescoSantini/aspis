@@ -103,6 +103,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--isoform-switch-html", default="", help="Optional isoform-switch HTML report")
     parser.add_argument("--isoform-switch-candidates", default="", help="Optional isoform-switch candidate table")
     parser.add_argument("--isoform-switch-events", default="", help="Optional isoform-switch event table")
+    parser.add_argument("--isoform-switch-ncrna", default="", help="Optional isoform-switch ncRNA interpretation table")
     parser.add_argument("--isoform-switch-plots", default="", help="Optional isoform-switch plot manifest")
     parser.add_argument("--isoform-switch-plots-pdf", default="", help="Optional isoform-switch multi-page plot PDF")
     parser.add_argument("--asset-manifest", required=True, help="Report asset inventory TSV")
@@ -342,6 +343,7 @@ def render_html(
     isoform_switch_html: str = "",
     isoform_switch_candidates: str = "",
     isoform_switch_events: str = "",
+    isoform_switch_ncrna: str = "",
     isoform_switch_plots: str = "",
     isoform_switch_plots_pdf: str = "",
 ) -> str:
@@ -359,6 +361,7 @@ def render_html(
             ("isoform switch report", isoform_switch_html),
             ("isoform switch candidates", isoform_switch_candidates),
             ("isoform switch events", isoform_switch_events),
+            ("isoform switch ncRNA interpretation", isoform_switch_ncrna),
             ("isoform switch plots", isoform_switch_plots),
             ("isoform switch PDF", isoform_switch_plots_pdf),
         ],
@@ -542,6 +545,7 @@ def main() -> int:
             args.isoform_switch_html,
             args.isoform_switch_candidates,
             args.isoform_switch_events,
+            args.isoform_switch_ncrna,
             args.isoform_switch_plots,
             args.isoform_switch_plots_pdf,
         ),
@@ -551,6 +555,7 @@ def main() -> int:
         ("report_html", "html", args.isoform_switch_html, "ok"),
         ("candidate_table", "table", args.isoform_switch_candidates, "ok"),
         ("event_summary", "table", args.isoform_switch_events, "ok"),
+        ("ncrna_switch_interpretation", "table", args.isoform_switch_ncrna, "ok"),
         ("plot_manifest", "manifest", args.isoform_switch_plots, "ok"),
         ("plots_pdf", "plot", args.isoform_switch_plots_pdf, "ok"),
     ]
