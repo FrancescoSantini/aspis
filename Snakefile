@@ -2751,6 +2751,11 @@ rule render_smallrna_biological_warnings:
             [smallrna_length_qc_outputs(wildcards.project)["arm_summary"]]
             if SMALLRNA_LENGTH_QC_RUN
             else []
+        ),
+        mirna_deseq2_manifest=lambda wildcards: (
+            [f"{BRANCH_DIR}/smallrna/{wildcards.project}/smallrna/differential/mirna_deseq2/deseq2_manifest.tsv"]
+            if SMALLRNA_DIFFERENTIAL_RUN
+            else []
         )
     output:
         warnings=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/biological_warnings/warnings.tsv",
@@ -2795,9 +2800,26 @@ rule render_smallrna_biological_warnings:
             if SMALLRNA_LENGTH_QC_RUN
             else "",
         ),
+        mirna_deseq2_manifest=lambda wildcards: optional_shell_arg(
+            "--deseq2-manifest",
+            f"{BRANCH_DIR}/smallrna/{wildcards.project}/smallrna/differential/mirna_deseq2/deseq2_manifest.tsv"
+            if SMALLRNA_DIFFERENTIAL_RUN
+            else "",
+        ),
         min_detected_features=BIOLOGICAL_QC.get("min_detected_features", 10),
         min_library_size=BIOLOGICAL_QC.get("min_library_size", 100),
         min_sample_correlation=BIOLOGICAL_QC.get("min_sample_correlation", 0.6),
+        min_deseq2_replicates=BIOLOGICAL_QC.get(
+            "min_mirna_deseq2_replicates",
+            BIOLOGICAL_QC.get(
+                "min_deseq2_replicates",
+                SMALLRNA.get("min_replicates_per_group", 2),
+            ),
+        ),
+        min_deseq2_tested_features=BIOLOGICAL_QC.get(
+            "min_mirna_deseq2_tested_features",
+            BIOLOGICAL_QC.get("min_deseq2_tested_features", 10),
+        ),
         max_residual_genome_fraction=BIOLOGICAL_QC.get("max_residual_genome_fraction", 0.5)
     log:
         "logs/branches/smallrna/{project}.biological_warnings.log"
@@ -2814,6 +2836,7 @@ rule render_smallrna_biological_warnings:
           {params.residual_biotype_counts} \
           {params.length_stage_summary} \
           {params.arm_summary} \
+          {params.mirna_deseq2_manifest} \
           --outdir {params.outdir:q} \
           --warnings {output.warnings:q} \
           --summary-html {output.html:q} \
@@ -2822,6 +2845,8 @@ rule render_smallrna_biological_warnings:
           --min-detected-features {params.min_detected_features:q} \
           --min-library-size {params.min_library_size:q} \
           --min-sample-correlation {params.min_sample_correlation:q} \
+          --min-deseq2-replicates {params.min_deseq2_replicates:q} \
+          --min-deseq2-tested-features {params.min_deseq2_tested_features:q} \
           --max-residual-genome-fraction {params.max_residual_genome_fraction:q} \
           > {log:q} 2>&1
         """
@@ -4351,6 +4376,16 @@ rule render_rnaseq_biological_warnings:
             [f"{BRANCH_DIR}/rnaseq/{wildcards.project}/quantification/biotypes/transcript_discovery_differential_summary.tsv"]
             if RNASEQ_BIOTYPE_SUMMARY_RUN
             else []
+        ),
+        gene_deseq2_manifest=lambda wildcards: (
+            [f"{BRANCH_DIR}/rnaseq/{wildcards.project}/differential/gene_deseq2/deseq2_manifest.tsv"]
+            if RNASEQ_DIFFERENTIAL.get("run", False) and "gene" in RNASEQ_DIFFERENTIAL_LEVELS
+            else []
+        ),
+        transcript_deseq2_manifest=lambda wildcards: (
+            [f"{BRANCH_DIR}/rnaseq/{wildcards.project}/differential/transcript_deseq2/deseq2_manifest.tsv"]
+            if RNASEQ_DIFFERENTIAL.get("run", False) and "transcript" in RNASEQ_DIFFERENTIAL_LEVELS
+            else []
         )
     output:
         warnings=f"{BRANCH_DIR}" + "/rnaseq/{project}/biological_warnings/warnings.tsv",
@@ -4401,9 +4436,26 @@ rule render_rnaseq_biological_warnings:
             if RNASEQ_BIOTYPE_SUMMARY_RUN
             else "",
         ),
+        gene_deseq2_manifest=lambda wildcards: optional_shell_arg(
+            "--deseq2-manifest",
+            f"{BRANCH_DIR}/rnaseq/{wildcards.project}/differential/gene_deseq2/deseq2_manifest.tsv"
+            if RNASEQ_DIFFERENTIAL.get("run", False) and "gene" in RNASEQ_DIFFERENTIAL_LEVELS
+            else "",
+        ),
+        transcript_deseq2_manifest=lambda wildcards: optional_shell_arg(
+            "--deseq2-manifest",
+            f"{BRANCH_DIR}/rnaseq/{wildcards.project}/differential/transcript_deseq2/deseq2_manifest.tsv"
+            if RNASEQ_DIFFERENTIAL.get("run", False) and "transcript" in RNASEQ_DIFFERENTIAL_LEVELS
+            else "",
+        ),
         min_detected_features=BIOLOGICAL_QC.get("min_detected_features", 10),
         min_library_size=BIOLOGICAL_QC.get("min_library_size", 100),
         min_sample_correlation=BIOLOGICAL_QC.get("min_sample_correlation", 0.6),
+        min_deseq2_replicates=BIOLOGICAL_QC.get(
+            "min_deseq2_replicates",
+            RNASEQ_DIFFERENTIAL.get("min_replicates_per_group", 2),
+        ),
+        min_deseq2_tested_features=BIOLOGICAL_QC.get("min_deseq2_tested_features", 10),
         max_unclassified_biotype_fraction=BIOLOGICAL_QC.get("max_unclassified_biotype_fraction", 0.5),
         max_true_novel_transcript_fraction=BIOLOGICAL_QC.get(
             "max_true_novel_transcript_fraction",
@@ -4430,6 +4482,8 @@ rule render_rnaseq_biological_warnings:
           {params.biotype_differential_summary} \
           {params.transcript_discovery_summary} \
           {params.transcript_discovery_differential_summary} \
+          {params.gene_deseq2_manifest} \
+          {params.transcript_deseq2_manifest} \
           --outdir {params.outdir:q} \
           --warnings {output.warnings:q} \
           --summary-html {output.html:q} \
@@ -4438,6 +4492,8 @@ rule render_rnaseq_biological_warnings:
           --min-detected-features {params.min_detected_features:q} \
           --min-library-size {params.min_library_size:q} \
           --min-sample-correlation {params.min_sample_correlation:q} \
+          --min-deseq2-replicates {params.min_deseq2_replicates:q} \
+          --min-deseq2-tested-features {params.min_deseq2_tested_features:q} \
           --max-unclassified-biotype-fraction {params.max_unclassified_biotype_fraction:q} \
           {params.warn_high_true_novel_fraction} \
           --max-true-novel-transcript-fraction {params.max_true_novel_transcript_fraction:q} \
