@@ -205,8 +205,10 @@ def parse_args() -> argparse.Namespace:
         "--functional-annotation-tables",
         default="",
         help=(
-            "Optional comma-separated TSVs with protein/domain annotations. "
-            "Supported identifiers: isoform_id, transcript_id, or protein_id."
+            "Optional comma-separated annotation files. Supports generic TSVs "
+            "with isoform_id/transcript_id/protein_id plus native InterProScan "
+            "TSV, HMMER/Pfam domtblout, CPAT/CPC2 TSV, SignalP summary, "
+            "DeepTMHMM/TMHMM GFF-like output, DeepLoc2 TSV, and IUPred2A table/raw output."
         ),
     )
     parser.add_argument("--interproscan-command", default="", help="Optional command template for InterProScan")
@@ -270,6 +272,19 @@ def first_column(fieldnames: Iterable[str], candidates: Iterable[str]) -> str:
     return ""
 
 
+def normalized_key(value: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "_", value.strip().lower().lstrip("#")).strip("_")
+
+
+def value_by_normalized_key(row: dict[str, str], names: Iterable[str]) -> str:
+    lookup = {normalized_key(key): value for key, value in row.items()}
+    for name in names:
+        value = lookup.get(normalized_key(name), "")
+        if value != "":
+            return value
+    return ""
+
+
 def find_statistic_column(fieldnames: Iterable[str]) -> str:
     preferred = [
         "isoform_switch_q_value",
@@ -298,6 +313,303 @@ def to_float(value: str) -> Optional[float]:
     if math.isnan(parsed):
         return None
     return parsed
+
+
+def annotation_row(
+    *,
+    isoform_id: str,
+    source: str,
+    feature_type: str,
+    feature_id: str = "",
+    feature_name: str = "",
+    start_aa: str = "",
+    end_aa: str = "",
+    score: str = "",
+    description: str = "",
+) -> dict[str, str]:
+    return {
+        "isoform_id": isoform_id,
+        "source": source,
+        "feature_type": feature_type,
+        "feature_id": feature_id,
+        "feature_name": feature_name,
+        "start_aa": start_aa,
+        "end_aa": end_aa,
+        "score": score,
+        "description": description,
+    }
+
+
+def parse_signalp_cleavage(value: str) -> tuple[str, str]:
+    if not value:
+        return "", ""
+    match = re.search(r"CS\s+pos:\s*(\d+)\s*-\s*(\d+)", value, flags=re.IGNORECASE)
+    if match:
+        return "1", match.group(1)
+    match = re.search(r"\b(\d+)\s*-\s*(\d+)\b", value)
+    if match:
+        return "1", match.group(1)
+    return "", ""
+
+
+def contiguous_intervals(positions: list[int]) -> list[tuple[int, int]]:
+    if not positions:
+        return []
+    sorted_positions = sorted(set(positions))
+    intervals = []
+    start = previous = sorted_positions[0]
+    for position in sorted_positions[1:]:
+        if position == previous + 1:
+            previous = position
+            continue
+        intervals.append((start, previous))
+        start = previous = position
+    intervals.append((start, previous))
+    return intervals
+
+
+def parse_interproscan_headerless(path: Path, lines: list[str]) -> list[dict[str, str]]:
+    rows = []
+    parsed_any = False
+    for line in lines:
+        if line.startswith("#"):
+            continue
+        parts = line.split("\t")
+        if len(parts) < 11:
+            return []
+        if not (parts[6].isdigit() and parts[7].isdigit()):
+            return []
+        parsed_any = True
+        interpro_accession = parts[11] if len(parts) > 11 and parts[11] != "-" else ""
+        interpro_description = parts[12] if len(parts) > 12 and parts[12] != "-" else ""
+        signature_accession = parts[4]
+        signature_description = parts[5]
+        analysis = parts[3]
+        rows.append(
+            annotation_row(
+                isoform_id=parts[0],
+                source=f"interproscan:{analysis}",
+                feature_type="protein_domain",
+                feature_id=interpro_accession or signature_accession,
+                feature_name=interpro_description or signature_description,
+                start_aa=parts[6],
+                end_aa=parts[7],
+                score=parts[8],
+                description=f"signature={signature_accession}; signature_description={signature_description}",
+            )
+        )
+    return rows if parsed_any else []
+
+
+def parse_hmmer_domtblout(path: Path, lines: list[str]) -> list[dict[str, str]]:
+    rows = []
+    parsed_any = False
+    for line in lines:
+        if line.startswith("#"):
+            continue
+        parts = line.split(maxsplit=22)
+        if len(parts) < 22:
+            continue
+        if not (parts[17].isdigit() and parts[18].isdigit()):
+            continue
+        parsed_any = True
+        target_name = parts[0]
+        target_accession = "" if parts[1] == "-" else parts[1]
+        description = parts[22] if len(parts) > 22 else target_name
+        rows.append(
+            annotation_row(
+                isoform_id=parts[3],
+                source="hmmer_domtblout",
+                feature_type="protein_domain",
+                feature_id=target_accession or target_name,
+                feature_name=target_name,
+                start_aa=parts[17],
+                end_aa=parts[18],
+                score=parts[12],
+                description=description,
+            )
+        )
+    return rows if parsed_any else []
+
+
+def parse_deeptmhmm_gff(path: Path, lines: list[str]) -> list[dict[str, str]]:
+    rows = []
+    parsed_any = False
+    for line in lines:
+        if line.startswith("#"):
+            continue
+        parts = line.split("\t")
+        if len(parts) < 9:
+            continue
+        feature = parts[2]
+        if feature.lower() not in {"tmhelix", "transmembrane", "inside", "outside", "signal", "signal_peptide"}:
+            continue
+        parsed_any = True
+        feature_type = "transmembrane" if feature.lower() in {"tmhelix", "transmembrane"} else "topology"
+        rows.append(
+            annotation_row(
+                isoform_id=parts[0],
+                source=parts[1] or "deeptmhmm",
+                feature_type=feature_type,
+                feature_id=feature,
+                feature_name=feature,
+                start_aa=parts[3],
+                end_aa=parts[4],
+                score="" if parts[5] == "." else parts[5],
+                description=parts[8],
+            )
+        )
+    return rows if parsed_any else []
+
+
+def parse_iupred_raw(path: Path, lines: list[str]) -> list[dict[str, str]]:
+    rows = []
+    current_id = ""
+    positions_by_id: dict[str, list[tuple[int, float]]] = defaultdict(list)
+    for line in lines:
+        if line.startswith("#"):
+            match = re.search(r"['\"]([^'\"]+)['\"]", line)
+            if match:
+                current_id = match.group(1)
+            continue
+        parts = line.split()
+        if len(parts) < 3 or not parts[0].isdigit() or not current_id:
+            continue
+        score = to_float(parts[2])
+        if score is not None:
+            positions_by_id[current_id].append((int(parts[0]), score))
+    for isoform_id, values in positions_by_id.items():
+        disordered = [position for position, score in values if score >= 0.5]
+        for start, end in contiguous_intervals(disordered):
+            max_score = max(score for position, score in values if start <= position <= end)
+            rows.append(
+                annotation_row(
+                    isoform_id=isoform_id,
+                    source="iupred2a",
+                    feature_type="disorder",
+                    feature_id="iupred2a_disorder",
+                    feature_name="predicted_disordered_region",
+                    start_aa=str(start),
+                    end_aa=str(end),
+                    score=f"{max_score:.6g}",
+                    description="IUPred2A score >= 0.5",
+                )
+            )
+    return rows
+
+
+def parse_structured_annotation_table(path: Path) -> list[dict[str, str]]:
+    fieldnames, raw_rows = read_table(path)
+    normalized_fields = {normalized_key(field) for field in fieldnames}
+    rows = []
+    is_interpro = {"protein_accession", "analysis", "signature_accession", "start", "stop"} <= normalized_fields
+    is_cpat = bool({"coding_prob", "coding_probability"} & normalized_fields and {"coding_label", "label"} & normalized_fields)
+    is_signalp = "prediction" in normalized_fields and bool({"cs_position", "cs_pos"} & normalized_fields)
+    is_deeploc = bool({"localizations", "localization"} & normalized_fields and {"protein_id", "protein_id_seq"} & normalized_fields)
+    is_iupred = "position" in normalized_fields and bool({"iupred2", "iupred_score", "score"} & normalized_fields)
+    if is_iupred:
+        grouped: dict[str, list[tuple[int, float]]] = defaultdict(list)
+        for raw in raw_rows:
+            isoform_id = value_by_normalized_key(raw, ["protein_id", "isoform_id", "transcript_id", "id", "query"])
+            position = value_by_normalized_key(raw, ["position", "pos", "aa_position"])
+            score = to_float(value_by_normalized_key(raw, ["iupred2", "iupred_score", "disorder_score", "score"]))
+            if isoform_id and position.isdigit() and score is not None:
+                grouped[isoform_id].append((int(position), score))
+        for isoform_id, values in grouped.items():
+            disordered = [position for position, score in values if score >= 0.5]
+            for start, end in contiguous_intervals(disordered):
+                max_score = max(score for position, score in values if start <= position <= end)
+                rows.append(
+                    annotation_row(
+                        isoform_id=isoform_id,
+                        source="iupred2a",
+                        feature_type="disorder",
+                        feature_id="iupred2a_disorder",
+                        feature_name="predicted_disordered_region",
+                        start_aa=str(start),
+                        end_aa=str(end),
+                        score=f"{max_score:.6g}",
+                        description="IUPred2A score >= 0.5",
+                    )
+                )
+        return rows
+    for raw in raw_rows:
+        if is_interpro:
+            analysis = value_by_normalized_key(raw, ["analysis"])
+            interpro_accession = value_by_normalized_key(raw, ["interpro_accession"])
+            signature_accession = value_by_normalized_key(raw, ["signature_accession"])
+            interpro_description = value_by_normalized_key(raw, ["interpro_description"])
+            signature_description = value_by_normalized_key(raw, ["signature_description"])
+            rows.append(
+                annotation_row(
+                    isoform_id=value_by_normalized_key(raw, ["protein_accession", "isoform_id", "query"]),
+                    source=f"interproscan:{analysis}",
+                    feature_type="protein_domain",
+                    feature_id=interpro_accession or signature_accession,
+                    feature_name=interpro_description or signature_description,
+                    start_aa=value_by_normalized_key(raw, ["start"]),
+                    end_aa=value_by_normalized_key(raw, ["stop", "end"]),
+                    score=value_by_normalized_key(raw, ["score", "evalue"]),
+                    description=f"signature={signature_accession}; signature_description={signature_description}",
+                )
+            )
+        elif is_cpat:
+            label = value_by_normalized_key(raw, ["coding_label", "label", "prediction"])
+            rows.append(
+                annotation_row(
+                    isoform_id=value_by_normalized_key(raw, ["id", "mrna", "seq_id", "transcript_id", "isoform_id", "query"]),
+                    source="coding_potential",
+                    feature_type="coding_potential",
+                    feature_id=label,
+                    feature_name=label,
+                    score=value_by_normalized_key(raw, ["coding_prob", "coding_probability"]),
+                    description="CPAT/CPC2 coding-potential prediction",
+                )
+            )
+        elif is_signalp:
+            prediction = value_by_normalized_key(raw, ["prediction"])
+            cleavage = value_by_normalized_key(raw, ["cs_position", "cs_pos", "cleavage_site"])
+            start, end = parse_signalp_cleavage(cleavage) if prediction and prediction.upper() != "OTHER" else ("", "")
+            rows.append(
+                annotation_row(
+                    isoform_id=value_by_normalized_key(raw, ["id", "protein_id", "isoform_id", "transcript_id"]),
+                    source="signalp",
+                    feature_type="signal_peptide",
+                    feature_id=prediction,
+                    feature_name=prediction,
+                    start_aa=start,
+                    end_aa=end,
+                    score=value_by_normalized_key(raw, ["sp_sec_spi", "signal_peptide_probability", "probability", "score"]),
+                    description=cleavage,
+                )
+            )
+        elif is_deeploc:
+            localization = value_by_normalized_key(raw, ["localizations", "localization"])
+            rows.append(
+                annotation_row(
+                    isoform_id=value_by_normalized_key(raw, ["protein_id", "id", "isoform_id", "transcript_id"]),
+                    source="deeploc2",
+                    feature_type="localization",
+                    feature_id=localization,
+                    feature_name=localization,
+                    score=value_by_normalized_key(raw, ["score", "probability"]),
+                    description=value_by_normalized_key(raw, ["signals", "signal"]),
+                )
+            )
+        else:
+            rows.append(raw)
+    return rows
+
+
+def native_annotation_rows(path: Path) -> list[dict[str, str]]:
+    lines = [line.rstrip("\n") for line in path.read_text(encoding="utf-8", errors="replace").splitlines() if line.strip()]
+    if not lines:
+        return []
+    for parser in [parse_deeptmhmm_gff, parse_hmmer_domtblout, parse_interproscan_headerless, parse_iupred_raw]:
+        parsed = parser(path, lines)
+        if parsed:
+            return parsed
+    return parse_structured_annotation_table(path)
 
 
 def parse_fasta(path: Path) -> dict[str, str]:
@@ -430,12 +742,13 @@ def normalized_annotations(
         path = Path(item)
         if not path.exists():
             raise FileNotFoundError(f"Functional annotation table does not exist: {path}")
-        fieldnames, raw_rows = read_table(path)
-        iso_col = first_column(fieldnames, ["isoform_id", "transcript_id", "protein_id", "query", "query_id"])
-        if not iso_col:
+        raw_rows = native_annotation_rows(path)
+        if not raw_rows:
+            continue
+        if not any(first_existing(raw, ["isoform_id", "transcript_id", "protein_id", "query", "query_id"]) for raw in raw_rows):
             raise ValueError(f"Annotation table lacks isoform/transcript/protein identifier column: {path}")
         for raw in raw_rows:
-            isoform_id = raw.get(iso_col, "")
+            isoform_id = first_existing(raw, ["isoform_id", "transcript_id", "protein_id", "query", "query_id"])
             if not isoform_id:
                 continue
             isoform_aliases = {isoform_id, isoform_id.split("|")[0], isoform_id.split(".")[0]}
