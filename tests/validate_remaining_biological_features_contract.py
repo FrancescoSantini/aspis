@@ -194,6 +194,7 @@ def exercise_inverse_target_featuresets() -> Path:
             "target_analysis_mode",
             "collection",
             "query_source",
+            "target_evidence_type",
             "target_universe_definition",
             "feature_set_version",
             "query_size",
@@ -203,6 +204,8 @@ def exercise_inverse_target_featuresets() -> Path:
     )
     if any(item["target_analysis_mode"] != "inverse_integrated_target_feature_set" for item in universe):
         raise ValueError(f"inverse target feature-set universe has unexpected mode: {universe}")
+    if any(item["target_evidence_type"] != "inverse_integrated" for item in universe):
+        raise ValueError(f"inverse target feature-set universe lost target evidence type: {universe}")
     if any(item["query_source"] != item["collection"] for item in universe):
         raise ValueError(f"inverse target feature-set universe has inconsistent query source: {universe}")
     if any(item["feature_set_version"] != "toy_pathway_2026_05" for item in universe):
@@ -213,6 +216,7 @@ def exercise_inverse_target_featuresets() -> Path:
             "target_analysis_mode",
             "collection",
             "query_source",
+            "target_evidence_type",
             "target_universe_definition",
             "feature_set_version",
             "set_id",
@@ -222,6 +226,8 @@ def exercise_inverse_target_featuresets() -> Path:
     )
     if any(item["target_analysis_mode"] != "inverse_integrated_target_feature_set" for item in results):
         raise ValueError(f"inverse target feature-set results have unexpected mode: {results}")
+    if any(item["target_evidence_type"] != "inverse_integrated" for item in results):
+        raise ValueError(f"inverse target feature-set results lost target evidence type: {results}")
     if any(item["query_source"] != item["collection"] for item in results):
         raise ValueError(f"inverse target feature-set results have inconsistent query source: {results}")
     if any(item["feature_set_version"] != "toy_pathway_2026_05" for item in results):
@@ -319,7 +325,7 @@ def exercise_mirna_mrna_target_modes() -> Path:
     targets = INPUT / "mirna_targets.tsv"
     write_tsv(
         targets,
-        ["contrast_id", "mirna_id", "target_id", "target_symbol", "target_source", "target_source_type"],
+        ["contrast_id", "mirna_id", "target_id", "target_symbol", "target_source", "target_source_type", "target_evidence_type"],
         [
             {
                 "contrast_id": "treated_vs_control",
@@ -328,6 +334,7 @@ def exercise_mirna_mrna_target_modes() -> Path:
                 "target_symbol": "Gene One",
                 "target_source": "validated_toy",
                 "target_source_type": "validated",
+                "target_evidence_type": "validated",
             },
             {
                 "contrast_id": "treated_vs_control",
@@ -336,6 +343,7 @@ def exercise_mirna_mrna_target_modes() -> Path:
                 "target_symbol": "Gene Two",
                 "target_source": "validated_toy",
                 "target_source_type": "validated",
+                "target_evidence_type": "validated",
             },
             {
                 "contrast_id": "treated_vs_control",
@@ -344,6 +352,7 @@ def exercise_mirna_mrna_target_modes() -> Path:
                 "target_symbol": "Gene Two",
                 "target_source": "predicted_toy",
                 "target_source_type": "predicted",
+                "target_evidence_type": "predicted",
             },
         ],
     )
@@ -407,6 +416,7 @@ def exercise_mirna_mrna_target_modes() -> Path:
             "target_universe_definition",
             "target_id",
             "target_source_type",
+            "target_evidence_type",
         },
     )
     modes = {item["target_analysis_mode"] for item in mode_rows}
@@ -414,9 +424,15 @@ def exercise_mirna_mrna_target_modes() -> Path:
         raise ValueError(f"target-analysis modes missing: {modes}")
     if any(not item["target_universe_definition"] for item in mode_rows):
         raise ValueError(f"target-mode universe definition missing: {mode_rows}")
+    expressed_modes = [item for item in mode_rows if item["target_analysis_mode"] == "expressed_target"]
+    inverse_modes = [item for item in mode_rows if item["target_analysis_mode"] == "inverse_integrated_target"]
+    if any(item["target_evidence_type"] != "matched_expressed" for item in expressed_modes):
+        raise ValueError(f"expressed target modes lost matched-expressed evidence label: {mode_rows}")
+    if any(item["target_evidence_type"] != "inverse_integrated" for item in inverse_modes):
+        raise ValueError(f"inverse target modes lost inverse-integrated evidence label: {mode_rows}")
     summaries = read_tsv(
         Path(row["mirna_mrna_target_mode_summary"]),
-        {"target_analysis_mode", "collection", "n_pairs", "n_targets", "target_universe_definition"},
+        {"target_analysis_mode", "collection", "target_evidence_type", "n_pairs", "n_targets", "target_universe_definition"},
     )
     summary_keys = {(item["target_analysis_mode"], item["collection"]) for item in summaries}
     expected_keys = {
@@ -427,6 +443,10 @@ def exercise_mirna_mrna_target_modes() -> Path:
     }
     if not expected_keys <= summary_keys:
         raise ValueError(f"target-mode summary missing expected collections: {summary_keys}")
+    if any(item["target_analysis_mode"] == "expressed_target" and item["target_evidence_type"] != "matched_expressed" for item in summaries):
+        raise ValueError(f"target-mode summary lost matched-expressed evidence label: {summaries}")
+    if any(item["target_analysis_mode"] == "inverse_integrated_target" and item["target_evidence_type"] != "inverse_integrated" for item in summaries):
+        raise ValueError(f"target-mode summary lost inverse-integrated evidence label: {summaries}")
     return manifest
 
 
