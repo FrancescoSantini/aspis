@@ -139,8 +139,9 @@ def main() -> int:
             'chr1\tASPIS\tCDS\t150\t161\t.\t+\t0\tgene_id "geneA"; transcript_id "tx_novel"; gene_name "GeneA"; gene_biotype "protein_coding"; transcript_biotype "protein_coding";\n'
             'chr1\tASPIS\texon\t1\t6\t.\t+\t.\tgene_id "geneA"; transcript_id "tx_context"; gene_name "GeneA"; gene_biotype "protein_coding"; transcript_biotype "protein_coding";\n'
             'chr2\tASPIS\texon\t10\t18\t.\t+\t.\tgene_id "geneB"; transcript_id "lnc_short"; gene_name "LncB"; gene_biotype "lncRNA"; transcript_biotype "lncRNA";\n'
-            'chr2\tASPIS\texon\t10\t18\t.\t+\t.\tgene_id "geneB"; transcript_id "lnc_long"; gene_name "LncB"; gene_biotype "lncRNA"; transcript_biotype "lncRNA";\n'
+            'chr2\tASPIS\texon\t5\t18\t.\t+\t.\tgene_id "geneB"; transcript_id "lnc_long"; gene_name "LncB"; gene_biotype "lncRNA"; transcript_biotype "lncRNA";\n'
             'chr2\tASPIS\texon\t80\t86\t.\t+\t.\tgene_id "geneB"; transcript_id "lnc_long"; gene_name "LncB"; gene_biotype "lncRNA"; transcript_biotype "lncRNA";\n'
+            'chr2\tASPIS\texon\t1\t4\t.\t+\t.\tgene_id "geneD"; transcript_id "near_prom"; gene_name "NearProm"; gene_biotype "protein_coding"; transcript_biotype "protein_coding";\n'
             'chr3\tASPIS\texon\t20\t25\t.\t+\t.\tgene_id "geneC"; transcript_id "pg_short"; gene_name "PseudoC"; gene_biotype "processed_pseudogene"; transcript_biotype "processed_pseudogene";\n'
             'chr3\tASPIS\texon\t20\t25\t.\t+\t.\tgene_id "geneC"; transcript_id "pg_long"; gene_name "PseudoC"; gene_biotype "processed_pseudogene"; transcript_biotype "processed_pseudogene";\n'
             'chr3\tASPIS\texon\t110\t115\t.\t+\t.\tgene_id "geneC"; transcript_id "pg_long"; gene_name "PseudoC"; gene_biotype "processed_pseudogene"; transcript_biotype "processed_pseudogene";\n',
@@ -395,6 +396,10 @@ def main() -> int:
         assert "sno1" in lnc_long_rows[0]["host_smallrna_change"], lnc_long_rows
         assert "GENEA-AS" in lnc_long_rows[0]["resource_antisense_overlap"], lnc_long_rows
         assert "conserved_exon" in lnc_long_rows[0]["ncrna_resource_annotations"], lnc_long_rows
+        assert lnc_long_rows[0]["gained_splice_junctions"] == "chr2:19-79:+", lnc_long_rows
+        assert lnc_long_rows[0]["n_gained_splice_junctions"] == "1", lnc_long_rows
+        assert lnc_long_rows[0]["promoter_context_change"] == "upstream_TSS_shift:5bp", lnc_long_rows
+        assert "NearProm" in lnc_long_rows[0]["isoform_proximal_gene_context"], lnc_long_rows
         assert any(row["isoform_id"] == "tx_novel" and row["aa_sequence"] == "MAMAPG" for row in sequences)
         assert any(row["isoform_id"] == "tx_novel" and row["gained_exon_coordinates"] for row in sequences)
         assert any(row["isoform_id"] == "tx_novel" and row["affected_aa_sequence"] for row in sequences)

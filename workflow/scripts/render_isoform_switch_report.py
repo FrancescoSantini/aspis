@@ -107,8 +107,15 @@ NCRNA_SWITCH_COLUMNS = [
     "transcript_length_change",
     "exon_gain_loss",
     "intron_retention_change",
+    "gained_splice_junctions",
+    "lost_splice_junctions",
+    "n_gained_splice_junctions",
+    "n_lost_splice_junctions",
     "TSS_change",
     "TES_change",
+    "promoter_context_change",
+    "isoform_proximal_gene_context",
+    "paired_isoform_proximal_gene_context",
     "antisense_overlap",
     "conserved_exon_change",
     "motif_change",
@@ -708,6 +715,17 @@ class TranscriptModel:
     strand: str
     exons: list[tuple[int, int]]
     cds: list[tuple[int, int]]
+
+
+@dataclass
+class GeneLocus:
+    gene_id: str
+    gene_name: str
+    gene_biotype: str
+    chrom: str
+    strand: str
+    start: int
+    end: int
 
 
 def parse_gtf(path: Path) -> dict[str, TranscriptModel]:
@@ -1478,6 +1496,115 @@ def coordinate_change(current: Optional[int], paired: Optional[int]) -> str:
     return "unchanged" if delta == 0 else signed_change(delta)
 
 
+def model_splice_junctions(model: Optional[TranscriptModel]) -> set[tuple[str, int, int, str]]:
+    if model is None or len(model.exons) < 2:
+        return set()
+    junctions: set[tuple[str, int, int, str]] = set()
+    for left, right in zip(sorted(model.exons), sorted(model.exons)[1:]):
+        intron_start = left[1] + 1
+        intron_end = right[0] - 1
+        if intron_start <= intron_end:
+            junctions.add((model.chrom, intron_start, intron_end, model.strand))
+    return junctions
+
+
+def splice_junction_text(junctions: Iterable[tuple[str, int, int, str]]) -> str:
+    return "; ".join(f"{chrom}:{start}-{end}:{strand}" for chrom, start, end, strand in sorted(junctions))
+
+
+def splice_junction_gain_loss(
+    current: Optional[TranscriptModel],
+    paired: Optional[TranscriptModel],
+) -> tuple[set[tuple[str, int, int, str]], set[tuple[str, int, int, str]]]:
+    current_junctions = model_splice_junctions(current)
+    paired_junctions = model_splice_junctions(paired)
+    return current_junctions - paired_junctions, paired_junctions - current_junctions
+
+
+def gene_loci_from_models(models: dict[str, TranscriptModel]) -> list[GeneLocus]:
+    loci: dict[str, GeneLocus] = {}
+    for model in models.values():
+        if not model.gene_id or not model.exons:
+            continue
+        start = min(exon_start for exon_start, _ in model.exons)
+        end = max(exon_end for _, exon_end in model.exons)
+        locus = loci.get(model.gene_id)
+        if locus is None:
+            loci[model.gene_id] = GeneLocus(
+                gene_id=model.gene_id,
+                gene_name=model.gene_name,
+                gene_biotype=model.gene_biotype,
+                chrom=model.chrom,
+                strand=model.strand,
+                start=start,
+                end=end,
+            )
+            continue
+        locus.start = min(locus.start, start)
+        locus.end = max(locus.end, end)
+        if model.gene_name and not locus.gene_name:
+            locus.gene_name = model.gene_name
+        if model.gene_biotype and not locus.gene_biotype:
+            locus.gene_biotype = model.gene_biotype
+    return list(loci.values())
+
+
+def promoter_context_change(current: Optional[TranscriptModel], paired: Optional[TranscriptModel]) -> str:
+    if current is None or paired is None:
+        return "not_available"
+    current_tss, _ = tss_tes(current)
+    paired_tss, _ = tss_tes(paired)
+    if current_tss is None or paired_tss is None:
+        return "not_available"
+    if current.chrom != paired.chrom or current.strand != paired.strand:
+        return "different_locus_or_strand"
+    delta = current_tss - paired_tss
+    if delta == 0:
+        return "unchanged"
+    if current.strand == "-":
+        direction = "upstream" if delta > 0 else "downstream"
+    else:
+        direction = "upstream" if delta < 0 else "downstream"
+    return f"{direction}_TSS_shift:{abs(delta)}bp"
+
+
+def distance_to_locus(point: int, locus: GeneLocus) -> int:
+    if locus.start <= point <= locus.end:
+        return 0
+    return min(abs(point - locus.start), abs(point - locus.end))
+
+
+def proximal_gene_context(
+    model: Optional[TranscriptModel],
+    gene_loci: list[GeneLocus],
+    radius_bp: int = 1000,
+) -> str:
+    if model is None:
+        return "not_available"
+    tss, _ = tss_tes(model)
+    if tss is None:
+        return "not_available"
+    matches = []
+    for locus in gene_loci:
+        if locus.gene_id == model.gene_id or locus.chrom != model.chrom:
+            continue
+        distance = distance_to_locus(tss, locus)
+        if distance > radius_bp:
+            continue
+        relation = "overlap" if distance == 0 else "proximal"
+        strand_relation = "same_strand" if locus.strand == model.strand else "opposite_strand"
+        label = (
+            f"{relation}:{locus.gene_id}"
+            f"({locus.gene_name or locus.gene_id};"
+            f"{locus.gene_biotype or 'biotype_unknown'};"
+            f"{strand_relation};distance={distance}bp)"
+        )
+        matches.append((distance, label))
+    if not matches:
+        return f"no_other_gene_within_{radius_bp}bp"
+    return "; ".join(label for _, label in sorted(matches)[:5])
+
+
 def retained_intron_label(row: dict[str, str]) -> str:
     text = " ".join(
         [
@@ -1663,7 +1790,15 @@ def summarize_ncrna_resource_annotations(matches: list[dict[str, object]]) -> di
     }
 
 
-def ncrna_interpretation_label(row: dict[str, str], exon_gain_loss: str, tss_change: str, tes_change: str) -> str:
+def ncrna_interpretation_label(
+    row: dict[str, str],
+    exon_gain_loss: str,
+    tss_change: str,
+    tes_change: str,
+    gained_junctions: set[tuple[str, int, int, str]],
+    lost_junctions: set[tuple[str, int, int, str]],
+    promoter_change: str,
+) -> str:
     switch_class = row.get("switch_biotype_class", "")
     if is_pseudogene_switch(row):
         return "pseudogene_transcript_architecture_change"
@@ -1671,7 +1806,14 @@ def ncrna_interpretation_label(row: dict[str, str], exon_gain_loss: str, tss_cha
         return "ambiguous_or_artifact"
     if switch_class == "mixed_coding_noncoding":
         return "coding_potential_transition"
-    if exon_gain_loss or tss_change not in {"", "unchanged", "not_available"} or tes_change not in {"", "unchanged", "not_available"}:
+    if (
+        exon_gain_loss
+        or gained_junctions
+        or lost_junctions
+        or tss_change not in {"", "unchanged", "not_available"}
+        or tes_change not in {"", "unchanged", "not_available"}
+        or promoter_change not in {"", "unchanged", "not_available"}
+    ):
         return "noncoding_structure_change"
     return "noncoding_isoform_fraction_change"
 
@@ -1690,6 +1832,7 @@ def build_ncrna_switch_rows(
 ) -> list[dict[str, str]]:
     sequence_by_key = {(row["event_id"], row["isoform_id"]): row for row in sequence_rows}
     candidate_by_key = {(row["event_id"], row["isoform_id"]): row for row in candidate_rows}
+    gene_loci = gene_loci_from_models(models)
     rows: list[dict[str, str]] = []
     for row in candidate_rows:
         if row.get("switch_role") not in {"switch_in", "switch_out"}:
@@ -1709,6 +1852,8 @@ def build_ncrna_switch_rows(
         paired_tss, paired_tes = tss_tes(paired_model)
         tss_change = coordinate_change(current_tss, paired_tss)
         tes_change = coordinate_change(current_tes, paired_tes)
+        gained_junctions, lost_junctions = splice_junction_gain_loss(current_model, paired_model)
+        promoter_change = promoter_context_change(current_model, paired_model)
         exon_gain_loss = "; ".join(
             part
             for part in [
@@ -1741,8 +1886,15 @@ def build_ncrna_switch_rows(
                 "transcript_length_change": signed_change(length_change),
                 "exon_gain_loss": exon_gain_loss,
                 "intron_retention_change": retained_intron_label(row),
+                "gained_splice_junctions": splice_junction_text(gained_junctions),
+                "lost_splice_junctions": splice_junction_text(lost_junctions),
+                "n_gained_splice_junctions": str(len(gained_junctions)),
+                "n_lost_splice_junctions": str(len(lost_junctions)),
                 "TSS_change": tss_change,
                 "TES_change": tes_change,
+                "promoter_context_change": promoter_change,
+                "isoform_proximal_gene_context": proximal_gene_context(current_model, gene_loci),
+                "paired_isoform_proximal_gene_context": proximal_gene_context(paired_model, gene_loci),
                 "antisense_overlap": antisense_label(row),
                 "conserved_exon_change": resource_summary["conserved_exon_change"],
                 "motif_change": resource_summary["motif_change"],
@@ -1751,7 +1903,15 @@ def build_ncrna_switch_rows(
                 "ncrna_resource_annotations": resource_summary["ncrna_resource_annotations"],
                 "pseudogene_caution": pseudogene_caution_label(row),
                 "coding_potential_change": coding_potential_change(row, paired_candidate),
-                "interpretation_label": ncrna_interpretation_label(row, exon_gain_loss, tss_change, tes_change),
+                "interpretation_label": ncrna_interpretation_label(
+                    row,
+                    exon_gain_loss,
+                    tss_change,
+                    tes_change,
+                    gained_junctions,
+                    lost_junctions,
+                    promoter_change,
+                ),
             }
         )
     rows.sort(key=lambda item: (item["switch_biotype_class"], item["event_id"], item["switch_role"], item["isoform_id"]))
@@ -2234,7 +2394,7 @@ def render_event_html(
   <h2>Coding Switch Prioritization</h2>
   {table(['coding_priority_rank', 'coding_priority_score', 'coding_priority_tier', 'coding_priority_reasons', 'nmd_change', 'coding_potential_change', 'orf_length_change_aa', 'gained_domain', 'lost_domain', 'gained_signal_peptide', 'lost_signal_peptide', 'gained_transmembrane_region', 'lost_transmembrane_region', 'localization_change'], event_coding_rows)}
   <h2>ncRNA Switch Interpretation</h2>
-  {table(['isoform_id', 'paired_isoform_id', 'switch_role', 'gene_biotype', 'transcript_biotype', 'switch_biotype_class', 'transcript_length_change', 'exon_gain_loss', 'intron_retention_change', 'TSS_change', 'TES_change', 'antisense_overlap', 'conserved_exon_change', 'motif_change', 'host_smallrna_change', 'resource_antisense_overlap', 'pseudogene_caution', 'coding_potential_change', 'interpretation_label'], event_ncrna_rows)}
+  {table(['isoform_id', 'paired_isoform_id', 'switch_role', 'gene_biotype', 'transcript_biotype', 'switch_biotype_class', 'transcript_length_change', 'exon_gain_loss', 'intron_retention_change', 'gained_splice_junctions', 'lost_splice_junctions', 'TSS_change', 'TES_change', 'promoter_context_change', 'isoform_proximal_gene_context', 'paired_isoform_proximal_gene_context', 'antisense_overlap', 'conserved_exon_change', 'motif_change', 'host_smallrna_change', 'resource_antisense_overlap', 'pseudogene_caution', 'coding_potential_change', 'interpretation_label'], event_ncrna_rows)}
   <h2>Functional Annotations</h2>
   {table(['isoform_id', 'source', 'feature_type', 'feature_id', 'feature_name', 'start_aa', 'end_aa', 'score', 'feature_change', 'description'], event_annotations)}
   <h2>Sequences</h2>
