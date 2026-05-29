@@ -1,0 +1,38 @@
+# Example feature-set resource block for ASPIS reports.
+#
+# This is a partial config fragment. Copy the relevant keys into a project
+# config such as config/aspis_rnaseq_project.example.yaml or
+# config/aspis_smallrna_project.example.yaml, then replace paths with local
+# files prepared for the project.
+
+rnaseq_differential:
+  # GMT files: SET_ID, DESCRIPTION, FEATURE_ID...
+  # Good for MSigDB-style collections.
+  report_feature_sets: >-
+    resources/feature_sets/msigdb_hallmark.gmt,
+    resources/feature_sets/msigdb_c2_cp_reactome.gmt
+
+  # TSV files: set_id, feature_id, optional source, collection, description.
+  # Good for GO BP/MF/CC, Reactome, KEGG, and custom exported resources.
+  report_feature_set_tables: >-
+    resources/feature_sets/go_bp.tsv,
+    resources/feature_sets/go_mf.tsv,
+    resources/feature_sets/go_cc.tsv,
+    resources/feature_sets/reactome.tsv,
+    resources/feature_sets/kegg.tsv
+
+  report_feature_set_min_overlap: 5
+  report_feature_set_top_n: 30
+
+smallrna:
+  # Target-gene feature sets use the same GMT/TSV contracts, but feature_id
+  # must match the normalized target_id emitted by the miRNA target table.
+  target_feature_sets: resources/feature_sets/msigdb_hallmark.gmt
+  target_feature_set_tables: >-
+    resources/feature_sets/go_bp.tsv,
+    resources/feature_sets/reactome.tsv,
+    resources/feature_sets/kegg.tsv
+
+  target_feature_set_min_overlap: 5
+  target_feature_set_top_n: 30
+
