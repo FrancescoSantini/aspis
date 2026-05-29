@@ -39,7 +39,16 @@ VALID_RNASEQ_LEVELS = {"gene", "transcript", "isoform_switch"}
 IUPAC_BASES = set("ACGTURYSWKMBDHVNacgturyswkmbdhvn")
 FEATURE_SET_TABLE_REQUIRED_COLUMNS = {"set_id", "feature_id"}
 TARGET_MIRNA_COLUMNS = {"mirna_id", "mature_mirna_id", "miRNA", "mirna", "mature_id"}
-TARGET_GENE_COLUMNS = {"target_id", "target_symbol", "target_gene", "gene_symbol", "target_entrez", "gene_id"}
+TARGET_GENE_COLUMNS = {
+    "target_id",
+    "target_symbol",
+    "target_gene",
+    "gene_symbol",
+    "target_entrez",
+    "gene_id",
+    "target_ensembl",
+    "target",
+}
 
 
 def parse_args() -> argparse.Namespace:
@@ -555,15 +564,20 @@ def validate_smallrna_config(config: dict[str, Any]) -> list[str]:
         errors.append("smallrna.differential_run=true requires smallrna.quantification_run=true")
 
     if str(small.get("target_enrichment_mode", "disabled")).strip().lower() == "table" and not (
-        small.get("target_table") or clean_list(small.get("target_tables"))
+        small.get("target_table") or clean_list(small.get("target_tables")) or clean_list(small.get("target_cache"))
     ):
-        errors.append("smallrna.target_enrichment_mode=table requires smallrna.target_table or smallrna.target_tables")
+        errors.append(
+            "smallrna.target_enrichment_mode=table requires "
+            "smallrna.target_table, smallrna.target_tables, or smallrna.target_cache"
+        )
     require_existing_optional_file(errors, small.get("target_table"), "smallrna.target_table")
     require_existing_files(errors, small.get("target_tables"), "smallrna.target_tables")
+    require_existing_files(errors, small.get("target_cache"), "smallrna.target_cache")
     require_existing_files(errors, small.get("target_feature_sets"), "smallrna.target_feature_sets")
     require_existing_files(errors, small.get("target_feature_set_tables"), "smallrna.target_feature_set_tables")
     validate_target_table(errors, small.get("target_table"), "smallrna.target_table")
     validate_target_tables(errors, small.get("target_tables"), "smallrna.target_tables")
+    validate_target_tables(errors, small.get("target_cache"), "smallrna.target_cache")
     validate_gmt_files(errors, small.get("target_feature_sets"), "smallrna.target_feature_sets")
     validate_feature_set_tables(errors, small.get("target_feature_set_tables"), "smallrna.target_feature_set_tables")
     return errors
