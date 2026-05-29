@@ -5,8 +5,10 @@ from __future__ import annotations
 
 import argparse
 import csv
+import hashlib
 import html
 import math
+import random
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -54,7 +56,16 @@ CONTRAST_MANIFEST_COLUMNS = [
     "path",
     "n_features",
 ]
-FEATURE_COLUMNS = ["feature_id", "mapped_feature_id", "log2FoldChange", "padj", "rank_score"]
+FEATURE_COLUMNS = [
+    "feature_id",
+    "mapped_feature_id",
+    "log2FoldChange",
+    "stat",
+    "pvalue",
+    "padj",
+    "rank_score",
+    "ranking_metric",
+]
 FEATURE_SET_COLUMNS = [
     "contrast_id",
     "collection",
@@ -93,7 +104,12 @@ RANKED_FEATURE_SET_COLUMNS = [
     "final_universe_size",
     "resource_mapping_loss",
     "universe_size",
+    "ranking_metric",
     "enrichment_score",
+    "normalized_enrichment_score",
+    "pvalue",
+    "padj",
+    "n_permutations",
     "leading_edge_size",
     "direction",
     "leading_edge_features",
@@ -175,6 +191,18 @@ def parse_args() -> argparse.Namespace:
         default=20,
         help="Maximum terms to show in the enrichment dotplot",
     )
+    parser.add_argument(
+        "--ranked-feature-set-permutations",
+        type=int,
+        default=1000,
+        help="Number of deterministic label permutations for ranked feature-set p-values",
+    )
+    parser.add_argument(
+        "--ranked-feature-set-seed",
+        type=int,
+        default=1,
+        help="Base random seed for deterministic ranked feature-set permutations",
+    )
     return parser.parse_args()
 
 
@@ -244,23 +272,36 @@ def read_feature_id_map(path_text: str) -> dict[str, str]:
     return mapping
 
 
+def rank_score(row: dict[str, str]) -> tuple[float, str]:
+    stat = parse_float(row.get("stat", ""))
+    if stat is not None:
+        return stat, "deseq2_wald_stat"
+    log2fc = parse_float(row.get("log2FoldChange", ""))
+    pvalue = parse_float(row.get("pvalue", ""))
+    if log2fc is not None and pvalue is not None:
+        sign = -1.0 if log2fc < 0 else 1.0
+        return sign * -math.log10(max(pvalue, 1e-300)), "signed_neg_log10_pvalue"
+    padj = parse_float(row.get("padj", ""))
+    if log2fc is not None and padj is not None:
+        sign = -1.0 if log2fc < 0 else 1.0
+        return sign * -math.log10(max(padj, 1e-300)), "signed_neg_log10_padj"
+    if log2fc is not None:
+        return log2fc, "log2FoldChange"
+    return 0.0, "zero_fallback"
+
+
 def feature_row(row: dict[str, str], feature_column: str, id_map: dict[str, str]) -> dict[str, str]:
     feature_id = row.get(feature_column, "")
-    log2fc = parse_float(row.get("log2FoldChange", ""))
-    padj = parse_float(row.get("padj", ""))
-    if log2fc is None:
-        score = 0.0
-    elif padj is None:
-        score = log2fc
-    else:
-        sign = -1.0 if log2fc < 0 else 1.0
-        score = sign * -math.log10(max(padj, 1e-300))
+    score, metric = rank_score(row)
     return {
         "feature_id": feature_id,
         "mapped_feature_id": id_map.get(feature_id, feature_id),
         "log2FoldChange": row.get("log2FoldChange", ""),
+        "stat": row.get("stat", ""),
+        "pvalue": row.get("pvalue", ""),
         "padj": row.get("padj", ""),
         "rank_score": f"{score:.8g}",
+        "ranking_metric": metric,
     }
 
 
@@ -438,6 +479,151 @@ def bh_adjust(rows: list[dict[str, str]]) -> None:
         rows[index]["padj"] = f"{value:.8g}"
 
 
+def ranked_feature_series(
+    ranked: list[dict[str, str]],
+    final_universe: set[str],
+) -> list[tuple[str, float, str]]:
+    best_by_feature: dict[str, tuple[float, str]] = {}
+    metric_by_feature: dict[str, str] = {}
+    for row in ranked:
+        feature = row.get("mapped_feature_id") or row.get("feature_id", "")
+        if not feature or feature not in final_universe:
+            continue
+        score = parse_float(row.get("rank_score", "")) or 0.0
+        metric = row.get("ranking_metric", "")
+        previous = best_by_feature.get(feature)
+        if previous is None or abs(score) > abs(previous[0]):
+            best_by_feature[feature] = (score, metric)
+            metric_by_feature[feature] = metric
+    return [
+        (feature, score, metric_by_feature.get(feature, ""))
+        for feature, (score, _) in sorted(
+            best_by_feature.items(),
+            key=lambda item: (item[1][0], item[0]),
+            reverse=True,
+        )
+    ]
+
+
+def primary_ranking_metric(series: list[tuple[str, float, str]]) -> str:
+    counts: dict[str, int] = {}
+    for _, _, metric in series:
+        counts[metric or "unknown"] = counts.get(metric or "unknown", 0) + 1
+    if not counts:
+        return "unknown"
+    return sorted(counts.items(), key=lambda item: (-item[1], item[0]))[0][0]
+
+
+def weighted_enrichment_score_from_indices(
+    scores: list[float],
+    member_indices: list[int],
+) -> tuple[float, int]:
+    if not scores or not member_indices:
+        return 0.0, -1
+    member_indices = sorted(set(member_indices))
+    member_count = len(member_indices)
+    miss_count = len(scores) - member_count
+    hit_weight = sum(abs(scores[index]) for index in member_indices)
+    if hit_weight <= 0:
+        hit_weight = float(member_count)
+    miss_penalty = 1.0 / miss_count if miss_count > 0 else 0.0
+    running = 0.0
+    best_abs = -1.0
+    best_score = 0.0
+    best_index = -1
+    previous_index = -1
+    for index in member_indices:
+        misses = index - previous_index - 1
+        if misses:
+            running -= misses * miss_penalty
+            if abs(running) > best_abs:
+                best_abs = abs(running)
+                best_score = running
+                best_index = index - 1
+        running += (abs(scores[index]) / hit_weight) if hit_weight else 0.0
+        if abs(running) > best_abs:
+            best_abs = abs(running)
+            best_score = running
+            best_index = index
+        previous_index = index
+    tail_misses = len(scores) - previous_index - 1
+    if tail_misses:
+        running -= tail_misses * miss_penalty
+        if abs(running) > best_abs:
+            best_score = running
+            best_index = len(scores) - 1
+    return best_score, best_index
+
+
+def weighted_enrichment_score(
+    features: list[str],
+    scores: list[float],
+    members: set[str],
+) -> tuple[float, list[str]]:
+    if not features or not members:
+        return 0.0, []
+    index_by_feature = {feature: index for index, feature in enumerate(features)}
+    member_indices = [index_by_feature[feature] for feature in members if feature in index_by_feature]
+    best_score, leading_edge_index = weighted_enrichment_score_from_indices(scores, member_indices)
+    if best_score >= 0:
+        leading_edge = [feature for feature in features[: leading_edge_index + 1] if feature in members]
+    else:
+        leading_edge = [feature for feature in features[leading_edge_index:] if feature in members]
+    return best_score, leading_edge
+
+
+def stable_seed(base_seed: int, *parts: str) -> int:
+    digest = hashlib.sha256("|".join([str(base_seed), *parts]).encode("utf-8")).hexdigest()
+    return int(digest[:16], 16)
+
+
+def permutation_scores(
+    features: list[str],
+    scores: list[float],
+    set_size: int,
+    permutations: int,
+    seed: int,
+) -> list[float]:
+    if permutations <= 0 or set_size <= 0 or set_size > len(features):
+        return []
+    if set_size == len(features):
+        observed, _ = weighted_enrichment_score_from_indices(scores, list(range(len(features))))
+        return [observed for _ in range(permutations)]
+    rng = random.Random(seed)
+    values = []
+    population = list(range(len(features)))
+    for _ in range(permutations):
+        member_indices = rng.sample(population, set_size)
+        score, _ = weighted_enrichment_score_from_indices(scores, member_indices)
+        values.append(score)
+    return values
+
+
+def normalized_score_and_pvalue(observed: float, null_scores: list[float]) -> tuple[float, float]:
+    if not null_scores:
+        return observed, 1.0
+    if observed >= 0:
+        same_direction = [score for score in null_scores if score >= 0]
+        if same_direction:
+            mean_null = sum(score for score in same_direction) / len(same_direction)
+            pvalue = (sum(1 for score in same_direction if score >= observed) + 1) / (len(same_direction) + 1)
+        else:
+            mean_null = sum(abs(score) for score in null_scores) / len(null_scores)
+            pvalue = (sum(1 for score in null_scores if abs(score) >= abs(observed)) + 1) / (len(null_scores) + 1)
+    else:
+        same_direction = [score for score in null_scores if score < 0]
+        if same_direction:
+            mean_null = sum(abs(score) for score in same_direction) / len(same_direction)
+            pvalue = (sum(1 for score in same_direction if score <= observed) + 1) / (len(same_direction) + 1)
+        else:
+            mean_null = sum(abs(score) for score in null_scores) / len(null_scores)
+            pvalue = (sum(1 for score in null_scores if abs(score) >= abs(observed)) + 1) / (len(null_scores) + 1)
+    if mean_null <= 0:
+        return observed, min(1.0, pvalue)
+    normalized = observed / mean_null
+    return normalized, min(1.0, pvalue)
+
+
 def enrichment_rows(
     contrast_id: str,
     level: str,
@@ -583,6 +769,8 @@ def ranked_feature_set_rows(
     feature_lists: FeatureLists,
     feature_sets: list[FeatureSet],
     min_overlap: int,
+    permutations: int,
+    seed: int,
 ) -> list[dict[str, str]]:
     ranked = [
         row
@@ -602,33 +790,26 @@ def ranked_feature_set_rows(
         if not final_universe:
             continue
         mapping_loss = mapped_count - len(final_universe)
-        resource_ranked = [
-            row
-            for row in ranked
-            if (row.get("mapped_feature_id") or row.get("feature_id", "")) in final_universe
-        ]
-        universe = [row.get("mapped_feature_id") or row.get("feature_id", "") for row in resource_ranked]
-        scores = [abs(parse_float(row.get("rank_score", "")) or 0.0) for row in resource_ranked]
+        series = ranked_feature_series(ranked, final_universe)
+        universe = [feature for feature, _, _ in series]
+        scores = [score for _, score, _ in series]
+        ranking_metric = primary_ranking_metric(series)
+        null_score_cache: dict[int, list[float]] = {}
         for feature_set in grouped_sets:
             members = feature_set.features & final_universe
             if len(members) < min_overlap:
                 continue
-            miss_penalty = 1.0 / max(1, len(universe) - len(members))
-            running = 0.0
-            best_abs = 0.0
-            best_score = 0.0
-            leading_edge_index = -1
-            member_weight = sum(score for feature, score in zip(universe, scores) if feature in members) or float(len(members))
-            for index, (feature, score) in enumerate(zip(universe, scores)):
-                if feature in members:
-                    running += score / member_weight
-                else:
-                    running -= miss_penalty
-                if abs(running) > best_abs:
-                    best_abs = abs(running)
-                    best_score = running
-                    leading_edge_index = index
-            leading_edge = [feature for feature in universe[: leading_edge_index + 1] if feature in members]
+            best_score, leading_edge = weighted_enrichment_score(universe, scores, members)
+            if len(members) not in null_score_cache:
+                null_score_cache[len(members)] = permutation_scores(
+                    universe,
+                    scores,
+                    len(members),
+                    permutations,
+                    stable_seed(seed, contrast_id, source, collection_name, str(len(members))),
+                )
+            null_scores = null_score_cache[len(members)]
+            normalized_score, pvalue = normalized_score_and_pvalue(best_score, null_scores)
             direction = "top_enriched" if best_score >= 0 else "bottom_enriched"
             rows.append(
                 {
@@ -646,15 +827,22 @@ def ranked_feature_set_rows(
                     "final_universe_size": str(len(final_universe)),
                     "resource_mapping_loss": str(mapping_loss),
                     "universe_size": str(len(final_universe)),
+                    "ranking_metric": ranking_metric,
                     "enrichment_score": f"{best_score:.8g}",
+                    "normalized_enrichment_score": f"{normalized_score:.8g}",
+                    "pvalue": f"{pvalue:.8g}",
+                    "padj": "",
+                    "n_permutations": str(permutations),
                     "leading_edge_size": str(len(leading_edge)),
                     "direction": direction,
                     "leading_edge_features": ",".join(leading_edge),
                 }
             )
+    bh_adjust(rows)
     rows.sort(
         key=lambda row: (
-            -(abs(parse_float(row.get("enrichment_score", "")) or 0.0)),
+            parse_float(row.get("padj", "")) or 1.0,
+            -(abs(parse_float(row.get("normalized_enrichment_score", "")) or 0.0)),
             row["feature_set_source"],
             row["feature_set_collection"],
             row["set_id"],
@@ -717,7 +905,7 @@ def write_ranked_enrichment_svg(path: Path, rows: list[dict[str, str]], top_n: i
     selected = rows[:top_n]
     height = max(220, margin_top + margin_bottom + row_height * max(1, len(selected)))
     plot_width = width - margin_left - margin_right
-    max_score = max((abs(parse_float(row.get("enrichment_score", "")) or 0.0) for row in selected), default=1.0)
+    max_score = max((abs(parse_float(row.get("normalized_enrichment_score", "")) or 0.0) for row in selected), default=1.0)
     max_score = max(max_score, 1.0)
     elements = [
         f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}">',
@@ -729,7 +917,7 @@ def write_ranked_enrichment_svg(path: Path, rows: list[dict[str, str]], top_n: i
         elements.append('<text x="40" y="72" font-family="sans-serif" font-size="14">No ranked feature-set terms</text>')
     for index, row in enumerate(selected):
         y = margin_top + index * row_height + 18
-        score = parse_float(row.get("enrichment_score", "")) or 0.0
+        score = parse_float(row.get("normalized_enrichment_score", "")) or 0.0
         x = margin_left + ((score / max_score) + 1.0) * plot_width / 2.0
         label = f"{row.get('feature_set_collection') or row.get('feature_set_source')}:{row['set_id']}"
         if len(label) > 48:
@@ -739,9 +927,9 @@ def write_ranked_enrichment_svg(path: Path, rows: list[dict[str, str]], top_n: i
         elements.append(f'<text x="40" y="{y + 4}" font-family="sans-serif" font-size="12">{html.escape(label)}</text>')
         elements.append(f'<line x1="{margin_left}" y1="{y}" x2="{width - margin_right}" y2="{y}" stroke="#eeeeee"/>')
         elements.append(f'<circle cx="{x:.1f}" cy="{y}" r="{radius}" fill="{color}" fill-opacity="0.82"/>')
-        elements.append(f'<text x="{x + radius + 6:.1f}" y="{y + 4}" font-family="sans-serif" font-size="11">{score:.3g}</text>')
+        elements.append(f'<text x="{x + radius + 6:.1f}" y="{y + 4}" font-family="sans-serif" font-size="11">NES {score:.3g}</text>')
     elements.append(
-        f'<text x="{margin_left + plot_width / 2 - 30:.1f}" y="{height - 18}" font-family="sans-serif" font-size="12">ranked ES</text>'
+        f'<text x="{margin_left + plot_width / 2 - 30:.1f}" y="{height - 18}" font-family="sans-serif" font-size="12">normalized enrichment score</text>'
     )
     elements.append("</svg>")
     path.write_text("\n".join(elements) + "\n", encoding="utf-8")
@@ -752,6 +940,8 @@ def write_feature_lists(
     feature_sets: list[FeatureSet],
     min_overlap: int,
     top_n: int,
+    permutations: int,
+    seed: int,
 ) -> tuple[FeatureLists, dict[str, str], list[dict[str, str]]]:
     result_columns, result_rows = read_table(Path(row["results"]))
     filtered_columns, filtered_rows = read_table(Path(row["filtered"]))
@@ -802,7 +992,16 @@ def write_feature_lists(
         min_overlap,
     )
     term_rows = enrichment_rows(row["contrast_id"], row.get("level", ""), map_mode, feature_lists, feature_sets, min_overlap)
-    ranked_term_rows = ranked_feature_set_rows(row["contrast_id"], row.get("level", ""), map_mode, feature_lists, feature_sets, min_overlap)
+    ranked_term_rows = ranked_feature_set_rows(
+        row["contrast_id"],
+        row.get("level", ""),
+        map_mode,
+        feature_lists,
+        feature_sets,
+        min_overlap,
+        permutations,
+        seed,
+    )
     write_table(paths["feature_set_universe"], FEATURE_SET_UNIVERSE_COLUMNS, universe_rows)
     write_table(paths["feature_set_results"], FEATURE_SET_COLUMNS, term_rows)
     write_enrichment_svg(paths["feature_set_plot"], term_rows, top_n)
@@ -947,6 +1146,8 @@ def render_row(
     feature_sets: list[FeatureSet],
     min_overlap: int,
     top_n: int,
+    permutations: int,
+    seed: int,
 ) -> dict[str, str]:
     output = empty_output(row)
     if row["status"] != "ready":
@@ -954,7 +1155,7 @@ def render_row(
         write_blocked_contrast_manifest(row, reason)
         return {**output, "status": "blocked", "reason": reason}
     try:
-        _, paths, _ = write_feature_lists(row, feature_sets, min_overlap, top_n)
+        _, paths, _ = write_feature_lists(row, feature_sets, min_overlap, top_n, permutations, seed)
         return {**output, **paths, "status": "ok", "reason": ""}
     except Exception as exc:
         return {**output, "status": "failed", "reason": str(exc)}
@@ -980,12 +1181,21 @@ def main() -> int:
         raise ValueError("--feature-set-min-overlap must be positive")
     if args.feature_set_top_n < 1:
         raise ValueError("--feature-set-top-n must be positive")
+    if args.ranked_feature_set_permutations < 0:
+        raise ValueError("--ranked-feature-set-permutations must be >= 0")
     _, plan_rows = read_table(Path(args.plan), REQUIRED_PLAN_COLUMNS)
     if not plan_rows:
         raise ValueError("Differential report plan has no rows")
     feature_sets = read_feature_sets(args.feature_sets, args.feature_set_tables)
     rows = [
-        render_row(row, feature_sets, args.feature_set_min_overlap, args.feature_set_top_n)
+        render_row(
+            row,
+            feature_sets,
+            args.feature_set_min_overlap,
+            args.feature_set_top_n,
+            args.ranked_feature_set_permutations,
+            args.ranked_feature_set_seed,
+        )
         for row in plan_rows
     ]
     write_table(Path(args.manifest), MANIFEST_COLUMNS, rows)
