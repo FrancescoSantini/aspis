@@ -231,16 +231,15 @@ Current state:
 - miRNA target enrichment and target-gene feature-set enrichment preserve
   optional target-source and feature-set resource versions in target mapping,
   universe, and result tables.
+- miRNA target mapping, target enrichment, target feature-set enrichment, and
+  matched miRNA-mRNA target-mode tables now carry controlled
+  `target_evidence_type` labels: `validated`, `predicted`, `conserved`,
+  `user_provided`, `matched_expressed`, `inverse_integrated`, `unspecified`,
+  or aggregate `mixed`.
 
 Remaining work:
 
-- Add first-class controlled labels/documentation for target evidence types:
-  - validated;
-  - predicted;
-  - conserved;
-  - user-provided;
-  - matched expressed;
-  - inverse integrated.
+- No remaining target-evidence labeling items in this section.
 
 ## 8. miRNA ORA And GSEA
 
@@ -385,5 +384,4 @@ Desired isoform-switch report:
 Suggested order:
 
 1. Add real-data validation notes once real projects are available.
-2. Add first-class controlled labels/documentation for miRNA target evidence
-   types.
+2. Add target-gene GSEA when matched RNA-seq exists.

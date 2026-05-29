@@ -37,6 +37,7 @@ PAIR_COLUMNS = [
     "target_symbol",
     "target_source",
     "target_source_type",
+    "target_evidence_type",
     "regulation_class",
     "pearson",
     "matched_samples",
@@ -64,6 +65,7 @@ TARGET_MODE_COLUMNS = [
     "target_symbol",
     "target_source",
     "target_source_type",
+    "target_evidence_type",
     "regulation_class",
     "pearson",
     "matched_samples",
@@ -77,6 +79,7 @@ TARGET_MODE_SUMMARY_COLUMNS = [
     "target_analysis_mode",
     "collection",
     "query_source",
+    "target_evidence_type",
     "target_universe_definition",
     "n_pairs",
     "n_mirnas",
@@ -235,6 +238,36 @@ def regulation_class(mirna_lfc: float | None, target_lfc: float | None) -> str:
     return "unchanged"
 
 
+def normalize_evidence_text(value: str) -> str:
+    return value.strip().lower().replace("-", "_").replace(" ", "_").replace("/", "_").replace(":", "_")
+
+
+def source_target_evidence_type(row: dict[str, str]) -> str:
+    value = normalize_evidence_text(row.get("target_evidence_type", ""))
+    if value:
+        return value
+    raw = normalize_evidence_text(
+        " ".join([row.get("target_source_type", ""), row.get("target_source", ""), row.get("source", "")])
+    )
+    if any(token in raw for token in ["validated", "experimental", "mirtarbase", "tarbase"]):
+        return "validated"
+    if any(token in raw for token in ["predicted", "computational", "targetscan", "miranda", "mirwalk"]):
+        return "predicted"
+    if "conserved" in raw:
+        return "conserved"
+    if any(token in raw for token in ["user", "custom", "manual"]):
+        return "user_provided"
+    return "unspecified"
+
+
+def mode_target_evidence_type(mode: str) -> str:
+    if mode == "expressed_target":
+        return "matched_expressed"
+    if mode == "inverse_integrated_target":
+        return "inverse_integrated"
+    return "unspecified"
+
+
 def summarize_pairs(contrast_id: str, rows: list[dict[str, str]]) -> list[dict[str, str]]:
     collections = {"all": rows}
     collections["inverse"] = [row for row in rows if row.get("regulation_class") in INVERSE_CLASSES]
@@ -301,6 +334,7 @@ def target_mode_rows(contrast_id: str, rows: list[dict[str, str]]) -> list[dict[
                     "target_analysis_mode": mode,
                     "collection": collection,
                     "query_source": collection,
+                    "target_evidence_type": mode_target_evidence_type(mode),
                     "target_universe_definition": universe_definition,
                 }
             )
@@ -322,6 +356,7 @@ def target_mode_summary_rows(contrast_id: str, rows: list[dict[str, str]]) -> li
                 "target_analysis_mode": mode,
                 "collection": collection,
                 "query_source": collection,
+                "target_evidence_type": mode_target_evidence_type(mode),
                 "target_universe_definition": universe_definition,
                 "n_pairs": str(len(selected)),
                 "n_mirnas": str(len({row.get("mirna_id", "") for row in selected if row.get("mirna_id", "")})),
@@ -461,6 +496,7 @@ def render_contrast(
                 "target_symbol": target.get("target_symbol", ""),
                 "target_source": target.get("target_source", target.get("source", "")),
                 "target_source_type": target.get("target_source_type", ""),
+                "target_evidence_type": source_target_evidence_type(target),
                 "regulation_class": regulation_class(mirna_lfc, target_lfc),
                 "pearson": f"{correlation:.6g}",
                 "matched_samples": str(len(matches)),

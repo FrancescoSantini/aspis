@@ -30,6 +30,11 @@ smallrna:
   # must match the normalized target_id emitted by the miRNA target table.
   # miRNA target tables can also carry source_version/database_version/release;
   # those values are preserved in target enrichment provenance outputs.
+  #
+  # Target tables should use target_evidence_type when possible:
+  # validated, predicted, conserved, or user_provided. Matched RNA-seq
+  # integration adds matched_expressed and inverse_integrated target evidence
+  # labels in the derived target-mode outputs.
   target_feature_sets: resources/feature_sets/msigdb_hallmark.gmt
   target_feature_set_tables: >-
     resources/feature_sets/go_bp.tsv,
