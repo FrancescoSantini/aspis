@@ -24,6 +24,10 @@ reproducible modules.
   machine-readable per-contrast metrics TSVs and link them from summaries.
 - Differential summaries include a PCA interpretation note clarifying that weak
   or absent clustering is not automatically a failed analysis.
+- Branch-level biological warning reports consume DESeq2 manifests and flag
+  weak or risky contrast contexts: low replicate counts, confounded or constant
+  design covariates, too few tested features, empty significant sets, and
+  contrast-level library-size/detected-feature problems.
 - SmallRNA reports currently include miRNA DESeq2 plots, target-table
   enrichment, target feature-set enrichment, length/isomiR summaries, residual
   read fate, and optional miRNA-mRNA integration when matched RNA-seq exists.
@@ -45,12 +49,7 @@ Current state:
 
 Remaining work:
 
-- Add warnings for:
-  - too few replicates;
-  - confounded design/covariates;
-  - too few retained features;
-  - empty significant set;
-  - very low library sizes or detected-feature counts.
+- No remaining core DESeq2 warning/provenance items in this section.
 
 ## 2. PCA And Sample-Level QC
 
@@ -367,9 +366,8 @@ Desired isoform-switch report:
 
 Suggested order:
 
-1. Complete DESeq2 report warnings and manifest-level provenance.
-2. Make RNA-seq ORA/GSEA resource handling explicit.
-3. Refine miRNA target universes and source-specific target reports.
-4. Add ncRNA-aware isoform-switch summaries.
-5. Add native parsers for selected external functional annotation tools.
-6. Add real-data validation notes once real projects are available.
+1. Make RNA-seq ORA/GSEA resource handling explicit.
+2. Refine miRNA target universes and source-specific target reports.
+3. Add ncRNA-aware isoform-switch summaries.
+4. Add native parsers for selected external functional annotation tools.
+5. Add real-data validation notes once real projects are available.
