@@ -41,9 +41,9 @@ reproducible modules.
 - Transcript reports now support novelty-aware groups:
   `all`, `known_compatible`, `novel_isoform`, `novel_locus`, `ambiguous`, and
   `artifact`.
-- Isoform-switch testing is not intentionally restricted to coding genes, but
-  the current report interpretation is still biased toward coding consequences
-  such as ORF/CDS/NMD/protein domains.
+- Isoform-switch testing is not intentionally restricted to coding genes, and
+  the report now separates coding, noncoding/mixed, and ambiguous/artifact
+  switch events with an ncRNA-aware interpretation table.
 
 ## 1. DESeq2 Core Analysis
 
@@ -280,38 +280,24 @@ Current state:
 - Isoform-switch testing is not deliberately restricted to coding genes.
 - Any expressed multi-isoform gene present in transcript counts/GTF can
   potentially enter the analysis.
-- However, current interpretation is coding-biased because the most detailed
-  consequences focus on ORF/CDS/NMD/protein-domain changes.
+- Reports explicitly classify selected switch events as coding, noncoding,
+  mixed coding/noncoding, ambiguous/artifact, or unclassified.
+- Reports write `ncrna_switch_interpretation.tsv` with gene/transcript biotype,
+  transcript length change, exon gain/loss, TSS/TES change, retained-intron
+  annotation flags, antisense labels, coding-potential change, and an
+  interpretation label.
+- Project-level isoform-switch HTML has separate coding, noncoding/mixed, and
+  ambiguous/artifact sections.
 
 Remaining work:
 
-- Add an explicit noncoding switch class in reports.
-- Classify switch gene/transcript biotype:
-  - lncRNA;
-  - antisense RNA;
-  - pseudogene;
-  - snoRNA;
-  - snRNA;
-  - rRNA;
-  - miRNA host gene;
-  - retained-intron transcript;
-  - other annotated ncRNA.
-- For ncRNA switches, do not require ORF/CDS/domain evidence for biological
-  relevance.
-- Add ncRNA-specific consequences:
-  - transcript length change;
-  - exon gain/loss;
-  - intron retention;
-  - alternative TSS/TES;
+- Add richer ncRNA-specific consequences when optional annotation resources
+  are supplied:
   - splice junction gain/loss;
   - overlap with known ncRNA annotations;
-  - antisense overlap with coding genes;
-  - promoter/proximal gene context where available.
+  - antisense overlap with coding genes beyond simple antisense biotype labels;
+  - promoter/proximal gene context.
 - Treat coding-potential gain/loss as a useful warning, not as a requirement.
-- Add separate report sections:
-  - coding switches;
-  - noncoding switches;
-  - ambiguous/artifact switches.
 
 ## 11. ncRNA Switch Interpretation
 
@@ -319,31 +305,14 @@ Remaining work:
 
 - For lncRNAs, report features relevant to noncoding function:
   - gained/lost conserved exons;
-  - altered TSS/TES;
-  - altered antisense overlap;
-  - altered intron retention;
+  - resource-backed altered antisense overlap;
   - possible RBP/miRNA motif changes if resources are provided later.
 - For snoRNA/miRNA host genes, report whether the switch changes host
   transcript architecture around embedded small RNA loci.
 - For pseudogenes, label interpretation cautiously and avoid implying direct
   protein consequences.
-- Add an ncRNA switch table with columns such as:
-  - contrast_id;
-  - gene_id;
-  - gene_name;
-  - gene_biotype;
-  - isoform_id;
-  - paired_isoform_id;
-  - dIF;
-  - padj/qvalue;
-  - transcript_length_change;
-  - exon_gain_loss;
-  - intron_retention_change;
-  - TSS_change;
-  - TES_change;
-  - antisense_overlap;
-  - coding_potential_change;
-  - interpretation_label.
+- Extend the ncRNA switch table with optional resource-backed conserved exon,
+  motif, host-small-RNA, and antisense-overlap fields.
 
 ## 12. Final Report Structure Target
 
@@ -385,9 +354,9 @@ Desired isoform-switch report:
 
 Suggested order:
 
-1. Add ncRNA-aware isoform-switch summaries.
-2. Add query/universe provenance to target-gene feature-set enrichment.
-3. Add expressed-target and inverse-integrated miRNA target modes.
-4. Add native parsers for selected external functional annotation tools.
-5. Add first-class GO/Reactome/KEGG/MSigDB resource configuration docs.
+1. Add query/universe provenance to target-gene feature-set enrichment.
+2. Add expressed-target and inverse-integrated miRNA target modes.
+3. Add native parsers for selected external functional annotation tools.
+4. Add first-class GO/Reactome/KEGG/MSigDB resource configuration docs.
+5. Add richer resource-backed ncRNA switch annotations.
 6. Add real-data validation notes once real projects are available.
