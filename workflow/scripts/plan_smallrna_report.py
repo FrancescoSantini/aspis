@@ -31,6 +31,18 @@ TARGET_FEATURE_SET_COLUMNS = {
     "target_feature_set_results",
     "target_feature_set_plot",
 }
+MIRNA_FEATURE_SET_COLUMNS = {
+    "contrast_id",
+    "status",
+    "reason",
+    "mirna_feature_set_manifest",
+    "mirna_feature_set_universe",
+    "mirna_feature_set_results",
+    "mirna_feature_set_plot",
+    "mirna_ranked_feature_set_universe",
+    "mirna_ranked_feature_set_results",
+    "mirna_ranked_feature_set_plot",
+}
 MIRNA_MRNA_TARGET_FEATURE_SET_COLUMNS = {
     "contrast_id",
     "status",
@@ -84,6 +96,13 @@ REPORT_COLUMNS = [
     "target_feature_set_universe",
     "target_feature_set_results",
     "target_feature_set_plot",
+    "mirna_feature_set_manifest",
+    "mirna_feature_set_universe",
+    "mirna_feature_set_results",
+    "mirna_feature_set_plot",
+    "mirna_ranked_feature_set_universe",
+    "mirna_ranked_feature_set_results",
+    "mirna_ranked_feature_set_plot",
     "residual_manifest",
     "residual_biotype_counts",
     "residual_feature_counts",
@@ -113,6 +132,11 @@ def parse_args() -> argparse.Namespace:
         "--target-feature-set-manifest",
         default="",
         help="Optional target-gene feature-set enrichment manifest TSV",
+    )
+    parser.add_argument(
+        "--mirna-feature-set-manifest",
+        default="",
+        help="Optional miRNA-ID feature-set enrichment manifest TSV",
     )
     parser.add_argument("--mirna-mrna-manifest", default="", help="Optional integrated miRNA-mRNA manifest TSV")
     parser.add_argument(
@@ -203,6 +227,16 @@ def target_feature_set_rows_by_contrast(path_text: str) -> dict[str, dict[str, s
     return {row["contrast_id"]: row for row in rows}
 
 
+def mirna_feature_set_rows_by_contrast(path_text: str) -> dict[str, dict[str, str]]:
+    if not path_text:
+        return {}
+    path = Path(path_text)
+    if not path.exists():
+        return {}
+    _, rows = read_table(path, MIRNA_FEATURE_SET_COLUMNS)
+    return {row["contrast_id"]: row for row in rows}
+
+
 def integration_rows_by_contrast(path_text: str) -> dict[str, dict[str, str]]:
     if not path_text:
         return {}
@@ -241,6 +275,7 @@ def planned_row(
     deseq2_row: dict[str, str],
     target_row: dict[str, str],
     target_feature_set_row: dict[str, str],
+    mirna_feature_set_row: dict[str, str],
     integration_row: dict[str, str],
     mirna_mrna_target_feature_set_row: dict[str, str],
     stage_blocker: str,
@@ -255,6 +290,11 @@ def planned_row(
         blockers.append(
             target_feature_set_row.get("reason")
             or f"target feature-set enrichment is {target_feature_set_row.get('status', 'not ok')}"
+        )
+    if mirna_feature_set_row and mirna_feature_set_row.get("status") != "ok":
+        blockers.append(
+            mirna_feature_set_row.get("reason")
+            or f"miRNA-ID feature-set enrichment is {mirna_feature_set_row.get('status', 'not ok')}"
         )
     if integration_row and integration_row.get("status") != "ok":
         blockers.append(
@@ -332,6 +372,13 @@ def planned_row(
         "target_feature_set_universe": target_feature_set_row.get("target_feature_set_universe", ""),
         "target_feature_set_results": target_feature_set_row.get("target_feature_set_results", ""),
         "target_feature_set_plot": target_feature_set_row.get("target_feature_set_plot", ""),
+        "mirna_feature_set_manifest": mirna_feature_set_row.get("mirna_feature_set_manifest", ""),
+        "mirna_feature_set_universe": mirna_feature_set_row.get("mirna_feature_set_universe", ""),
+        "mirna_feature_set_results": mirna_feature_set_row.get("mirna_feature_set_results", ""),
+        "mirna_feature_set_plot": mirna_feature_set_row.get("mirna_feature_set_plot", ""),
+        "mirna_ranked_feature_set_universe": mirna_feature_set_row.get("mirna_ranked_feature_set_universe", ""),
+        "mirna_ranked_feature_set_results": mirna_feature_set_row.get("mirna_ranked_feature_set_results", ""),
+        "mirna_ranked_feature_set_plot": mirna_feature_set_row.get("mirna_ranked_feature_set_plot", ""),
         "residual_manifest": args.residual_manifest,
         "residual_biotype_counts": args.residual_biotype_counts,
         "residual_feature_counts": args.residual_feature_counts,
@@ -360,6 +407,7 @@ def main() -> int:
     stage_blocker = report_stage_blocker(Path(args.smallrna_plan))
     targets = target_rows_by_contrast(args.target_manifest)
     target_feature_sets = target_feature_set_rows_by_contrast(args.target_feature_set_manifest)
+    mirna_feature_sets = mirna_feature_set_rows_by_contrast(args.mirna_feature_set_manifest)
     integration_rows = integration_rows_by_contrast(args.mirna_mrna_manifest)
     mirna_mrna_target_feature_sets = mirna_mrna_target_feature_set_rows_by_contrast(
         args.mirna_mrna_target_feature_set_manifest
@@ -371,6 +419,7 @@ def main() -> int:
             deseq2_row=row,
             target_row=targets.get(row["contrast_id"], {}),
             target_feature_set_row=target_feature_sets.get(row["contrast_id"], {}),
+            mirna_feature_set_row=mirna_feature_sets.get(row["contrast_id"], {}),
             integration_row=integration_rows.get(row["contrast_id"], {}),
             mirna_mrna_target_feature_set_row=mirna_mrna_target_feature_sets.get(row["contrast_id"], {}),
             stage_blocker=stage_blocker,

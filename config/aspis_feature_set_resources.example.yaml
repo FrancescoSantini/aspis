@@ -43,3 +43,9 @@ smallrna:
 
   target_feature_set_min_overlap: 5
   target_feature_set_top_n: 30
+
+  # Optional miRNA-ID feature sets. These are not target-gene resources:
+  # feature_id must match the tested miRNA IDs, not mRNA target genes.
+  mirna_feature_set_tables: resources/feature_sets/mirna_seed_families.tsv
+  mirna_feature_set_min_overlap: 2
+  mirna_feature_set_top_n: 30

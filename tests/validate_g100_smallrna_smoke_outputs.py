@@ -86,6 +86,46 @@ TARGET_FEATURE_SET_COLUMNS = {
     "padj",
     "targets",
 }
+MIRNA_FEATURE_SET_UNIVERSE_COLUMNS = {
+    "contrast_id",
+    "mirna_analysis_mode",
+    "collection",
+    "query_source",
+    "mirna_universe_definition",
+    "feature_set_source",
+    "feature_set_collection",
+    "feature_set_version",
+    "query_size",
+    "mirna_universe_size",
+    "feature_set_member_universe_size",
+}
+MIRNA_FEATURE_SET_COLUMNS = {
+    "contrast_id",
+    "mirna_analysis_mode",
+    "collection",
+    "query_source",
+    "mirna_universe_definition",
+    "feature_set_source",
+    "feature_set_collection",
+    "feature_set_version",
+    "set_id",
+    "overlap",
+    "query_size",
+    "universe_size",
+    "padj",
+    "mirnas",
+}
+MIRNA_RANKED_FEATURE_SET_COLUMNS = {
+    "contrast_id",
+    "mirna_analysis_mode",
+    "collection",
+    "ranking_metric",
+    "set_id",
+    "enrichment_score",
+    "direction",
+    "leading_edge_mirnas",
+    "feature_set_version",
+}
 
 
 def read_tsv(path: Path, required_columns: set[str]) -> tuple[list[str], list[dict[str, str]]]:
@@ -250,6 +290,9 @@ def validate_reports() -> str:
             "summary_html",
             "target_universe",
             "target_feature_set_universe",
+            "mirna_feature_set_universe",
+            "mirna_feature_set_results",
+            "mirna_ranked_feature_set_results",
         },
         "plots/plots_manifest.tsv": {
             "contrast_id",
@@ -270,8 +313,13 @@ def validate_reports() -> str:
             "n_targets",
             "n_enrichment_terms",
             "n_target_feature_set_terms",
+            "n_mirna_feature_set_terms",
+            "n_mirna_ranked_feature_set_terms",
             "target_universe",
             "target_feature_set_universe",
+            "mirna_feature_set_universe",
+            "mirna_feature_set_results",
+            "mirna_ranked_feature_set_results",
             "n_residual_input_reads",
             "n_residual_genome_aligned_reads",
             "n_residual_biotypes",
@@ -316,6 +364,9 @@ def validate_reports() -> str:
         "target_universe",
         "target_feature_set_universe",
         "target_feature_set_results",
+        "mirna_feature_set_universe",
+        "mirna_feature_set_results",
+        "mirna_ranked_feature_set_results",
         "volcano_pdf",
         "ma_pdf",
         "pca_pdf",
@@ -333,6 +384,11 @@ def validate_reports() -> str:
             row["target_feature_set_universe"],
             reports / "summaries/summary_manifest.tsv",
             "target_feature_set_universe",
+        )
+        require_path(
+            row["mirna_feature_set_universe"],
+            reports / "summaries/summary_manifest.tsv",
+            "mirna_feature_set_universe",
         )
         _, universe_rows = read_tsv(Path(row["target_universe"]), TARGET_UNIVERSE_COLUMNS)
         if not any(item["target_source"] == "all_sources" for item in universe_rows):
@@ -381,6 +437,19 @@ def validate_reports() -> str:
                     f"Target feature-set query source mismatch in {row['target_feature_set_results']}: "
                     f"{feature_set_row}"
                 )
+        _, mirna_feature_universe = read_tsv(Path(row["mirna_feature_set_universe"]), MIRNA_FEATURE_SET_UNIVERSE_COLUMNS)
+        if any(item["mirna_analysis_mode"] != "mirna_id_feature_set" for item in mirna_feature_universe):
+            raise ValueError(f"Unexpected miRNA-ID feature-set universe mode in {row['mirna_feature_set_universe']}")
+        if any(item["query_source"] != item["collection"] for item in mirna_feature_universe):
+            raise ValueError(f"miRNA-ID feature-set universe query source mismatch in {row['mirna_feature_set_universe']}")
+        _, mirna_feature_rows = read_tsv(Path(row["mirna_feature_set_results"]), MIRNA_FEATURE_SET_COLUMNS)
+        if any(item["mirna_analysis_mode"] != "mirna_id_feature_set" for item in mirna_feature_rows):
+            raise ValueError(f"Unexpected miRNA-ID feature-set result mode in {row['mirna_feature_set_results']}")
+        _, mirna_ranked_rows = read_tsv(Path(row["mirna_ranked_feature_set_results"]), MIRNA_RANKED_FEATURE_SET_COLUMNS)
+        if any(item["mirna_analysis_mode"] != "mirna_id_ranked_feature_set" for item in mirna_ranked_rows):
+            raise ValueError(f"Unexpected ranked miRNA-ID feature-set mode in {row['mirna_ranked_feature_set_results']}")
+        if any(item["ranking_metric"] != "mirna_stat_else_signed_log10_pvalue_else_log2fc" for item in mirna_ranked_rows):
+            raise ValueError(f"Ranked miRNA-ID feature sets lost ranking metric in {row['mirna_ranked_feature_set_results']}")
         text = Path(row["summary_html"]).read_text(encoding="utf-8")
         if PCA_NOTE_FRAGMENT not in text:
             raise ValueError(f"{row['summary_html']} is missing the PCA interpretation note")
