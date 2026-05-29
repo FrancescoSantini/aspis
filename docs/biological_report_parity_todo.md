@@ -229,6 +229,9 @@ Current state:
   `target_evidence_type` labels: `validated`, `predicted`, `conserved`,
   `user_provided`, `matched_expressed`, `inverse_integrated`, `unspecified`,
   or aggregate `mixed`.
+- Cached multiMiR-style target exports can be supplied through
+  `smallrna.target_cache` and are normalized as offline local target resources,
+  preserving database/source/evidence labels without cluster network access.
 
 Remaining work:
 

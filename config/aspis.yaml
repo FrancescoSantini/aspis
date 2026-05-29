@@ -266,6 +266,7 @@ smallrna:
   target_enrichment_mode: disabled
   target_table: ""
   target_tables: []
+  target_cache: ""
   target_min_overlap: 1
   target_top_n: 20
   target_feature_sets: ""

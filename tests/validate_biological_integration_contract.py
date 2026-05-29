@@ -61,6 +61,7 @@ def setup_common_inputs() -> dict[str, Path]:
         "rnaseq_samples": INPUT / "rnaseq_samples.tsv",
         "targets_validated": INPUT / "targets_validated.tsv",
         "targets_predicted": INPUT / "targets_predicted.tsv",
+        "targets_multimir_cache": INPUT / "targets_multimir_cache.tsv",
     }
     contrast = "treated_vs_control__time_h_24"
     write_tsv(paths["small_plan"], ["stage", "status", "reason"], [{"stage": "mirna_target_enrichment", "status": "ready", "reason": ""}])
@@ -139,6 +140,21 @@ def setup_common_inputs() -> dict[str, Path]:
         ["mirna_id", "target_id", "target_symbol", "source", "source_type", "evidence"],
         [{"mirna_id": "hsa-miR-1-3p", "target_id": "GENE3", "target_symbol": "Gene three", "source": "TargetScan", "source_type": "predicted", "evidence": "context"}],
     )
+    write_tsv(
+        paths["targets_multimir_cache"],
+        ["mature_mirna_id", "target_symbol", "target_entrez", "database", "type", "support_type", "pubmed_id"],
+        [
+            {
+                "mature_mirna_id": "hsa-miR-2-3p",
+                "target_symbol": "GENE3",
+                "target_entrez": "333",
+                "database": "miRTarBase",
+                "type": "validated",
+                "support_type": "functional MTI",
+                "pubmed_id": "123456",
+            }
+        ],
+    )
     return paths
 
 
@@ -154,6 +170,8 @@ def exercise_target_and_integration(paths: dict[str, Path]) -> None:
             str(paths["small_manifest"]),
             "--target-tables",
             f"{paths['targets_validated']},{paths['targets_predicted']}",
+            "--target-cache",
+            str(paths["targets_multimir_cache"]),
             "--outdir",
             str(BASE / "target_enrichment"),
             "--manifest",
@@ -172,6 +190,10 @@ def exercise_target_and_integration(paths: dict[str, Path]) -> None:
     source_summary = read_tsv(Path(target_rows[0]["target_source_summary"]), {"target_source", "target_source_type"})
     if not {"validated", "predicted"} <= {row["target_source_type"] for row in source_summary}:
         raise ValueError(f"target sources were not propagated: {source_summary}")
+    if "miRTarBase" not in {row["target_source"] for row in source_summary}:
+        raise ValueError(f"cached multiMiR-style source was not propagated: {source_summary}")
+    if "validated" not in {row["target_evidence_type"] for row in source_summary}:
+        raise ValueError(f"cached multiMiR-style evidence was not propagated: {source_summary}")
 
     integration_manifest = BASE / "mirna_mrna" / "mirna_mrna_manifest.tsv"
     run_command(
