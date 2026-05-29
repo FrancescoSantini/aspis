@@ -313,6 +313,8 @@ def main() -> int:
             str(outdir / "switch_event_summary.tsv"),
             "--ncrna-switch-table",
             str(outdir / "ncrna_switch_interpretation.tsv"),
+            "--coding-switch-summary",
+            str(outdir / "coding_switch_summary.tsv"),
             "--sequence-table",
             str(outdir / "switch_sequence_summary.tsv"),
             "--functional-annotation-table",
@@ -358,11 +360,21 @@ def main() -> int:
         candidates = read_rows(outdir / "switch_candidates.tsv")
         events = read_rows(outdir / "switch_event_summary.tsv")
         ncrna_rows = read_rows(outdir / "ncrna_switch_interpretation.tsv")
+        coding_rows = read_rows(outdir / "coding_switch_summary.tsv")
         sequences = read_rows(outdir / "switch_sequence_summary.tsv")
         annotation_rows = read_rows(outdir / "functional_annotation_summary.tsv")
         plots = read_rows(outdir / "switch_plot_manifest.tsv")
         assert len(events) == 3, events
         assert {row["switch_biotype_class"] for row in events} >= {"coding", "noncoding"}, events
+        assert coding_rows, "coding_switch_summary.tsv is empty"
+        assert coding_rows[0]["gene_id"] == "geneA", coding_rows
+        assert coding_rows[0]["coding_priority_tier"] == "high", coding_rows
+        assert "protein_domain_gain_loss" in coding_rows[0]["coding_priority_reasons"], coding_rows
+        assert coding_rows[0]["gained_domain"], coding_rows
+        assert coding_rows[0]["gained_signal_peptide"], coding_rows
+        assert coding_rows[0]["gained_transmembrane_region"], coding_rows
+        assert "NMD_status_change" in coding_rows[0]["coding_priority_reasons"], coding_rows
+        assert any(row["gene_id"] == "geneA" and row["coding_priority_score"] == coding_rows[0]["coding_priority_score"] for row in events), events
         assert {row["switch_role"] for row in candidates} >= {"switch_in", "switch_out"}, candidates
         assert any(row["gene_biotype"] == "lncRNA" and row["switch_biotype_class"] == "noncoding" for row in candidates)
         assert candidates[0]["switch_rank"] == "1"

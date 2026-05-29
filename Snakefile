@@ -4149,6 +4149,7 @@ rule render_isoform_switch_report:
         candidate_table=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/isoform_switch/report/switch_candidates.tsv",
         event_summary=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/isoform_switch/report/switch_event_summary.tsv",
         ncrna_switch_table=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/isoform_switch/report/ncrna_switch_interpretation.tsv",
+        coding_switch_summary=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/isoform_switch/report/coding_switch_summary.tsv",
         sequence_table=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/isoform_switch/report/switch_sequence_summary.tsv",
         functional_annotation_table=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/isoform_switch/report/functional_annotation_summary.tsv",
         plot_manifest=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/isoform_switch/report/switch_plot_manifest.tsv",
@@ -4214,6 +4215,7 @@ rule render_isoform_switch_report:
           --candidate-table {output.candidate_table:q} \
           --event-summary {output.event_summary:q} \
           --ncrna-switch-table {output.ncrna_switch_table:q} \
+          --coding-switch-summary {output.coding_switch_summary:q} \
           --sequence-table {output.sequence_table:q} \
           --functional-annotation-table {output.functional_annotation_table:q} \
           --plot-manifest {output.plot_manifest:q} \
