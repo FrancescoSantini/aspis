@@ -21,9 +21,14 @@ MANIFEST_COLUMNS = [
     "mirna_mrna_pairs",
     "mirna_mrna_summary",
     "mirna_mrna_plot",
+    "mirna_mrna_target_modes",
+    "mirna_mrna_target_mode_summary",
     "n_pairs",
     "n_inverse_pairs",
     "n_anticorrelated_pairs",
+    "n_expressed_targets",
+    "n_inverse_integrated_targets",
+    "n_inverse_anticorrelated_targets",
 ]
 PAIR_COLUMNS = [
     "contrast_id",
@@ -48,8 +53,49 @@ SUMMARY_COLUMNS = [
     "n_anticorrelated_pairs",
     "median_pearson",
 ]
+TARGET_MODE_COLUMNS = [
+    "contrast_id",
+    "target_analysis_mode",
+    "collection",
+    "query_source",
+    "target_universe_definition",
+    "mirna_id",
+    "target_id",
+    "target_symbol",
+    "target_source",
+    "target_source_type",
+    "regulation_class",
+    "pearson",
+    "matched_samples",
+    "mirna_log2FoldChange",
+    "mirna_padj",
+    "target_log2FoldChange",
+    "target_padj",
+]
+TARGET_MODE_SUMMARY_COLUMNS = [
+    "contrast_id",
+    "target_analysis_mode",
+    "collection",
+    "query_source",
+    "target_universe_definition",
+    "n_pairs",
+    "n_mirnas",
+    "n_targets",
+    "n_inverse_pairs",
+    "n_anticorrelated_pairs",
+    "median_pearson",
+]
 CONTRAST_MANIFEST_COLUMNS = ["contrast_id", "resource", "status", "reason", "path", "n_rows"]
 STAT_COLUMNS = {"baseMean", "log2FoldChange", "lfcSE", "stat", "pvalue", "padj"}
+INVERSE_CLASSES = {"mirna_up_target_down", "mirna_down_target_up"}
+EXPRESSED_TARGET_UNIVERSE = (
+    "targets reachable from significant miRNAs and present in matched RNA-seq "
+    "DESeq2 results/normalized counts"
+)
+INVERSE_TARGET_UNIVERSE = (
+    "expressed miRNA targets with opposite-sign miRNA and RNA-seq log2 fold changes; "
+    "anticorrelated collections also require negative Pearson correlation across matched samples"
+)
 
 
 def parse_args() -> argparse.Namespace:
@@ -191,9 +237,7 @@ def regulation_class(mirna_lfc: float | None, target_lfc: float | None) -> str:
 
 def summarize_pairs(contrast_id: str, rows: list[dict[str, str]]) -> list[dict[str, str]]:
     collections = {"all": rows}
-    collections["inverse"] = [
-        row for row in rows if row.get("regulation_class") in {"mirna_up_target_down", "mirna_down_target_up"}
-    ]
+    collections["inverse"] = [row for row in rows if row.get("regulation_class") in INVERSE_CLASSES]
     collections["anticorrelated"] = [row for row in rows if (parse_float(row.get("pearson", "")) or 0.0) < 0]
     summary = []
     for collection, selected in collections.items():
@@ -209,8 +253,80 @@ def summarize_pairs(contrast_id: str, rows: list[dict[str, str]]) -> list[dict[s
                 "collection": collection,
                 "n_pairs": str(len(selected)),
                 "n_inverse_pairs": str(
-                    sum(1 for row in selected if row.get("regulation_class") in {"mirna_up_target_down", "mirna_down_target_up"})
+                    sum(1 for row in selected if row.get("regulation_class") in INVERSE_CLASSES)
                 ),
+                "n_anticorrelated_pairs": str(sum(1 for row in selected if (parse_float(row.get("pearson", "")) or 0.0) < 0)),
+                "median_pearson": f"{median:.6g}",
+            }
+        )
+    return summary
+
+
+def target_mode_collections(rows: list[dict[str, str]]) -> list[tuple[str, str, str, list[dict[str, str]]]]:
+    inverse = [row for row in rows if row.get("regulation_class") in INVERSE_CLASSES]
+    anticorrelated = [row for row in rows if (parse_float(row.get("pearson", "")) or 0.0) < 0]
+    inverse_anticorrelated = [
+        row
+        for row in inverse
+        if (parse_float(row.get("pearson", "")) or 0.0) < 0
+    ]
+    return [
+        ("expressed_target", "all", EXPRESSED_TARGET_UNIVERSE, rows),
+        ("expressed_target", "anticorrelated", EXPRESSED_TARGET_UNIVERSE, anticorrelated),
+        ("inverse_integrated_target", "inverse", INVERSE_TARGET_UNIVERSE, inverse),
+        ("inverse_integrated_target", "inverse_anticorrelated", INVERSE_TARGET_UNIVERSE, inverse_anticorrelated),
+        (
+            "inverse_integrated_target",
+            "mirna_up_target_down",
+            INVERSE_TARGET_UNIVERSE,
+            [row for row in inverse if row.get("regulation_class") == "mirna_up_target_down"],
+        ),
+        (
+            "inverse_integrated_target",
+            "mirna_down_target_up",
+            INVERSE_TARGET_UNIVERSE,
+            [row for row in inverse if row.get("regulation_class") == "mirna_down_target_up"],
+        ),
+    ]
+
+
+def target_mode_rows(contrast_id: str, rows: list[dict[str, str]]) -> list[dict[str, str]]:
+    mode_rows = []
+    for mode, collection, universe_definition, selected in target_mode_collections(rows):
+        for row in selected:
+            mode_rows.append(
+                {
+                    **{column: row.get(column, "") for column in PAIR_COLUMNS},
+                    "contrast_id": contrast_id,
+                    "target_analysis_mode": mode,
+                    "collection": collection,
+                    "query_source": collection,
+                    "target_universe_definition": universe_definition,
+                }
+            )
+    return mode_rows
+
+
+def target_mode_summary_rows(contrast_id: str, rows: list[dict[str, str]]) -> list[dict[str, str]]:
+    summary = []
+    for mode, collection, universe_definition, selected in target_mode_collections(rows):
+        correlations = sorted(parse_float(row.get("pearson", "")) or 0.0 for row in selected)
+        if correlations:
+            middle = len(correlations) // 2
+            median = correlations[middle] if len(correlations) % 2 else (correlations[middle - 1] + correlations[middle]) / 2
+        else:
+            median = 0.0
+        summary.append(
+            {
+                "contrast_id": contrast_id,
+                "target_analysis_mode": mode,
+                "collection": collection,
+                "query_source": collection,
+                "target_universe_definition": universe_definition,
+                "n_pairs": str(len(selected)),
+                "n_mirnas": str(len({row.get("mirna_id", "") for row in selected if row.get("mirna_id", "")})),
+                "n_targets": str(len({row.get("target_id", "") for row in selected if row.get("target_id", "")})),
+                "n_inverse_pairs": str(sum(1 for row in selected if row.get("regulation_class") in INVERSE_CLASSES)),
                 "n_anticorrelated_pairs": str(sum(1 for row in selected if (parse_float(row.get("pearson", "")) or 0.0) < 0)),
                 "median_pearson": f"{median:.6g}",
             }
@@ -260,6 +376,8 @@ def blocked_row(row: dict[str, str], outdir: Path, reason: str) -> dict[str, str
             {"contrast_id": row["contrast_id"], "resource": "mirna_mrna_pairs", "status": "blocked", "reason": reason, "path": "", "n_rows": "0"},
             {"contrast_id": row["contrast_id"], "resource": "mirna_mrna_summary", "status": "blocked", "reason": reason, "path": "", "n_rows": "0"},
             {"contrast_id": row["contrast_id"], "resource": "mirna_mrna_plot", "status": "blocked", "reason": reason, "path": "", "n_rows": "0"},
+            {"contrast_id": row["contrast_id"], "resource": "mirna_mrna_target_modes", "status": "blocked", "reason": reason, "path": "", "n_rows": "0"},
+            {"contrast_id": row["contrast_id"], "resource": "mirna_mrna_target_mode_summary", "status": "blocked", "reason": reason, "path": "", "n_rows": "0"},
         ],
     )
     return {
@@ -270,9 +388,14 @@ def blocked_row(row: dict[str, str], outdir: Path, reason: str) -> dict[str, str
         "mirna_mrna_pairs": "",
         "mirna_mrna_summary": "",
         "mirna_mrna_plot": "",
+        "mirna_mrna_target_modes": "",
+        "mirna_mrna_target_mode_summary": "",
         "n_pairs": "0",
         "n_inverse_pairs": "0",
         "n_anticorrelated_pairs": "0",
+        "n_expressed_targets": "0",
+        "n_inverse_integrated_targets": "0",
+        "n_inverse_anticorrelated_targets": "0",
     }
 
 
@@ -293,6 +416,8 @@ def render_contrast(
         "pairs": contrast_dir / "mirna_mrna_pairs.tsv",
         "summary": contrast_dir / "mirna_mrna_summary.tsv",
         "plot": contrast_dir / "mirna_mrna_anticorrelation.svg",
+        "target_modes": contrast_dir / "mirna_mrna_target_modes.tsv",
+        "target_mode_summary": contrast_dir / "mirna_mrna_target_mode_summary.tsv",
     }
     if small_row.get("status") != "ok":
         return blocked_row(small_row, outdir, small_row.get("reason", "") or "smallRNA DESeq2 contrast is not ok")
@@ -354,8 +479,12 @@ def render_contrast(
         )
     )
     summary = summarize_pairs(contrast_id, pairs)
+    modes = target_mode_rows(contrast_id, pairs)
+    mode_summary = target_mode_summary_rows(contrast_id, pairs)
     write_table(paths["pairs"], PAIR_COLUMNS, pairs)
     write_table(paths["summary"], SUMMARY_COLUMNS, summary)
+    write_table(paths["target_modes"], TARGET_MODE_COLUMNS, modes)
+    write_table(paths["target_mode_summary"], TARGET_MODE_SUMMARY_COLUMNS, mode_summary)
     write_svg(paths["plot"], pairs, top_n)
     write_table(
         paths["manifest"],
@@ -364,8 +493,22 @@ def render_contrast(
             {"contrast_id": contrast_id, "resource": "mirna_mrna_pairs", "status": "ok", "reason": "", "path": str(paths["pairs"]), "n_rows": str(len(pairs))},
             {"contrast_id": contrast_id, "resource": "mirna_mrna_summary", "status": "ok", "reason": "", "path": str(paths["summary"]), "n_rows": str(len(summary))},
             {"contrast_id": contrast_id, "resource": "mirna_mrna_plot", "status": "ok", "reason": "", "path": str(paths["plot"]), "n_rows": str(len(pairs))},
+            {"contrast_id": contrast_id, "resource": "mirna_mrna_target_modes", "status": "ok", "reason": "", "path": str(paths["target_modes"]), "n_rows": str(len(modes))},
+            {"contrast_id": contrast_id, "resource": "mirna_mrna_target_mode_summary", "status": "ok", "reason": "", "path": str(paths["target_mode_summary"]), "n_rows": str(len(mode_summary))},
         ],
     )
+    inverse_targets = {
+        row.get("target_id", "")
+        for row in pairs
+        if row.get("target_id", "") and row.get("regulation_class") in INVERSE_CLASSES
+    }
+    inverse_anticorrelated_targets = {
+        row.get("target_id", "")
+        for row in pairs
+        if row.get("target_id", "")
+        and row.get("regulation_class") in INVERSE_CLASSES
+        and (parse_float(row.get("pearson", "")) or 0.0) < 0
+    }
     return {
         "contrast_id": contrast_id,
         "status": "ok",
@@ -374,9 +517,14 @@ def render_contrast(
         "mirna_mrna_pairs": str(paths["pairs"]),
         "mirna_mrna_summary": str(paths["summary"]),
         "mirna_mrna_plot": str(paths["plot"]),
+        "mirna_mrna_target_modes": str(paths["target_modes"]),
+        "mirna_mrna_target_mode_summary": str(paths["target_mode_summary"]),
         "n_pairs": str(len(pairs)),
-        "n_inverse_pairs": str(sum(1 for row in pairs if row["regulation_class"] in {"mirna_up_target_down", "mirna_down_target_up"})),
+        "n_inverse_pairs": str(sum(1 for row in pairs if row["regulation_class"] in INVERSE_CLASSES)),
         "n_anticorrelated_pairs": str(sum(1 for row in pairs if (parse_float(row.get("pearson", "")) or 0.0) < 0)),
+        "n_expressed_targets": str(len({row.get("target_id", "") for row in pairs if row.get("target_id", "")})),
+        "n_inverse_integrated_targets": str(len(inverse_targets)),
+        "n_inverse_anticorrelated_targets": str(len(inverse_anticorrelated_targets)),
     }
 
 

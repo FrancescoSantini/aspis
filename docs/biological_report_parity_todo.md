@@ -209,16 +209,16 @@ Current state:
   - tested/mapped miRNA universe;
   - target universe size;
   - resource mapping loss.
+- Matched miRNA-mRNA integration now writes explicit target-mode tables for:
+  - expressed-target mode, where database targets are restricted to genes
+    detected in matched RNA-seq differential results/counts;
+  - inverse-integrated mode, where expressed targets also show opposite
+    miRNA/mRNA log2 fold-change direction;
+  - inverse anticorrelated subsets when matched sample-level counts support a
+    negative miRNA-mRNA correlation.
 
 Remaining work:
 
-- Separate three target-analysis modes:
-  - expressed-target mode: DE miRNAs to targets detected in matched RNA-seq;
-  - inverse-integrated mode: DE miRNAs plus opposite-direction DE target genes.
-- For expressed-target mode, define the universe as reachable targets that are
-  detected in the matched RNA-seq data.
-- For inverse-integrated mode, define the query as target genes with inverse
-  miRNA/mRNA regulation and, where possible, negative correlation.
 - Report target database/source versions when available.
 - Add first-class controlled labels/documentation for target evidence types:
   - validated;
@@ -359,8 +359,7 @@ Desired isoform-switch report:
 
 Suggested order:
 
-1. Add expressed-target and inverse-integrated miRNA target modes.
-2. Add native parsers for selected external functional annotation tools.
-3. Add first-class GO/Reactome/KEGG/MSigDB resource configuration docs.
-4. Add richer resource-backed ncRNA switch annotations.
-5. Add real-data validation notes once real projects are available.
+1. Add native parsers for selected external functional annotation tools.
+2. Add first-class GO/Reactome/KEGG/MSigDB resource configuration docs.
+3. Add richer resource-backed ncRNA switch annotations.
+4. Add real-data validation notes once real projects are available.

@@ -225,6 +225,205 @@ def exercise_inverse_target_featuresets() -> Path:
     return manifest
 
 
+def exercise_mirna_mrna_target_modes() -> Path:
+    small_samples = INPUT / "smallrna_samples.tsv"
+    rnaseq_samples = INPUT / "rnaseq_samples.tsv"
+    write_tsv(
+        small_samples,
+        ["library_id", "biospecimen_id", "condition"],
+        [
+            {"library_id": "small_control", "biospecimen_id": "bio_control", "condition": "control"},
+            {"library_id": "small_treated", "biospecimen_id": "bio_treated", "condition": "treated"},
+        ],
+    )
+    write_tsv(
+        rnaseq_samples,
+        ["library_id", "biospecimen_id", "condition"],
+        [
+            {"library_id": "rna_control", "biospecimen_id": "bio_control", "condition": "control"},
+            {"library_id": "rna_treated", "biospecimen_id": "bio_treated", "condition": "treated"},
+        ],
+    )
+    small_results = INPUT / "mirna_results.tsv"
+    rnaseq_results = INPUT / "gene_results.tsv"
+    small_counts = INPUT / "mirna_normalized.tsv"
+    rnaseq_counts = INPUT / "gene_normalized.tsv"
+    write_tsv(
+        small_results,
+        ["Geneid", "baseMean", "log2FoldChange", "pvalue", "padj"],
+        [
+            {"Geneid": "hsa-miR-1-5p", "baseMean": "50", "log2FoldChange": "2", "pvalue": "0.001", "padj": "0.01"},
+            {"Geneid": "hsa-miR-2-3p", "baseMean": "50", "log2FoldChange": "-2", "pvalue": "0.001", "padj": "0.01"},
+        ],
+    )
+    write_tsv(
+        rnaseq_results,
+        ["Geneid", "baseMean", "log2FoldChange", "pvalue", "padj"],
+        [
+            {"Geneid": "GENE1", "baseMean": "50", "log2FoldChange": "-2", "pvalue": "0.001", "padj": "0.01"},
+            {"Geneid": "GENE2", "baseMean": "50", "log2FoldChange": "2", "pvalue": "0.001", "padj": "0.01"},
+        ],
+    )
+    write_tsv(
+        small_counts,
+        ["Geneid", "small_control", "small_treated"],
+        [
+            {"Geneid": "hsa-miR-1-5p", "small_control": "10", "small_treated": "100"},
+            {"Geneid": "hsa-miR-2-3p", "small_control": "90", "small_treated": "10"},
+        ],
+    )
+    write_tsv(
+        rnaseq_counts,
+        ["Geneid", "rna_control", "rna_treated"],
+        [
+            {"Geneid": "GENE1", "rna_control": "100", "rna_treated": "10"},
+            {"Geneid": "GENE2", "rna_control": "5", "rna_treated": "80"},
+        ],
+    )
+    small_manifest = INPUT / "mirna_deseq2_manifest.tsv"
+    rnaseq_manifest = INPUT / "gene_deseq2_manifest.tsv"
+    write_tsv(
+        small_manifest,
+        ["contrast_id", "status", "reason", "results", "filtered", "normalized_counts"],
+        [
+            {
+                "contrast_id": "treated_vs_control",
+                "status": "ok",
+                "reason": "",
+                "results": str(small_results),
+                "filtered": str(small_results),
+                "normalized_counts": str(small_counts),
+            }
+        ],
+    )
+    write_tsv(
+        rnaseq_manifest,
+        ["contrast_id", "status", "reason", "results", "filtered", "normalized_counts"],
+        [
+            {
+                "contrast_id": "treated_vs_control",
+                "status": "ok",
+                "reason": "",
+                "results": str(rnaseq_results),
+                "filtered": str(rnaseq_results),
+                "normalized_counts": str(rnaseq_counts),
+            }
+        ],
+    )
+    targets = INPUT / "mirna_targets.tsv"
+    write_tsv(
+        targets,
+        ["contrast_id", "mirna_id", "target_id", "target_symbol", "target_source", "target_source_type"],
+        [
+            {
+                "contrast_id": "treated_vs_control",
+                "mirna_id": "hsa-miR-1-5p",
+                "target_id": "GENE1",
+                "target_symbol": "Gene One",
+                "target_source": "validated_toy",
+                "target_source_type": "validated",
+            },
+            {
+                "contrast_id": "treated_vs_control",
+                "mirna_id": "hsa-miR-1-5p",
+                "target_id": "GENE2",
+                "target_symbol": "Gene Two",
+                "target_source": "validated_toy",
+                "target_source_type": "validated",
+            },
+            {
+                "contrast_id": "treated_vs_control",
+                "mirna_id": "hsa-miR-2-3p",
+                "target_id": "GENE2",
+                "target_symbol": "Gene Two",
+                "target_source": "predicted_toy",
+                "target_source_type": "predicted",
+            },
+        ],
+    )
+    target_manifest = INPUT / "target_manifest.tsv"
+    write_tsv(
+        target_manifest,
+        ["contrast_id", "status", "reason", "mirna_targets"],
+        [{"contrast_id": "treated_vs_control", "status": "ok", "reason": "", "mirna_targets": str(targets)}],
+    )
+    outdir = BASE / "mirna_mrna_integration"
+    manifest = outdir / "mirna_mrna_manifest.tsv"
+    run_command(
+        [
+            sys.executable,
+            "workflow/scripts/render_mirna_mrna_integration.py",
+            "--smallrna-samples",
+            str(small_samples),
+            "--rnaseq-samples",
+            str(rnaseq_samples),
+            "--smallrna-deseq2-manifest",
+            str(small_manifest),
+            "--rnaseq-gene-manifest",
+            str(rnaseq_manifest),
+            "--target-manifest",
+            str(target_manifest),
+            "--outdir",
+            str(outdir),
+            "--manifest",
+            str(manifest),
+            "--done",
+            str(outdir / "mirna_mrna.done"),
+            "--match-columns",
+            "biospecimen_id",
+            "--min-pairs",
+            "2",
+            "--min-abs-correlation",
+            "0",
+        ]
+    )
+    row = read_tsv(
+        manifest,
+        {
+            "status",
+            "mirna_mrna_target_modes",
+            "mirna_mrna_target_mode_summary",
+            "n_expressed_targets",
+            "n_inverse_integrated_targets",
+            "n_inverse_anticorrelated_targets",
+        },
+    )[0]
+    if row["status"] != "ok":
+        raise ValueError(f"miRNA-mRNA integration was not ok: {row}")
+    if row["n_expressed_targets"] != "2" or row["n_inverse_integrated_targets"] != "2":
+        raise ValueError(f"target-mode counts are unexpected: {row}")
+    mode_rows = read_tsv(
+        Path(row["mirna_mrna_target_modes"]),
+        {
+            "target_analysis_mode",
+            "collection",
+            "query_source",
+            "target_universe_definition",
+            "target_id",
+            "target_source_type",
+        },
+    )
+    modes = {item["target_analysis_mode"] for item in mode_rows}
+    if not {"expressed_target", "inverse_integrated_target"} <= modes:
+        raise ValueError(f"target-analysis modes missing: {modes}")
+    if any(not item["target_universe_definition"] for item in mode_rows):
+        raise ValueError(f"target-mode universe definition missing: {mode_rows}")
+    summaries = read_tsv(
+        Path(row["mirna_mrna_target_mode_summary"]),
+        {"target_analysis_mode", "collection", "n_pairs", "n_targets", "target_universe_definition"},
+    )
+    summary_keys = {(item["target_analysis_mode"], item["collection"]) for item in summaries}
+    expected_keys = {
+        ("expressed_target", "all"),
+        ("expressed_target", "anticorrelated"),
+        ("inverse_integrated_target", "inverse"),
+        ("inverse_integrated_target", "inverse_anticorrelated"),
+    }
+    if not expected_keys <= summary_keys:
+        raise ValueError(f"target-mode summary missing expected collections: {summary_keys}")
+    return manifest
+
+
 def exercise_ranked_enrichment() -> Path:
     results = INPUT / "rnaseq_results.tsv"
     filtered = INPUT / "rnaseq_filtered.tsv"
@@ -354,6 +553,7 @@ def main() -> int:
     reset()
     length_outputs = exercise_smallrna_length_qc()
     exercise_inverse_target_featuresets()
+    exercise_mirna_mrna_target_modes()
     exercise_ranked_enrichment()
     exercise_biological_warnings(length_outputs)
     print("remaining biological feature contracts ok")
