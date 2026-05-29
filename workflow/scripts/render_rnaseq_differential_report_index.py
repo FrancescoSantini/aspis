@@ -26,6 +26,7 @@ REQUIRED_PLAN_COLUMNS = {
     "pca_pdf",
     "pca_metrics_tsv",
     "heatmap_pdf",
+    "heatmap_panel_tsv",
     "vst_tsv",
     "enrichment_manifest",
 }
@@ -40,6 +41,7 @@ REQUIRED_PLOTS_COLUMNS = {
     "pca_pdf",
     "pca_metrics_tsv",
     "heatmap_pdf",
+    "heatmap_panel_tsv",
     "vst_tsv",
     "n_features",
     "n_significant",
@@ -244,6 +246,11 @@ def merged_rows(
                     plan.get("sample_distance_pdf", ""),
                 ),
                 "heatmap_pdf": first_value(plots.get("heatmap_pdf", ""), plan.get("heatmap_pdf", "")),
+                "heatmap_panel_tsv": first_value(
+                    plots.get("heatmap_panel_tsv", ""),
+                    summary.get("heatmap_panel_tsv", ""),
+                    plan.get("heatmap_panel_tsv", ""),
+                ),
                 "plot_group_tsv": first_value(plots.get("plot_group_tsv", ""), plan.get("plot_group_tsv", "")),
                 "vst_tsv": first_value(plots.get("vst_tsv", ""), plan.get("vst_tsv", "")),
                 "enrichment_manifest": first_value(
@@ -295,6 +302,7 @@ def render_table(rows: list[dict[str, str]], output: Path) -> str:
                 ("pca", row["pca_pdf"]),
                 ("sample distance", row.get("sample_distance_pdf", "")),
                 ("heatmap", row["heatmap_pdf"]),
+                ("heatmap panels", row.get("heatmap_panel_tsv", "")),
                 ("plot groups", row.get("plot_group_tsv", "")),
             ],
             output,
@@ -448,6 +456,7 @@ ASSET_FIELDS = [
     ("plots", "pca_metrics_tsv", "table", "pca_metrics_tsv"),
     ("plots", "sample_distance_pdf", "plot", "sample_distance_pdf"),
     ("plots", "heatmap_pdf", "plot", "heatmap_pdf"),
+    ("plots", "heatmap_panel_tsv", "table", "heatmap_panel_tsv"),
     ("plots", "plot_group_tsv", "table", "plot_group_tsv"),
     ("enrichment", "enrichment_manifest", "manifest", "enrichment_manifest"),
     ("enrichment", "ranked_features", "table", "ranked_features"),

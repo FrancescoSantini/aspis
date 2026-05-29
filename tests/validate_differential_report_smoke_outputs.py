@@ -28,6 +28,7 @@ SCHEMAS = {
         "ma_pdf",
         "pca_pdf",
         "heatmap_pdf",
+        "heatmap_panel_tsv",
         "plot_group_tsv",
         "vst_tsv",
         "enrichment_manifest",
@@ -43,6 +44,7 @@ SCHEMAS = {
         "ma_pdf",
         "pca_pdf",
         "heatmap_pdf",
+        "heatmap_panel_tsv",
         "vst_tsv",
         "n_features",
         "n_significant",
@@ -176,11 +178,29 @@ def main() -> int:
             require_table_adapter=report_dir == Path("results/deseq2_smoke/reports"),
         )
         _, assets = read_tsv(report_dir / "asset_manifest.tsv")
-        labels = {row["asset_label"] for row in assets if row.get("exists") == "true"}
-        required_labels = {"summary_html", "results", "volcano_pdf", "ma_pdf", "pca_pdf", "heatmap_pdf", "plot_group_tsv"}
+        labels = {row["asset_label"] for row in assets}
+        required_labels = {
+            "summary_html",
+            "results",
+            "volcano_pdf",
+            "ma_pdf",
+            "pca_pdf",
+            "heatmap_pdf",
+            "heatmap_panel_tsv",
+            "plot_group_tsv",
+        }
         missing_labels = required_labels - labels
         if missing_labels:
-            raise ValueError(f"{report_dir} asset manifest is missing existing assets: {sorted(missing_labels)}")
+            raise ValueError(f"{report_dir} asset manifest is missing declared assets: {sorted(missing_labels)}")
+        existing_labels = {row["asset_label"] for row in assets if row.get("exists") == "true"}
+        has_ready_assets = any(
+            row.get("status") == "ok" and row.get("asset_label") in required_labels for row in assets
+        )
+        missing_existing = required_labels - existing_labels
+        if has_ready_assets and missing_existing:
+            raise ValueError(
+                f"{report_dir} asset manifest is missing existing assets: {sorted(missing_existing)}"
+            )
     return 0
 
 

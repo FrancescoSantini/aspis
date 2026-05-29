@@ -144,6 +144,7 @@ def exercise_grouped_plots() -> None:
     filtered = plot_dir / "transcript_filtered.tsv"
     normalized = plot_dir / "normalized_counts.tsv"
     coldata = plot_dir / "coldata.tsv"
+    heatmap_features = plot_dir / "heatmap_features.tsv"
     plan = plot_dir / "report_plan.tsv"
     rows = [
         {
@@ -198,6 +199,14 @@ def exercise_grouped_plots() -> None:
         ],
     )
     write_tsv(
+        heatmap_features,
+        ["feature_id", "feature_list", "level", "plot_group"],
+        [
+            {"feature_id": "TX_KNOWN", "feature_list": "curated_switch_candidates", "level": "transcript", "plot_group": "all"},
+            {"feature_id": "TX_J", "feature_list": "curated_switch_candidates", "level": "transcript", "plot_group": "all"},
+        ],
+    )
+    write_tsv(
         plan,
         [
             "project",
@@ -213,6 +222,7 @@ def exercise_grouped_plots() -> None:
             "ma_pdf",
             "pca_pdf",
             "heatmap_pdf",
+            "heatmap_panel_tsv",
             "vst_tsv",
         ],
         [
@@ -230,6 +240,7 @@ def exercise_grouped_plots() -> None:
                 "ma_pdf": str(plot_dir / "ma.pdf"),
                 "pca_pdf": str(plot_dir / "pca.pdf"),
                 "heatmap_pdf": str(plot_dir / "heatmap.pdf"),
+                "heatmap_panel_tsv": str(plot_dir / "heatmap_panels.tsv"),
                 "vst_tsv": str(plot_dir / "vst.tsv"),
             }
         ],
@@ -249,6 +260,10 @@ def exercise_grouped_plots() -> None:
             str(plot_dir / "plots.done"),
             "--top-n",
             "3",
+            "--heatmap-modes",
+            "significant,variable,feature_list",
+            "--heatmap-feature-lists",
+            str(heatmap_features),
             "--padj",
             "0.1",
             "--log2fc",
@@ -259,13 +274,24 @@ def exercise_grouped_plots() -> None:
             "protein_coding,lncRNA",
         ]
     )
-    manifest = read_tsv(plot_dir / "plots_manifest.tsv", {"status", "volcano_pdf", "heatmap_pdf", "plot_group_tsv"})
+    manifest = read_tsv(
+        plot_dir / "plots_manifest.tsv",
+        {"status", "volcano_pdf", "heatmap_pdf", "heatmap_panel_tsv", "plot_group_tsv"},
+    )
     if manifest[0]["status"] != "ok":
         raise ValueError(f"grouped plot rendering failed: {manifest[0]}")
     for key in ["volcano_pdf", "heatmap_pdf"]:
         output = Path(manifest[0][key])
         if not output.exists() or output.stat().st_size == 0:
             raise ValueError(f"grouped plot output was not written: {output}")
+    panel_rows = read_tsv(
+        Path(manifest[0]["heatmap_panel_tsv"]),
+        {"plot_group", "heatmap_mode", "status", "n_plotted_features", "features"},
+    )
+    if not any(row["heatmap_mode"] == "feature_list" and row["status"] == "ok" for row in panel_rows):
+        raise ValueError(f"configured heatmap feature-list panel was not rendered: {panel_rows}")
+    if not any(row["heatmap_mode"] == "variable" and row["status"] == "ok" for row in panel_rows):
+        raise ValueError(f"variable-feature heatmap panel was not rendered: {panel_rows}")
     group_rows = read_tsv(
         Path(manifest[0]["plot_group_tsv"]),
         {"plot_group", "plot_group_type", "plot_label", "n_features"},
@@ -329,6 +355,7 @@ def exercise_gene_biotype_plots() -> None:
             "ma_pdf",
             "pca_pdf",
             "heatmap_pdf",
+            "heatmap_panel_tsv",
             "vst_tsv",
         ],
         [
@@ -346,6 +373,7 @@ def exercise_gene_biotype_plots() -> None:
                 "ma_pdf": str(plot_dir / "ma.pdf"),
                 "pca_pdf": str(plot_dir / "pca.pdf"),
                 "heatmap_pdf": str(plot_dir / "heatmap.pdf"),
+                "heatmap_panel_tsv": str(plot_dir / "heatmap_panels.tsv"),
                 "vst_tsv": str(plot_dir / "vst.tsv"),
             }
         ],
@@ -373,9 +401,12 @@ def exercise_gene_biotype_plots() -> None:
             "protein_coding,lncRNA,pseudogene",
         ]
     )
-    manifest = read_tsv(plot_dir / "plots_manifest.tsv", {"status", "plot_group_tsv"})[0]
+    manifest = read_tsv(plot_dir / "plots_manifest.tsv", {"status", "plot_group_tsv", "heatmap_panel_tsv"})[0]
     if manifest["status"] != "ok":
         raise ValueError(f"gene biotype plot rendering failed: {manifest}")
+    panel_rows = read_tsv(Path(manifest["heatmap_panel_tsv"]), {"heatmap_mode", "status"})
+    if not any(row["heatmap_mode"] == "significant" for row in panel_rows):
+        raise ValueError(f"gene heatmap significant panel was not planned: {panel_rows}")
     group_rows = read_tsv(Path(manifest["plot_group_tsv"]), {"plot_group", "plot_group_type"})
     groups = {row["plot_group"] for row in group_rows}
     expected_groups = {"gene_biotype__protein_coding", "gene_biotype__lncrna", "gene_biotype__processed_pseudogene"}

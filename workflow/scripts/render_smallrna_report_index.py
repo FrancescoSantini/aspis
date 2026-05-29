@@ -24,6 +24,7 @@ SUMMARY_COLUMNS = {
     "pca_metrics_tsv",
     "sample_distance_pdf",
     "heatmap_pdf",
+    "heatmap_panel_tsv",
     "vst_tsv",
     "mirna_mrna_target_feature_set_manifest",
     "mirna_mrna_target_feature_set_universe",
@@ -172,6 +173,7 @@ ASSET_FIELDS = [
     ("plots", "pca_metrics_tsv", "table", "pca_metrics_tsv"),
     ("plots", "sample_distance_pdf", "plot", "sample_distance_pdf"),
     ("plots", "heatmap_pdf", "plot", "heatmap_pdf"),
+    ("plots", "heatmap_panel_tsv", "table", "heatmap_panel_tsv"),
 ]
 
 
@@ -243,6 +245,7 @@ def render_index(path: Path, rows: list[dict[str, str]], warnings_html: str = ""
                 link(row.get("pca_metrics_tsv", ""), "PCA metrics"),
                 link(row.get("sample_distance_pdf", ""), "sample distance"),
                 link(row.get("heatmap_pdf", ""), "heatmap"),
+                link(row.get("heatmap_panel_tsv", ""), "heatmap panels"),
                 link(row.get("vst_tsv", ""), "log2 counts"),
             ]
             if value
