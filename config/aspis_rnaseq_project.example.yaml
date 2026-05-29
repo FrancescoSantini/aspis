@@ -123,6 +123,7 @@ rnaseq_differential:
   report_feature_set_top_n: 20
   report_ranked_feature_set_permutations: 1000
   report_ranked_feature_set_seed: 1
+  report_ranked_feature_set_min_mapped: 100
   report_transcript_plot_groups:
     - all
     - known_compatible

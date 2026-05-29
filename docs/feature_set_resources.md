@@ -271,7 +271,9 @@ DESeq2 Wald statistic when present, then signed `-log10(pvalue)`, then signed
 permutation p-value, adjusted p-value, leading-edge features, direction, and
 the ranking metric used. The number of permutations is controlled by
 `rnaseq_differential.report_ranked_feature_set_permutations`; the seed is
-controlled by `rnaseq_differential.report_ranked_feature_set_seed`.
+controlled by `rnaseq_differential.report_ranked_feature_set_seed`. Resource
+mapping warnings are recorded in each `feature_set_universe.tsv` when fewer
+ranked genes map than `rnaseq_differential.report_ranked_feature_set_min_mapped`.
 
 smallRNA target-gene enrichment is interpreted as potentially regulated target
 processes. It is not direct evidence that a pathway is activated or repressed

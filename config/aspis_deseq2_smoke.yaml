@@ -23,6 +23,7 @@ deseq2_smoke:
   report_feature_set_top_n: 12
   report_ranked_feature_set_permutations: 200
   report_ranked_feature_set_seed: 1
+  report_ranked_feature_set_min_mapped: 1
   samples: tests/differential/gene_samples.tsv
   gene_counts: tests/differential/gene_counts.tsv
   gene_metadata: tests/differential/gene_metadata.tsv
