@@ -286,6 +286,7 @@ def validate_reports() -> str:
             "pca_pdf",
             "pca_metrics_tsv",
             "heatmap_pdf",
+            "heatmap_panel_tsv",
             "plot_group_tsv",
             "vst_tsv",
             "summary_html",
@@ -303,6 +304,7 @@ def validate_reports() -> str:
             "pca_pdf",
             "pca_metrics_tsv",
             "heatmap_pdf",
+            "heatmap_panel_tsv",
             "vst_tsv",
         },
         "summaries/summary_manifest.tsv": {
@@ -329,6 +331,7 @@ def validate_reports() -> str:
             "pca_pdf",
             "pca_metrics_tsv",
             "heatmap_pdf",
+            "heatmap_panel_tsv",
             "vst_tsv",
         },
         "asset_manifest.tsv": {
@@ -354,7 +357,7 @@ def validate_reports() -> str:
 
     _, plot_rows = read_tsv(reports / "plots/plots_manifest.tsv", schemas["plots/plots_manifest.tsv"])
     for row in plot_rows:
-        for column in ["volcano_pdf", "ma_pdf", "pca_pdf", "pca_metrics_tsv", "heatmap_pdf", "vst_tsv"]:
+        for column in ["volcano_pdf", "ma_pdf", "pca_pdf", "pca_metrics_tsv", "heatmap_pdf", "heatmap_panel_tsv", "vst_tsv"]:
             require_path(row[column], reports / "plots/plots_manifest.tsv", column)
 
     _, asset_rows = read_tsv(reports / "asset_manifest.tsv", schemas["asset_manifest.tsv"])
@@ -373,6 +376,7 @@ def validate_reports() -> str:
         "pca_pdf",
         "pca_metrics_tsv",
         "heatmap_pdf",
+        "heatmap_panel_tsv",
     }
     missing_labels = required_labels - labels
     if missing_labels:

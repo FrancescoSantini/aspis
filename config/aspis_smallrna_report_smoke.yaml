@@ -96,6 +96,11 @@ smallrna:
   mirna_feature_set_top_n: 20
   reports: true
   report_top_n: 20
+  report_heatmap_modes:
+    - significant
+    - variable
+  report_heatmap_feature_lists: ""
+  report_heatmap_significant_fallback: variable
   condition_col: condition
   control_label: control
   design_formula: ""

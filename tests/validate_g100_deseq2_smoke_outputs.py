@@ -96,6 +96,7 @@ REPORT_SCHEMAS = {
         "pca_pdf",
         "pca_metrics_tsv",
         "heatmap_pdf",
+        "heatmap_panel_tsv",
         "plot_group_tsv",
         "vst_tsv",
         "enrichment_manifest",
@@ -112,6 +113,7 @@ REPORT_SCHEMAS = {
         "pca_pdf",
         "pca_metrics_tsv",
         "heatmap_pdf",
+        "heatmap_panel_tsv",
         "vst_tsv",
         "n_features",
         "n_significant",
@@ -437,6 +439,7 @@ def validate_reports() -> str:
         "pca_pdf",
         "pca_metrics_tsv",
         "heatmap_pdf",
+        "heatmap_panel_tsv",
         "plot_group_tsv",
     }
     missing_labels = required_labels - labels

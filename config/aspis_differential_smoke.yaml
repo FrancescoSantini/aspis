@@ -109,6 +109,11 @@ rnaseq_differential:
     - isoform_switch
   reports: true
   report_top_n: 20
+  report_heatmap_modes:
+    - significant
+    - variable
+  report_heatmap_feature_lists: ""
+  report_heatmap_significant_fallback: variable
   report_transcript_plot_groups:
     - all
     - known_compatible

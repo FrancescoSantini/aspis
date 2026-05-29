@@ -25,6 +25,7 @@ REQUIRED_PLAN_COLUMNS = {
     "pca_metrics_tsv",
     "sample_distance_pdf",
     "heatmap_pdf",
+    "heatmap_panel_tsv",
     "enrichment_manifest",
     "summary_html",
 }
@@ -40,6 +41,7 @@ MANIFEST_COLUMNS = [
     "ma_pdf",
     "pca_metrics_tsv",
     "sample_distance_pdf",
+    "heatmap_panel_tsv",
     "n_features",
     "n_significant",
     "n_up",
@@ -221,6 +223,7 @@ def render_html(
         ("Full DESeq2 results", row["results"]),
         ("Filtered DESeq2 results", row["filtered"]),
         ("PCA metrics", row.get("pca_metrics_tsv", "")),
+        ("Heatmap panels", row.get("heatmap_panel_tsv", "")),
         ("Plot groups", row.get("plot_group_tsv", "")),
         ("Enrichment manifest", row["enrichment_manifest"]),
     ]
@@ -321,6 +324,7 @@ def render_ready_row(row: dict[str, str], top_n: int) -> dict[str, str]:
         "ma_pdf": row.get("ma_pdf", ""),
         "pca_metrics_tsv": row.get("pca_metrics_tsv", ""),
         "sample_distance_pdf": row.get("sample_distance_pdf", ""),
+        "heatmap_panel_tsv": row.get("heatmap_panel_tsv", ""),
         "n_features": str(len(result_rows)),
         "n_significant": str(len(filtered_rows)),
         "n_up": str(n_up),
@@ -345,6 +349,7 @@ def render_rows(plan_rows: list[dict[str, str]], top_n: int) -> list[dict[str, s
                     "ma_pdf": row.get("ma_pdf", ""),
                     "pca_metrics_tsv": row.get("pca_metrics_tsv", ""),
                     "sample_distance_pdf": row.get("sample_distance_pdf", ""),
+                    "heatmap_panel_tsv": row.get("heatmap_panel_tsv", ""),
                     "n_features": "0",
                     "n_significant": "0",
                     "n_up": "0",
@@ -364,6 +369,7 @@ def render_rows(plan_rows: list[dict[str, str]], top_n: int) -> list[dict[str, s
             failed["n_down"] = "0"
             failed["ma_pdf"] = row.get("ma_pdf", "")
             failed["pca_metrics_tsv"] = row.get("pca_metrics_tsv", "")
+            failed["heatmap_panel_tsv"] = row.get("heatmap_panel_tsv", "")
             output_rows.append(failed)
     return output_rows
 
