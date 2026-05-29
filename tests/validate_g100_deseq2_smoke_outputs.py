@@ -98,6 +98,7 @@ REPORT_SCHEMAS = {
         "heatmap_pdf",
         "heatmap_panel_tsv",
         "plot_group_tsv",
+        "novelty_summary_tsv",
         "vst_tsv",
         "enrichment_manifest",
         "summary_html",
@@ -154,6 +155,7 @@ REPORT_SCHEMAS = {
         "filtered",
         "ma_pdf",
         "pca_metrics_tsv",
+        "novelty_summary_tsv",
         "n_features",
         "n_significant",
         "n_up",
@@ -247,6 +249,27 @@ FEATURE_SET_UNIVERSE_COLUMNS = {
     "ranked_mapping_warning",
     "min_overlap",
 }
+TRANSCRIPT_NOVELTY_COLUMNS = {
+    "transcript_discovery_class",
+    "transcript_novelty",
+    "true_novel_candidate",
+    "transcript_plot_group",
+    "transcript_plot_label",
+}
+TRANSCRIPT_NOVELTY_SUMMARY_COLUMNS = {
+    "project",
+    "level",
+    "contrast_id",
+    "transcript_novelty",
+    "transcript_plot_group",
+    "transcript_plot_label",
+    "n_tested",
+    "fraction_tested",
+    "n_significant",
+    "fraction_significant",
+    "n_up",
+    "n_down",
+}
 
 
 def read_tsv(path: Path, required_columns: set[str]) -> tuple[list[str], list[dict[str, str]]]:
@@ -303,7 +326,14 @@ def validate_level(level: str, branch: Path, feature_column: str) -> str:
     ]:
         require_path(manifest[column], branch / "deseq2_manifest.tsv", column)
 
-    _, result_rows = read_tsv(Path(manifest["results"]), {feature_column, "padj"})
+    result_required = {feature_column, "padj"}
+    if level == "transcript":
+        result_required |= TRANSCRIPT_NOVELTY_COLUMNS
+    _, result_rows = read_tsv(Path(manifest["results"]), result_required)
+    if level == "transcript":
+        plot_groups = {row.get("transcript_plot_group", "") for row in result_rows}
+        if not {"known_compatible", "novel_isoform", "novel_locus"} <= plot_groups:
+            raise ValueError(f"Transcript DESeq2 results did not preserve novelty plot groups: {sorted(plot_groups)}")
     _, normalized_rows = read_tsv(Path(manifest["normalized_counts"]), {feature_column})
     summary_columns = {
         "status",
@@ -429,6 +459,12 @@ def validate_reports() -> str:
         text = summary_html.read_text(encoding="utf-8")
         if PCA_NOTE_FRAGMENT not in text:
             raise ValueError(f"{summary_html} is missing the PCA interpretation note")
+        if row.get("level") == "transcript":
+            require_path(row.get("novelty_summary_tsv", ""), REPORT_DIR / "summaries/summary_manifest.tsv", "novelty_summary_tsv")
+            _, novelty_rows = read_tsv(Path(row["novelty_summary_tsv"]), TRANSCRIPT_NOVELTY_SUMMARY_COLUMNS)
+            novelty_groups = {novelty_row.get("transcript_plot_group", "") for novelty_row in novelty_rows}
+            if not {"known_compatible", "novel_isoform", "novel_locus"} <= novelty_groups:
+                raise ValueError(f"Transcript novelty summary is missing expected groups: {novelty_rows}")
     asset_rows = validate_report_tsv("asset_manifest.tsv", REPORT_SCHEMAS["asset_manifest.tsv"])
     labels = {row["asset_label"] for row in asset_rows if row.get("exists") == "true"}
     required_labels = {
@@ -441,6 +477,7 @@ def validate_reports() -> str:
         "heatmap_pdf",
         "heatmap_panel_tsv",
         "plot_group_tsv",
+        "novelty_summary_tsv",
     }
     missing_labels = required_labels - labels
     if missing_labels:

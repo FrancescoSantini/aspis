@@ -30,6 +30,7 @@ SCHEMAS = {
         "heatmap_pdf",
         "heatmap_panel_tsv",
         "plot_group_tsv",
+        "novelty_summary_tsv",
         "vst_tsv",
         "enrichment_manifest",
         "summary_html",
@@ -79,6 +80,7 @@ SCHEMAS = {
         "results",
         "filtered",
         "ma_pdf",
+        "novelty_summary_tsv",
         "n_features",
         "n_significant",
         "n_up",
@@ -118,6 +120,18 @@ FEATURE_SET_RESULT_COLUMNS = {
     "pvalue",
     "padj",
     "features",
+}
+TRANSCRIPT_NOVELTY_SUMMARY_COLUMNS = {
+    "project",
+    "level",
+    "contrast_id",
+    "transcript_novelty",
+    "transcript_plot_group",
+    "transcript_plot_label",
+    "n_tested",
+    "fraction_tested",
+    "n_significant",
+    "fraction_significant",
 }
 
 
@@ -177,6 +191,20 @@ def main() -> int:
             report_dir,
             require_table_adapter=report_dir == Path("results/deseq2_smoke/reports"),
         )
+        _, summary_rows = read_tsv(report_dir / "summaries/summary_manifest.tsv")
+        for row in summary_rows:
+            if row.get("level") != "transcript":
+                continue
+            novelty_path = Path(row.get("novelty_summary_tsv", ""))
+            if not novelty_path.exists():
+                raise FileNotFoundError(f"Missing transcript novelty summary: {novelty_path}")
+            columns, novelty_rows = read_tsv(novelty_path)
+            missing_columns = TRANSCRIPT_NOVELTY_SUMMARY_COLUMNS - set(columns)
+            if missing_columns:
+                raise ValueError(f"{novelty_path} is missing columns: {sorted(missing_columns)}")
+            novelty_groups = {novelty_row.get("transcript_plot_group", "") for novelty_row in novelty_rows}
+            if "known_compatible" not in novelty_groups:
+                raise ValueError(f"{novelty_path} does not include known-compatible transcript rows")
         _, assets = read_tsv(report_dir / "asset_manifest.tsv")
         labels = {row["asset_label"] for row in assets}
         required_labels = {
@@ -188,6 +216,7 @@ def main() -> int:
             "heatmap_pdf",
             "heatmap_panel_tsv",
             "plot_group_tsv",
+            "novelty_summary_tsv",
         }
         missing_labels = required_labels - labels
         if missing_labels:
