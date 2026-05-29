@@ -68,6 +68,8 @@ REPORT_COLUMNS = [
     "mirna_mrna_pairs",
     "mirna_mrna_summary",
     "mirna_mrna_plot",
+    "mirna_mrna_target_modes",
+    "mirna_mrna_target_mode_summary",
     "mirna_mrna_target_feature_set_manifest",
     "mirna_mrna_target_feature_set_universe",
     "mirna_mrna_target_feature_set_results",
@@ -290,6 +292,8 @@ def planned_row(
         "mirna_mrna_pairs": integration_row.get("mirna_mrna_pairs", ""),
         "mirna_mrna_summary": integration_row.get("mirna_mrna_summary", ""),
         "mirna_mrna_plot": integration_row.get("mirna_mrna_plot", ""),
+        "mirna_mrna_target_modes": integration_row.get("mirna_mrna_target_modes", ""),
+        "mirna_mrna_target_mode_summary": integration_row.get("mirna_mrna_target_mode_summary", ""),
         "mirna_mrna_target_feature_set_manifest": mirna_mrna_target_feature_set_row.get(
             "mirna_mrna_target_feature_set_manifest",
             "",
