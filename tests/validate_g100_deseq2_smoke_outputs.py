@@ -126,14 +126,19 @@ REPORT_SCHEMAS = {
         "significant_features",
         "up_features",
         "down_features",
+        "feature_set_universe",
         "feature_set_results",
         "feature_set_plot",
+        "ranked_feature_set_results",
+        "ranked_feature_set_plot",
         "n_ranked",
         "n_significant",
         "n_up",
         "n_down",
         "n_feature_sets",
+        "n_feature_set_resources",
         "n_feature_set_terms",
+        "n_ranked_feature_set_terms",
     },
     "summaries/summary_manifest.tsv": {
         "project",
@@ -174,17 +179,61 @@ REPORT_SCHEMAS = {
 FEATURE_SET_RESULT_COLUMNS = {
     "contrast_id",
     "collection",
+    "query_source",
     "feature_set_source",
     "feature_set_collection",
     "set_id",
     "description",
+    "mapping_mode",
     "overlap",
     "set_size",
     "query_size",
+    "tested_features",
+    "mapped_tested_features",
+    "resource_universe_size",
+    "final_universe_size",
+    "resource_mapping_loss",
     "universe_size",
     "pvalue",
     "padj",
     "features",
+}
+RANKED_FEATURE_SET_RESULT_COLUMNS = {
+    "contrast_id",
+    "feature_set_source",
+    "feature_set_collection",
+    "set_id",
+    "description",
+    "mapping_mode",
+    "set_size",
+    "tested_features",
+    "mapped_tested_features",
+    "resource_universe_size",
+    "final_universe_size",
+    "resource_mapping_loss",
+    "universe_size",
+    "enrichment_score",
+    "leading_edge_size",
+    "direction",
+    "leading_edge_features",
+}
+FEATURE_SET_UNIVERSE_COLUMNS = {
+    "contrast_id",
+    "level",
+    "feature_set_source",
+    "feature_set_collection",
+    "mapping_mode",
+    "feature_set_count",
+    "tested_features",
+    "mapped_tested_features",
+    "resource_universe_size",
+    "final_universe_size",
+    "resource_mapping_loss",
+    "significant_query_size",
+    "up_query_size",
+    "down_query_size",
+    "ranked_query_size",
+    "min_overlap",
 }
 
 
@@ -303,15 +352,52 @@ def validate_feature_set_results() -> None:
         REPORT_SCHEMAS["enrichment/enrichment_manifest.tsv"],
     )
     found_table_adapter_term = False
+    found_universe_row = False
+    found_ranked_term = False
     for row in manifest_rows:
-        if row.get("status") != "ok" or not row.get("feature_set_results", ""):
+        if row.get("status") != "ok":
             continue
-        result_path = Path(row["feature_set_results"])
-        _, result_rows = read_tsv(result_path, FEATURE_SET_RESULT_COLUMNS)
-        if any(result_row.get("feature_set_source", "") == "toy_pathways" for result_row in result_rows):
-            found_table_adapter_term = True
+        if row.get("feature_set_universe", ""):
+            universe_path = Path(row["feature_set_universe"])
+            _, universe_rows = read_tsv(universe_path, FEATURE_SET_UNIVERSE_COLUMNS)
+            for universe_row in universe_rows:
+                if universe_row.get("feature_set_source", "") != "toy_pathways":
+                    continue
+                found_universe_row = True
+                final_universe = int(universe_row.get("final_universe_size", "0") or "0")
+                resource_universe = int(universe_row.get("resource_universe_size", "0") or "0")
+                if final_universe <= 0 or resource_universe < final_universe:
+                    raise ValueError(f"Invalid feature-set universe row in {universe_path}: {universe_row}")
+                if universe_row.get("mapping_mode", "") not in {"native", "parent_gene"}:
+                    raise ValueError(f"Invalid feature-set mapping mode in {universe_path}: {universe_row}")
+                if universe_row.get("resource_mapping_loss", "") == "":
+                    raise ValueError(f"Missing feature-set mapping loss in {universe_path}: {universe_row}")
+        if row.get("feature_set_results", ""):
+            result_path = Path(row["feature_set_results"])
+            _, result_rows = read_tsv(result_path, FEATURE_SET_RESULT_COLUMNS)
+            for result_row in result_rows:
+                if result_row.get("feature_set_source", "") != "toy_pathways":
+                    continue
+                found_table_adapter_term = True
+                if result_row.get("query_source", "") not in {"significant", "up", "down"}:
+                    raise ValueError(f"Invalid feature-set query source in {result_path}: {result_row}")
+                if result_row.get("universe_size", "") != result_row.get("final_universe_size", ""):
+                    raise ValueError(f"ORA universe mismatch in {result_path}: {result_row}")
+        if row.get("ranked_feature_set_results", ""):
+            ranked_path = Path(row["ranked_feature_set_results"])
+            _, ranked_rows = read_tsv(ranked_path, RANKED_FEATURE_SET_RESULT_COLUMNS)
+            for ranked_row in ranked_rows:
+                if ranked_row.get("feature_set_source", "") != "toy_pathways":
+                    continue
+                found_ranked_term = True
+                if ranked_row.get("universe_size", "") != ranked_row.get("final_universe_size", ""):
+                    raise ValueError(f"Ranked feature-set universe mismatch in {ranked_path}: {ranked_row}")
+    if not found_universe_row:
+        raise ValueError(f"{REPORT_DIR} did not include feature-set universe provenance from the TSV adapter")
     if not found_table_adapter_term:
         raise ValueError(f"{REPORT_DIR} did not include feature-set terms from the TSV adapter")
+    if not found_ranked_term:
+        raise ValueError(f"{REPORT_DIR} did not include ranked feature-set terms from the TSV adapter")
 
 
 def validate_reports() -> str:

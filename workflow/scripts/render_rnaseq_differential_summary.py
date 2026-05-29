@@ -226,6 +226,9 @@ def render_html(
     feature_set_results = resources.get("feature_set_results", {}).get("path", "")
     if feature_set_results:
         artifacts.append(("Feature-set enrichment", feature_set_results))
+    feature_set_universe = resources.get("feature_set_universe", {}).get("path", "")
+    if feature_set_universe:
+        artifacts.append(("Feature-set universe", feature_set_universe))
     ranked_feature_set_results = resources.get("ranked_feature_set_results", {}).get("path", "")
     if ranked_feature_set_results:
         artifacts.append(("Ranked feature-set enrichment", ranked_feature_set_results))

@@ -32,6 +32,7 @@ MANIFEST_COLUMNS = [
     "significant_features",
     "up_features",
     "down_features",
+    "feature_set_universe",
     "feature_set_results",
     "feature_set_plot",
     "ranked_feature_set_results",
@@ -41,6 +42,7 @@ MANIFEST_COLUMNS = [
     "n_up",
     "n_down",
     "n_feature_sets",
+    "n_feature_set_resources",
     "n_feature_set_terms",
     "n_ranked_feature_set_terms",
 ]
@@ -56,13 +58,20 @@ FEATURE_COLUMNS = ["feature_id", "mapped_feature_id", "log2FoldChange", "padj", 
 FEATURE_SET_COLUMNS = [
     "contrast_id",
     "collection",
+    "query_source",
     "feature_set_source",
     "feature_set_collection",
     "set_id",
     "description",
+    "mapping_mode",
     "overlap",
     "set_size",
     "query_size",
+    "tested_features",
+    "mapped_tested_features",
+    "resource_universe_size",
+    "final_universe_size",
+    "resource_mapping_loss",
     "universe_size",
     "pvalue",
     "padj",
@@ -74,12 +83,36 @@ RANKED_FEATURE_SET_COLUMNS = [
     "feature_set_collection",
     "set_id",
     "description",
+    "mapping_mode",
     "set_size",
+    "tested_features",
+    "mapped_tested_features",
+    "resource_universe_size",
+    "final_universe_size",
+    "resource_mapping_loss",
     "universe_size",
     "enrichment_score",
     "leading_edge_size",
     "direction",
     "leading_edge_features",
+]
+FEATURE_SET_UNIVERSE_COLUMNS = [
+    "contrast_id",
+    "level",
+    "feature_set_source",
+    "feature_set_collection",
+    "mapping_mode",
+    "feature_set_count",
+    "tested_features",
+    "mapped_tested_features",
+    "resource_universe_size",
+    "final_universe_size",
+    "resource_mapping_loss",
+    "significant_query_size",
+    "up_query_size",
+    "down_query_size",
+    "ranked_query_size",
+    "min_overlap",
 ]
 STAT_COLUMNS = {
     "baseMean",
@@ -235,6 +268,30 @@ def feature_ids(rows: list[dict[str, str]]) -> set[str]:
     }
 
 
+def original_feature_ids(rows: list[dict[str, str]]) -> set[str]:
+    return {row.get("feature_id", "") for row in rows if row.get("feature_id", "")}
+
+
+def feature_set_groups(feature_sets: list[FeatureSet]) -> dict[tuple[str, str], list[FeatureSet]]:
+    groups: dict[tuple[str, str], list[FeatureSet]] = {}
+    for feature_set in feature_sets:
+        groups.setdefault((feature_set.source, feature_set.collection), []).append(feature_set)
+    return groups
+
+
+def resource_universe(feature_sets: list[FeatureSet]) -> set[str]:
+    universe: set[str] = set()
+    for feature_set in feature_sets:
+        universe.update(feature_set.features)
+    return universe
+
+
+def mapping_mode(level: str, id_map: dict[str, str]) -> str:
+    if level == "transcript" and id_map:
+        return "parent_gene"
+    return "native"
+
+
 def split_paths(paths_text: str) -> list[Path]:
     return [Path(path.strip()) for path in paths_text.split(",") if path.strip()]
 
@@ -350,43 +407,60 @@ def bh_adjust(rows: list[dict[str, str]]) -> None:
 
 def enrichment_rows(
     contrast_id: str,
+    level: str,
+    map_mode: str,
     feature_lists: FeatureLists,
     feature_sets: list[FeatureSet],
     min_overlap: int,
 ) -> list[dict[str, str]]:
-    universe = feature_ids(feature_lists.ranked)
+    mapped_universe = feature_ids(feature_lists.ranked)
+    tested_count = len(original_feature_ids(feature_lists.ranked))
+    mapped_count = len(mapped_universe)
     collections = {
         "significant": feature_ids(feature_lists.significant),
         "up": feature_ids(feature_lists.up),
         "down": feature_ids(feature_lists.down),
     }
     rows: list[dict[str, str]] = []
-    for collection, query in collections.items():
-        query = query & universe
-        if not query:
+    for (source, collection_name), grouped_sets in feature_set_groups(feature_sets).items():
+        resource_members = resource_universe(grouped_sets)
+        final_universe = mapped_universe & resource_members
+        if not final_universe:
             continue
-        for feature_set in feature_sets:
-            set_members = feature_set.features & universe
-            overlap = query & set_members
-            if len(overlap) < min_overlap:
+        mapping_loss = mapped_count - len(final_universe)
+        for collection, query_all in collections.items():
+            query = query_all & final_universe
+            if not query:
                 continue
-            rows.append(
-                {
-                    "contrast_id": contrast_id,
-                    "collection": collection,
-                    "feature_set_source": feature_set.source,
-                    "feature_set_collection": feature_set.collection,
-                    "set_id": feature_set.set_id,
-                    "description": feature_set.description,
-                    "overlap": str(len(overlap)),
-                    "set_size": str(len(set_members)),
-                    "query_size": str(len(query)),
-                    "universe_size": str(len(universe)),
-                    "pvalue": f"{hypergeom_tail(len(overlap), len(set_members), len(query), len(universe)):.8g}",
-                    "padj": "",
-                    "features": ",".join(sorted(overlap)),
-                }
-            )
+            for feature_set in grouped_sets:
+                set_members = feature_set.features & final_universe
+                overlap = query & set_members
+                if len(overlap) < min_overlap:
+                    continue
+                rows.append(
+                    {
+                        "contrast_id": contrast_id,
+                        "collection": collection,
+                        "query_source": collection,
+                        "feature_set_source": source,
+                        "feature_set_collection": collection_name,
+                        "set_id": feature_set.set_id,
+                        "description": feature_set.description,
+                        "mapping_mode": map_mode,
+                        "overlap": str(len(overlap)),
+                        "set_size": str(len(set_members)),
+                        "query_size": str(len(query)),
+                        "tested_features": str(tested_count),
+                        "mapped_tested_features": str(mapped_count),
+                        "resource_universe_size": str(len(resource_members)),
+                        "final_universe_size": str(len(final_universe)),
+                        "resource_mapping_loss": str(mapping_loss),
+                        "universe_size": str(len(final_universe)),
+                        "pvalue": f"{hypergeom_tail(len(overlap), len(set_members), len(query), len(final_universe)):.8g}",
+                        "padj": "",
+                        "features": ",".join(sorted(overlap)),
+                    }
+                )
     bh_adjust(rows)
     rows.sort(
         key=lambda row: (
@@ -469,6 +543,8 @@ def write_enrichment_svg(path: Path, rows: list[dict[str, str]], top_n: int) -> 
 
 def ranked_feature_set_rows(
     contrast_id: str,
+    level: str,
+    map_mode: str,
     feature_lists: FeatureLists,
     feature_sets: list[FeatureSet],
     min_overlap: int,
@@ -478,49 +554,67 @@ def ranked_feature_set_rows(
         for row in feature_lists.ranked
         if row.get("mapped_feature_id") or row.get("feature_id", "")
     ]
-    universe = [row.get("mapped_feature_id") or row.get("feature_id", "") for row in ranked]
-    universe_set = set(universe)
-    if not ranked or not universe_set:
+    mapped_universe = {row.get("mapped_feature_id") or row.get("feature_id", "") for row in ranked}
+    if not ranked or not mapped_universe:
         return []
-    scores = [abs(parse_float(row.get("rank_score", "")) or 0.0) for row in ranked]
-    total_weight = sum(scores) or float(len(scores))
+    tested_count = len(original_feature_ids(ranked))
+    mapped_count = len(mapped_universe)
     rows: list[dict[str, str]] = []
-    for feature_set in feature_sets:
-        members = feature_set.features & universe_set
-        if len(members) < min_overlap:
+    for (source, collection_name), grouped_sets in feature_set_groups(feature_sets).items():
+        resource_members = resource_universe(grouped_sets)
+        final_universe = mapped_universe & resource_members
+        if not final_universe:
             continue
-        miss_penalty = 1.0 / max(1, len(universe) - len(members))
-        running = 0.0
-        best_abs = 0.0
-        best_score = 0.0
-        leading_edge_index = -1
-        member_weight = sum(score for feature, score in zip(universe, scores) if feature in members) or float(len(members))
-        for index, (feature, score) in enumerate(zip(universe, scores)):
-            if feature in members:
-                running += score / member_weight
-            else:
-                running -= miss_penalty
-            if abs(running) > best_abs:
-                best_abs = abs(running)
-                best_score = running
-                leading_edge_index = index
-        leading_edge = [feature for feature in universe[: leading_edge_index + 1] if feature in members]
-        direction = "top_enriched" if best_score >= 0 else "bottom_enriched"
-        rows.append(
-            {
-                "contrast_id": contrast_id,
-                "feature_set_source": feature_set.source,
-                "feature_set_collection": feature_set.collection,
-                "set_id": feature_set.set_id,
-                "description": feature_set.description,
-                "set_size": str(len(members)),
-                "universe_size": str(len(universe_set)),
-                "enrichment_score": f"{best_score:.8g}",
-                "leading_edge_size": str(len(leading_edge)),
-                "direction": direction,
-                "leading_edge_features": ",".join(leading_edge),
-            }
-        )
+        mapping_loss = mapped_count - len(final_universe)
+        resource_ranked = [
+            row
+            for row in ranked
+            if (row.get("mapped_feature_id") or row.get("feature_id", "")) in final_universe
+        ]
+        universe = [row.get("mapped_feature_id") or row.get("feature_id", "") for row in resource_ranked]
+        scores = [abs(parse_float(row.get("rank_score", "")) or 0.0) for row in resource_ranked]
+        for feature_set in grouped_sets:
+            members = feature_set.features & final_universe
+            if len(members) < min_overlap:
+                continue
+            miss_penalty = 1.0 / max(1, len(universe) - len(members))
+            running = 0.0
+            best_abs = 0.0
+            best_score = 0.0
+            leading_edge_index = -1
+            member_weight = sum(score for feature, score in zip(universe, scores) if feature in members) or float(len(members))
+            for index, (feature, score) in enumerate(zip(universe, scores)):
+                if feature in members:
+                    running += score / member_weight
+                else:
+                    running -= miss_penalty
+                if abs(running) > best_abs:
+                    best_abs = abs(running)
+                    best_score = running
+                    leading_edge_index = index
+            leading_edge = [feature for feature in universe[: leading_edge_index + 1] if feature in members]
+            direction = "top_enriched" if best_score >= 0 else "bottom_enriched"
+            rows.append(
+                {
+                    "contrast_id": contrast_id,
+                    "feature_set_source": source,
+                    "feature_set_collection": collection_name,
+                    "set_id": feature_set.set_id,
+                    "description": feature_set.description,
+                    "mapping_mode": map_mode,
+                    "set_size": str(len(members)),
+                    "tested_features": str(tested_count),
+                    "mapped_tested_features": str(mapped_count),
+                    "resource_universe_size": str(len(resource_members)),
+                    "final_universe_size": str(len(final_universe)),
+                    "resource_mapping_loss": str(mapping_loss),
+                    "universe_size": str(len(final_universe)),
+                    "enrichment_score": f"{best_score:.8g}",
+                    "leading_edge_size": str(len(leading_edge)),
+                    "direction": direction,
+                    "leading_edge_features": ",".join(leading_edge),
+                }
+            )
     rows.sort(
         key=lambda row: (
             -(abs(parse_float(row.get("enrichment_score", "")) or 0.0)),
@@ -529,6 +623,47 @@ def ranked_feature_set_rows(
             row["set_id"],
         )
     )
+    return rows
+
+
+def feature_set_universe_rows(
+    contrast_id: str,
+    level: str,
+    map_mode: str,
+    feature_lists: FeatureLists,
+    feature_sets: list[FeatureSet],
+    min_overlap: int,
+) -> list[dict[str, str]]:
+    mapped_universe = feature_ids(feature_lists.ranked)
+    tested_count = len(original_feature_ids(feature_lists.ranked))
+    mapped_count = len(mapped_universe)
+    significant = feature_ids(feature_lists.significant)
+    up = feature_ids(feature_lists.up)
+    down = feature_ids(feature_lists.down)
+    rows: list[dict[str, str]] = []
+    for (source, collection), grouped_sets in sorted(feature_set_groups(feature_sets).items()):
+        resource_members = resource_universe(grouped_sets)
+        final_universe = mapped_universe & resource_members
+        rows.append(
+            {
+                "contrast_id": contrast_id,
+                "level": level,
+                "feature_set_source": source,
+                "feature_set_collection": collection,
+                "mapping_mode": map_mode,
+                "feature_set_count": str(len(grouped_sets)),
+                "tested_features": str(tested_count),
+                "mapped_tested_features": str(mapped_count),
+                "resource_universe_size": str(len(resource_members)),
+                "final_universe_size": str(len(final_universe)),
+                "resource_mapping_loss": str(mapped_count - len(final_universe)),
+                "significant_query_size": str(len(significant & final_universe)),
+                "up_query_size": str(len(up & final_universe)),
+                "down_query_size": str(len(down & final_universe)),
+                "ranked_query_size": str(len(final_universe)),
+                "min_overlap": str(min_overlap),
+            }
+        )
     return rows
 
 
@@ -591,6 +726,7 @@ def write_feature_lists(
         "significant_features": outdir / "significant_features.tsv",
         "up_features": outdir / "up_features.tsv",
         "down_features": outdir / "down_features.tsv",
+        "feature_set_universe": outdir / "feature_set_universe.tsv",
         "feature_set_results": outdir / "feature_set_enrichment.tsv",
         "feature_set_plot": outdir / "feature_set_enrichment.svg",
         "ranked_feature_set_results": outdir / "ranked_feature_set_enrichment.tsv",
@@ -611,14 +747,24 @@ def write_feature_lists(
         if (parse_float(source_row.get("log2FoldChange", "")) or 0.0) < 0
     ]
     feature_lists = FeatureLists(ranked=ranked, significant=significant, up=up, down=down)
+    map_mode = mapping_mode(row.get("level", ""), id_map)
 
     write_table(paths["ranked_features"], FEATURE_COLUMNS, ranked)
     write_table(paths["significant_features"], FEATURE_COLUMNS, significant)
     write_table(paths["up_features"], FEATURE_COLUMNS, up)
     write_table(paths["down_features"], FEATURE_COLUMNS, down)
 
-    term_rows = enrichment_rows(row["contrast_id"], feature_lists, feature_sets, min_overlap)
-    ranked_term_rows = ranked_feature_set_rows(row["contrast_id"], feature_lists, feature_sets, min_overlap)
+    universe_rows = feature_set_universe_rows(
+        row["contrast_id"],
+        row.get("level", ""),
+        map_mode,
+        feature_lists,
+        feature_sets,
+        min_overlap,
+    )
+    term_rows = enrichment_rows(row["contrast_id"], row.get("level", ""), map_mode, feature_lists, feature_sets, min_overlap)
+    ranked_term_rows = ranked_feature_set_rows(row["contrast_id"], row.get("level", ""), map_mode, feature_lists, feature_sets, min_overlap)
+    write_table(paths["feature_set_universe"], FEATURE_SET_UNIVERSE_COLUMNS, universe_rows)
     write_table(paths["feature_set_results"], FEATURE_SET_COLUMNS, term_rows)
     write_enrichment_svg(paths["feature_set_plot"], term_rows, top_n)
     write_table(paths["ranked_feature_set_results"], RANKED_FEATURE_SET_COLUMNS, ranked_term_rows)
@@ -629,6 +775,7 @@ def write_feature_lists(
         "significant_features": str(paths["significant_features"]),
         "up_features": str(paths["up_features"]),
         "down_features": str(paths["down_features"]),
+        "feature_set_universe": str(paths["feature_set_universe"]),
         "feature_set_results": str(paths["feature_set_results"]),
         "feature_set_plot": str(paths["feature_set_plot"]),
         "ranked_feature_set_results": str(paths["ranked_feature_set_results"]),
@@ -638,6 +785,7 @@ def write_feature_lists(
         "n_up": str(len(up)),
         "n_down": str(len(down)),
         "n_feature_sets": str(len(feature_sets)),
+        "n_feature_set_resources": str(len(universe_rows)),
         "n_feature_set_terms": str(len(term_rows)),
         "n_ranked_feature_set_terms": str(len(ranked_term_rows)),
     }
@@ -646,6 +794,13 @@ def write_feature_lists(
         ("significant_features", paths["significant_features"], "ok", "", len(significant)),
         ("up_features", paths["up_features"], "ok", "", len(up)),
         ("down_features", paths["down_features"], "ok", "", len(down)),
+        (
+            "feature_set_universe",
+            paths["feature_set_universe"],
+            "ok" if feature_sets else "not_configured",
+            "" if feature_sets else "No feature set GMT or table configured",
+            len(universe_rows),
+        ),
         (
             "feature_set_results",
             paths["feature_set_results"],
@@ -699,6 +854,7 @@ def write_blocked_contrast_manifest(row: dict[str, str], reason: str) -> None:
         "significant_features",
         "up_features",
         "down_features",
+        "feature_set_universe",
         "feature_set_results",
         "feature_set_plot",
         "ranked_feature_set_results",
@@ -731,6 +887,7 @@ def empty_output(row: dict[str, str]) -> dict[str, str]:
         "significant_features": "",
         "up_features": "",
         "down_features": "",
+        "feature_set_universe": "",
         "feature_set_results": "",
         "feature_set_plot": "",
         "ranked_feature_set_results": "",
@@ -740,6 +897,7 @@ def empty_output(row: dict[str, str]) -> dict[str, str]:
         "n_up": "0",
         "n_down": "0",
         "n_feature_sets": "0",
+        "n_feature_set_resources": "0",
         "n_feature_set_terms": "0",
         "n_ranked_feature_set_terms": "0",
     }

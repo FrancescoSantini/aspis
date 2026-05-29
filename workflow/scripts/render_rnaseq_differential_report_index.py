@@ -55,6 +55,7 @@ REQUIRED_ENRICHMENT_COLUMNS = {
     "significant_features",
     "up_features",
     "down_features",
+    "feature_set_universe",
     "feature_set_results",
     "feature_set_plot",
     "ranked_feature_set_results",
@@ -64,6 +65,7 @@ REQUIRED_ENRICHMENT_COLUMNS = {
     "n_up",
     "n_down",
     "n_feature_sets",
+    "n_feature_set_resources",
     "n_feature_set_terms",
     "n_ranked_feature_set_terms",
 }
@@ -221,6 +223,7 @@ def merged_rows(
                 "n_up": first_value(summary.get("n_up", ""), enrichment.get("n_up", "")),
                 "n_down": first_value(summary.get("n_down", ""), enrichment.get("n_down", "")),
                 "n_feature_sets": enrichment.get("n_feature_sets", ""),
+                "n_feature_set_resources": enrichment.get("n_feature_set_resources", ""),
                 "n_feature_set_terms": enrichment.get("n_feature_set_terms", ""),
                 "n_ranked_feature_set_terms": enrichment.get("n_ranked_feature_set_terms", ""),
                 "summary_html": first_value(summary.get("summary_html", ""), plan.get("summary_html", "")),
@@ -249,6 +252,7 @@ def merged_rows(
                 "significant_features": enrichment.get("significant_features", ""),
                 "up_features": enrichment.get("up_features", ""),
                 "down_features": enrichment.get("down_features", ""),
+                "feature_set_universe": enrichment.get("feature_set_universe", ""),
                 "feature_set_results": enrichment.get("feature_set_results", ""),
                 "feature_set_plot": enrichment.get("feature_set_plot", ""),
                 "ranked_feature_set_results": enrichment.get("ranked_feature_set_results", ""),
@@ -299,6 +303,7 @@ def render_table(rows: list[dict[str, str]], output: Path) -> str:
                 ("significant", row["significant_features"]),
                 ("up", row["up_features"]),
                 ("down", row["down_features"]),
+                ("universe", row["feature_set_universe"]),
                 ("sets", row["feature_set_results"]),
                 ("plot", row["feature_set_plot"]),
                 ("ranked sets", row["ranked_feature_set_results"]),
@@ -317,6 +322,7 @@ def render_table(rows: list[dict[str, str]], output: Path) -> str:
             f"<td>{text_cell(row['n_significant'])}</td>"
             f"<td>{text_cell(row['n_up'])}</td>"
             f"<td>{text_cell(row['n_down'])}</td>"
+            f"<td>{text_cell(row['n_feature_set_resources'])}</td>"
             f"<td>{text_cell(row['n_feature_set_terms'])}</td>"
             f"<td>{text_cell(row['n_ranked_feature_set_terms'])}</td>"
             f"<td>{artifacts}</td>"
@@ -396,6 +402,7 @@ def render_html(
         <th>significant</th>
         <th>up</th>
         <th>down</th>
+        <th>resources</th>
         <th>ORA terms</th>
         <th>ranked terms</th>
         <th>artifacts</th>
@@ -441,6 +448,7 @@ ASSET_FIELDS = [
     ("enrichment", "significant_features", "table", "significant_features"),
     ("enrichment", "up_features", "table", "up_features"),
     ("enrichment", "down_features", "table", "down_features"),
+    ("enrichment", "feature_set_universe", "table", "feature_set_universe"),
     ("enrichment", "feature_set_results", "table", "feature_set_results"),
     ("enrichment", "feature_set_plot", "plot", "feature_set_plot"),
     ("enrichment", "ranked_feature_set_results", "table", "ranked_feature_set_results"),
