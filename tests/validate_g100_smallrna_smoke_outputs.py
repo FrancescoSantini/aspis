@@ -51,6 +51,41 @@ TARGET_ENRICHMENT_COLUMNS = {
     "padj",
     "mirnas",
 }
+TARGET_FEATURE_SET_UNIVERSE_COLUMNS = {
+    "contrast_id",
+    "target_analysis_mode",
+    "collection",
+    "query_source",
+    "target_source",
+    "target_source_type",
+    "target_universe_definition",
+    "feature_set_source",
+    "feature_set_collection",
+    "query_size",
+    "target_universe_size",
+    "feature_set_member_universe_size",
+    "target_rows",
+    "min_overlap",
+}
+TARGET_FEATURE_SET_COLUMNS = {
+    "contrast_id",
+    "target_analysis_mode",
+    "collection",
+    "query_source",
+    "target_source",
+    "target_source_type",
+    "target_universe_definition",
+    "feature_set_source",
+    "feature_set_collection",
+    "set_id",
+    "overlap",
+    "query_size",
+    "universe_size",
+    "feature_set_member_universe_size",
+    "target_rows",
+    "padj",
+    "targets",
+}
 
 
 def read_tsv(path: Path, required_columns: set[str]) -> tuple[list[str], list[dict[str, str]]]:
@@ -214,6 +249,7 @@ def validate_reports() -> str:
             "vst_tsv",
             "summary_html",
             "target_universe",
+            "target_feature_set_universe",
         },
         "plots/plots_manifest.tsv": {
             "contrast_id",
@@ -235,6 +271,7 @@ def validate_reports() -> str:
             "n_enrichment_terms",
             "n_target_feature_set_terms",
             "target_universe",
+            "target_feature_set_universe",
             "n_residual_input_reads",
             "n_residual_genome_aligned_reads",
             "n_residual_biotypes",
@@ -277,6 +314,7 @@ def validate_reports() -> str:
         "summary_html",
         "results",
         "target_universe",
+        "target_feature_set_universe",
         "target_feature_set_results",
         "volcano_pdf",
         "ma_pdf",
@@ -291,6 +329,11 @@ def validate_reports() -> str:
     for row in summary_rows:
         require_path(row["summary_html"], reports / "summaries/summary_manifest.tsv", "summary_html")
         require_path(row["target_universe"], reports / "summaries/summary_manifest.tsv", "target_universe")
+        require_path(
+            row["target_feature_set_universe"],
+            reports / "summaries/summary_manifest.tsv",
+            "target_feature_set_universe",
+        )
         _, universe_rows = read_tsv(Path(row["target_universe"]), TARGET_UNIVERSE_COLUMNS)
         if not any(item["target_source"] == "all_sources" for item in universe_rows):
             raise ValueError(f"{row['target_universe']} lacks aggregate all_sources universe provenance")
@@ -311,6 +354,33 @@ def validate_reports() -> str:
                 raise ValueError(f"Target enrichment query source mismatch in {row['target_enrichment']}: {enrichment_row}")
             if enrichment_row["universe_size"] != enrichment_row["final_mirna_universe_size"]:
                 raise ValueError(f"Target enrichment universe mismatch in {row['target_enrichment']}: {enrichment_row}")
+        _, feature_universe_rows = read_tsv(Path(row["target_feature_set_universe"]), TARGET_FEATURE_SET_UNIVERSE_COLUMNS)
+        if not any(item["target_source"] == "all_sources" for item in feature_universe_rows):
+            raise ValueError(f"{row['target_feature_set_universe']} lacks aggregate all_sources provenance")
+        if not any(item["target_source"] != "all_sources" for item in feature_universe_rows):
+            raise ValueError(f"{row['target_feature_set_universe']} lacks source-specific provenance")
+        for feature_universe_row in feature_universe_rows:
+            if feature_universe_row["target_analysis_mode"] != "database_target_feature_set":
+                raise ValueError(
+                    f"Unexpected target feature-set mode in {row['target_feature_set_universe']}: "
+                    f"{feature_universe_row}"
+                )
+            if feature_universe_row["query_source"] != feature_universe_row["collection"]:
+                raise ValueError(
+                    f"Target feature-set universe query source mismatch in {row['target_feature_set_universe']}: "
+                    f"{feature_universe_row}"
+                )
+        _, feature_set_rows = read_tsv(Path(row["target_feature_set_results"]), TARGET_FEATURE_SET_COLUMNS)
+        if not any(item["target_source"] != "all_sources" for item in feature_set_rows):
+            raise ValueError(f"{row['target_feature_set_results']} lacks source-specific feature-set rows")
+        for feature_set_row in feature_set_rows:
+            if feature_set_row["target_analysis_mode"] != "database_target_feature_set":
+                raise ValueError(f"Unexpected target feature-set mode in {row['target_feature_set_results']}: {feature_set_row}")
+            if feature_set_row["query_source"] != feature_set_row["collection"]:
+                raise ValueError(
+                    f"Target feature-set query source mismatch in {row['target_feature_set_results']}: "
+                    f"{feature_set_row}"
+                )
         text = Path(row["summary_html"]).read_text(encoding="utf-8")
         if PCA_NOTE_FRAGMENT not in text:
             raise ValueError(f"{row['summary_html']} is missing the PCA interpretation note")

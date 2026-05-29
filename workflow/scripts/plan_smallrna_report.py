@@ -27,6 +27,7 @@ TARGET_FEATURE_SET_COLUMNS = {
     "status",
     "reason",
     "target_feature_set_manifest",
+    "target_feature_set_universe",
     "target_feature_set_results",
     "target_feature_set_plot",
 }
@@ -35,6 +36,7 @@ MIRNA_MRNA_TARGET_FEATURE_SET_COLUMNS = {
     "status",
     "reason",
     "mirna_mrna_target_feature_set_manifest",
+    "mirna_mrna_target_feature_set_universe",
     "mirna_mrna_target_feature_set_results",
     "mirna_mrna_target_feature_set_plot",
 }
@@ -67,9 +69,11 @@ REPORT_COLUMNS = [
     "mirna_mrna_summary",
     "mirna_mrna_plot",
     "mirna_mrna_target_feature_set_manifest",
+    "mirna_mrna_target_feature_set_universe",
     "mirna_mrna_target_feature_set_results",
     "mirna_mrna_target_feature_set_plot",
     "target_feature_set_manifest",
+    "target_feature_set_universe",
     "target_feature_set_results",
     "target_feature_set_plot",
     "residual_manifest",
@@ -290,6 +294,10 @@ def planned_row(
             "mirna_mrna_target_feature_set_manifest",
             "",
         ),
+        "mirna_mrna_target_feature_set_universe": mirna_mrna_target_feature_set_row.get(
+            "mirna_mrna_target_feature_set_universe",
+            "",
+        ),
         "mirna_mrna_target_feature_set_results": mirna_mrna_target_feature_set_row.get(
             "mirna_mrna_target_feature_set_results",
             "",
@@ -299,6 +307,7 @@ def planned_row(
             "",
         ),
         "target_feature_set_manifest": target_feature_set_row.get("target_feature_set_manifest", ""),
+        "target_feature_set_universe": target_feature_set_row.get("target_feature_set_universe", ""),
         "target_feature_set_results": target_feature_set_row.get("target_feature_set_results", ""),
         "target_feature_set_plot": target_feature_set_row.get("target_feature_set_plot", ""),
         "residual_manifest": args.residual_manifest,
