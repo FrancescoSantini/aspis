@@ -33,6 +33,7 @@ def main() -> int:
         metadata = tmp / "transcript_metadata.tsv"
         gtf = tmp / "annotated.gtf"
         annotations = tmp / "domains.tsv"
+        ncrna_annotations = tmp / "ncrna_annotations.tsv"
         interproscan = tmp / "interproscan.tsv"
         pfam_domtblout = tmp / "pfam.domtblout"
         coding_potential = tmp / "coding_potential.tsv"
@@ -205,6 +206,84 @@ def main() -> int:
             + "\t".join(["tx_novel", "4", "A", "0.30"])
             + "\n",
         )
+        write(
+            ncrna_annotations,
+            "\t".join(
+                [
+                    "transcript_id",
+                    "gene_id",
+                    "chrom",
+                    "start",
+                    "end",
+                    "source",
+                    "feature_type",
+                    "feature_id",
+                    "feature_name",
+                    "description",
+                ]
+            )
+            + "\n"
+            + "\t".join(
+                [
+                    "lnc_long",
+                    "geneB",
+                    "chr2",
+                    "80",
+                    "86",
+                    "phyloP",
+                    "conserved_exon",
+                    "cons_exon_1",
+                    "Conserved exon",
+                    "overlaps gained lncRNA exon",
+                ]
+            )
+            + "\n"
+            + "\t".join(
+                [
+                    "lnc_long",
+                    "geneB",
+                    "chr2",
+                    "82",
+                    "84",
+                    "RBPDB",
+                    "rbp_motif",
+                    "RBP1",
+                    "RBP motif",
+                    "motif in gained lncRNA exon",
+                ]
+            )
+            + "\n"
+            + "\t".join(
+                [
+                    "lnc_long",
+                    "geneB",
+                    "chr2",
+                    "83",
+                    "85",
+                    "GENCODE",
+                    "host_small_rna",
+                    "sno1",
+                    "embedded snoRNA",
+                    "embedded small-RNA locus in gained lncRNA exon",
+                ]
+            )
+            + "\n"
+            + "\t".join(
+                [
+                    "lnc_long",
+                    "geneB",
+                    "chr2",
+                    "80",
+                    "86",
+                    "GENCODE",
+                    "antisense_overlap",
+                    "GENEA-AS",
+                    "antisense overlap",
+                    "resource-backed antisense overlap",
+                ]
+            )
+            + "\n",
+        )
 
         command = [
             sys.executable,
@@ -256,6 +335,8 @@ def main() -> int:
                     str(iupred),
                 ]
             ),
+            "--ncrna-annotation-tables",
+            str(ncrna_annotations),
         ]
         completed = subprocess.run(command, check=False, capture_output=True, text=True)
         if completed.returncode:
@@ -277,6 +358,13 @@ def main() -> int:
         assert candidates[0]["reason_selected"]
         assert any(row["gene_id"] == "geneB" and row["interpretation_label"] == "noncoding_structure_change" for row in ncrna_rows), ncrna_rows
         assert any(row["gene_id"] == "geneB" and row["transcript_length_change"] for row in ncrna_rows), ncrna_rows
+        lnc_long_rows = [row for row in ncrna_rows if row["gene_id"] == "geneB" and row["isoform_id"] == "lnc_long"]
+        assert lnc_long_rows, ncrna_rows
+        assert "cons_exon_1" in lnc_long_rows[0]["conserved_exon_change"], lnc_long_rows
+        assert "RBP1" in lnc_long_rows[0]["motif_change"], lnc_long_rows
+        assert "sno1" in lnc_long_rows[0]["host_smallrna_change"], lnc_long_rows
+        assert "GENEA-AS" in lnc_long_rows[0]["resource_antisense_overlap"], lnc_long_rows
+        assert "conserved_exon" in lnc_long_rows[0]["ncrna_resource_annotations"], lnc_long_rows
         assert any(row["isoform_id"] == "tx_novel" and row["aa_sequence"] == "MAMAPG" for row in sequences)
         assert any(row["isoform_id"] == "tx_novel" and row["gained_exon_coordinates"] for row in sequences)
         assert any(row["isoform_id"] == "tx_novel" and row["affected_aa_sequence"] for row in sequences)

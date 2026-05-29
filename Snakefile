@@ -4167,6 +4167,12 @@ rule render_isoform_switch_report:
                 RNASEQ_DIFFERENTIAL.get("isoform_switch_functional_annotation_tables", "")
             ),
         ),
+        ncrna_annotation_tables=lambda wildcards: optional_shell_arg(
+            "--ncrna-annotation-tables",
+            joined_config_values(
+                RNASEQ_DIFFERENTIAL.get("isoform_switch_ncrna_annotation_tables", "")
+            ),
+        ),
         interproscan_command=lambda wildcards: optional_shell_arg(
             "--interproscan-command",
             RNASEQ_DIFFERENTIAL.get("isoform_switch_interproscan_command", ""),
@@ -4219,6 +4225,7 @@ rule render_isoform_switch_report:
           --dif {params.dif:q} \
           --top-n {params.top_n:q} \
           {params.functional_annotation_tables} \
+          {params.ncrna_annotation_tables} \
           {params.interproscan_command} \
           {params.pfam_command} \
           {params.coding_potential_command} \
