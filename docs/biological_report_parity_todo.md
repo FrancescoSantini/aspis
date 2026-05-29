@@ -38,6 +38,10 @@ reproducible modules.
   provenance per contrast, including aggregate and source-specific rows for
   tested miRNAs, mapped tested miRNAs, target universe size, final miRNA
   universe, source/type labels, and mapping loss.
+- SmallRNA target-gene feature-set enrichment now writes explicit
+  query/universe/mapping-source provenance for database-target and inverse
+  miRNA-mRNA feature-set modes, with aggregate and source-specific rows where
+  target-table sources are available.
 - Transcript reports now support novelty-aware groups:
   `all`, `known_compatible`, `novel_isoform`, `novel_locus`, `ambiguous`, and
   `artifact`.
@@ -231,6 +235,9 @@ Current state:
 - miRNA target ORA and target-gene feature-set enrichment are implemented.
 - miRNA target-table enrichment now writes query/universe/mapping-source
   provenance.
+- Target-gene feature-set enrichment now writes query/universe/source
+  provenance for database-target feature sets and inverse miRNA-mRNA target
+  feature sets.
 
 Remaining work:
 
@@ -242,8 +249,6 @@ Remaining work:
   - report inverse-direction subsets separately.
 - Keep miRNA-ID gene-set enrichment separate from target-gene enrichment, and
   only run it when a true miRNA gene-set resource is provided.
-- Add equivalent query/universe/mapping-source provenance to target-gene
-  feature-set enrichment and inverse miRNA-mRNA target feature-set enrichment.
 
 ## 9. Isoform Switching In Coding Genes
 
@@ -354,9 +359,8 @@ Desired isoform-switch report:
 
 Suggested order:
 
-1. Add query/universe provenance to target-gene feature-set enrichment.
-2. Add expressed-target and inverse-integrated miRNA target modes.
-3. Add native parsers for selected external functional annotation tools.
-4. Add first-class GO/Reactome/KEGG/MSigDB resource configuration docs.
-5. Add richer resource-backed ncRNA switch annotations.
-6. Add real-data validation notes once real projects are available.
+1. Add expressed-target and inverse-integrated miRNA target modes.
+2. Add native parsers for selected external functional annotation tools.
+3. Add first-class GO/Reactome/KEGG/MSigDB resource configuration docs.
+4. Add richer resource-backed ncRNA switch annotations.
+5. Add real-data validation notes once real projects are available.
