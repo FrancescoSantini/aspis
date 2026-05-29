@@ -378,13 +378,44 @@ def render_html(
     if not significant_columns and significant:
         significant_columns = list(significant[0])[:8]
     enrichment_columns = [
-        column for column in ["collection", "target_id", "target_symbol", "overlap", "query_size", "padj", "mirnas"] if enrichment_preview and column in enrichment_preview[0]
+        column
+        for column in [
+            "collection",
+            "target_evidence_type",
+            "target_id",
+            "target_symbol",
+            "overlap",
+            "query_size",
+            "padj",
+            "mirnas",
+        ]
+        if enrichment_preview and column in enrichment_preview[0]
     ]
     summary_columns = [
-        column for column in ["collection", "target_source", "target_source_type", "n_mirnas", "n_target_rows", "n_targets"] if target_summary and column in target_summary[0]
+        column
+        for column in [
+            "collection",
+            "target_source",
+            "target_source_type",
+            "target_evidence_type",
+            "n_mirnas",
+            "n_target_rows",
+            "n_targets",
+        ]
+        if target_summary and column in target_summary[0]
     ]
     source_summary_columns = [
-        column for column in ["collection", "target_source", "target_source_type", "n_mirnas", "n_target_rows", "n_targets"] if target_source_summary and column in target_source_summary[0]
+        column
+        for column in [
+            "collection",
+            "target_source",
+            "target_source_type",
+            "target_evidence_type",
+            "n_mirnas",
+            "n_target_rows",
+            "n_targets",
+        ]
+        if target_source_summary and column in target_source_summary[0]
     ]
     integration_summary_columns = [
         column for column in ["contrast_id", "collection", "n_pairs", "n_inverse_pairs", "n_anticorrelated_pairs", "median_pearson"] if integration_summary and column in integration_summary[0]
@@ -395,6 +426,7 @@ def render_html(
             "mirna_id",
             "target_id",
             "target_symbol",
+            "target_evidence_type",
             "regulation_class",
             "pearson",
             "mirna_log2FoldChange",
@@ -409,6 +441,7 @@ def render_html(
             "target_analysis_mode",
             "collection",
             "query_source",
+            "target_evidence_type",
             "n_pairs",
             "n_mirnas",
             "n_targets",
@@ -424,6 +457,7 @@ def render_html(
             "collection",
             "target_source",
             "target_source_type",
+            "target_evidence_type",
             "set_id",
             "description",
             "overlap",
