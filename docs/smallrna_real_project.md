@@ -261,9 +261,14 @@ The report index is:
 <branch_dir>/smallrna/<PROJECT>/smallrna/differential/reports/index.html
 ```
 
-Per-contrast HTML summaries link the MA, volcano, PCA, and heatmap plots. When
-residual genome alignment is enabled, they also link the residual manifest,
-residual biotype matrix, and residual feature matrix.
+Per-contrast HTML summaries link the MA, volcano, PCA, heatmap plot, and
+heatmap panel manifest. Heatmap PDFs include top-significant and top-variable
+panels by default. To add curated panels, set `smallrna.report_heatmap_feature_lists`
+to one or more TSV/one-column files. TSV feature-list files can contain
+`feature_id` plus optional `feature_list`, `level`, `contrast_id`, and
+`plot_group` columns. When residual genome alignment is enabled, summaries also
+link the residual manifest, residual biotype matrix, and residual feature
+matrix.
 
 Important intermediate manifests are:
 

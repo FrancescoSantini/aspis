@@ -93,6 +93,13 @@ Current state:
 - Transcript-level RNA-seq volcano, MA, and heatmap PDFs can include configured
   transcript-biotype panels and novelty-by-biotype combination panels when
   transcript metadata provides both fields.
+- RNA-seq and smallRNA heatmap PDFs now include explicit heatmap panel modes:
+  top significant features, top variable features, and optional user-provided
+  feature lists. Each contrast writes `heatmap_panels.tsv` with the plotted
+  panel mode, source, matching counts, fallback status, and feature IDs.
+- Significant-feature heatmaps fall back to top-variable features when too few
+  significant features are available, and the fallback is recorded in
+  `heatmap_panels.tsv`.
 
 Remaining work:
 
@@ -102,11 +109,6 @@ Remaining work:
   - up/down;
   - mature arm if available;
   - target-source strata if relevant.
-- Heatmaps should support:
-  - top significant features;
-  - top variable features;
-  - user-provided feature lists;
-  - fallback behavior when few/no significant features exist.
 
 ## 4. Known And Novel Transcript Logic
 

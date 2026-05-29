@@ -118,6 +118,8 @@ REPORT_COLUMNS = [
     "pca_metrics_tsv",
     "sample_distance_pdf",
     "heatmap_pdf",
+    "heatmap_panel_tsv",
+    "plot_group_tsv",
     "vst_tsv",
     "summary_html",
 ]
@@ -394,6 +396,8 @@ def planned_row(
         "pca_metrics_tsv": str(Path(args.outdir) / "plots" / f"{safe_path_id(contrast_id)}.pca_metrics.tsv"),
         "sample_distance_pdf": str(Path(args.outdir) / "plots" / f"{safe_path_id(contrast_id)}.sample_distance.pdf"),
         "heatmap_pdf": str(Path(args.outdir) / "plots" / f"{safe_path_id(contrast_id)}.heatmap.pdf"),
+        "heatmap_panel_tsv": str(Path(args.outdir) / "plots" / f"{safe_path_id(contrast_id)}.heatmap_panels.tsv"),
+        "plot_group_tsv": str(Path(args.outdir) / "plots" / f"{safe_path_id(contrast_id)}.plot_groups.tsv"),
         "vst_tsv": str(Path(args.outdir) / "plots" / f"{safe_path_id(contrast_id)}.log2_counts.tsv"),
         "summary_html": str(Path(args.outdir) / "summaries" / f"{safe_path_id(contrast_id)}.html"),
     }

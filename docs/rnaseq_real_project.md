@@ -331,8 +331,12 @@ The report index is:
 <branch_dir>/rnaseq/<PROJECT>/differential/reports/index.html
 ```
 
-Per-contrast HTML summaries link the MA, volcano, PCA, heatmap, transformed
-count table, and feature-set enrichment outputs.
+Per-contrast HTML summaries link the MA, volcano, PCA, heatmap, heatmap panel
+manifest, transformed count table, and feature-set enrichment outputs.
+Heatmap PDFs include top-significant and top-variable panels by default. To add
+curated panels, set `rnaseq_differential.report_heatmap_feature_lists` to one
+or more TSV/one-column files. TSV feature-list files can contain `feature_id`
+plus optional `feature_list`, `level`, `contrast_id`, and `plot_group` columns.
 
 Important intermediate manifests are:
 
