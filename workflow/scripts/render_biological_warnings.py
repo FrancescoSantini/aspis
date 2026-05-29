@@ -25,6 +25,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--biotype-differential-summary", default="")
     parser.add_argument("--transcript-discovery-summary", default="")
     parser.add_argument("--transcript-discovery-differential-summary", default="")
+    parser.add_argument(
+        "--deseq2-manifest",
+        action="append",
+        default=[],
+        help="Optional DESeq2 contrast manifest TSV; may be repeated.",
+    )
     parser.add_argument("--residual-manifest", default="")
     parser.add_argument("--residual-biotype-counts", default="")
     parser.add_argument("--length-stage-summary", default="")
@@ -41,6 +47,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--max-true-novel-transcript-fraction", type=float, default=0.2)
     parser.add_argument("--warn-high-true-novel-transcript-fraction", action="store_true")
     parser.add_argument("--max-residual-genome-fraction", type=float, default=0.5)
+    parser.add_argument("--min-deseq2-replicates", type=int, default=2)
+    parser.add_argument("--min-deseq2-tested-features", type=int, default=10)
     return parser.parse_args()
 
 
@@ -77,6 +85,10 @@ def parse_float(value: str) -> float:
         return 0.0
 
 
+def parse_int(value: str) -> int:
+    return int(parse_float(value))
+
+
 def add_warning(rows: list[dict[str, str]], args: argparse.Namespace, severity: str, category: str, item: str, message: str, source: str) -> None:
     rows.append(
         {
@@ -89,6 +101,64 @@ def add_warning(rows: list[dict[str, str]], args: argparse.Namespace, severity: 
             "source": source,
         }
     )
+
+
+def split_csv(value: str) -> list[str]:
+    return [part.strip() for part in value.split(",") if part.strip()]
+
+
+def simple_design_terms(formula: str) -> list[str]:
+    text = formula.strip()
+    if text.startswith("~"):
+        text = text[1:]
+    terms: list[str] = []
+    for raw_term in text.split("+"):
+        term = raw_term.strip()
+        if not term or term in {"0", "1"}:
+            continue
+        if any(operator in term for operator in [":", "*", "/", "(", ")"]):
+            continue
+        terms.append(term)
+    return terms
+
+
+def count_matrix_qc(path_text: str, samples: list[str]) -> dict[str, dict[str, int]]:
+    if not path_text or not samples:
+        return {}
+    path = Path(path_text)
+    if not path.exists():
+        return {}
+    qc = {sample: {"library_size": 0, "detected_features": 0} for sample in samples}
+    with path.open(newline="", encoding="utf-8") as handle:
+        reader = csv.DictReader(handle, delimiter="\t")
+        if reader.fieldnames is None:
+            return qc
+        available = [sample for sample in samples if sample in reader.fieldnames]
+        for row in reader:
+            for sample in available:
+                value = parse_float(row.get(sample, ""))
+                qc[sample]["library_size"] += int(value)
+                if value > 0:
+                    qc[sample]["detected_features"] += 1
+    return qc
+
+
+def coldata_by_sample(path_text: str, samples: list[str]) -> dict[str, dict[str, str]]:
+    if not path_text:
+        return {}
+    _columns, rows = read_table(path_text)
+    if not rows:
+        return {}
+    id_column = "library_id" if "library_id" in rows[0] else ""
+    if not id_column:
+        for candidate in ["sample", "sample_id", "Sample", "SampleID"]:
+            if candidate in rows[0]:
+                id_column = candidate
+                break
+    if not id_column:
+        return {}
+    wanted = set(samples)
+    return {row[id_column]: row for row in rows if row.get(id_column, "") in wanted}
 
 
 def design_warnings(args: argparse.Namespace, warnings: list[dict[str, str]]) -> None:
@@ -106,6 +176,146 @@ def design_warnings(args: argparse.Namespace, warnings: list[dict[str, str]]) ->
             )
         if row.get("model_warning", ""):
             add_warning(warnings, args, "warning", "design", row.get("condition", "design"), row["model_warning"], args.design)
+
+
+def deseq2_warnings(args: argparse.Namespace, warnings: list[dict[str, str]]) -> None:
+    required = {"contrast_id", "status"}
+    for manifest in args.deseq2_manifest:
+        _columns, rows = read_table(manifest, required)
+        for row in rows:
+            contrast_id = row["contrast_id"]
+            status = row.get("status", "")
+            if status and status != "ok":
+                message = row.get("reason", "") or f"DESeq2 contrast status is {status}"
+                add_warning(warnings, args, "error", "deseq2_status", contrast_id, message, manifest)
+
+            n_control = parse_int(row.get("n_control", ""))
+            n_test = parse_int(row.get("n_test", ""))
+            if (
+                row.get("n_control", "").strip()
+                and row.get("n_test", "").strip()
+                and (n_control < args.min_deseq2_replicates or n_test < args.min_deseq2_replicates)
+            ):
+                add_warning(
+                    warnings,
+                    args,
+                    "warning",
+                    "deseq2_replicates",
+                    contrast_id,
+                    (
+                        f"contrast has {n_control} control and {n_test} test samples; "
+                        f"minimum expected is {args.min_deseq2_replicates} per group"
+                    ),
+                    manifest,
+                )
+
+            n_tested = parse_int(row.get("n_features_tested", ""))
+            if row.get("n_features_tested", "").strip() and n_tested < args.min_deseq2_tested_features:
+                add_warning(
+                    warnings,
+                    args,
+                    "warning",
+                    "deseq2_features",
+                    contrast_id,
+                    f"only {n_tested} features passed DESeq2 filtering; expected at least {args.min_deseq2_tested_features}",
+                    manifest,
+                )
+
+            n_significant = parse_int(row.get("n_significant", ""))
+            if n_tested and row.get("n_significant", "").strip() and n_significant == 0:
+                padj = row.get("padj_threshold", "")
+                log2fc = row.get("log2fc_threshold", "")
+                add_warning(
+                    warnings,
+                    args,
+                    "info",
+                    "deseq2_signal",
+                    contrast_id,
+                    f"no significant features at padj <= {padj} and |log2FC| >= {log2fc}",
+                    manifest,
+                )
+
+            samples = split_csv(row.get("samples", ""))
+            for sample, metrics in count_matrix_qc(row.get("counts", ""), samples).items():
+                library_size = metrics["library_size"]
+                detected = metrics["detected_features"]
+                if library_size < args.min_library_size:
+                    add_warning(
+                        warnings,
+                        args,
+                        "warning",
+                        "deseq2_sample_qc",
+                        f"{contrast_id}:{sample}",
+                        f"contrast count matrix library size {library_size} is below {args.min_library_size}",
+                        row.get("counts", ""),
+                    )
+                if detected < args.min_detected_features:
+                    add_warning(
+                        warnings,
+                        args,
+                        "warning",
+                        "deseq2_sample_qc",
+                        f"{contrast_id}:{sample}",
+                        f"contrast count matrix detected features {detected} is below {args.min_detected_features}",
+                        row.get("counts", ""),
+                    )
+
+            coldata = coldata_by_sample(row.get("coldata", ""), samples)
+            condition_col = row.get("condition_col", "condition")
+            formula = row.get("effective_design_formula", "") or row.get("design_formula", "")
+            for term in simple_design_terms(formula):
+                if term == condition_col:
+                    continue
+                values_by_condition: dict[str, set[str]] = {}
+                condition_values: dict[str, set[str]] = {}
+                term_values: set[str] = set()
+                missing = False
+                for sample in samples:
+                    sample_row = coldata.get(sample, {})
+                    if term not in sample_row:
+                        missing = True
+                        continue
+                    condition = sample_row.get(condition_col, "")
+                    value = sample_row.get(term, "")
+                    if value:
+                        term_values.add(value)
+                    if condition and value:
+                        values_by_condition.setdefault(value, set()).add(condition)
+                        condition_values.setdefault(condition, set()).add(value)
+                if missing:
+                    add_warning(
+                        warnings,
+                        args,
+                        "warning",
+                        "deseq2_design",
+                        f"{contrast_id}:{term}",
+                        f"design covariate {term} is absent from one or more DESeq2 coldata rows",
+                        row.get("coldata", ""),
+                    )
+                elif len(term_values) <= 1:
+                    add_warning(
+                        warnings,
+                        args,
+                        "info",
+                        "deseq2_design",
+                        f"{contrast_id}:{term}",
+                        f"design covariate {term} is constant in this contrast",
+                        row.get("coldata", ""),
+                    )
+                elif (
+                    len(condition_values) > 1
+                    and all(len(values) == 1 for values in condition_values.values())
+                    and all(len(conditions) == 1 for conditions in values_by_condition.values())
+                ):
+                    add_warning(
+                        warnings,
+                        args,
+                        "warning",
+                        "deseq2_design",
+                        f"{contrast_id}:{term}",
+                        f"design covariate {term} is confounded with {condition_col} in this contrast",
+                        row.get("coldata", ""),
+                    )
 
 
 def sample_qc_warnings(args: argparse.Namespace, warnings: list[dict[str, str]]) -> None:
@@ -299,6 +509,7 @@ def main() -> int:
     args = parse_args()
     warnings: list[dict[str, str]] = []
     design_warnings(args, warnings)
+    deseq2_warnings(args, warnings)
     sample_qc_warnings(args, warnings)
     strandedness_warnings(args, warnings)
     biotype_warnings(args, warnings)
