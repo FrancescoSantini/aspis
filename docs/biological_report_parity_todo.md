@@ -309,8 +309,9 @@ Current state:
   mixed coding/noncoding, ambiguous/artifact, or unclassified.
 - Reports write `ncrna_switch_interpretation.tsv` with gene/transcript biotype,
   transcript length change, exon gain/loss, TSS/TES change, retained-intron
-  annotation flags, antisense labels, coding-potential change, and an
-  interpretation label.
+  annotation flags, splice-junction gain/loss, promoter/TSS-shift context,
+  proximal-gene context, antisense labels, coding-potential warning labels, and
+  an interpretation label.
 - When optional ncRNA annotation TSVs are supplied, reports add
   resource-backed conserved-exon, motif, embedded small-RNA, and antisense
   overlap labels to the ncRNA switch table. Resource rows can match by
@@ -318,14 +319,12 @@ Current state:
   with the gained/lost switch intervals.
 - Project-level isoform-switch HTML has separate coding, noncoding/mixed, and
   ambiguous/artifact sections.
+- Coding-potential gain/loss is retained as an interpretive warning for ncRNA
+  switches, not as a requirement for reporting ncRNA switch events.
 
 Remaining work:
 
-- Add richer ncRNA-specific consequences that require additional coordinate
-  context beyond transcript-exon overlap:
-  - splice junction gain/loss;
-  - promoter/proximal gene context.
-- Treat coding-potential gain/loss as a useful warning, not as a requirement.
+- No remaining ncRNA switch coordinate-context items in this section.
 
 ## 11. ncRNA Switch Interpretation
 
@@ -387,5 +386,5 @@ Desired isoform-switch report:
 Suggested order:
 
 1. Add real-data validation notes once real projects are available.
-2. Add richer ncRNA switch consequences for splice-junction gain/loss and
-   promoter/proximal gene context.
+2. Add real `fgsea`/permutation-style ranked enrichment for standard
+   gene-set resources.
