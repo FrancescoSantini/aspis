@@ -87,23 +87,15 @@ Current state:
 
 - RNA-seq and smallRNA reports include volcano, MA, PCA, and heatmap outputs.
 - Transcript reports support novelty groups.
+- RNA-seq plot rendering now emits a plot-group manifest per contrast.
+- Gene-level RNA-seq volcano, MA, and heatmap PDFs can include configured biotype
+  panels when gene biotypes are present in DESeq2 result metadata.
+- Transcript-level RNA-seq volcano, MA, and heatmap PDFs can include configured
+  transcript-biotype panels and novelty-by-biotype combination panels when
+  transcript metadata provides both fields.
 
 Remaining work:
 
-- Add plot variants by biotype for gene-level results:
-  - protein_coding;
-  - lncRNA;
-  - pseudogene;
-  - snoRNA;
-  - snRNA;
-  - miRNA host or other annotated classes where available.
-- Add transcript plot panels combining novelty and biotype:
-  - all transcripts;
-  - known/reference-compatible transcripts;
-  - novel isoforms of known genes;
-  - true novel loci;
-  - ncRNA transcripts;
-  - artifact/ambiguous class.
 - For miRNA, avoid fake known/novel panels unless a real novel-miRNA discovery
   workflow is added. Prefer:
   - all miRNAs;
@@ -389,5 +381,3 @@ Desired isoform-switch report:
 Suggested order:
 
 1. Add real-data validation notes once real projects are available.
-2. Add report warnings when too few ranked genes map to a configured
-   feature-set resource.

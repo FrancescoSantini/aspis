@@ -125,6 +125,8 @@ def parse_gtf(path: Path, sample_id: str, read_length: int) -> tuple[dict[str, i
                 {
                     "gene_id": gene_id,
                     "gene_name": attrs.get("ref_gene_name") or attrs.get("gene_name", ""),
+                    "gene_biotype": attrs.get("gene_biotype") or attrs.get("gene_type") or "",
+                    "transcript_biotype": attrs.get("transcript_biotype") or attrs.get("transcript_type") or attrs.get("biotype", ""),
                     "chr": chrom,
                     "start": int(start),
                     "end": int(end),
@@ -136,6 +138,10 @@ def parse_gtf(path: Path, sample_id: str, read_length: int) -> tuple[dict[str, i
             feature["gene_id"] = gene_id or feature["gene_id"]
             if attrs.get("ref_gene_name") or attrs.get("gene_name"):
                 feature["gene_name"] = attrs.get("ref_gene_name") or attrs.get("gene_name", "")
+            if attrs.get("gene_biotype") or attrs.get("gene_type"):
+                feature["gene_biotype"] = attrs.get("gene_biotype") or attrs.get("gene_type", "")
+            if attrs.get("transcript_biotype") or attrs.get("transcript_type") or attrs.get("biotype"):
+                feature["transcript_biotype"] = attrs.get("transcript_biotype") or attrs.get("transcript_type") or attrs.get("biotype", "")
             if feature_type == "transcript":
                 feature["chr"] = chrom
                 feature["start"] = int(start)
@@ -159,6 +165,8 @@ def parse_gtf(path: Path, sample_id: str, read_length: int) -> tuple[dict[str, i
             "transcript_id": tx_id,
             "gene_id": str(feature["gene_id"]),
             "gene_name": str(feature["gene_name"]),
+            "gene_biotype": str(feature.get("gene_biotype", "")),
+            "transcript_biotype": str(feature.get("transcript_biotype", "")),
             "Chr": str(feature["chr"]),
             "Start": str(feature["start"]),
             "End": str(feature["end"]),
@@ -334,6 +342,8 @@ def main() -> int:
         "transcript_id",
         "gene_id",
         "gene_name",
+        "gene_biotype",
+        "transcript_biotype",
         "class_code",
         "transcript_discovery_class",
         "transcript_novelty",

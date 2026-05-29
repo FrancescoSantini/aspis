@@ -96,6 +96,7 @@ REPORT_SCHEMAS = {
         "pca_pdf",
         "pca_metrics_tsv",
         "heatmap_pdf",
+        "plot_group_tsv",
         "vst_tsv",
         "enrichment_manifest",
         "summary_html",
@@ -428,7 +429,16 @@ def validate_reports() -> str:
             raise ValueError(f"{summary_html} is missing the PCA interpretation note")
     asset_rows = validate_report_tsv("asset_manifest.tsv", REPORT_SCHEMAS["asset_manifest.tsv"])
     labels = {row["asset_label"] for row in asset_rows if row.get("exists") == "true"}
-    required_labels = {"summary_html", "results", "volcano_pdf", "ma_pdf", "pca_pdf", "pca_metrics_tsv", "heatmap_pdf"}
+    required_labels = {
+        "summary_html",
+        "results",
+        "volcano_pdf",
+        "ma_pdf",
+        "pca_pdf",
+        "pca_metrics_tsv",
+        "heatmap_pdf",
+        "plot_group_tsv",
+    }
     missing_labels = required_labels - labels
     if missing_labels:
         raise ValueError(f"Report asset manifest is missing existing assets: {sorted(missing_labels)}")
