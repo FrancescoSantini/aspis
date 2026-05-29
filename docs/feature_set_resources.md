@@ -264,6 +264,15 @@ REACTOME_INTERFERON_SIGNALING	STAT1	MSigDB	C2:CP:REACTOME	2026.1	interferon sign
 RNA-seq enrichment is interpreted as feature-set enrichment among observed
 DESeq2 genes/transcripts.
 
+RNA-seq ranked feature-set enrichment uses a deterministic permutation-based
+running-score test over the resource-specific ranked universe. It ranks by the
+DESeq2 Wald statistic when present, then signed `-log10(pvalue)`, then signed
+`-log10(padj)`, and finally log2 fold change. Ranked outputs report ES, NES,
+permutation p-value, adjusted p-value, leading-edge features, direction, and
+the ranking metric used. The number of permutations is controlled by
+`rnaseq_differential.report_ranked_feature_set_permutations`; the seed is
+controlled by `rnaseq_differential.report_ranked_feature_set_seed`.
+
 smallRNA target-gene enrichment is interpreted as potentially regulated target
 processes. It is not direct evidence that a pathway is activated or repressed
 unless matched RNA-seq integration supports the target expression direction.

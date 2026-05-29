@@ -24,6 +24,8 @@ rnaseq_differential:
 
   report_feature_set_min_overlap: 5
   report_feature_set_top_n: 30
+  report_ranked_feature_set_permutations: 1000
+  report_ranked_feature_set_seed: 1
 
 smallrna:
   # Target-gene feature sets use the same GMT/TSV contracts, but feature_id
