@@ -60,6 +60,8 @@ Completed:
   common DRIMSeq, DEXSeq, SUPPA2, or rMATS-style tabular result columns. Each
   completed method writes an ASPIS-standard `standardized_results.tsv`, and the
   DTU method manifest records parser status and row counts.
+- RNA-seq report indexes and branch provenance bundles now expose DTU plans,
+  method manifests, standardized parser status, and standardized result tables.
 
 Remaining:
 

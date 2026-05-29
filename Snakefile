@@ -605,6 +605,34 @@ def rnaseq_isoform_switch_report_arg(wildcards, key, flag):
     return optional_shell_arg(flag, rnaseq_isoform_switch_report_outputs(wildcards.project)[key])
 
 
+def rnaseq_dtu_report_outputs(project):
+    base = f"{BRANCH_DIR}/rnaseq/{project}/differential/dtu"
+    return {
+        "plan": f"{base}/dtu_plan.tsv",
+        "plan_done": f"{base}/dtu.done",
+        "method_manifest": f"{base}/dtu_method_manifest.tsv",
+        "method_done": f"{base}/dtu_methods.done",
+    }
+
+
+def rnaseq_dtu_report_inputs(wildcards):
+    if not RNASEQ_DTU_RUN:
+        return []
+    outputs = rnaseq_dtu_report_outputs(wildcards.project)
+    return [
+        outputs["plan"],
+        outputs["plan_done"],
+        outputs["method_manifest"],
+        outputs["method_done"],
+    ]
+
+
+def rnaseq_dtu_report_arg(wildcards, key, flag):
+    if not RNASEQ_DTU_RUN:
+        return ""
+    return optional_shell_arg(flag, rnaseq_dtu_report_outputs(wildcards.project)[key])
+
+
 def deseq2_smoke_report_levels():
     raw = DESEQ2_SMOKE.get("report_levels", [])
     if isinstance(raw, str):
@@ -4933,7 +4961,8 @@ rule render_rnaseq_differential_report_index:
             if RNASEQ_WARNINGS_RUN
             else []
         ),
-        isoform_switch=rnaseq_isoform_switch_report_inputs
+        isoform_switch=rnaseq_isoform_switch_report_inputs,
+        dtu=rnaseq_dtu_report_inputs
     output:
         html=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/reports/index.html",
         asset_manifest=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/reports/asset_manifest.tsv",
@@ -4980,6 +5009,16 @@ rule render_rnaseq_differential_report_index:
             wildcards,
             "plots_pdf",
             "--isoform-switch-plots-pdf",
+        ),
+        dtu_plan=lambda wildcards: rnaseq_dtu_report_arg(
+            wildcards,
+            "plan",
+            "--dtu-plan",
+        ),
+        dtu_method_manifest=lambda wildcards: rnaseq_dtu_report_arg(
+            wildcards,
+            "method_manifest",
+            "--dtu-method-manifest",
         )
     log:
         "logs/branches/rnaseq/{project}.differential_report_index.log"
@@ -5002,6 +5041,8 @@ rule render_rnaseq_differential_report_index:
           {params.isoform_switch_ncrna} \
           {params.isoform_switch_plots} \
           {params.isoform_switch_plots_pdf} \
+          {params.dtu_plan} \
+          {params.dtu_method_manifest} \
           > {log:q} 2>&1
         """
 
