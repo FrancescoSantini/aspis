@@ -244,6 +244,14 @@ Copy one of those files, replace the placeholder feature IDs with IDs from your
 gene count metadata, and point `report_feature_set_tables` or
 `report_feature_sets` to the copied file.
 
+For a complete GO/Reactome/KEGG/MSigDB resource layout, accepted GMT/TSV
+schemas, identifier-matching rules, and a reusable config fragment, see:
+
+```text
+docs/feature_set_resources.md
+config/aspis_feature_set_resources.example.yaml
+```
+
 ## G100 Run
 
 Start with a dry-run:
