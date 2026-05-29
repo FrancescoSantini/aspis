@@ -133,6 +133,19 @@ smallrna:
 
   reports: true
   report_top_n: 25
+  report_heatmap_modes:
+    - significant
+    - variable
+  report_heatmap_feature_lists: ""
+  report_heatmap_significant_fallback: variable
+  report_mirna_plot_groups:
+    - all
+    - up
+    - down
+    - arm
+    - target_source
+    - target_source_type
+    - target_evidence_type
 
 mirna_mrna_integration:
   # Enable only when the same project also has a matched RNA-seq branch.

@@ -100,15 +100,14 @@ Current state:
 - Significant-feature heatmaps fall back to top-variable features when too few
   significant features are available, and the fallback is recorded in
   `heatmap_panels.tsv`.
+- miRNA reports use miRNA-specific plot groups instead of transcript-style
+  known/novel panels: all miRNAs, significant up/down miRNAs, mature-arm
+  groups inferred from 5p/3p IDs, and target-source/source-type/evidence
+  groups when target mappings are available.
 
 Remaining work:
 
-- For miRNA, avoid fake known/novel panels unless a real novel-miRNA discovery
-  workflow is added. Prefer:
-  - all miRNAs;
-  - up/down;
-  - mature arm if available;
-  - target-source strata if relevant.
+- No remaining volcano/MA/heatmap panel parity items in this section.
 
 ## 4. Known And Novel Transcript Logic
 

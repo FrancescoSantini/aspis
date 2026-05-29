@@ -101,6 +101,14 @@ smallrna:
     - variable
   report_heatmap_feature_lists: ""
   report_heatmap_significant_fallback: variable
+  report_mirna_plot_groups:
+    - all
+    - up
+    - down
+    - arm
+    - target_source
+    - target_source_type
+    - target_evidence_type
   condition_col: condition
   control_label: control
   design_formula: ""

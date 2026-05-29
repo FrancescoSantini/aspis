@@ -90,6 +90,7 @@ def setup_inputs() -> dict[str, Path]:
         {"Geneid": "hsa-miR-1-3p", "baseMean": "100", "log2FoldChange": "2.1", "pvalue": "0.001", "padj": "0.01"},
         {"Geneid": "hsa-miR-2-3p", "baseMean": "90", "log2FoldChange": "-1.4", "pvalue": "0.002", "padj": "0.02"},
         {"Geneid": "hsa-miR-3-3p", "baseMean": "80", "log2FoldChange": "0.2", "pvalue": "0.8", "padj": "0.9"},
+        {"Geneid": "hsa-miR-4-5p", "baseMean": "70", "log2FoldChange": "0.1", "pvalue": "0.7", "padj": "0.8"},
     ]
     write_tsv(paths["results"], ["Geneid", "baseMean", "log2FoldChange", "pvalue", "padj"], rows)
     write_tsv(paths["filtered"], ["Geneid", "baseMean", "log2FoldChange", "pvalue", "padj"], rows[:2])
@@ -99,6 +100,8 @@ def setup_inputs() -> dict[str, Path]:
         [
             {"Geneid": "hsa-miR-1-3p", "control_1": "20", "treated_1": "120"},
             {"Geneid": "hsa-miR-2-3p", "control_1": "110", "treated_1": "30"},
+            {"Geneid": "hsa-miR-3-3p", "control_1": "70", "treated_1": "75"},
+            {"Geneid": "hsa-miR-4-5p", "control_1": "60", "treated_1": "68"},
         ],
     )
     write_tsv(paths["summary"], ["metric", "value"], [{"metric": "status", "value": "ok"}])
@@ -277,6 +280,8 @@ def run_report_contract(paths: dict[str, Path]) -> None:
             "0.1",
             "--log2fc",
             "1.0",
+            "--mirna-plot-groups",
+            "all,up,down,arm,target_source,target_source_type,target_evidence_type",
         ]
     )
     run_command(
@@ -520,6 +525,7 @@ def validate_outputs(paths: dict[str, Path]) -> None:
             "pca_pdf",
             "heatmap_pdf",
             "heatmap_panel_tsv",
+            "plot_group_tsv",
             "vst_tsv",
         },
     )
@@ -527,14 +533,47 @@ def validate_outputs(paths: dict[str, Path]) -> None:
         raise ValueError(f"Expected one ready report-plan row, got {plan_rows}")
     plot_rows = read_tsv(
         paths["plots_manifest"],
-        {"contrast_id", "status", "volcano_pdf", "ma_pdf", "pca_pdf", "heatmap_pdf", "heatmap_panel_tsv", "vst_tsv"},
+        {
+            "contrast_id",
+            "status",
+            "volcano_pdf",
+            "ma_pdf",
+            "pca_pdf",
+            "heatmap_pdf",
+            "heatmap_panel_tsv",
+            "plot_group_tsv",
+            "vst_tsv",
+        },
     )
     if len(plot_rows) != 1 or plot_rows[0]["status"] != "ok":
         raise ValueError(f"Expected one ok plot row, got {plot_rows}")
-    for column in ["volcano_pdf", "ma_pdf", "pca_pdf", "heatmap_pdf", "heatmap_panel_tsv", "vst_tsv"]:
+    for column in ["volcano_pdf", "ma_pdf", "pca_pdf", "heatmap_pdf", "heatmap_panel_tsv", "plot_group_tsv", "vst_tsv"]:
         path = Path(plot_rows[0][column])
         if not path.exists():
             raise FileNotFoundError(f"Missing smallRNA report plot artifact from {column}: {path}")
+    plot_groups = read_tsv(
+        Path(plot_rows[0]["plot_group_tsv"]),
+        {"plot_group", "plot_group_type", "plot_label", "n_features"},
+    )
+    expected_groups = {
+        "all",
+        "mirna_up",
+        "mirna_down",
+        "mirna_arm__3p",
+        "mirna_arm__5p",
+        "mirna_target_source__validated_db",
+        "mirna_target_source__predicted_db",
+        "mirna_target_source_type__experimental",
+        "mirna_target_source_type__computational",
+        "mirna_target_evidence_type__validated",
+        "mirna_target_evidence_type__predicted",
+    }
+    observed_groups = {row["plot_group"] for row in plot_groups}
+    missing_groups = expected_groups - observed_groups
+    if missing_groups:
+        raise ValueError(f"SmallRNA miRNA plot groups are missing expected panels: {sorted(missing_groups)}")
+    if any(row["plot_group"].startswith("known") or row["plot_group"].startswith("novel") for row in plot_groups):
+        raise ValueError(f"SmallRNA miRNA report should not create fake known/novel panels: {plot_groups}")
     summary_rows = read_tsv(
         paths["summary_manifest"],
         {
@@ -562,7 +601,7 @@ def validate_outputs(paths: dict[str, Path]) -> None:
     if len(summary_rows) != 1 or summary_rows[0]["status"] != "ok":
         raise ValueError(f"Expected one ok summary row, got {summary_rows}")
     row = summary_rows[0]
-    expected = {"n_features": "3", "n_significant": "2", "n_up": "1", "n_down": "1", "n_target_rows": "4", "n_targets": "3"}
+    expected = {"n_features": "4", "n_significant": "2", "n_up": "1", "n_down": "1", "n_target_rows": "4", "n_targets": "3"}
     for key, value in expected.items():
         if row[key] != value:
             raise ValueError(f"Unexpected {key}: expected {value}, got {row[key]}")
