@@ -111,6 +111,7 @@ NCRNA_SWITCH_COLUMNS = [
     "host_smallrna_change",
     "resource_antisense_overlap",
     "ncrna_resource_annotations",
+    "pseudogene_caution",
     "coding_potential_change",
     "interpretation_label",
 ]
@@ -1062,6 +1063,14 @@ def is_noncoding_biotype(value: str) -> bool:
     return any(hint in normalized for hint in NONCODING_HINTS) or normalized.endswith("_rna")
 
 
+def is_pseudogene_biotype(value: str) -> bool:
+    return "pseudogene" in normalized_biotype(value)
+
+
+def is_pseudogene_switch(row: dict[str, str]) -> bool:
+    return is_pseudogene_biotype(row.get("gene_biotype", "")) or is_pseudogene_biotype(row.get("transcript_biotype", ""))
+
+
 def is_artifact_or_ambiguous(row: dict[str, str]) -> bool:
     values = {
         normalized_biotype(row.get("transcript_plot_group", "")),
@@ -1084,8 +1093,11 @@ def classify_switch_biotype(rows: list[dict[str, str]]) -> tuple[str, str, str]:
     ]
     has_coding = any(normalized_biotype(value) in CODING_BIOTYPES for value in all_biotypes)
     has_noncoding = any(is_noncoding_biotype(value) for value in all_biotypes)
+    has_pseudogene = any(is_pseudogene_biotype(value) for value in all_biotypes)
     if has_coding and has_noncoding:
         return "mixed_coding_noncoding", gene_biotype, "coding_potential_transition"
+    if has_pseudogene:
+        return "noncoding", gene_biotype, "pseudogene_transcript_architecture_change"
     if has_noncoding:
         return "noncoding", gene_biotype, "noncoding_structure_change"
     if has_coding:
@@ -1611,6 +1623,8 @@ def summarize_ncrna_resource_annotations(matches: list[dict[str, object]]) -> di
 
 def ncrna_interpretation_label(row: dict[str, str], exon_gain_loss: str, tss_change: str, tes_change: str) -> str:
     switch_class = row.get("switch_biotype_class", "")
+    if is_pseudogene_switch(row):
+        return "pseudogene_transcript_architecture_change"
     if switch_class == "ambiguous_artifact":
         return "ambiguous_or_artifact"
     if switch_class == "mixed_coding_noncoding":
@@ -1618,6 +1632,12 @@ def ncrna_interpretation_label(row: dict[str, str], exon_gain_loss: str, tss_cha
     if exon_gain_loss or tss_change not in {"", "unchanged", "not_available"} or tes_change not in {"", "unchanged", "not_available"}:
         return "noncoding_structure_change"
     return "noncoding_isoform_fraction_change"
+
+
+def pseudogene_caution_label(row: dict[str, str]) -> str:
+    if not is_pseudogene_switch(row):
+        return ""
+    return "interpret_as_transcript_architecture_not_protein_consequence"
 
 
 def build_ncrna_switch_rows(
@@ -1687,6 +1707,7 @@ def build_ncrna_switch_rows(
                 "host_smallrna_change": resource_summary["host_smallrna_change"],
                 "resource_antisense_overlap": resource_summary["resource_antisense_overlap"],
                 "ncrna_resource_annotations": resource_summary["ncrna_resource_annotations"],
+                "pseudogene_caution": pseudogene_caution_label(row),
                 "coding_potential_change": coding_potential_change(row, paired_candidate),
                 "interpretation_label": ncrna_interpretation_label(row, exon_gain_loss, tss_change, tes_change),
             }
@@ -1904,7 +1925,7 @@ def render_event_html(
   <h2>Candidate Isoforms</h2>
   {table(['switch_rank', 'isoform_id', 'switch_role', 'gene_biotype', 'transcript_biotype', 'switch_biotype_class', 'dIF', 'padj_qvalue', 'isoform_fraction_control', 'isoform_fraction_test', 'switch_direction', 'novelty_group', 'reason_selected', 'consequence_summary'], event_candidates)}
   <h2>ncRNA Switch Interpretation</h2>
-  {table(['isoform_id', 'paired_isoform_id', 'switch_role', 'gene_biotype', 'transcript_biotype', 'switch_biotype_class', 'transcript_length_change', 'exon_gain_loss', 'intron_retention_change', 'TSS_change', 'TES_change', 'antisense_overlap', 'coding_potential_change', 'interpretation_label'], event_ncrna_rows)}
+  {table(['isoform_id', 'paired_isoform_id', 'switch_role', 'gene_biotype', 'transcript_biotype', 'switch_biotype_class', 'transcript_length_change', 'exon_gain_loss', 'intron_retention_change', 'TSS_change', 'TES_change', 'antisense_overlap', 'conserved_exon_change', 'motif_change', 'host_smallrna_change', 'resource_antisense_overlap', 'pseudogene_caution', 'coding_potential_change', 'interpretation_label'], event_ncrna_rows)}
   <h2>Functional Annotations</h2>
   {table(['isoform_id', 'source', 'feature_type', 'feature_id', 'feature_name', 'start_aa', 'end_aa', 'score', 'feature_change', 'description'], event_annotations)}
   <h2>Sequences</h2>
