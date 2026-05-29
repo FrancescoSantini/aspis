@@ -51,8 +51,14 @@ def write_quant_gtf(path: Path) -> None:
                 'chr1\tStringTie\ttranscript\t1\t160\t.\t+\t.\tgene_id "GENE1"; transcript_id "TX_J"; gene_name "Gene1"; gene_biotype "protein_coding"; transcript_biotype "protein_coding"; cov "8";',
                 'chr1\tStringTie\texon\t1\t70\t.\t+\t.\tgene_id "GENE1"; transcript_id "TX_J";',
                 'chr1\tStringTie\texon\t100\t160\t.\t+\t.\tgene_id "GENE1"; transcript_id "TX_J";',
+                'chr1\tStringTie\ttranscript\t1\t90\t.\t+\t.\tgene_id "GENE1"; transcript_id "TX_C"; gene_name "Gene1"; gene_biotype "protein_coding"; transcript_biotype "protein_coding"; cov "7";',
+                'chr1\tStringTie\texon\t1\t90\t.\t+\t.\tgene_id "GENE1"; transcript_id "TX_C";',
                 'chr1\tStringTie\ttranscript\t300\t380\t.\t+\t.\tgene_id "MSTRG.1"; transcript_id "TX_U"; gene_biotype "lncRNA"; transcript_biotype "lncRNA"; cov "5";',
                 'chr1\tStringTie\texon\t300\t380\t.\t+\t.\tgene_id "MSTRG.1"; transcript_id "TX_U";',
+                'chr1\tStringTie\ttranscript\t500\t580\t.\t+\t.\tgene_id "GENE2"; transcript_id "TX_I"; gene_name "Gene2"; gene_biotype "lncRNA"; transcript_biotype "lncRNA"; cov "4";',
+                'chr1\tStringTie\texon\t500\t580\t.\t+\t.\tgene_id "GENE2"; transcript_id "TX_I";',
+                'chr1\tStringTie\ttranscript\t700\t780\t.\t+\t.\tgene_id "GENE3"; transcript_id "TX_P"; gene_name "Gene3"; gene_biotype "processed_pseudogene"; transcript_biotype "processed_pseudogene"; cov "3";',
+                'chr1\tStringTie\texon\t700\t780\t.\t+\t.\tgene_id "GENE3"; transcript_id "TX_P";',
             ]
         )
         + "\n",
@@ -79,7 +85,10 @@ def exercise_transcript_matrix() -> tuple[Path, Path]:
         [
             {"q_id": "TX_KNOWN", "class_code": "="},
             {"q_id": "TX_J", "class_code": "j"},
+            {"q_id": "TX_C", "class_code": "c"},
             {"q_id": "TX_U", "class_code": "u"},
+            {"q_id": "TX_I", "class_code": "i"},
+            {"q_id": "TX_P", "class_code": "p"},
         ],
     )
     run_command(
@@ -113,12 +122,32 @@ def exercise_transcript_matrix() -> tuple[Path, Path]:
                 "gene_biotype",
                 "transcript_biotype",
                 "class_code",
+                "transcript_discovery_class",
                 "transcript_novelty",
                 "true_novel_candidate",
                 "transcript_plot_group",
+                "transcript_plot_label",
             },
         )
     }
+    expected_discovery = {
+        "TX_KNOWN": ("known_transcript", "known", "no", "known_compatible"),
+        "TX_C": ("reference_contained_or_containing", "reference_overlap", "no", "known_compatible"),
+        "TX_J": ("novel_isoform_known_gene", "novel_isoform", "yes", "novel_isoform"),
+        "TX_U": ("intergenic_novel_locus", "novel_locus", "yes", "novel_locus"),
+        "TX_I": ("intronic_novel_candidate", "ambiguous_overlap", "no", "ambiguous"),
+        "TX_P": ("likely_artifact_or_repeat", "low_confidence", "no", "artifact"),
+    }
+    for tx_id, expected in expected_discovery.items():
+        observed = rows[tx_id]
+        actual = (
+            observed["transcript_discovery_class"],
+            observed["transcript_novelty"],
+            observed["true_novel_candidate"],
+            observed["transcript_plot_group"],
+        )
+        if actual != expected:
+            raise ValueError(f"{tx_id} discovery classification mismatch: expected {expected}, observed {observed}")
     if rows["TX_KNOWN"]["transcript_biotype"] != "protein_coding" or rows["TX_U"]["transcript_biotype"] != "lncRNA":
         raise ValueError(f"transcript biotypes were not propagated from StringTie GTF: {rows}")
     if rows["TX_KNOWN"]["transcript_novelty"] != "known" or rows["TX_KNOWN"]["gene_type_strict"] != "Known":
@@ -177,6 +206,26 @@ def exercise_grouped_plots() -> None:
             "transcript_plot_label": "Novel locus",
             "transcript_biotype": "lncRNA",
         },
+        {
+            "transcript_id": "TX_I",
+            "baseMean": "70",
+            "log2FoldChange": "-1.2",
+            "pvalue": "0.03",
+            "padj": "0.08",
+            "transcript_plot_group": "ambiguous",
+            "transcript_plot_label": "Ambiguous overlap",
+            "transcript_biotype": "lncRNA",
+        },
+        {
+            "transcript_id": "TX_P",
+            "baseMean": "50",
+            "log2FoldChange": "1.1",
+            "pvalue": "0.04",
+            "padj": "0.09",
+            "transcript_plot_group": "artifact",
+            "transcript_plot_label": "Artifact/repeat",
+            "transcript_biotype": "processed_pseudogene",
+        },
     ]
     write_tsv(results, list(rows[0]), rows)
     write_tsv(filtered, list(rows[0]), rows)
@@ -187,6 +236,8 @@ def exercise_grouped_plots() -> None:
             {"transcript_id": "TX_KNOWN", "s1": "10", "s2": "20", "s3": "30"},
             {"transcript_id": "TX_J", "s1": "30", "s2": "20", "s3": "10"},
             {"transcript_id": "TX_U", "s1": "5", "s2": "15", "s3": "30"},
+            {"transcript_id": "TX_I", "s1": "20", "s2": "10", "s3": "8"},
+            {"transcript_id": "TX_P", "s1": "6", "s2": "10", "s3": "12"},
         ],
     )
     write_tsv(
@@ -269,9 +320,9 @@ def exercise_grouped_plots() -> None:
             "--log2fc",
             "1.0",
             "--transcript-plot-groups",
-            "all,known_compatible,novel_isoform,novel_locus",
+            "all,known_compatible,novel_isoform,novel_locus,ambiguous,artifact",
             "--transcript-biotype-plot-groups",
-            "protein_coding,lncRNA",
+            "protein_coding,lncRNA,processed_pseudogene",
         ]
     )
     manifest = read_tsv(
@@ -300,8 +351,13 @@ def exercise_grouped_plots() -> None:
     expected_groups = {
         "transcript_biotype__protein_coding",
         "transcript_biotype__lncrna",
+        "transcript_biotype__processed_pseudogene",
+        "ambiguous",
+        "artifact",
         "transcript_novelty_biotype__known_compatible__protein_coding",
         "transcript_novelty_biotype__novel_locus__lncrna",
+        "transcript_novelty_biotype__ambiguous__lncrna",
+        "transcript_novelty_biotype__artifact__processed_pseudogene",
     }
     if not expected_groups <= groups:
         raise ValueError(f"missing transcript biotype/novelty plot groups: {group_rows}")
@@ -737,10 +793,18 @@ def exercise_discovery_reports(counts: Path, metadata: Path) -> None:
         },
     )
     classes = {row["transcript_discovery_class"] for row in discovery_rows}
-    if not {"known_transcript", "novel_isoform_known_gene", "intergenic_novel_locus"} <= classes:
+    expected_classes = {
+        "known_transcript",
+        "reference_contained_or_containing",
+        "novel_isoform_known_gene",
+        "intergenic_novel_locus",
+        "intronic_novel_candidate",
+        "likely_artifact_or_repeat",
+    }
+    if not expected_classes <= classes:
         raise ValueError(f"missing transcript discovery classes: {discovery_rows}")
     groups = {row["transcript_plot_group"] for row in discovery_rows}
-    if not {"known_compatible", "novel_isoform", "novel_locus"} <= groups:
+    if not {"known_compatible", "novel_isoform", "novel_locus", "ambiguous", "artifact"} <= groups:
         raise ValueError(f"missing transcript plot groups: {discovery_rows}")
 
     warnings_dir = BASE / "warnings"
