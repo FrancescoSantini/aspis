@@ -39,6 +39,9 @@ MIRNA_MRNA_TARGET_FEATURE_SET_COLUMNS = {
     "mirna_mrna_target_feature_set_universe",
     "mirna_mrna_target_feature_set_results",
     "mirna_mrna_target_feature_set_plot",
+    "mirna_mrna_target_ranked_feature_set_universe",
+    "mirna_mrna_target_ranked_feature_set_results",
+    "mirna_mrna_target_ranked_feature_set_plot",
 }
 REPORT_COLUMNS = [
     "project",
@@ -74,6 +77,9 @@ REPORT_COLUMNS = [
     "mirna_mrna_target_feature_set_universe",
     "mirna_mrna_target_feature_set_results",
     "mirna_mrna_target_feature_set_plot",
+    "mirna_mrna_target_ranked_feature_set_universe",
+    "mirna_mrna_target_ranked_feature_set_results",
+    "mirna_mrna_target_ranked_feature_set_plot",
     "target_feature_set_manifest",
     "target_feature_set_universe",
     "target_feature_set_results",
@@ -308,6 +314,18 @@ def planned_row(
         ),
         "mirna_mrna_target_feature_set_plot": mirna_mrna_target_feature_set_row.get(
             "mirna_mrna_target_feature_set_plot",
+            "",
+        ),
+        "mirna_mrna_target_ranked_feature_set_universe": mirna_mrna_target_feature_set_row.get(
+            "mirna_mrna_target_ranked_feature_set_universe",
+            "",
+        ),
+        "mirna_mrna_target_ranked_feature_set_results": mirna_mrna_target_feature_set_row.get(
+            "mirna_mrna_target_ranked_feature_set_results",
+            "",
+        ),
+        "mirna_mrna_target_ranked_feature_set_plot": mirna_mrna_target_feature_set_row.get(
+            "mirna_mrna_target_ranked_feature_set_plot",
             "",
         ),
         "target_feature_set_manifest": target_feature_set_row.get("target_feature_set_manifest", ""),
