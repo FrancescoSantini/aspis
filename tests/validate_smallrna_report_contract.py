@@ -14,6 +14,7 @@ BASE = Path("results/smallrna_report_contract")
 INPUT = BASE / "input"
 TARGETS = BASE / "target_enrichment"
 TARGET_FEATURE_SETS = BASE / "target_feature_sets"
+MIRNA_FEATURE_SETS = BASE / "mirna_feature_sets"
 REPORTS = BASE / "reports"
 
 
@@ -59,10 +60,13 @@ def setup_inputs() -> dict[str, Path]:
         "metadata": INPUT / "mirna_metadata.tsv",
         "targets": INPUT / "targets.tsv",
         "feature_sets": INPUT / "target_feature_sets.tsv",
+        "mirna_feature_sets": INPUT / "mirna_feature_sets.tsv",
         "target_manifest": TARGETS / "target_manifest.tsv",
         "target_done": TARGETS / "target_enrichment.done",
         "target_feature_set_manifest": TARGET_FEATURE_SETS / "target_feature_set_manifest.tsv",
         "target_feature_set_done": TARGET_FEATURE_SETS / "target_feature_sets.done",
+        "mirna_feature_set_manifest": MIRNA_FEATURE_SETS / "mirna_feature_set_manifest.tsv",
+        "mirna_feature_set_done": MIRNA_FEATURE_SETS / "mirna_feature_sets.done",
         "report_plan": REPORTS / "report_plan.tsv",
         "report_plan_done": REPORTS / "report_plan.done",
         "plots_manifest": REPORTS / "plots" / "plots_manifest.tsv",
@@ -148,6 +152,16 @@ def setup_inputs() -> dict[str, Path]:
             {"source": "toy", "collection": "target_process", "resource_version": "toy_pathway_2026_05", "set_id": "target_other", "description": "Background targets", "feature_id": "GENE4"},
         ],
     )
+    write_tsv(
+        paths["mirna_feature_sets"],
+        ["source", "collection", "resource_version", "set_id", "description", "feature_id"],
+        [
+            {"source": "toy_mirna", "collection": "seed_family", "resource_version": "toy_mirna_2026_05", "set_id": "mirna_seed_shared", "description": "shared seed family", "feature_id": "hsa-miR-1-3p"},
+            {"source": "toy_mirna", "collection": "seed_family", "resource_version": "toy_mirna_2026_05", "set_id": "mirna_seed_shared", "description": "shared seed family", "feature_id": "hsa-miR-2-3p"},
+            {"source": "toy_mirna", "collection": "cluster", "resource_version": "toy_mirna_2026_05", "set_id": "mirna_cluster_up", "description": "up miRNA cluster", "feature_id": "hsa-miR-1-3p"},
+            {"source": "toy_mirna", "collection": "cluster", "resource_version": "toy_mirna_2026_05", "set_id": "mirna_cluster_background", "description": "background miRNA cluster", "feature_id": "hsa-miR-3-3p"},
+        ],
+    )
     return paths
 
 
@@ -199,6 +213,29 @@ def run_feature_set_contract(paths: dict[str, Path]) -> None:
     )
 
 
+def run_mirna_feature_set_contract(paths: dict[str, Path]) -> None:
+    run_command(
+        [
+            sys.executable,
+            "workflow/scripts/render_smallrna_mirna_featuresets.py",
+            "--deseq2-manifest",
+            str(paths["deseq2_manifest"]),
+            "--outdir",
+            str(MIRNA_FEATURE_SETS),
+            "--manifest",
+            str(paths["mirna_feature_set_manifest"]),
+            "--done",
+            str(paths["mirna_feature_set_done"]),
+            "--feature-set-tables",
+            str(paths["mirna_feature_sets"]),
+            "--min-overlap",
+            "1",
+            "--top-n",
+            "10",
+        ]
+    )
+
+
 def run_report_contract(paths: dict[str, Path]) -> None:
     run_command(
         [
@@ -212,6 +249,8 @@ def run_report_contract(paths: dict[str, Path]) -> None:
             str(paths["target_manifest"]),
             "--target-feature-set-manifest",
             str(paths["target_feature_set_manifest"]),
+            "--mirna-feature-set-manifest",
+            str(paths["mirna_feature_set_manifest"]),
             "--project",
             "ASPIS_SMALLRNA_TEST",
             "--outdir",
@@ -386,6 +425,84 @@ def validate_outputs(paths: dict[str, Path]) -> None:
             raise ValueError(f"Target feature-set result lost controlled predicted evidence label: {row}")
         if row["target_source"] == "predicted_db" and row["target_source_version"] != "TargetScan_8.0":
             raise ValueError(f"Target feature-set result lost target-source version: {row}")
+    mirna_feature_rows = read_tsv(
+        paths["mirna_feature_set_manifest"],
+        {
+            "contrast_id",
+            "status",
+            "mirna_feature_set_universe",
+            "mirna_feature_set_results",
+            "mirna_feature_set_plot",
+            "mirna_ranked_feature_set_universe",
+            "mirna_ranked_feature_set_results",
+            "mirna_ranked_feature_set_plot",
+            "n_mirna_feature_set_terms",
+            "n_mirna_ranked_feature_set_terms",
+        },
+    )
+    if len(mirna_feature_rows) != 1 or mirna_feature_rows[0]["status"] != "ok":
+        raise ValueError(f"Expected one ok miRNA-ID feature-set row, got {mirna_feature_rows}")
+    if int(mirna_feature_rows[0]["n_mirna_feature_set_terms"]) < 1:
+        raise ValueError(f"Expected miRNA-ID feature-set enrichment terms, got {mirna_feature_rows[0]}")
+    if int(mirna_feature_rows[0]["n_mirna_ranked_feature_set_terms"]) < 1:
+        raise ValueError(f"Expected ranked miRNA-ID feature-set terms, got {mirna_feature_rows[0]}")
+    mirna_feature_universe = read_tsv(
+        Path(mirna_feature_rows[0]["mirna_feature_set_universe"]),
+        {
+            "mirna_analysis_mode",
+            "collection",
+            "query_source",
+            "mirna_universe_definition",
+            "feature_set_source",
+            "feature_set_collection",
+            "feature_set_version",
+            "query_size",
+            "mirna_universe_size",
+            "feature_set_member_universe_size",
+        },
+    )
+    if any(row["mirna_analysis_mode"] != "mirna_id_feature_set" for row in mirna_feature_universe):
+        raise ValueError(f"Unexpected miRNA-ID feature-set universe mode: {mirna_feature_universe}")
+    if any(row["query_source"] != row["collection"] for row in mirna_feature_universe):
+        raise ValueError(f"miRNA-ID feature-set universe query source mismatch: {mirna_feature_universe}")
+    if any(row["feature_set_version"] != "toy_mirna_2026_05" for row in mirna_feature_universe):
+        raise ValueError(f"miRNA-ID feature-set universe lost resource version: {mirna_feature_universe}")
+    mirna_feature_results = read_tsv(
+        Path(mirna_feature_rows[0]["mirna_feature_set_results"]),
+        {
+            "mirna_analysis_mode",
+            "collection",
+            "query_source",
+            "mirna_universe_definition",
+            "feature_set_version",
+            "set_id",
+            "overlap",
+            "mirnas",
+        },
+    )
+    if any(row["mirna_analysis_mode"] != "mirna_id_feature_set" for row in mirna_feature_results):
+        raise ValueError(f"Unexpected miRNA-ID feature-set result mode: {mirna_feature_results}")
+    if not any(row["collection"] == "up" and row["set_id"] == "mirna_cluster_up" for row in mirna_feature_results):
+        raise ValueError(f"miRNA-ID feature-set results lack up-miRNA collection: {mirna_feature_results}")
+    mirna_ranked_results = read_tsv(
+        Path(mirna_feature_rows[0]["mirna_ranked_feature_set_results"]),
+        {
+            "mirna_analysis_mode",
+            "collection",
+            "ranking_metric",
+            "set_id",
+            "enrichment_score",
+            "direction",
+            "leading_edge_mirnas",
+            "feature_set_version",
+        },
+    )
+    if any(row["mirna_analysis_mode"] != "mirna_id_ranked_feature_set" for row in mirna_ranked_results):
+        raise ValueError(f"Unexpected ranked miRNA-ID feature-set mode: {mirna_ranked_results}")
+    if any(row["ranking_metric"] != "mirna_stat_else_signed_log10_pvalue_else_log2fc" for row in mirna_ranked_results):
+        raise ValueError(f"Ranked miRNA-ID feature sets lost ranking metric: {mirna_ranked_results}")
+    if not any(row["direction"] == "mirna_up" for row in mirna_ranked_results):
+        raise ValueError(f"Ranked miRNA-ID feature sets do not expose miRNA-up direction: {mirna_ranked_results}")
     plan_rows = read_tsv(
         paths["report_plan"],
         {
@@ -395,6 +512,9 @@ def validate_outputs(paths: dict[str, Path]) -> None:
             "mirna_targets",
             "target_feature_set_universe",
             "target_feature_set_results",
+            "mirna_feature_set_universe",
+            "mirna_feature_set_results",
+            "mirna_ranked_feature_set_results",
             "volcano_pdf",
             "ma_pdf",
             "pca_pdf",
@@ -428,6 +548,8 @@ def validate_outputs(paths: dict[str, Path]) -> None:
             "n_targets",
             "n_enrichment_terms",
             "n_target_feature_set_terms",
+            "n_mirna_feature_set_terms",
+            "n_mirna_ranked_feature_set_terms",
             "volcano_pdf",
             "ma_pdf",
             "pca_pdf",
@@ -444,20 +566,28 @@ def validate_outputs(paths: dict[str, Path]) -> None:
             raise ValueError(f"Unexpected {key}: expected {value}, got {row[key]}")
     if int(row["n_target_feature_set_terms"]) < 1:
         raise ValueError(f"Expected target feature-set terms in summary row, got {row}")
+    if int(row["n_mirna_feature_set_terms"]) < 1 or int(row["n_mirna_ranked_feature_set_terms"]) < 1:
+        raise ValueError(f"Expected miRNA-ID feature-set terms in summary row, got {row}")
     summary_html = Path(row["summary_html"])
     if not summary_html.exists():
         raise FileNotFoundError(f"Missing summary HTML: {summary_html}")
     text = summary_html.read_text(encoding="utf-8")
     if (
         "hsa-miR-1-3p" not in text
-        or "Target enrichment" not in text
+        or "Potentially regulated target processes" not in text
         or "Target-gene feature sets" not in text
+        or "miRNA-ID feature sets" not in text
         or "target_evidence_type" not in text
         or "volcano plot" not in text
     ):
         raise ValueError("Summary HTML lacks expected miRNA, target-enrichment, feature-set, or plot content")
     index_text = paths["index"].read_text(encoding="utf-8")
-    if "treated_vs_control__time_h_24" not in index_text or "feature sets" not in index_text or "volcano" not in index_text:
+    if (
+        "treated_vs_control__time_h_24" not in index_text
+        or "feature sets" not in index_text
+        or "miRNA-ID feature sets" not in index_text
+        or "volcano" not in index_text
+    ):
         raise ValueError("Report index lacks expected contrast/resource links")
     asset_rows = read_tsv(
         paths["asset_manifest"],
@@ -469,6 +599,9 @@ def validate_outputs(paths: dict[str, Path]) -> None:
         "results",
         "target_feature_set_universe",
         "target_feature_set_results",
+        "mirna_feature_set_universe",
+        "mirna_feature_set_results",
+        "mirna_ranked_feature_set_results",
         "volcano_pdf",
         "ma_pdf",
         "pca_pdf",
@@ -486,6 +619,7 @@ def main() -> int:
     paths = setup_inputs()
     run_contract(paths)
     run_feature_set_contract(paths)
+    run_mirna_feature_set_contract(paths)
     run_report_contract(paths)
     validate_outputs(paths)
     return 0

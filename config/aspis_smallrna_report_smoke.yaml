@@ -91,6 +91,9 @@ smallrna:
   target_feature_set_tables: tests/reference/smallrna_target_featuresets_toy.tsv
   target_feature_set_min_overlap: 1
   target_feature_set_top_n: 20
+  mirna_feature_set_tables: tests/reference/smallrna_mirna_featuresets_toy.tsv
+  mirna_feature_set_min_overlap: 1
+  mirna_feature_set_top_n: 20
   reports: true
   report_top_n: 20
   condition_col: condition
