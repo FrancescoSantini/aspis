@@ -116,6 +116,8 @@ Current state:
 - The new pipeline no longer treats every assembled transcript as simply novel.
 - It uses compatibility/novelty classes derived from gffcompare/stringtie
   metadata.
+- Transcript differential reports write a per-contrast `novelty_summary.tsv`
+  with tested/significant/up/down counts and fractions for each novelty class.
 
 Remaining work:
 
@@ -130,7 +132,6 @@ Remaining work:
   - known-compatible;
   - novel isoforms;
   - true novel loci.
-- Add explicit counts/fractions for each novelty class in the report.
 - Keep a configurable threshold/warning for unexpectedly high true-novel
   fraction, but do not treat the threshold as a biological law.
 - Ensure novelty labels propagate consistently into:

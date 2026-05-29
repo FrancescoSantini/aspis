@@ -252,6 +252,10 @@ def merged_rows(
                     plan.get("heatmap_panel_tsv", ""),
                 ),
                 "plot_group_tsv": first_value(plots.get("plot_group_tsv", ""), plan.get("plot_group_tsv", "")),
+                "novelty_summary_tsv": first_value(
+                    summary.get("novelty_summary_tsv", ""),
+                    plan.get("novelty_summary_tsv", ""),
+                ),
                 "vst_tsv": first_value(plots.get("vst_tsv", ""), plan.get("vst_tsv", "")),
                 "enrichment_manifest": first_value(
                     enrichment.get("enrichment_manifest", ""),
@@ -291,6 +295,7 @@ def render_table(rows: list[dict[str, str]], output: Path) -> str:
                 ("results", row["results"]),
                 ("filtered", row["filtered"]),
                 ("pca metrics", row["pca_metrics_tsv"]),
+                ("novelty", row.get("novelty_summary_tsv", "")),
                 ("vst", row["vst_tsv"]),
             ],
             output,
@@ -458,6 +463,7 @@ ASSET_FIELDS = [
     ("plots", "heatmap_pdf", "plot", "heatmap_pdf"),
     ("plots", "heatmap_panel_tsv", "table", "heatmap_panel_tsv"),
     ("plots", "plot_group_tsv", "table", "plot_group_tsv"),
+    ("summary", "novelty_summary_tsv", "table", "novelty_summary_tsv"),
     ("enrichment", "enrichment_manifest", "manifest", "enrichment_manifest"),
     ("enrichment", "ranked_features", "table", "ranked_features"),
     ("enrichment", "significant_features", "table", "significant_features"),
