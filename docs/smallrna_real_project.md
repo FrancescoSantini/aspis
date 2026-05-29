@@ -149,6 +149,14 @@ source, collection, description
 `smallrna.target_feature_sets` can instead point to one or more comma-separated
 GMT files.
 
+For a complete GO/Reactome/KEGG/MSigDB resource layout, accepted GMT/TSV
+schemas, identifier-matching rules, and a reusable config fragment, see:
+
+```text
+docs/feature_set_resources.md
+config/aspis_feature_set_resources.example.yaml
+```
+
 ## miRNA-mRNA Integration
 
 When a project has both `smallrna` and `rnaseq` branches with the same project
