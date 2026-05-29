@@ -181,19 +181,17 @@ Remaining work:
 
 Current state:
 
-- A ranked feature-set enrichment layer exists, but it is closer to a
-  GSEA-like score than a full `fgsea`/permutation-style implementation.
+- RNA-seq ranked feature-set enrichment now uses a deterministic
+  permutation-based running-score implementation for standard gene-set
+  resources.
 - Ranked feature-set outputs now use the same resource-specific final universe
   and mapping provenance fields as ORA.
-
-Remaining work:
-
-- Add an `fgsea`-style implementation for standard gene-set resources.
-- Define ranking metrics:
+- Ranked enrichment metrics are defined as:
   - signed Wald statistic when available;
   - signed `-log10(pvalue)` as fallback;
-  - possibly shrunken log2FC for sensitivity checks.
-- Report:
+  - signed `-log10(padj)` as a later fallback;
+  - log2 fold change as a final fallback.
+- Ranked enrichment reports:
   - enrichment score;
   - normalized enrichment score;
   - p-value;
@@ -201,6 +199,9 @@ Remaining work:
   - leading-edge genes;
   - direction.
 - Keep ORA and GSEA outputs separate in reports.
+
+Remaining work:
+
 - Add warnings when too few ranked genes map to the resource.
 
 ## 7. miRNA Target Enrichment
@@ -386,5 +387,5 @@ Desired isoform-switch report:
 Suggested order:
 
 1. Add real-data validation notes once real projects are available.
-2. Add real `fgsea`/permutation-style ranked enrichment for standard
-   gene-set resources.
+2. Add report warnings when too few ranked genes map to a configured
+   feature-set resource.

@@ -121,6 +121,8 @@ rnaseq_differential:
   report_feature_set_tables: ""
   report_feature_set_min_overlap: 2
   report_feature_set_top_n: 20
+  report_ranked_feature_set_permutations: 1000
+  report_ranked_feature_set_seed: 1
   report_transcript_plot_groups:
     - all
     - known_compatible

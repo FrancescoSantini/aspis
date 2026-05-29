@@ -41,15 +41,15 @@ def build_inputs() -> dict[str, Path]:
     done = BASE / "enrichment.done"
     plan = BASE / "report_plan.tsv"
 
-    result_columns = ["Geneid", "log2FoldChange", "padj"]
+    result_columns = ["Geneid", "log2FoldChange", "stat", "pvalue", "padj"]
     write_tsv(
         results,
         result_columns,
         [
-            {"Geneid": "G1", "log2FoldChange": "2.0", "padj": "0.001"},
-            {"Geneid": "G2", "log2FoldChange": "1.5", "padj": "0.002"},
-            {"Geneid": "G3", "log2FoldChange": "-1.0", "padj": "0.2"},
-            {"Geneid": "G4", "log2FoldChange": "0.2", "padj": "0.5"},
+            {"Geneid": "G1", "log2FoldChange": "2.0", "stat": "5.0", "pvalue": "0.0001", "padj": "0.001"},
+            {"Geneid": "G2", "log2FoldChange": "1.5", "stat": "4.0", "pvalue": "0.0002", "padj": "0.002"},
+            {"Geneid": "G3", "log2FoldChange": "-1.0", "stat": "-1.2", "pvalue": "0.2", "padj": "0.2"},
+            {"Geneid": "G4", "log2FoldChange": "0.2", "stat": "0.3", "pvalue": "0.5", "padj": "0.5"},
         ],
     )
     write_tsv(
@@ -87,6 +87,14 @@ def build_inputs() -> dict[str, Path]:
                 "set_id": "known_signal",
                 "description": "Known signal",
                 "feature_id": "GX",
+            },
+            {
+                "source": "toy_pathways",
+                "collection": "go_bp",
+                "resource_version": "toy_go_2026_05",
+                "set_id": "top_singleton",
+                "description": "Top singleton",
+                "feature_id": "G1",
             },
             {
                 "source": "toy_pathways",
@@ -156,6 +164,8 @@ def main() -> int:
             "1",
             "--feature-set-top-n",
             "5",
+            "--ranked-feature-set-permutations",
+            "50",
         ],
         check=True,
     )
@@ -212,6 +222,16 @@ def main() -> int:
         raise ValueError(f"{ranked_path} did not use the final resource universe: {ranked_rows[0]}")
     if ranked_rows[0]["feature_set_version"] != "toy_go_2026_05":
         raise ValueError(f"{ranked_path} did not preserve resource version: {ranked_rows[0]}")
+    singleton = require_single([row for row in read_tsv(ranked_path) if row["set_id"] == "top_singleton"], "top_singleton ranked row")
+    for key in ["ranking_metric", "normalized_enrichment_score", "pvalue", "padj", "n_permutations"]:
+        if not singleton.get(key, ""):
+            raise ValueError(f"{ranked_path} missing ranked permutation field {key}: {singleton}")
+    if singleton["ranking_metric"] != "deseq2_wald_stat":
+        raise ValueError(f"{ranked_path} did not prefer DESeq2 Wald statistic ranking: {singleton}")
+    if not (0.0 <= float(singleton["pvalue"]) <= 1.0):
+        raise ValueError(f"{ranked_path} invalid ranked permutation p-value: {singleton}")
+    if singleton["n_permutations"] != "50":
+        raise ValueError(f"{ranked_path} did not record permutation count: {singleton}")
 
     shutil.rmtree(BASE)
     print("RNA-seq enrichment universe contract ok")

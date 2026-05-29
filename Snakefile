@@ -4781,7 +4781,9 @@ rule render_rnaseq_differential_enrichment:
         top_n=RNASEQ_DIFFERENTIAL.get(
             "report_feature_set_top_n",
             RNASEQ_DIFFERENTIAL_REPORT_TOP_N,
-        )
+        ),
+        ranked_permutations=RNASEQ_DIFFERENTIAL.get("report_ranked_feature_set_permutations", 1000),
+        ranked_seed=RNASEQ_DIFFERENTIAL.get("report_ranked_feature_set_seed", 1)
     log:
         "logs/branches/rnaseq/{project}.differential_enrichment.log"
     shell:
@@ -4795,6 +4797,8 @@ rule render_rnaseq_differential_enrichment:
           {params.feature_set_tables} \
           --feature-set-min-overlap {params.min_overlap:q} \
           --feature-set-top-n {params.top_n:q} \
+          --ranked-feature-set-permutations {params.ranked_permutations:q} \
+          --ranked-feature-set-seed {params.ranked_seed:q} \
           > {log:q} 2>&1
         """
 
@@ -5191,7 +5195,9 @@ rule render_deseq2_report_smoke_enrichment:
         top_n=DESEQ2_SMOKE.get(
             "report_feature_set_top_n",
             DESEQ2_SMOKE.get("report_top_n", DESEQ2_SMOKE.get("plot_top_n", 50)),
-        )
+        ),
+        ranked_permutations=DESEQ2_SMOKE.get("report_ranked_feature_set_permutations", 200),
+        ranked_seed=DESEQ2_SMOKE.get("report_ranked_feature_set_seed", 1)
     log:
         f"{DESEQ2_SMOKE_REPORT_DIR}/logs/enrichment.log"
     shell:
@@ -5205,6 +5211,8 @@ rule render_deseq2_report_smoke_enrichment:
           {params.feature_set_tables} \
           --feature-set-min-overlap {params.min_overlap:q} \
           --feature-set-top-n {params.top_n:q} \
+          --ranked-feature-set-permutations {params.ranked_permutations:q} \
+          --ranked-feature-set-seed {params.ranked_seed:q} \
           > {log:q} 2>&1
         """
 

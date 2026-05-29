@@ -503,14 +503,14 @@ def exercise_ranked_enrichment() -> Path:
     feature_sets = INPUT / "rnaseq_feature_sets.tsv"
     write_tsv(
         results,
-        ["Geneid", "baseMean", "log2FoldChange", "pvalue", "padj"],
+        ["Geneid", "baseMean", "log2FoldChange", "stat", "pvalue", "padj"],
         [
-            {"Geneid": "GENE1", "baseMean": "100", "log2FoldChange": "3", "pvalue": "0.001", "padj": "0.01"},
-            {"Geneid": "GENE2", "baseMean": "80", "log2FoldChange": "2", "pvalue": "0.01", "padj": "0.04"},
-            {"Geneid": "GENE3", "baseMean": "70", "log2FoldChange": "-1", "pvalue": "0.2", "padj": "0.5"},
+            {"Geneid": "GENE1", "baseMean": "100", "log2FoldChange": "3", "stat": "6", "pvalue": "0.001", "padj": "0.01"},
+            {"Geneid": "GENE2", "baseMean": "80", "log2FoldChange": "2", "stat": "5", "pvalue": "0.01", "padj": "0.04"},
+            {"Geneid": "GENE3", "baseMean": "70", "log2FoldChange": "-1", "stat": "-1", "pvalue": "0.2", "padj": "0.5"},
         ],
     )
-    write_tsv(filtered, ["Geneid", "baseMean", "log2FoldChange", "pvalue", "padj"], read_tsv(results))
+    write_tsv(filtered, ["Geneid", "baseMean", "log2FoldChange", "stat", "pvalue", "padj"], read_tsv(results))
     write_tsv(
         plan,
         ["project", "level", "contrast_id", "status", "reason", "results", "filtered", "enrichment_manifest"],
@@ -552,14 +552,32 @@ def exercise_ranked_enrichment() -> Path:
             "1",
             "--feature-set-top-n",
             "10",
+            "--ranked-feature-set-permutations",
+            "50",
         ]
     )
     row = read_tsv(manifest, {"ranked_feature_set_results", "n_ranked_feature_set_terms"})[0]
     if int(row["n_ranked_feature_set_terms"]) < 1:
         raise ValueError(f"ranked enrichment did not produce terms: {row}")
-    ranked_rows = read_tsv(Path(row["ranked_feature_set_results"]), {"enrichment_score", "leading_edge_features", "feature_set_version"})
+    ranked_rows = read_tsv(
+        Path(row["ranked_feature_set_results"]),
+        {
+            "enrichment_score",
+            "normalized_enrichment_score",
+            "pvalue",
+            "padj",
+            "n_permutations",
+            "ranking_metric",
+            "leading_edge_features",
+            "feature_set_version",
+        },
+    )
     if any(item["feature_set_version"] != "toy_pathway_2026_05" for item in ranked_rows):
         raise ValueError(f"ranked enrichment lost resource version: {ranked_rows}")
+    if any(item["ranking_metric"] != "deseq2_wald_stat" for item in ranked_rows):
+        raise ValueError(f"ranked enrichment did not use Wald statistic ranking: {ranked_rows}")
+    if any(item["n_permutations"] != "50" for item in ranked_rows):
+        raise ValueError(f"ranked enrichment did not record permutation count: {ranked_rows}")
     return manifest
 
 
