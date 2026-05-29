@@ -46,12 +46,12 @@ def write_quant_gtf(path: Path) -> None:
     path.write_text(
         "\n".join(
             [
-                'chr1\tStringTie\ttranscript\t1\t100\t.\t+\t.\tgene_id "GENE1"; transcript_id "TX_KNOWN"; gene_name "Gene1"; cov "10";',
+                'chr1\tStringTie\ttranscript\t1\t100\t.\t+\t.\tgene_id "GENE1"; transcript_id "TX_KNOWN"; gene_name "Gene1"; gene_biotype "protein_coding"; transcript_biotype "protein_coding"; cov "10";',
                 'chr1\tStringTie\texon\t1\t100\t.\t+\t.\tgene_id "GENE1"; transcript_id "TX_KNOWN";',
-                'chr1\tStringTie\ttranscript\t1\t160\t.\t+\t.\tgene_id "GENE1"; transcript_id "TX_J"; gene_name "Gene1"; cov "8";',
+                'chr1\tStringTie\ttranscript\t1\t160\t.\t+\t.\tgene_id "GENE1"; transcript_id "TX_J"; gene_name "Gene1"; gene_biotype "protein_coding"; transcript_biotype "protein_coding"; cov "8";',
                 'chr1\tStringTie\texon\t1\t70\t.\t+\t.\tgene_id "GENE1"; transcript_id "TX_J";',
                 'chr1\tStringTie\texon\t100\t160\t.\t+\t.\tgene_id "GENE1"; transcript_id "TX_J";',
-                'chr1\tStringTie\ttranscript\t300\t380\t.\t+\t.\tgene_id "MSTRG.1"; transcript_id "TX_U"; cov "5";',
+                'chr1\tStringTie\ttranscript\t300\t380\t.\t+\t.\tgene_id "MSTRG.1"; transcript_id "TX_U"; gene_biotype "lncRNA"; transcript_biotype "lncRNA"; cov "5";',
                 'chr1\tStringTie\texon\t300\t380\t.\t+\t.\tgene_id "MSTRG.1"; transcript_id "TX_U";',
             ]
         )
@@ -108,9 +108,19 @@ def exercise_transcript_matrix() -> tuple[Path, Path]:
         row["transcript_id"]: row
         for row in read_tsv(
             metadata,
-            {"transcript_id", "class_code", "transcript_novelty", "true_novel_candidate", "transcript_plot_group"},
+            {
+                "transcript_id",
+                "gene_biotype",
+                "transcript_biotype",
+                "class_code",
+                "transcript_novelty",
+                "true_novel_candidate",
+                "transcript_plot_group",
+            },
         )
     }
+    if rows["TX_KNOWN"]["transcript_biotype"] != "protein_coding" or rows["TX_U"]["transcript_biotype"] != "lncRNA":
+        raise ValueError(f"transcript biotypes were not propagated from StringTie GTF: {rows}")
     if rows["TX_KNOWN"]["transcript_novelty"] != "known" or rows["TX_KNOWN"]["gene_type_strict"] != "Known":
         raise ValueError(f"exact match was not treated as known: {rows['TX_KNOWN']}")
     if rows["TX_KNOWN"]["transcript_plot_group"] != "known_compatible":
@@ -144,6 +154,7 @@ def exercise_grouped_plots() -> None:
             "padj": "0.01",
             "transcript_plot_group": "known_compatible",
             "transcript_plot_label": "Known/reference-compatible",
+            "transcript_biotype": "protein_coding",
         },
         {
             "transcript_id": "TX_J",
@@ -153,6 +164,7 @@ def exercise_grouped_plots() -> None:
             "padj": "0.02",
             "transcript_plot_group": "novel_isoform",
             "transcript_plot_label": "Novel isoform",
+            "transcript_biotype": "protein_coding",
         },
         {
             "transcript_id": "TX_U",
@@ -162,6 +174,7 @@ def exercise_grouped_plots() -> None:
             "padj": "0.05",
             "transcript_plot_group": "novel_locus",
             "transcript_plot_label": "Novel locus",
+            "transcript_biotype": "lncRNA",
         },
     ]
     write_tsv(results, list(rows[0]), rows)
@@ -242,15 +255,132 @@ def exercise_grouped_plots() -> None:
             "1.0",
             "--transcript-plot-groups",
             "all,known_compatible,novel_isoform,novel_locus",
+            "--transcript-biotype-plot-groups",
+            "protein_coding,lncRNA",
         ]
     )
-    manifest = read_tsv(plot_dir / "plots_manifest.tsv", {"status", "volcano_pdf", "heatmap_pdf"})
+    manifest = read_tsv(plot_dir / "plots_manifest.tsv", {"status", "volcano_pdf", "heatmap_pdf", "plot_group_tsv"})
     if manifest[0]["status"] != "ok":
         raise ValueError(f"grouped plot rendering failed: {manifest[0]}")
     for key in ["volcano_pdf", "heatmap_pdf"]:
         output = Path(manifest[0][key])
         if not output.exists() or output.stat().st_size == 0:
             raise ValueError(f"grouped plot output was not written: {output}")
+    group_rows = read_tsv(
+        Path(manifest[0]["plot_group_tsv"]),
+        {"plot_group", "plot_group_type", "plot_label", "n_features"},
+    )
+    groups = {row["plot_group"] for row in group_rows}
+    expected_groups = {
+        "transcript_biotype__protein_coding",
+        "transcript_biotype__lncrna",
+        "transcript_novelty_biotype__known_compatible__protein_coding",
+        "transcript_novelty_biotype__novel_locus__lncrna",
+    }
+    if not expected_groups <= groups:
+        raise ValueError(f"missing transcript biotype/novelty plot groups: {group_rows}")
+
+
+def exercise_gene_biotype_plots() -> None:
+    plot_dir = BASE / "gene_plots"
+    results = plot_dir / "gene_results.tsv"
+    filtered = plot_dir / "gene_filtered.tsv"
+    normalized = plot_dir / "normalized_counts.tsv"
+    coldata = plot_dir / "coldata.tsv"
+    plan = plot_dir / "report_plan.tsv"
+    rows = [
+        {"Geneid": "GENE1", "baseMean": "100", "log2FoldChange": "2.0", "pvalue": "0.001", "padj": "0.01", "gene_biotype": "protein_coding"},
+        {"Geneid": "GENE2", "baseMean": "80", "log2FoldChange": "-1.5", "pvalue": "0.01", "padj": "0.04", "gene_biotype": "lncRNA"},
+        {"Geneid": "GENE3", "baseMean": "60", "log2FoldChange": "0.5", "pvalue": "0.2", "padj": "0.5", "gene_biotype": "processed_pseudogene"},
+    ]
+    write_tsv(results, list(rows[0]), rows)
+    write_tsv(filtered, list(rows[0]), rows[:2])
+    write_tsv(
+        normalized,
+        ["Geneid", "s1", "s2", "s3"],
+        [
+            {"Geneid": "GENE1", "s1": "10", "s2": "20", "s3": "30"},
+            {"Geneid": "GENE2", "s1": "30", "s2": "20", "s3": "10"},
+            {"Geneid": "GENE3", "s1": "5", "s2": "15", "s3": "30"},
+        ],
+    )
+    write_tsv(
+        coldata,
+        ["library_id", "condition"],
+        [
+            {"library_id": "s1", "condition": "control"},
+            {"library_id": "s2", "condition": "treated"},
+            {"library_id": "s3", "condition": "treated"},
+        ],
+    )
+    write_tsv(
+        plan,
+        [
+            "project",
+            "level",
+            "contrast_id",
+            "status",
+            "reason",
+            "results",
+            "filtered",
+            "normalized_counts",
+            "coldata",
+            "volcano_pdf",
+            "ma_pdf",
+            "pca_pdf",
+            "heatmap_pdf",
+            "vst_tsv",
+        ],
+        [
+            {
+                "project": "ASPIS_GENE_BIOTYPE",
+                "level": "gene",
+                "contrast_id": "treated_vs_control",
+                "status": "ready",
+                "reason": "",
+                "results": str(results),
+                "filtered": str(filtered),
+                "normalized_counts": str(normalized),
+                "coldata": str(coldata),
+                "volcano_pdf": str(plot_dir / "volcano.pdf"),
+                "ma_pdf": str(plot_dir / "ma.pdf"),
+                "pca_pdf": str(plot_dir / "pca.pdf"),
+                "heatmap_pdf": str(plot_dir / "heatmap.pdf"),
+                "vst_tsv": str(plot_dir / "vst.tsv"),
+            }
+        ],
+    )
+    rscript = shutil.which("Rscript")
+    if not rscript:
+        raise RuntimeError("Rscript is required for gene biotype plot validation")
+    run_command(
+        [
+            rscript,
+            "workflow/scripts/render_rnaseq_differential_plots.R",
+            "--plan",
+            str(plan),
+            "--manifest",
+            str(plot_dir / "plots_manifest.tsv"),
+            "--done",
+            str(plot_dir / "plots.done"),
+            "--top-n",
+            "3",
+            "--padj",
+            "0.1",
+            "--log2fc",
+            "1.0",
+            "--gene-biotype-plot-groups",
+            "protein_coding,lncRNA,pseudogene",
+        ]
+    )
+    manifest = read_tsv(plot_dir / "plots_manifest.tsv", {"status", "plot_group_tsv"})[0]
+    if manifest["status"] != "ok":
+        raise ValueError(f"gene biotype plot rendering failed: {manifest}")
+    group_rows = read_tsv(Path(manifest["plot_group_tsv"]), {"plot_group", "plot_group_type"})
+    groups = {row["plot_group"] for row in group_rows}
+    expected_groups = {"gene_biotype__protein_coding", "gene_biotype__lncrna", "gene_biotype__processed_pseudogene"}
+    if not expected_groups <= groups:
+        raise ValueError(f"missing gene biotype plot groups: {group_rows}")
 
 
 def exercise_discovery_reports(counts: Path, metadata: Path) -> None:
@@ -363,6 +493,7 @@ def exercise_discovery_reports(counts: Path, metadata: Path) -> None:
 def main() -> int:
     counts, metadata = exercise_transcript_matrix()
     exercise_grouped_plots()
+    exercise_gene_biotype_plots()
     exercise_discovery_reports(counts, metadata)
     return 0
 

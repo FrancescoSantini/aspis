@@ -244,6 +244,7 @@ def merged_rows(
                     plan.get("sample_distance_pdf", ""),
                 ),
                 "heatmap_pdf": first_value(plots.get("heatmap_pdf", ""), plan.get("heatmap_pdf", "")),
+                "plot_group_tsv": first_value(plots.get("plot_group_tsv", ""), plan.get("plot_group_tsv", "")),
                 "vst_tsv": first_value(plots.get("vst_tsv", ""), plan.get("vst_tsv", "")),
                 "enrichment_manifest": first_value(
                     enrichment.get("enrichment_manifest", ""),
@@ -294,6 +295,7 @@ def render_table(rows: list[dict[str, str]], output: Path) -> str:
                 ("pca", row["pca_pdf"]),
                 ("sample distance", row.get("sample_distance_pdf", "")),
                 ("heatmap", row["heatmap_pdf"]),
+                ("plot groups", row.get("plot_group_tsv", "")),
             ],
             output,
         )
@@ -446,6 +448,7 @@ ASSET_FIELDS = [
     ("plots", "pca_metrics_tsv", "table", "pca_metrics_tsv"),
     ("plots", "sample_distance_pdf", "plot", "sample_distance_pdf"),
     ("plots", "heatmap_pdf", "plot", "heatmap_pdf"),
+    ("plots", "plot_group_tsv", "table", "plot_group_tsv"),
     ("enrichment", "enrichment_manifest", "manifest", "enrichment_manifest"),
     ("enrichment", "ranked_features", "table", "ranked_features"),
     ("enrichment", "significant_features", "table", "significant_features"),

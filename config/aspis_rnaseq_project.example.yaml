@@ -131,6 +131,20 @@ rnaseq_differential:
     - novel_locus
     - ambiguous
     - artifact
+  report_gene_biotype_plot_groups:
+    - protein_coding
+    - lncRNA
+    - pseudogene
+    - snoRNA
+    - snRNA
+    - miRNA
+  report_transcript_biotype_plot_groups:
+    - protein_coding
+    - lncRNA
+    - pseudogene
+    - snoRNA
+    - snRNA
+    - miRNA
   report_pca_color_columns:
     - condition
     - time

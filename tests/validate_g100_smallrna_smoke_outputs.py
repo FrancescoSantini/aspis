@@ -286,6 +286,7 @@ def validate_reports() -> str:
             "pca_pdf",
             "pca_metrics_tsv",
             "heatmap_pdf",
+            "plot_group_tsv",
             "vst_tsv",
             "summary_html",
             "target_universe",
