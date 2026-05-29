@@ -14,12 +14,16 @@ reproducible modules.
   feature-level DESeq2 runner.
 - The shared DESeq2 runner emits raw log2FC, optional shrunken log2FC,
   normalized counts, and a DESeq2-transformed count matrix for PCA/heatmaps.
+- Shared gene, transcript, and miRNA DESeq2 manifests now record standard
+  design/contrast/filtering/threshold fields copied from the runner summary.
 - RNA-seq reports currently include volcano, MA, PCA, heatmap, summary HTML,
   configurable feature-set ORA, and ranked feature-set enrichment.
 - Differential PCA reports can color samples by configured biological and
   technical metadata columns when available.
 - Differential PCA reports now write PC1/PC2 variance percentages to
   machine-readable per-contrast metrics TSVs and link them from summaries.
+- Differential summaries include a PCA interpretation note clarifying that weak
+  or absent clustering is not automatically a failed analysis.
 - SmallRNA reports currently include miRNA DESeq2 plots, target-table
   enrichment, target feature-set enrichment, length/isomiR summaries, residual
   read fate, and optional miRNA-mRNA integration when matched RNA-seq exists.
@@ -41,16 +45,12 @@ Current state:
 
 Remaining work:
 
-- Report the exact design formula, contrast labels, sample counts, feature
-  counts before/after filtering, and thresholds in every result manifest.
 - Add warnings for:
   - too few replicates;
   - confounded design/covariates;
   - too few retained features;
   - empty significant set;
   - very low library sizes or detected-feature counts.
-- Ensure gene, transcript, and miRNA runners all write the same standard
-  manifest columns.
 
 ## 2. PCA And Sample-Level QC
 
@@ -62,9 +62,7 @@ Current state:
 
 Remaining work:
 
-- Add a report note that lack of PCA clustering is not automatically a failure.
-  It can reflect weak biological effect, small sample size, strong individual
-  variation, or poor design power.
+- No remaining PCA/report-level QC parity items in this section.
 
 ## 3. Volcano, MA, And Heatmap Reports
 

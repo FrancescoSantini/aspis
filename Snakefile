@@ -1463,7 +1463,7 @@ rule check_execution_config:
     output:
         EXECUTION_REPORT
     params:
-        account=EXECUTION_SLURM_ACCOUNT,
+        account_arg=optional_shell_arg("--slurm-account", EXECUTION_SLURM_ACCOUNT),
         account_source=EXECUTION_SLURM_ACCOUNT_SOURCE,
         default_partition=EXECUTION_DEFAULT_PARTITION,
         default_partition_source=EXECUTION_DEFAULT_PARTITION_SOURCE,
@@ -1482,7 +1482,7 @@ rule check_execution_config:
         mkdir -p logs
         python3 workflow/scripts/write_execution_report.py \
           --output {output:q} \
-          --slurm-account {params.account:q} --slurm-account-source {params.account_source:q} \
+          {params.account_arg} --slurm-account-source {params.account_source:q} \
           --default-partition {params.default_partition:q} --default-partition-source {params.default_partition_source:q} \
           --download-partition {params.download_partition:q} --download-partition-source {params.download_partition_source:q} \
           --runtime {params.runtime:q} --runtime-source {params.runtime_source:q} \
@@ -2494,7 +2494,10 @@ rule plan_mirna_differential:
             DESIGN.get("control_label", "control"),
         ),
         contrast_by=SMALLRNA.get("contrast_by", DESIGN.get("covariates", [])),
-        design_formula=SMALLRNA.get("design_formula", DESIGN.get("model_formula", "")),
+        design_formula_arg=optional_shell_arg(
+            "--design-formula",
+            SMALLRNA.get("design_formula", DESIGN.get("model_formula", "")),
+        ),
         min_replicates=SMALLRNA.get("min_replicates_per_group", 2)
     log:
         "logs/branches/smallrna/{project}.mirna_differential_plan.log"
@@ -2510,7 +2513,7 @@ rule plan_mirna_differential:
           --condition-col {params.condition_col:q} \
           --control-label {params.control_label:q} \
           --contrast-by {params.contrast_by:q} \
-          --design-formula {params.design_formula:q} \
+          {params.design_formula_arg} \
           --min-replicates {params.min_replicates:q} \
           > {log:q} 2>&1
         """
@@ -3891,7 +3894,10 @@ rule plan_gene_differential:
             DESIGN.get("control_label", "control"),
         ),
         contrast_by=RNASEQ_DIFFERENTIAL.get("contrast_by", DESIGN.get("covariates", [])),
-        design_formula=RNASEQ_DIFFERENTIAL.get("design_formula", DESIGN.get("model_formula", "")),
+        design_formula_arg=optional_shell_arg(
+            "--design-formula",
+            RNASEQ_DIFFERENTIAL.get("design_formula", DESIGN.get("model_formula", "")),
+        ),
         min_replicates=RNASEQ_DIFFERENTIAL.get("min_replicates_per_group", 2)
     log:
         "logs/branches/rnaseq/{project}.gene_differential_plan.log"
@@ -3912,7 +3918,7 @@ rule plan_gene_differential:
           --condition-col {params.condition_col:q} \
           --control-label {params.control_label:q} \
           --contrast-by {params.contrast_by:q} \
-          --design-formula {params.design_formula:q} \
+          {params.design_formula_arg} \
           --min-replicates {params.min_replicates:q} \
           > {log:q} 2>&1
         """
@@ -3937,7 +3943,10 @@ rule plan_transcript_differential:
             DESIGN.get("control_label", "control"),
         ),
         contrast_by=RNASEQ_DIFFERENTIAL.get("contrast_by", DESIGN.get("covariates", [])),
-        design_formula=RNASEQ_DIFFERENTIAL.get("design_formula", DESIGN.get("model_formula", "")),
+        design_formula_arg=optional_shell_arg(
+            "--design-formula",
+            RNASEQ_DIFFERENTIAL.get("design_formula", DESIGN.get("model_formula", "")),
+        ),
         min_replicates=RNASEQ_DIFFERENTIAL.get("min_replicates_per_group", 2)
     log:
         "logs/branches/rnaseq/{project}.transcript_differential_plan.log"
@@ -3958,7 +3967,7 @@ rule plan_transcript_differential:
           --condition-col {params.condition_col:q} \
           --control-label {params.control_label:q} \
           --contrast-by {params.contrast_by:q} \
-          --design-formula {params.design_formula:q} \
+          {params.design_formula_arg} \
           --min-replicates {params.min_replicates:q} \
           > {log:q} 2>&1
         """
@@ -4757,7 +4766,7 @@ rule plan_deseq2_smoke:
         condition_col=DESEQ2_SMOKE.get("condition_col", "condition"),
         control_label=DESEQ2_SMOKE.get("control_label", "control"),
         contrast_by=DESEQ2_SMOKE.get("contrast_by", ["time_h"]),
-        design_formula=DESEQ2_SMOKE.get("design_formula", ""),
+        design_formula_arg=optional_shell_arg("--design-formula", DESEQ2_SMOKE.get("design_formula", "")),
         min_replicates=DESEQ2_SMOKE.get("min_replicates_per_group", 2)
     log:
         f"{DESEQ2_SMOKE_DIR}/logs/contrast_plan.log"
@@ -4777,7 +4786,7 @@ rule plan_deseq2_smoke:
           --condition-col {params.condition_col:q} \
           --control-label {params.control_label:q} \
           --contrast-by {params.contrast_by:q} \
-          --design-formula {params.design_formula:q} \
+          {params.design_formula_arg} \
           --min-replicates {params.min_replicates:q} \
           > {log:q} 2>&1
         """
@@ -4798,7 +4807,7 @@ rule plan_transcript_deseq2_smoke:
         condition_col=DESEQ2_SMOKE.get("condition_col", "condition"),
         control_label=DESEQ2_SMOKE.get("control_label", "control"),
         contrast_by=DESEQ2_SMOKE.get("contrast_by", ["time_h"]),
-        design_formula=DESEQ2_SMOKE.get("design_formula", ""),
+        design_formula_arg=optional_shell_arg("--design-formula", DESEQ2_SMOKE.get("design_formula", "")),
         min_replicates=DESEQ2_SMOKE.get("min_replicates_per_group", 2)
     log:
         f"{TRANSCRIPT_DESEQ2_SMOKE_DIR}/logs/contrast_plan.log"
@@ -4818,7 +4827,7 @@ rule plan_transcript_deseq2_smoke:
           --condition-col {params.condition_col:q} \
           --control-label {params.control_label:q} \
           --contrast-by {params.contrast_by:q} \
-          --design-formula {params.design_formula:q} \
+          {params.design_formula_arg} \
           --min-replicates {params.min_replicates:q} \
           > {log:q} 2>&1
         """
