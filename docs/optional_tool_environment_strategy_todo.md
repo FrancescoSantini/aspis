@@ -39,21 +39,28 @@ story.
 
 ## TODO
 
-- Decide the environment layout:
-  - keep `aspis-smk9` as the core stable environment;
-  - add optional env specs such as `aspis-functional-annotation` and/or
-    `aspis-splicing`;
-  - document tools that cannot reasonably be bundled because of database size,
-    licensing, registration, or external setup.
-- Add conda environment YAMLs for optional tools where feasible.
-- Add environment checks for optional tool groups, including versions where
-  available.
-- Document which config keys point to each optional engine command.
+Completed:
+
+- The environment split is documented in `docs/optional_tool_environments.md`:
+  keep `aspis-smk9` as the stable core, add optional conda envs for feasible
+  functional-annotation and splicing tools, and keep licensed/database-heavy
+  tools externally managed.
+- Optional conda specs now exist for first-pass feasible tools:
+  `envs/aspis-functional-annotation.yaml` and `envs/aspis-splicing.yaml`.
+- RNA-seq differential environment reports now include optional isoform-switch
+  and DTU tool groups when the corresponding layers are enabled.
+- Project config examples document which environment keys define optional
+  isoform-switch and DTU tool checks.
+- Real-data readiness docs now point users to the optional environment strategy
+  before enabling advanced isoform-switch annotation or DTU engines.
+- Command-template fallback support remains the standard route for
+  site-managed HPC installations.
+
+Remaining:
+
 - For each selected engine, add a wrapper that turns native output into
-  ASPIS-standard TSV manifests/tables.
-- Keep command-template fallback support for site-specific installations,
-  especially on HPC systems.
-- Update real-data readiness docs once tool choices are finalized.
+  ASPIS-standard TSV manifests/tables when a native parser is not already
+  implemented.
 
 ## Acceptance Criteria
 
@@ -65,7 +72,7 @@ story.
 
 ## Proposed Environment Split
 
-The likely direction is:
+The implemented split is:
 
 - `aspis-smk9`: core stable pipeline tools.
 - `aspis-functional-annotation`: heavy isoform-switch consequence tools, where
