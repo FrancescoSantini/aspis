@@ -1,0 +1,5 @@
+set_id	feature_id	source	collection	resource_version	description
+MIRNA_SEED_A	hsa-miR-1-3p	toy_mirna_sets	seed_family	toy_mirna_sets_2026_05	shared seed-family fixture
+MIRNA_SEED_A	hsa-miR-2-3p	toy_mirna_sets	seed_family	toy_mirna_sets_2026_05	shared seed-family fixture
+MIRNA_CLUSTER_A	hsa-miR-1-3p	toy_mirna_sets	genomic_cluster	toy_mirna_sets_2026_05	genomic cluster fixture
+MIRNA_CLUSTER_B	hsa-miR-3-3p	toy_mirna_sets	genomic_cluster	toy_mirna_sets_2026_05	background genomic cluster fixture

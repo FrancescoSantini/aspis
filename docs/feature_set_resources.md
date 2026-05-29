@@ -28,6 +28,9 @@ smallrna:
 
 Use RNA-seq settings for gene/transcript DESeq2 reports. Use smallRNA settings
 for target-gene enrichment after miRNA target mapping or miRNA-mRNA integration.
+Use `smallrna.mirna_feature_sets` and `smallrna.mirna_feature_set_tables` only
+for resources whose members are miRNA identifiers themselves, such as miRNA
+families, seed groups, genomic clusters, or curated miRNA classes.
 
 ## Accepted GMT Format
 
@@ -102,6 +105,15 @@ For smallRNA target-gene enrichment:
 - use the same namespace as the miRNA target table, preferably stable gene IDs;
 - target-symbol-only resources are fragile unless the target table also uses
   symbols as `target_id`.
+
+For smallRNA miRNA-ID enrichment:
+
+- `feature_id` must match the miRNA feature IDs in the DESeq2 result table,
+  usually the `Geneid` values derived from the miRBase SAF/FASTA;
+- this is separate from target-gene enrichment and must not use GO/Reactome/KEGG
+  gene memberships unless those rows genuinely contain miRNA identifiers;
+- appropriate resources include miRNA families, seed families, genomic clusters,
+  conserved miRNA groups, or project-curated miRNA classes.
 
 ## miRNA Target Table Evidence Labels
 
@@ -255,6 +267,11 @@ DESeq2 genes/transcripts.
 smallRNA target-gene enrichment is interpreted as potentially regulated target
 processes. It is not direct evidence that a pathway is activated or repressed
 unless matched RNA-seq integration supports the target expression direction.
+
+smallRNA miRNA-ID feature-set enrichment is interpreted as enrichment among the
+observed differentially expressed miRNAs themselves. It is useful for resources
+such as seed families or genomic clusters and is deliberately reported
+separately from target-gene enrichment.
 
 When matched RNA-seq is available, ASPIS also writes ranked target feature-set
 outputs for inverse miRNA-mRNA integrations. These outputs rank target genes by

@@ -258,13 +258,15 @@ Current state:
   RNA-seq target DE statistics where available, falling back to signed
   p-value/log2FC ranking, and inverse-direction collections are reported
   separately from ORA-style target feature sets.
+- Optional miRNA-ID feature-set enrichment is implemented separately from
+  target-gene enrichment. It runs only when `smallrna.mirna_feature_sets` or
+  `smallrna.mirna_feature_set_tables` supplies resources whose members are
+  tested miRNA IDs, and it writes both significant-miRNA ORA-style outputs and
+  ranked miRNA-set running-score outputs.
 
 Remaining work:
 
-- Label target enrichment as "potentially regulated target processes", not as
-  directly observed mRNA pathway activation.
-- Keep miRNA-ID gene-set enrichment separate from target-gene enrichment, and
-  only run it when a true miRNA gene-set resource is provided.
+- No remaining miRNA ORA/GSEA separation items in this section.
 
 ## 9. Isoform Switching In Coding Genes
 
@@ -385,5 +387,5 @@ Desired isoform-switch report:
 Suggested order:
 
 1. Add real-data validation notes once real projects are available.
-2. Add miRNA-ID gene-set enrichment only when a true miRNA gene-set resource is
-   provided.
+2. Add richer ncRNA switch consequences for splice-junction gain/loss and
+   promoter/proximal gene context.

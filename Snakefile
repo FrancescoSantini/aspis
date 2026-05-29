@@ -331,6 +331,11 @@ SMALLRNA_TARGET_FEATURE_SET_TABLES = config_value_list(SMALLRNA.get("target_feat
 SMALLRNA_TARGET_FEATURE_SET_RUN = SMALLRNA_TARGET_ENRICHMENT_RUN and bool(
     SMALLRNA_TARGET_FEATURE_SET_FILES or SMALLRNA_TARGET_FEATURE_SET_TABLES
 )
+SMALLRNA_MIRNA_FEATURE_SET_FILES = config_value_list(SMALLRNA.get("mirna_feature_sets", ""))
+SMALLRNA_MIRNA_FEATURE_SET_TABLES = config_value_list(SMALLRNA.get("mirna_feature_set_tables", ""))
+SMALLRNA_MIRNA_FEATURE_SET_RUN = SMALLRNA_DIFFERENTIAL_RUN and bool(
+    SMALLRNA_MIRNA_FEATURE_SET_FILES or SMALLRNA_MIRNA_FEATURE_SET_TABLES
+)
 SMALLRNA_REPORTS_RUN = (
     as_bool(SMALLRNA.get("reports", True), True)
     and SMALLRNA_DIFFERENTIAL_RUN
@@ -464,6 +469,8 @@ if SMALLRNA_TARGET_ENRICHMENT_RUN and not SMALLRNA_TARGET_TABLE_INPUTS:
     raise ValueError("smallrna.target_enrichment_mode: table requires smallrna.target_table or smallrna.target_tables")
 if (SMALLRNA_TARGET_FEATURE_SET_FILES or SMALLRNA_TARGET_FEATURE_SET_TABLES) and not SMALLRNA_TARGET_ENRICHMENT_RUN:
     raise ValueError("smallrna target feature sets require smallrna.target_enrichment_mode: table")
+if (SMALLRNA_MIRNA_FEATURE_SET_FILES or SMALLRNA_MIRNA_FEATURE_SET_TABLES) and not SMALLRNA_DIFFERENTIAL_RUN:
+    raise ValueError("smallrna miRNA-ID feature sets require smallrna.differential_run: true")
 OPTIONAL_TOOLS = configured_tool_list("optional_tools", ["vdb-validate"])
 MINIMUM_VERSION_ARGS = configured_version_args("minimum_versions")
 RECOMMENDED_VERSION_ARGS = configured_version_args("recommended_versions")
@@ -616,6 +623,14 @@ def smallrna_target_feature_set_done(project):
     return f"{BRANCH_DIR}/smallrna/{project}/smallrna/differential/target_feature_sets/target_feature_sets.done"
 
 
+def smallrna_mirna_feature_set_manifest(project):
+    return f"{BRANCH_DIR}/smallrna/{project}/smallrna/differential/mirna_feature_sets/mirna_feature_set_manifest.tsv"
+
+
+def smallrna_mirna_feature_set_done(project):
+    return f"{BRANCH_DIR}/smallrna/{project}/smallrna/differential/mirna_feature_sets/mirna_feature_sets.done"
+
+
 def smallrna_mirna_mrna_manifest(project):
     return f"{BRANCH_DIR}/smallrna/{project}/smallrna/differential/mirna_mrna_integration/mirna_mrna_manifest.tsv"
 
@@ -680,6 +695,15 @@ def smallrna_target_feature_set_manifest_flag(wildcards):
     return optional_shell_arg(
         "--target-feature-set-manifest",
         smallrna_target_feature_set_manifest(wildcards.project),
+    )
+
+
+def smallrna_mirna_feature_set_manifest_flag(wildcards):
+    if not SMALLRNA_MIRNA_FEATURE_SET_RUN:
+        return ""
+    return optional_shell_arg(
+        "--mirna-feature-set-manifest",
+        smallrna_mirna_feature_set_manifest(wildcards.project),
     )
 
 
@@ -989,6 +1013,13 @@ def branch_provenance_inputs(wildcards):
                     f"{small}/differential/mirna_deseq2/contrast_plan.tsv",
                     f"{small}/differential/mirna_deseq2/deseq2_manifest.tsv",
                     f"{small}/differential/mirna_deseq2/deseq2.done",
+                ]
+            )
+        if SMALLRNA_MIRNA_FEATURE_SET_RUN:
+            inputs.extend(
+                [
+                    smallrna_mirna_feature_set_manifest(project),
+                    smallrna_mirna_feature_set_done(project),
                 ]
             )
         if SMALLRNA_TARGET_ENRICHMENT_RUN:
@@ -1329,6 +1360,13 @@ def planned_branch_targets(wildcards):
                             f"{BRANCH_DIR}/{assay}/{project}/smallrna/differential/mirna_deseq2/contrast_plan.tsv",
                             f"{BRANCH_DIR}/{assay}/{project}/smallrna/differential/mirna_deseq2/deseq2_manifest.tsv",
                             f"{BRANCH_DIR}/{assay}/{project}/smallrna/differential/mirna_deseq2/deseq2.done",
+                        ]
+                    )
+                if SMALLRNA_MIRNA_FEATURE_SET_RUN:
+                    targets.extend(
+                        [
+                            smallrna_mirna_feature_set_manifest(project),
+                            smallrna_mirna_feature_set_done(project),
                         ]
                     )
                 if SMALLRNA_TARGET_ENRICHMENT_RUN:
@@ -2566,6 +2604,45 @@ rule run_mirna_deseq2:
         """
 
 
+rule render_smallrna_mirna_featuresets:
+    input:
+        deseq2_manifest=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/differential/mirna_deseq2/deseq2_manifest.tsv",
+        deseq2_done=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/differential/mirna_deseq2/deseq2.done",
+        feature_sets=SMALLRNA_MIRNA_FEATURE_SET_FILES,
+        feature_set_tables=SMALLRNA_MIRNA_FEATURE_SET_TABLES
+    output:
+        manifest=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/differential/mirna_feature_sets/mirna_feature_set_manifest.tsv",
+        done=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/differential/mirna_feature_sets/mirna_feature_sets.done"
+    params:
+        outdir=lambda wildcards: f"{BRANCH_DIR}/smallrna/{wildcards.project}/smallrna/differential/mirna_feature_sets",
+        feature_sets=lambda wildcards: optional_shell_arg(
+            "--feature-sets",
+            joined_config_values(SMALLRNA_MIRNA_FEATURE_SET_FILES),
+        ),
+        feature_set_tables=lambda wildcards: optional_shell_arg(
+            "--feature-set-tables",
+            joined_config_values(SMALLRNA_MIRNA_FEATURE_SET_TABLES),
+        ),
+        min_overlap=SMALLRNA.get("mirna_feature_set_min_overlap", 2),
+        top_n=SMALLRNA.get("mirna_feature_set_top_n", SMALLRNA_REPORT_TOP_N)
+    log:
+        "logs/branches/smallrna/{project}.mirna_feature_sets.log"
+    shell:
+        r"""
+        mkdir -p logs/branches/smallrna
+        python3 workflow/scripts/render_smallrna_mirna_featuresets.py \
+          --deseq2-manifest {input.deseq2_manifest:q} \
+          --outdir {params.outdir:q} \
+          --manifest {output.manifest:q} \
+          --done {output.done:q} \
+          {params.feature_sets} \
+          {params.feature_set_tables} \
+          --min-overlap {params.min_overlap:q} \
+          --top-n {params.top_n:q} \
+          > {log:q} 2>&1
+        """
+
+
 rule render_smallrna_target_enrichment:
     input:
         plan=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/smallrna_plan.tsv",
@@ -2901,6 +2978,16 @@ rule plan_smallrna_report:
             if SMALLRNA_TARGET_FEATURE_SET_RUN
             else []
         ),
+        mirna_feature_set_manifest=lambda wildcards: (
+            [smallrna_mirna_feature_set_manifest(wildcards.project)]
+            if SMALLRNA_MIRNA_FEATURE_SET_RUN
+            else []
+        ),
+        mirna_feature_set_done=lambda wildcards: (
+            [smallrna_mirna_feature_set_done(wildcards.project)]
+            if SMALLRNA_MIRNA_FEATURE_SET_RUN
+            else []
+        ),
         mirna_mrna_manifest=lambda wildcards: (
             [smallrna_mirna_mrna_manifest(wildcards.project)]
             if MIRNA_MRNA_INTEGRATION_RUN
@@ -2951,6 +3038,7 @@ rule plan_smallrna_report:
         ),
         target_manifest_flag=smallrna_target_manifest_flag,
         target_feature_set_manifest_flag=smallrna_target_feature_set_manifest_flag,
+        mirna_feature_set_manifest_flag=smallrna_mirna_feature_set_manifest_flag,
         mirna_mrna_manifest_flag=smallrna_mirna_mrna_manifest_flag,
         mirna_mrna_target_feature_set_manifest_flag=smallrna_mirna_mrna_target_feature_set_manifest_flag,
         length_qc_manifest_flag=lambda wildcards: optional_shell_arg(
@@ -3002,6 +3090,7 @@ rule plan_smallrna_report:
           {params.residual_feature_counts_flag} \
           {params.target_manifest_flag} \
           {params.target_feature_set_manifest_flag} \
+          {params.mirna_feature_set_manifest_flag} \
           {params.mirna_mrna_manifest_flag} \
           {params.mirna_mrna_target_feature_set_manifest_flag} \
           {params.length_qc_manifest_flag} \
