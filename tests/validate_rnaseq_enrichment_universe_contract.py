@@ -166,6 +166,8 @@ def main() -> int:
             "5",
             "--ranked-feature-set-permutations",
             "50",
+            "--ranked-feature-set-min-mapped",
+            "3",
         ],
         check=True,
     )
@@ -190,11 +192,16 @@ def main() -> int:
         "up_query_size": "2",
         "down_query_size": "0",
         "ranked_query_size": "2",
+        "ranked_min_mapped_features": "3",
+        "ranked_mapping_fraction": "0.5",
+        "ranked_mapping_status": "warning",
     }
     for key, expected in expected_universe.items():
         observed = universe_row.get(key, "")
         if observed != expected:
             raise ValueError(f"{universe_path} expected {key}={expected!r}, got {observed!r}")
+    if "only 2 ranked feature(s)" not in universe_row.get("ranked_mapping_warning", ""):
+        raise ValueError(f"{universe_path} missing low ranked mapping warning: {universe_row}")
 
     enrichment_rows = [
         row
