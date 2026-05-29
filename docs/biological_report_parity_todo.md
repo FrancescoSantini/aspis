@@ -34,6 +34,10 @@ reproducible modules.
 - SmallRNA reports currently include miRNA DESeq2 plots, target-table
   enrichment, target feature-set enrichment, length/isomiR summaries, residual
   read fate, and optional miRNA-mRNA integration when matched RNA-seq exists.
+- SmallRNA target-table enrichment now writes database-target source/universe
+  provenance per contrast, including aggregate and source-specific rows for
+  tested miRNAs, mapped tested miRNAs, target universe size, final miRNA
+  universe, source/type labels, and mapping loss.
 - Transcript reports now support novelty-aware groups:
   `all`, `known_compatible`, `novel_isoform`, `novel_locus`, `ambiguous`, and
   `artifact`.
@@ -191,34 +195,42 @@ Current state:
 - Multiple target tables/source types can be represented.
 - Matched miRNA-mRNA integration exists when both smallRNA and RNA-seq are
   available.
+- Database-target mode now defines per-source universes as all target genes
+  reachable from tested miRNAs in each selected target source.
+- Target enrichment rows are now source-aware and explicitly label:
+  - database-target mode;
+  - query source;
+  - target source;
+  - target source type;
+  - tested/mapped miRNA universe;
+  - target universe size;
+  - resource mapping loss.
 
 Remaining work:
 
 - Separate three target-analysis modes:
-  - database-target mode: DE miRNAs to all selected database targets;
   - expressed-target mode: DE miRNAs to targets detected in matched RNA-seq;
   - inverse-integrated mode: DE miRNAs plus opposite-direction DE target genes.
-- For database-target mode, define the universe as all target genes reachable
-  from all tested miRNAs in the selected target resource.
 - For expressed-target mode, define the universe as reachable targets that are
   detected in the matched RNA-seq data.
 - For inverse-integrated mode, define the query as target genes with inverse
   miRNA/mRNA regulation and, where possible, negative correlation.
-- Split target evidence types:
+- Report target database/source versions when available.
+- Add first-class controlled labels/documentation for target evidence types:
   - validated;
   - predicted;
   - conserved;
   - user-provided;
   - matched expressed;
   - inverse integrated.
-- Report target database/source versions when available.
-- Avoid mixing validated and predicted targets without labeling the source.
 
 ## 8. miRNA ORA And GSEA
 
 Current state:
 
 - miRNA target ORA and target-gene feature-set enrichment are implemented.
+- miRNA target-table enrichment now writes query/universe/mapping-source
+  provenance.
 
 Remaining work:
 
@@ -230,7 +242,8 @@ Remaining work:
   - report inverse-direction subsets separately.
 - Keep miRNA-ID gene-set enrichment separate from target-gene enrichment, and
   only run it when a true miRNA gene-set resource is provided.
-- Write query/universe/mapping-source for every enrichment table.
+- Add equivalent query/universe/mapping-source provenance to target-gene
+  feature-set enrichment and inverse miRNA-mRNA target feature-set enrichment.
 
 ## 9. Isoform Switching In Coding Genes
 
@@ -372,8 +385,9 @@ Desired isoform-switch report:
 
 Suggested order:
 
-1. Refine miRNA target universes and source-specific target reports.
-2. Add ncRNA-aware isoform-switch summaries.
-3. Add native parsers for selected external functional annotation tools.
-4. Add first-class GO/Reactome/KEGG/MSigDB resource configuration docs.
-5. Add real-data validation notes once real projects are available.
+1. Add ncRNA-aware isoform-switch summaries.
+2. Add query/universe provenance to target-gene feature-set enrichment.
+3. Add expressed-target and inverse-integrated miRNA target modes.
+4. Add native parsers for selected external functional annotation tools.
+5. Add first-class GO/Reactome/KEGG/MSigDB resource configuration docs.
+6. Add real-data validation notes once real projects are available.
