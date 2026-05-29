@@ -18,6 +18,9 @@ reproducible modules.
   design/contrast/filtering/threshold fields copied from the runner summary.
 - RNA-seq reports currently include volcano, MA, PCA, heatmap, summary HTML,
   configurable feature-set ORA, and ranked feature-set enrichment.
+- RNA-seq feature-set ORA and ranked enrichment now write explicit
+  resource/universe/mapping provenance: tested features, mapped tested
+  features, resource universe, final universe, mapping mode, and mapping loss.
 - Differential PCA reports can color samples by configured biological and
   technical metadata columns when available.
 - Differential PCA reports now write PC1/PC2 variance percentages to
@@ -133,6 +136,17 @@ Remaining work:
 Current state:
 
 - Configurable feature-set ORA exists through GMT or TSV feature-set inputs.
+- ORA outputs now use a resource-specific final universe rather than the full
+  tested universe for every resource.
+- ORA outputs write per-resource universe definitions:
+  - tested features;
+  - mapped tested features;
+  - resource-specific universe;
+  - final universe used for the hypergeometric test;
+  - mapping loss.
+- Transcript-level pathway testing defaults to parent-gene mapping when
+  feature metadata supplies transcript-to-gene IDs, while transcript-native
+  resources still work when user-provided features match transcript IDs.
 
 Remaining work:
 
@@ -141,17 +155,7 @@ Remaining work:
   - Reactome;
   - KEGG/MSigDB-style collections;
   - user-provided GMT/TSV.
-- Always write the universe definition:
-  - tested features;
-  - mapped tested features;
-  - resource-specific universe;
-  - final universe used for the hypergeometric test.
-- For gene-level ORA, use all tested genes that map to the selected resource.
-- For transcript-level ORA, default to parent-gene mapping before pathway
-  testing, because pathways are usually gene-centric.
-- Keep transcript-level feature-set testing available only when the user
-  provides a transcript-native resource.
-- Report mapping losses explicitly.
+- Add resource-version fields when standard resources are configured.
 
 ## 6. RNA-seq Ranked Enrichment / GSEA
 
@@ -159,6 +163,8 @@ Current state:
 
 - A ranked feature-set enrichment layer exists, but it is closer to a
   GSEA-like score than a full `fgsea`/permutation-style implementation.
+- Ranked feature-set outputs now use the same resource-specific final universe
+  and mapping provenance fields as ORA.
 
 Remaining work:
 
@@ -366,8 +372,8 @@ Desired isoform-switch report:
 
 Suggested order:
 
-1. Make RNA-seq ORA/GSEA resource handling explicit.
-2. Refine miRNA target universes and source-specific target reports.
-3. Add ncRNA-aware isoform-switch summaries.
-4. Add native parsers for selected external functional annotation tools.
+1. Refine miRNA target universes and source-specific target reports.
+2. Add ncRNA-aware isoform-switch summaries.
+3. Add native parsers for selected external functional annotation tools.
+4. Add first-class GO/Reactome/KEGG/MSigDB resource configuration docs.
 5. Add real-data validation notes once real projects are available.
