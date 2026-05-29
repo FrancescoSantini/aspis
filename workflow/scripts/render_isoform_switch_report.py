@@ -68,6 +68,10 @@ EVENT_COLUMNS = [
     "gene_biotype",
     "switch_biotype_class",
     "switch_interpretation_label",
+    "coding_priority_rank",
+    "coding_priority_score",
+    "coding_priority_tier",
+    "coding_priority_reasons",
     "switch_rank",
     "status",
     "reason",
@@ -114,6 +118,39 @@ NCRNA_SWITCH_COLUMNS = [
     "pseudogene_caution",
     "coding_potential_change",
     "interpretation_label",
+]
+CODING_SWITCH_COLUMNS = [
+    "event_id",
+    "contrast_id",
+    "gene_id",
+    "gene_name",
+    "gene_biotype",
+    "switch_rank",
+    "coding_priority_rank",
+    "coding_priority_score",
+    "coding_priority_tier",
+    "coding_priority_reasons",
+    "functional_consequence_summary",
+    "switch_in_isoform",
+    "switch_out_isoform",
+    "switch_in_dIF",
+    "switch_out_dIF",
+    "max_abs_dIF",
+    "best_switch_statistic",
+    "nmd_change",
+    "coding_potential_change",
+    "orf_length_change_aa",
+    "gained_domain",
+    "lost_domain",
+    "gained_signal_peptide",
+    "lost_signal_peptide",
+    "gained_transmembrane_region",
+    "lost_transmembrane_region",
+    "gained_disorder_region",
+    "lost_disorder_region",
+    "localization_change",
+    "n_functional_annotations",
+    "event_html",
 ]
 SEQUENCE_COLUMNS = [
     "switch_pair_id",
@@ -197,6 +234,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--candidate-table", required=True, help="Output candidate isoform TSV")
     parser.add_argument("--event-summary", required=True, help="Output event summary TSV")
     parser.add_argument("--ncrna-switch-table", required=True, help="Output ncRNA-aware switch interpretation TSV")
+    parser.add_argument("--coding-switch-summary", required=True, help="Output coding-switch consequence-priority TSV")
     parser.add_argument("--sequence-table", required=True, help="Output event sequence TSV")
     parser.add_argument("--functional-annotation-table", required=True, help="Output normalized annotation TSV")
     parser.add_argument("--plot-manifest", required=True, help="Output plot manifest TSV")
@@ -1189,6 +1227,10 @@ def build_events(
             "switch_biotype_class": "",
             "switch_interpretation_label": "",
             "switch_rank": str(switch_rank),
+            "coding_priority_rank": "",
+            "coding_priority_score": "0",
+            "coding_priority_tier": "",
+            "coding_priority_reasons": "",
             "status": "ok",
             "reason": "",
             "switch_in_isoform": switch_in["_isoform_id"],
@@ -1716,6 +1758,269 @@ def build_ncrna_switch_rows(
     return rows
 
 
+def unique_join(values: Iterable[str]) -> str:
+    return "; ".join(dict.fromkeys(value for value in values if value))
+
+
+def annotation_display_label(row: dict[str, str]) -> str:
+    feature_id = row.get("feature_id", "")
+    feature_name = row.get("feature_name", "")
+    source = row.get("source", "")
+    label = feature_id or feature_name or row.get("description", "") or "annotation"
+    if feature_name and feature_name != label:
+        label = f"{label} ({feature_name})"
+    return f"{source}:{label}" if source else label
+
+
+def annotation_category(row: dict[str, str]) -> str:
+    feature_type = normalized_key(row.get("feature_type", ""))
+    feature_name = normalized_key(row.get("feature_name", ""))
+    feature_id = normalized_key(row.get("feature_id", ""))
+    text = "_".join([feature_type, feature_name, feature_id])
+    if "signal_peptide" in text or text == "signal" or "signalp" in normalized_key(row.get("source", "")):
+        return "signal_peptide"
+    if "transmembrane" in text or "tmhelix" in text or "tm_region" in text:
+        return "transmembrane"
+    if "localization" in text or "deeploc" in normalized_key(row.get("source", "")):
+        return "localization"
+    if "disorder" in text or "iupred" in normalized_key(row.get("source", "")):
+        return "disorder"
+    if "domain" in text or "pfam" in text or "interpro" in normalized_key(row.get("source", "")):
+        return "domain"
+    return feature_type or "other"
+
+
+def annotations_by_change(
+    rows: list[dict[str, str]],
+    category: str,
+    change_prefix: str,
+) -> list[str]:
+    labels = []
+    for row in rows:
+        if annotation_category(row) != category:
+            continue
+        if row.get("feature_change", "").startswith(change_prefix):
+            labels.append(annotation_display_label(row))
+    return list(dict.fromkeys(labels))
+
+
+def sequence_for_isoform(sequence_rows: list[dict[str, str]], event_id: str, isoform_id: str) -> dict[str, str]:
+    for row in sequence_rows:
+        if row.get("event_id") == event_id and row.get("isoform_id") == isoform_id:
+            return row
+    return {}
+
+
+def positive_nmd_status(value: str) -> bool:
+    normalized = normalized_key(value)
+    if not normalized:
+        return False
+    if normalized.startswith("not_nmd") or normalized in {"no_nmd", "non_nmd", "nmd_negative"}:
+        return False
+    return "nmd" in normalized
+
+
+def nmd_change_label(switch_out: dict[str, str], switch_in: dict[str, str]) -> str:
+    before = switch_out.get("nmd_status", "")
+    after = switch_in.get("nmd_status", "")
+    if not before and not after:
+        return ""
+    if positive_nmd_status(before) == positive_nmd_status(after) and normalized_key(before) == normalized_key(after):
+        return ""
+    return f"{before or 'unknown'}->{after or 'unknown'}"
+
+
+def coding_potential_class(value: str) -> str:
+    normalized = normalized_key(value)
+    if not normalized:
+        return ""
+    if any(token in normalized for token in ["noncoding", "non_coding", "low_potential", "no_orf", "no_coding"]):
+        return "noncoding_or_low_potential"
+    if "coding" in normalized or normalized in {"cp", "protein_coding"}:
+        return "coding"
+    return normalized
+
+
+def coding_potential_transition_label(switch_out: dict[str, str], switch_in: dict[str, str]) -> str:
+    before = coding_potential_class(switch_out.get("coding_potential", ""))
+    after = coding_potential_class(switch_in.get("coding_potential", ""))
+    if not before and not after:
+        return ""
+    if before == after:
+        return ""
+    return f"{before or 'unknown'}->{after or 'unknown'}"
+
+
+def orf_length_change_label(switch_out: dict[str, str], switch_in: dict[str, str]) -> tuple[str, bool]:
+    before = to_float(switch_out.get("orf_length_aa", ""))
+    after = to_float(switch_in.get("orf_length_aa", ""))
+    if before is None or after is None:
+        return "", False
+    delta = int(after - before)
+    if delta == 0:
+        return "0", False
+    denominator = max(abs(before), 1.0)
+    large = abs(delta) >= 50 or abs(delta) / denominator >= 0.25
+    return signed_change(delta), large
+
+
+def localization_change_label(
+    event_annotations: list[dict[str, str]],
+    switch_out_isoform: str,
+    switch_in_isoform: str,
+) -> str:
+    before = {
+        annotation_display_label(row)
+        for row in event_annotations
+        if row.get("isoform_id") == switch_out_isoform and annotation_category(row) == "localization"
+    }
+    after = {
+        annotation_display_label(row)
+        for row in event_annotations
+        if row.get("isoform_id") == switch_in_isoform and annotation_category(row) == "localization"
+    }
+    if before == after:
+        return ""
+    gained = sorted(after - before)
+    lost = sorted(before - after)
+    pieces = []
+    if gained:
+        pieces.append("gained=" + "; ".join(gained))
+    if lost:
+        pieces.append("lost=" + "; ".join(lost))
+    return " | ".join(pieces)
+
+
+def priority_tier(score: int) -> str:
+    if score >= 8:
+        return "high"
+    if score >= 4:
+        return "moderate"
+    if score > 0:
+        return "low"
+    return "annotation_limited"
+
+
+def build_coding_switch_rows(
+    event_rows: list[dict[str, str]],
+    candidate_rows: list[dict[str, str]],
+    sequence_rows: list[dict[str, str]],
+    annotation_rows: list[dict[str, str]],
+) -> list[dict[str, str]]:
+    candidate_by_event = defaultdict(list)
+    for row in candidate_rows:
+        candidate_by_event[row["event_id"]].append(row)
+    annotation_by_event = defaultdict(list)
+    for row in annotation_rows:
+        annotation_by_event[row["event_id"]].append(row)
+
+    rows = []
+    for event in event_rows:
+        if event.get("switch_biotype_class") != "coding":
+            continue
+        event_id = event["event_id"]
+        switch_in = sequence_for_isoform(sequence_rows, event_id, event["switch_in_isoform"])
+        switch_out = sequence_for_isoform(sequence_rows, event_id, event["switch_out_isoform"])
+        event_annotations = annotation_by_event[event_id]
+        gained_domain = annotations_by_change(event_annotations, "domain", "gained")
+        lost_domain = annotations_by_change(event_annotations, "domain", "lost")
+        gained_signal = annotations_by_change(event_annotations, "signal_peptide", "gained")
+        lost_signal = annotations_by_change(event_annotations, "signal_peptide", "lost")
+        gained_tm = annotations_by_change(event_annotations, "transmembrane", "gained")
+        lost_tm = annotations_by_change(event_annotations, "transmembrane", "lost")
+        gained_disorder = annotations_by_change(event_annotations, "disorder", "gained")
+        lost_disorder = annotations_by_change(event_annotations, "disorder", "lost")
+        localization_change = localization_change_label(event_annotations, event["switch_out_isoform"], event["switch_in_isoform"])
+        nmd_change = nmd_change_label(switch_out, switch_in)
+        coding_change = coding_potential_transition_label(switch_out, switch_in)
+        orf_change, large_orf_change = orf_length_change_label(switch_out, switch_in)
+
+        score = 0
+        reasons = []
+        if gained_domain or lost_domain:
+            score += 3
+            reasons.append("protein_domain_gain_loss")
+        if gained_signal or lost_signal:
+            score += 3
+            reasons.append("signal_peptide_gain_loss")
+        if gained_tm or lost_tm:
+            score += 3
+            reasons.append("transmembrane_region_gain_loss")
+        if nmd_change:
+            score += 4
+            reasons.append("NMD_status_change")
+        if coding_change:
+            score += 4
+            reasons.append("coding_potential_transition")
+        if large_orf_change:
+            score += 2
+            reasons.append("large_ORF_length_change")
+        if gained_disorder or lost_disorder:
+            score += 1
+            reasons.append("disorder_region_gain_loss")
+        if localization_change:
+            score += 2
+            reasons.append("localization_change")
+
+        consequence_summary = unique_join(
+            row.get("consequence_summary", "")
+            for row in candidate_by_event[event_id]
+            if row.get("switch_role") in {"switch_in", "switch_out"}
+        )
+        rows.append(
+            {
+                "event_id": event_id,
+                "contrast_id": event["contrast_id"],
+                "gene_id": event["gene_id"],
+                "gene_name": event["gene_name"],
+                "gene_biotype": event.get("gene_biotype", ""),
+                "switch_rank": event.get("switch_rank", ""),
+                "coding_priority_rank": "",
+                "coding_priority_score": str(score),
+                "coding_priority_tier": priority_tier(score),
+                "coding_priority_reasons": unique_join(reasons),
+                "functional_consequence_summary": consequence_summary,
+                "switch_in_isoform": event["switch_in_isoform"],
+                "switch_out_isoform": event["switch_out_isoform"],
+                "switch_in_dIF": event["switch_in_dIF"],
+                "switch_out_dIF": event["switch_out_dIF"],
+                "max_abs_dIF": event["max_abs_dIF"],
+                "best_switch_statistic": event["best_switch_statistic"],
+                "nmd_change": nmd_change,
+                "coding_potential_change": coding_change,
+                "orf_length_change_aa": orf_change,
+                "gained_domain": unique_join(gained_domain),
+                "lost_domain": unique_join(lost_domain),
+                "gained_signal_peptide": unique_join(gained_signal),
+                "lost_signal_peptide": unique_join(lost_signal),
+                "gained_transmembrane_region": unique_join(gained_tm),
+                "lost_transmembrane_region": unique_join(lost_tm),
+                "gained_disorder_region": unique_join(gained_disorder),
+                "lost_disorder_region": unique_join(lost_disorder),
+                "localization_change": localization_change,
+                "n_functional_annotations": event.get("n_functional_annotations", "0"),
+                "event_html": event.get("event_html", ""),
+            }
+        )
+
+    rows.sort(
+        key=lambda item: (
+            -int(item["coding_priority_score"]),
+            -float(item.get("max_abs_dIF") or "0"),
+            item["event_id"],
+        )
+    )
+    event_by_id = {row["event_id"]: row for row in event_rows}
+    for rank, row in enumerate(rows, start=1):
+        row["coding_priority_rank"] = str(rank)
+        event = event_by_id.get(row["event_id"], {})
+        event["coding_priority_rank"] = str(rank)
+        event["coding_priority_score"] = row["coding_priority_score"]
+        event["coding_priority_tier"] = row["coding_priority_tier"]
+        event["coding_priority_reasons"] = row["coding_priority_reasons"]
+    return rows
+
+
 def relative(path: str, base: Path) -> str:
     return os.path.relpath(path, start=base.parent)
 
@@ -1850,6 +2155,7 @@ def render_event_html(
     sequence_rows: list[dict[str, str]],
     annotation_rows: list[dict[str, str]],
     ncrna_rows: list[dict[str, str]],
+    coding_switch_rows: list[dict[str, str]],
     out_path: Path,
     svg_path: Path,
 ) -> None:
@@ -1858,6 +2164,7 @@ def render_event_html(
     event_sequences = [row for row in sequence_rows if row["event_id"] == event["event_id"]]
     event_annotations = [row for row in annotation_rows if row["event_id"] == event["event_id"]]
     event_ncrna_rows = [row for row in ncrna_rows if row["event_id"] == event["event_id"]]
+    event_coding_rows = [row for row in coding_switch_rows if row["event_id"] == event["event_id"]]
 
     def table(headers: list[str], rows: list[dict[str, str]]) -> str:
         if not rows:
@@ -1924,6 +2231,8 @@ def render_event_html(
   <img src="{html.escape(relative(str(svg_path), out_path))}" alt="Isoform switch plot">
   <h2>Candidate Isoforms</h2>
   {table(['switch_rank', 'isoform_id', 'switch_role', 'gene_biotype', 'transcript_biotype', 'switch_biotype_class', 'dIF', 'padj_qvalue', 'isoform_fraction_control', 'isoform_fraction_test', 'switch_direction', 'novelty_group', 'reason_selected', 'consequence_summary'], event_candidates)}
+  <h2>Coding Switch Prioritization</h2>
+  {table(['coding_priority_rank', 'coding_priority_score', 'coding_priority_tier', 'coding_priority_reasons', 'nmd_change', 'coding_potential_change', 'orf_length_change_aa', 'gained_domain', 'lost_domain', 'gained_signal_peptide', 'lost_signal_peptide', 'gained_transmembrane_region', 'lost_transmembrane_region', 'localization_change'], event_coding_rows)}
   <h2>ncRNA Switch Interpretation</h2>
   {table(['isoform_id', 'paired_isoform_id', 'switch_role', 'gene_biotype', 'transcript_biotype', 'switch_biotype_class', 'transcript_length_change', 'exon_gain_loss', 'intron_retention_change', 'TSS_change', 'TES_change', 'antisense_overlap', 'conserved_exon_change', 'motif_change', 'host_smallrna_change', 'resource_antisense_overlap', 'pseudogene_caution', 'coding_potential_change', 'interpretation_label'], event_ncrna_rows)}
   <h2>Functional Annotations</h2>
@@ -2134,8 +2443,38 @@ def run_external_tool_commands(args: argparse.Namespace, nt_fasta: str, aa_fasta
     return rows
 
 
-def render_project_html(event_rows: list[dict[str, str]], output: Path) -> None:
+def render_project_html(event_rows: list[dict[str, str]], coding_switch_rows: list[dict[str, str]], output: Path) -> None:
     output.parent.mkdir(parents=True, exist_ok=True)
+
+    def coding_priority_rows(rows: list[dict[str, str]]) -> str:
+        body = []
+        for row in rows:
+            link = ""
+            if row.get("event_html") and Path(row["event_html"]).exists():
+                link = f'<a href="{html.escape(relative(row["event_html"], output))}">{html.escape(row["event_id"])}</a>'
+            else:
+                link = html.escape(row["event_id"])
+            body.append(
+                "<tr>"
+                f"<td>{link}</td>"
+                f"<td>{html.escape(row['contrast_id'])}</td>"
+                f"<td>{html.escape(row.get('coding_priority_rank', ''))}</td>"
+                f"<td>{html.escape(row.get('coding_priority_score', ''))}</td>"
+                f"<td>{html.escape(row.get('coding_priority_tier', ''))}</td>"
+                f"<td>{html.escape(row['gene_name'])}</td>"
+                f"<td>{html.escape(row['gene_id'])}</td>"
+                f"<td>{html.escape(row.get('coding_priority_reasons', ''))}</td>"
+                f"<td>{html.escape(row.get('gained_domain', ''))}</td>"
+                f"<td>{html.escape(row.get('lost_domain', ''))}</td>"
+                f"<td>{html.escape(row.get('nmd_change', ''))}</td>"
+                f"<td>{html.escape(row.get('coding_potential_change', ''))}</td>"
+                f"<td>{html.escape(row.get('orf_length_change_aa', ''))}</td>"
+                "</tr>"
+            )
+        if not body:
+            return '<tr><td colspan="13">No coding switches with consequence-priority rows.</td></tr>'
+        return "".join(body)
+
     def section_rows(rows: list[dict[str, str]]) -> str:
         body = []
         for row in rows:
@@ -2154,6 +2493,8 @@ def render_project_html(event_rows: list[dict[str, str]], output: Path) -> None:
                 f"<td>{html.escape(row.get('gene_biotype', ''))}</td>"
                 f"<td>{html.escape(row.get('switch_biotype_class', ''))}</td>"
                 f"<td>{html.escape(row.get('switch_interpretation_label', ''))}</td>"
+                f"<td>{html.escape(row.get('coding_priority_tier', ''))}</td>"
+                f"<td>{html.escape(row.get('coding_priority_reasons', ''))}</td>"
                 f"<td>{html.escape(row['switch_in_isoform'])}</td>"
                 f"<td>{html.escape(row['switch_out_isoform'])}</td>"
                 f"<td>{html.escape(row['max_abs_dIF'])}</td>"
@@ -2163,7 +2504,7 @@ def render_project_html(event_rows: list[dict[str, str]], output: Path) -> None:
                 "</tr>"
             )
         if not body:
-            return '<tr><td colspan="14">No events in this section.</td></tr>'
+            return '<tr><td colspan="16">No events in this section.</td></tr>'
         return "".join(body)
 
     coding_events = [row for row in event_rows if row.get("switch_biotype_class") == "coding"]
@@ -2180,12 +2521,29 @@ def render_project_html(event_rows: list[dict[str, str]], output: Path) -> None:
     for title, rows in sections:
         tables.append(
             f"""
+  {f'''
+  <h2>Coding Switch Priority Summary</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>event</th><th>contrast</th><th>priority rank</th><th>score</th><th>tier</th>
+        <th>gene</th><th>gene_id</th><th>priority reasons</th>
+        <th>gained domains</th><th>lost domains</th><th>NMD change</th>
+        <th>coding-potential change</th><th>ORF length change</th>
+      </tr>
+    </thead>
+    <tbody>
+      {coding_priority_rows(coding_switch_rows)}
+    </tbody>
+  </table>
+  ''' if title == 'Coding Switches' else ''}
   <h2>{html.escape(title)}</h2>
   <table>
     <thead>
       <tr>
         <th>event</th><th>contrast</th><th>rank</th><th>gene</th><th>gene_id</th>
         <th>gene biotype</th><th>switch class</th><th>interpretation</th>
+        <th>coding priority</th><th>priority reasons</th>
         <th>switch-in</th><th>switch-out</th><th>max abs dIF</th>
         <th>best statistic</th><th>annotations</th><th>FASTA</th>
       </tr>
@@ -2215,7 +2573,7 @@ def render_project_html(event_rows: list[dict[str, str]], output: Path) -> None:
 </head>
 <body>
   <h1>Isoform-switch report</h1>
-  <p>Events are ranked by absolute isoform fraction change and split into coding, noncoding/mixed, and ambiguous sections. Noncoding switches are interpreted through transcript architecture rather than requiring ORF/domain evidence.</p>
+  <p>Events are ranked by absolute isoform fraction change and split into coding, noncoding/mixed, and ambiguous sections. Coding switches are additionally prioritized by predicted functional consequences. Noncoding switches are interpreted through transcript architecture rather than requiring ORF/domain evidence.</p>
   {''.join(tables)}
 </body>
 </html>
@@ -2275,6 +2633,10 @@ def main() -> int:
     annotation_counts = defaultdict(int)
     for row in annotation_rows:
         annotation_counts[row["event_id"]] += 1
+    for event in event_rows:
+        event["n_functional_annotations"] = str(annotation_counts[event["event_id"]])
+
+    coding_switch_rows = build_coding_switch_rows(event_rows, candidate_rows, sequence_rows, annotation_rows)
 
     plot_rows = []
     for event in event_rows:
@@ -2284,10 +2646,18 @@ def main() -> int:
         nt_fasta, aa_fasta = write_event_fastas(event, sequence_rows, event_dir)
         event["event_nt_fasta"] = nt_fasta
         event["event_aa_fasta"] = aa_fasta
-        event["n_functional_annotations"] = str(annotation_counts[event["event_id"]])
         event_annotations = [row for row in annotation_rows if row["event_id"] == event["event_id"]]
         render_event_svg(event, event_context[event["event_id"]], gtf_models, event_annotations, svg_path)
-        render_event_html(event, candidate_rows, sequence_rows, annotation_rows, ncrna_switch_rows, html_path, svg_path)
+        render_event_html(
+            event,
+            candidate_rows,
+            sequence_rows,
+            annotation_rows,
+            ncrna_switch_rows,
+            coding_switch_rows,
+            html_path,
+            svg_path,
+        )
         event["plot_svg"] = str(svg_path)
         event["event_html"] = str(html_path)
         plot_rows.append(
@@ -2308,15 +2678,22 @@ def main() -> int:
             }
         )
 
+    event_by_id = {row["event_id"]: row for row in event_rows}
+    for row in coding_switch_rows:
+        event = event_by_id.get(row["event_id"], {})
+        row["event_html"] = event.get("event_html", "")
+        row["n_functional_annotations"] = event.get("n_functional_annotations", row.get("n_functional_annotations", "0"))
+
     write_simple_pdf(Path(args.plots_pdf), event_rows)
     write_table(Path(args.candidate_table), CANDIDATE_COLUMNS, candidate_rows)
     write_table(Path(args.event_summary), EVENT_COLUMNS, event_rows)
     write_table(Path(args.ncrna_switch_table), NCRNA_SWITCH_COLUMNS, ncrna_switch_rows)
+    write_table(Path(args.coding_switch_summary), CODING_SWITCH_COLUMNS, coding_switch_rows)
     write_table(Path(args.sequence_table), SEQUENCE_COLUMNS, sequence_rows)
     write_table(Path(args.functional_annotation_table), ANNOTATION_COLUMNS, annotation_rows)
     write_table(Path(args.plot_manifest), PLOT_MANIFEST_COLUMNS, plot_rows)
     write_table(Path(args.external_tool_manifest), EXTERNAL_TOOL_COLUMNS, external_tool_rows)
-    render_project_html(event_rows, Path(args.html))
+    render_project_html(event_rows, coding_switch_rows, Path(args.html))
     write_done(Path(args.done), event_rows)
     return 0
 
