@@ -106,6 +106,11 @@ NCRNA_SWITCH_COLUMNS = [
     "TSS_change",
     "TES_change",
     "antisense_overlap",
+    "conserved_exon_change",
+    "motif_change",
+    "host_smallrna_change",
+    "resource_antisense_overlap",
+    "ncrna_resource_annotations",
     "coding_potential_change",
     "interpretation_label",
 ]
@@ -209,6 +214,16 @@ def parse_args() -> argparse.Namespace:
             "with isoform_id/transcript_id/protein_id plus native InterProScan "
             "TSV, HMMER/Pfam domtblout, CPAT/CPC2 TSV, SignalP summary, "
             "DeepTMHMM/TMHMM GFF-like output, DeepLoc2 TSV, and IUPred2A table/raw output."
+        ),
+    )
+    parser.add_argument(
+        "--ncrna-annotation-tables",
+        default="",
+        help=(
+            "Optional comma-separated TSVs with resource-backed ncRNA annotations. "
+            "Rows can match by transcript_id/isoform_id, gene_id, or chrom/start/end overlap "
+            "with gained/lost switch intervals. Recognized feature_type values include "
+            "conserved_exon, rbp_motif, mirna_motif, host_small_rna, and antisense_overlap."
         ),
     )
     parser.add_argument("--interproscan-command", default="", help="Optional command template for InterProScan")
@@ -1440,6 +1455,160 @@ def coding_potential_change(row: dict[str, str], paired: dict[str, str]) -> str:
     return f"{other or 'unknown'}->{current or 'unknown'}"
 
 
+def parse_coordinate_int(value: str) -> Optional[int]:
+    cleaned = (value or "").replace(",", "").strip()
+    if not cleaned:
+        return None
+    try:
+        return int(float(cleaned))
+    except ValueError:
+        return None
+
+
+def parse_genomic_intervals(text: str) -> list[tuple[str, int, int]]:
+    intervals: list[tuple[str, int, int]] = []
+    for match in re.finditer(r"([^:,\s;]+):(\d[\d,]*)-(\d[\d,]*)", text or ""):
+        start = parse_coordinate_int(match.group(2))
+        end = parse_coordinate_int(match.group(3))
+        if start is None or end is None:
+            continue
+        intervals.append((match.group(1), min(start, end), max(start, end)))
+    return intervals
+
+
+def row_genomic_intervals(row: dict[str, str]) -> list[tuple[str, int, int]]:
+    chrom = value_by_normalized_key(row, ["chrom", "chr", "seqname", "seqnames", "sequence_name"])
+    start = parse_coordinate_int(value_by_normalized_key(row, ["start", "start_position", "genomic_start"]))
+    end = parse_coordinate_int(value_by_normalized_key(row, ["end", "stop", "end_position", "genomic_end"]))
+    intervals: list[tuple[str, int, int]] = []
+    if chrom and start is not None and end is not None:
+        intervals.append((chrom, min(start, end), max(start, end)))
+    for field in ["coordinates", "coordinate", "genomic_coordinates", "interval", "locus", "region"]:
+        intervals.extend(parse_genomic_intervals(value_by_normalized_key(row, [field])))
+    return list(dict.fromkeys(intervals))
+
+
+def ncrna_resource_category(feature_type: str) -> str:
+    normalized = normalized_key(feature_type)
+    if "antisense" in normalized:
+        return "antisense"
+    if any(token in normalized for token in ["host_small_rna", "host_smallrna", "embedded_small_rna", "embedded_snorna"]):
+        return "host_smallrna"
+    if any(token in normalized for token in ["snorna", "scrna", "trna_fragment", "small_rna_locus"]):
+        return "host_smallrna"
+    if any(token in normalized for token in ["conserved", "phastcons", "phylop", "gerp"]):
+        return "conserved"
+    if any(token in normalized for token in ["motif", "rbp", "mirna_binding", "seed_match"]):
+        return "motif"
+    return "other"
+
+
+def split_optional_paths(paths_text: str) -> list[Path]:
+    return [Path(part.strip()) for part in (paths_text or "").split(",") if part.strip()]
+
+
+def read_ncrna_annotation_rows(paths_text: str) -> list[dict[str, object]]:
+    annotations: list[dict[str, object]] = []
+    for path in split_optional_paths(paths_text):
+        _, rows = read_table(path)
+        for row in rows:
+            transcript_id = value_by_normalized_key(
+                row,
+                ["transcript_id", "isoform_id", "target_id", "query_id"],
+            )
+            gene_id = value_by_normalized_key(row, ["gene_id", "gene", "target_gene", "geneid"])
+            intervals = row_genomic_intervals(row)
+            if not transcript_id and not gene_id and not intervals:
+                continue
+            feature_type = value_by_normalized_key(
+                row,
+                ["feature_type", "type", "category", "annotation_type", "resource_type"],
+            )
+            source = value_by_normalized_key(row, ["source", "database", "resource", "resource_name"]) or path.stem
+            feature_id = value_by_normalized_key(row, ["feature_id", "id", "accession", "motif_id", "target_id"])
+            feature_name = value_by_normalized_key(row, ["feature_name", "name", "label", "motif_name", "description"])
+            description = value_by_normalized_key(row, ["description", "note", "details", "evidence"])
+            annotations.append(
+                {
+                    "source": source,
+                    "feature_type": feature_type or "annotation",
+                    "category": ncrna_resource_category(feature_type or feature_name or description),
+                    "feature_id": feature_id,
+                    "feature_name": feature_name,
+                    "description": description,
+                    "transcript_id": transcript_id,
+                    "gene_id": gene_id,
+                    "intervals": intervals,
+                }
+            )
+    return annotations
+
+
+def intervals_overlap(left: tuple[str, int, int], right: tuple[str, int, int]) -> bool:
+    return left[0] == right[0] and left[1] <= right[2] and right[1] <= left[2]
+
+
+def ncrna_annotation_matches(
+    row: dict[str, str],
+    sequence: dict[str, str],
+    annotation: dict[str, object],
+) -> bool:
+    transcript_id = str(annotation.get("transcript_id", ""))
+    gene_id = str(annotation.get("gene_id", ""))
+    id_match = (transcript_id and transcript_id == row.get("isoform_id", "")) or (
+        gene_id and gene_id == row.get("gene_id", "")
+    )
+    annotation_intervals = annotation.get("intervals", [])
+    if not isinstance(annotation_intervals, list):
+        annotation_intervals = []
+    affected_intervals = parse_genomic_intervals(
+        ",".join(
+            [
+                sequence.get("gained_exon_coordinates", ""),
+                sequence.get("lost_exon_coordinates", ""),
+            ]
+        )
+    )
+    if annotation_intervals and affected_intervals:
+        interval_match = any(
+            intervals_overlap(left, right)
+            for left in annotation_intervals
+            for right in affected_intervals
+        )
+        return interval_match and (id_match or not transcript_id and not gene_id)
+    if annotation_intervals and not affected_intervals:
+        return bool(id_match)
+    return bool(id_match)
+
+
+def ncrna_annotation_label(annotation: dict[str, object]) -> str:
+    source = str(annotation.get("source", "resource"))
+    feature_type = str(annotation.get("feature_type", "annotation"))
+    feature_id = str(annotation.get("feature_id", ""))
+    feature_name = str(annotation.get("feature_name", ""))
+    identity = feature_id or feature_name or str(annotation.get("description", "")) or "annotation"
+    if feature_name and feature_name != identity:
+        identity = f"{identity} ({feature_name})"
+    return f"{source}:{feature_type}:{identity}"
+
+
+def summarize_ncrna_resource_annotations(matches: list[dict[str, object]]) -> dict[str, str]:
+    grouped: dict[str, list[str]] = defaultdict(list)
+    for annotation in matches:
+        grouped[str(annotation.get("category", "other"))].append(ncrna_annotation_label(annotation))
+
+    def joined(category: str) -> str:
+        return "; ".join(dict.fromkeys(grouped.get(category, [])))
+
+    return {
+        "conserved_exon_change": joined("conserved"),
+        "motif_change": joined("motif"),
+        "host_smallrna_change": joined("host_smallrna"),
+        "resource_antisense_overlap": joined("antisense"),
+        "ncrna_resource_annotations": "; ".join(dict.fromkeys(ncrna_annotation_label(row) for row in matches)),
+    }
+
+
 def ncrna_interpretation_label(row: dict[str, str], exon_gain_loss: str, tss_change: str, tes_change: str) -> str:
     switch_class = row.get("switch_biotype_class", "")
     if switch_class == "ambiguous_artifact":
@@ -1455,6 +1624,7 @@ def build_ncrna_switch_rows(
     candidate_rows: list[dict[str, str]],
     sequence_rows: list[dict[str, str]],
     models: dict[str, TranscriptModel],
+    ncrna_annotations: list[dict[str, object]],
 ) -> list[dict[str, str]]:
     sequence_by_key = {(row["event_id"], row["isoform_id"]): row for row in sequence_rows}
     candidate_by_key = {(row["event_id"], row["isoform_id"]): row for row in candidate_rows}
@@ -1485,6 +1655,13 @@ def build_ncrna_switch_rows(
             ]
             if part
         )
+        resource_summary = summarize_ncrna_resource_annotations(
+            [
+                annotation
+                for annotation in ncrna_annotations
+                if ncrna_annotation_matches(row, sequence, annotation)
+            ]
+        )
         rows.append(
             {
                 "event_id": row["event_id"],
@@ -1505,6 +1682,11 @@ def build_ncrna_switch_rows(
                 "TSS_change": tss_change,
                 "TES_change": tes_change,
                 "antisense_overlap": antisense_label(row),
+                "conserved_exon_change": resource_summary["conserved_exon_change"],
+                "motif_change": resource_summary["motif_change"],
+                "host_smallrna_change": resource_summary["host_smallrna_change"],
+                "resource_antisense_overlap": resource_summary["resource_antisense_overlap"],
+                "ncrna_resource_annotations": resource_summary["ncrna_resource_annotations"],
                 "coding_potential_change": coding_potential_change(row, paired_candidate),
                 "interpretation_label": ncrna_interpretation_label(row, exon_gain_loss, tss_change, tes_change),
             }
@@ -2046,7 +2228,8 @@ def main() -> int:
     )
     attach_consequences(candidate_rows, event_rows, manifest_rows)
     sequence_rows = build_sequence_rows(candidate_rows, event_rows, event_context, gtf_models, nt_sequences, aa_sequences)
-    ncrna_switch_rows = build_ncrna_switch_rows(candidate_rows, sequence_rows, gtf_models)
+    ncrna_annotations = read_ncrna_annotation_rows(args.ncrna_annotation_tables)
+    ncrna_switch_rows = build_ncrna_switch_rows(candidate_rows, sequence_rows, gtf_models, ncrna_annotations)
 
     event_by_isoform: dict[str, list[dict[str, str]]] = defaultdict(list)
     for row in candidate_rows:

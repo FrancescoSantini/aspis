@@ -150,6 +150,7 @@ rnaseq_differential:
   isoform_switch_reports: true
   isoform_switch_report_top_n: 30
   isoform_switch_functional_annotation_tables: []
+  isoform_switch_ncrna_annotation_tables: []
   isoform_switch_interproscan_command: ""
   isoform_switch_pfam_command: ""
   isoform_switch_coding_potential_command: ""
