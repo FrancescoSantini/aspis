@@ -265,6 +265,13 @@ Current state:
 - Reports include switch candidates, switch events, sequence/consequence
   tables, ORF/CDS/NMD fields, FASTA exports, SVG/HTML pages, and optional
   protein/domain annotation hooks.
+- Coding switch reports now write `coding_switch_summary.tsv`, with a
+  consequence-priority rank, score, tier, and reasons based on gained/lost
+  protein domains, signal peptides, transmembrane regions, disorder regions,
+  NMD status changes, coding-potential transitions, localization changes, and
+  large ORF-length shifts.
+- Project and per-event isoform-switch HTML now include a coding-switch
+  prioritization section distinct from the ncRNA interpretation table.
 - The isoform-switch report can now natively normalize common optional
   functional-annotation outputs into the internal annotation schema:
   - InterProScan TSV;
@@ -277,14 +284,8 @@ Current state:
 
 Remaining work:
 
-- Prioritize switches with functional consequences:
-  - gained/lost protein domain;
-  - gained/lost signal peptide;
-  - gained/lost transmembrane region;
-  - NMD gain/loss;
-  - coding-to-noncoding or noncoding-to-coding transition;
-  - large ORF length changes.
-- Add a coding-switch summary section distinct from noncoding switches.
+- No remaining coding switch prioritization/report-structure items in this
+  section.
 
 ## 10. Isoform Switching In Noncoding RNAs
 
@@ -374,7 +375,6 @@ Desired isoform-switch report:
 
 Suggested order:
 
-1. Prioritize coding isoform switches with predicted functional consequences.
-2. Add a coding-switch summary section distinct from the ncRNA interpretation
-   table.
-3. Add real-data validation notes once real projects are available.
+1. Add real-data validation notes once real projects are available.
+2. Revisit resource-version provenance for standard enrichment and target
+   resources when the project resource layout is finalized.
