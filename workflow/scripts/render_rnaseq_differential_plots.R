@@ -12,7 +12,10 @@ parse_args <- function(argv) {
     pca_color_columns = "condition,time,time_h,batch,batch_id,biospecimen,biospecimen_id,replicate,replicate_id",
     transcript_plot_groups = "all,known_compatible,novel_isoform,novel_locus,ambiguous,artifact",
     gene_biotype_plot_groups = "protein_coding,lncRNA,pseudogene,snoRNA,snRNA,miRNA",
-    transcript_biotype_plot_groups = "protein_coding,lncRNA,pseudogene,snoRNA,snRNA,miRNA"
+    transcript_biotype_plot_groups = "protein_coding,lncRNA,pseudogene,snoRNA,snRNA,miRNA",
+    heatmap_modes = "significant,variable",
+    heatmap_feature_lists = "",
+    heatmap_significant_fallback = "variable"
   )
   i <- 1
   while (i <= length(argv)) {
@@ -374,6 +377,298 @@ write_transformed_counts <- function(matrix, path) {
   transformed
 }
 
+ordered_result_feature_ids <- function(results) {
+  if (nrow(results) == 0) {
+    return(character())
+  }
+  feature_column <- feature_id_column(results)
+  padj <- if ("padj" %in% colnames(results)) numeric_column(results, "padj") else rep(NA_real_, nrow(results))
+  log2fc <- if ("log2FoldChange" %in% colnames(results)) numeric_column(results, "log2FoldChange") else rep(0, nrow(results))
+  order_index <- order(is.na(padj), padj, -abs(log2fc), na.last = TRUE)
+  unique(as.character(results[[feature_column]][order_index]))
+}
+
+top_variable_feature_ids <- function(matrix, top_n) {
+  if (nrow(matrix) == 0) {
+    return(character())
+  }
+  variances <- apply(matrix, 1, stats::var)
+  names(variances)[head(order(variances, decreasing = TRUE), min(top_n, length(variances)))]
+}
+
+subset_matrix_by_ids <- function(matrix, feature_ids) {
+  matched <- intersect(unique(feature_ids), rownames(matrix))
+  matrix[matched, , drop = FALSE]
+}
+
+read_heatmap_feature_list <- function(path) {
+  if (!file.exists(path)) {
+    stop("Heatmap feature list does not exist: ", path)
+  }
+  lines <- readLines(path, warn = FALSE)
+  lines <- lines[nzchar(trimws(lines))]
+  if (!length(lines)) {
+    return(data.frame(
+      feature_id = character(),
+      feature_list = character(),
+      level = character(),
+      contrast_id = character(),
+      plot_group = character(),
+      source = character(),
+      check.names = FALSE
+    ))
+  }
+  first_fields <- strsplit(lines[[1]], "\t", fixed = TRUE)[[1]]
+  known_headers <- c(
+    "feature_id",
+    "gene_id",
+    "Geneid",
+    "transcript_id",
+    "mirna_id",
+    "id",
+    "feature_list",
+    "list_name",
+    "level",
+    "contrast_id",
+    "plot_group"
+  )
+  has_header <- any(first_fields %in% known_headers)
+  table <- read.delim(path, header = has_header, check.names = FALSE, stringsAsFactors = FALSE)
+  if (!has_header) {
+    colnames(table) <- paste0("V", seq_len(ncol(table)))
+  }
+  feature_column <- first_existing_column(
+    table,
+    c("feature_id", "gene_id", "Geneid", "transcript_id", "mirna_id", "id", "V1")
+  )
+  if (feature_column == "") {
+    stop("Heatmap feature list lacks a feature-id column: ", path)
+  }
+  list_column <- first_existing_column(table, c("feature_list", "list_name", "name", "label"))
+  default_list <- tools::file_path_sans_ext(basename(path))
+  data.frame(
+    feature_id = as.character(table[[feature_column]]),
+    feature_list = if (list_column == "") default_list else as.character(table[[list_column]]),
+    level = if ("level" %in% colnames(table)) as.character(table[["level"]]) else "",
+    contrast_id = if ("contrast_id" %in% colnames(table)) as.character(table[["contrast_id"]]) else "",
+    plot_group = if ("plot_group" %in% colnames(table)) as.character(table[["plot_group"]]) else "",
+    source = path,
+    check.names = FALSE
+  )
+}
+
+read_heatmap_feature_lists <- function(paths) {
+  paths <- parse_list_arg(paths)
+  if (!length(paths)) {
+    return(data.frame(
+      feature_id = character(),
+      feature_list = character(),
+      level = character(),
+      contrast_id = character(),
+      plot_group = character(),
+      source = character(),
+      check.names = FALSE
+    ))
+  }
+  rows <- lapply(paths, read_heatmap_feature_list)
+  do.call(rbind, rows)
+}
+
+matching_feature_list_rows <- function(feature_lists, level, contrast_id, group) {
+  if (!nrow(feature_lists)) {
+    return(feature_lists)
+  }
+  keep <- rep(TRUE, nrow(feature_lists))
+  if ("level" %in% colnames(feature_lists)) {
+    keep <- keep & (feature_lists$level == "" | feature_lists$level == level)
+  }
+  if ("contrast_id" %in% colnames(feature_lists)) {
+    keep <- keep & (feature_lists$contrast_id == "" | feature_lists$contrast_id == contrast_id)
+  }
+  if ("plot_group" %in% colnames(feature_lists)) {
+    allowed <- c("", "all", group$name, group$type, group$label)
+    keep <- keep & feature_lists$plot_group %in% allowed
+  }
+  feature_lists[keep, , drop = FALSE]
+}
+
+heatmap_panel <- function(
+  level,
+  contrast_id,
+  group,
+  mode,
+  label,
+  source,
+  status,
+  reason,
+  requested_features,
+  matched_features,
+  selected_matrix
+) {
+  list(
+    level = level,
+    contrast_id = contrast_id,
+    plot_group = group$name,
+    plot_group_type = group$type,
+    plot_label = group$label,
+    heatmap_mode = mode,
+    heatmap_label = label,
+    source = source,
+    status = status,
+    reason = reason,
+    n_requested_features = length(unique(requested_features)),
+    n_matched_features = length(unique(matched_features)),
+    n_plotted_features = nrow(selected_matrix),
+    features = paste(rownames(selected_matrix), collapse = ","),
+    matrix = selected_matrix
+  )
+}
+
+heatmap_panels_for_group <- function(
+  transformed,
+  filtered,
+  group,
+  top_n,
+  heatmap_modes,
+  heatmap_feature_lists,
+  fallback_mode,
+  level,
+  contrast_id
+) {
+  group_ids <- intersect(group$feature_ids, rownames(transformed))
+  group_matrix <- transformed[group_ids, , drop = FALSE]
+  panels <- list()
+
+  if ("significant" %in% heatmap_modes) {
+    requested <- intersect(ordered_result_feature_ids(filtered), group$feature_ids)
+    matched <- intersect(requested, rownames(transformed))
+    selected <- subset_matrix_by_ids(transformed, head(matched, top_n))
+    status <- "ok"
+    reason <- ""
+    label <- "Top significant features"
+    if (nrow(selected) < 2 && fallback_mode == "variable") {
+      fallback_ids <- top_variable_feature_ids(group_matrix, top_n)
+      selected <- subset_matrix_by_ids(transformed, fallback_ids)
+      status <- if (nrow(selected) >= 2) "fallback" else "blocked"
+      reason <- if (status == "fallback") {
+        "Fewer than two significant features matched; plotted top variable features instead"
+      } else {
+        "Fewer than two significant or variable features matched"
+      }
+      label <- "Top significant features (fallback: top variable)"
+    } else if (nrow(selected) < 2) {
+      status <- "blocked"
+      reason <- "Fewer than two significant features matched"
+    }
+    panels[[length(panels) + 1]] <- heatmap_panel(
+      level,
+      contrast_id,
+      group,
+      "significant",
+      label,
+      "filtered_results",
+      status,
+      reason,
+      requested,
+      matched,
+      selected
+    )
+  }
+
+  if ("variable" %in% heatmap_modes) {
+    requested <- group_ids
+    selected <- subset_matrix_by_ids(transformed, top_variable_feature_ids(group_matrix, top_n))
+    status <- if (nrow(selected) >= 2) "ok" else "blocked"
+    reason <- if (status == "ok") "" else "Fewer than two variable features matched"
+    panels[[length(panels) + 1]] <- heatmap_panel(
+      level,
+      contrast_id,
+      group,
+      "variable",
+      "Top variable features",
+      "transformed_counts",
+      status,
+      reason,
+      requested,
+      rownames(group_matrix),
+      selected
+    )
+  }
+
+  if ("feature_list" %in% heatmap_modes) {
+    rows <- matching_feature_list_rows(heatmap_feature_lists, level, contrast_id, group)
+    if (nrow(rows)) {
+      for (feature_list in unique(rows$feature_list)) {
+        list_rows <- rows[rows$feature_list == feature_list, , drop = FALSE]
+        requested <- unique(list_rows$feature_id[list_rows$feature_id != ""])
+        matched <- intersect(requested, group_ids)
+        selected <- subset_matrix_by_ids(transformed, head(matched, top_n))
+        status <- if (nrow(selected) >= 2) "ok" else "blocked"
+        reason <- if (status == "ok") "" else "Fewer than two configured-list features matched"
+        panels[[length(panels) + 1]] <- heatmap_panel(
+          level,
+          contrast_id,
+          group,
+          "feature_list",
+          paste("Feature list", feature_list, sep = ": "),
+          paste(unique(list_rows$source), collapse = ","),
+          status,
+          reason,
+          requested,
+          matched,
+          selected
+        )
+      }
+    }
+  }
+
+  panels
+}
+
+write_heatmap_panel_manifest <- function(path, panels) {
+  ensure_parent(path)
+  columns <- c(
+    "level",
+    "contrast_id",
+    "plot_group",
+    "plot_group_type",
+    "plot_label",
+    "heatmap_mode",
+    "heatmap_label",
+    "source",
+    "status",
+    "reason",
+    "n_requested_features",
+    "n_matched_features",
+    "n_plotted_features",
+    "features"
+  )
+  if (!length(panels)) {
+    rows <- as.data.frame(setNames(rep(list(character()), length(columns)), columns), check.names = FALSE)
+  } else {
+    rows <- do.call(rbind, lapply(panels, function(panel) {
+      data.frame(
+        level = panel$level,
+        contrast_id = panel$contrast_id,
+        plot_group = panel$plot_group,
+        plot_group_type = panel$plot_group_type,
+        plot_label = panel$plot_label,
+        heatmap_mode = panel$heatmap_mode,
+        heatmap_label = panel$heatmap_label,
+        source = panel$source,
+        status = panel$status,
+        reason = panel$reason,
+        n_requested_features = panel$n_requested_features,
+        n_matched_features = panel$n_matched_features,
+        n_plotted_features = panel$n_plotted_features,
+        features = panel$features,
+        check.names = FALSE
+      )
+    }))
+  }
+  write.table(rows[, columns], path, sep = "\t", quote = FALSE, row.names = FALSE)
+}
+
 transformed_counts_for_row <- function(row) {
   transformed_path <- row[["transformed_counts"]]
   if (!is.null(transformed_path) && !is.na(transformed_path) && transformed_path != "" && file.exists(transformed_path)) {
@@ -523,14 +818,12 @@ plot_sample_distance <- function(transformed, path, title, coldata = NULL) {
   grDevices::dev.off()
 }
 
-plot_heatmap_panel <- function(transformed, title, top_n, coldata = NULL) {
+plot_heatmap_panel <- function(transformed, title, coldata = NULL) {
   if (ncol(transformed) < 2 || nrow(transformed) < 2) {
     blank_panel(title, "Heatmap requires at least two samples and two features")
     return()
   }
-  variances <- apply(transformed, 1, stats::var)
-  keep <- head(order(variances, decreasing = TRUE), min(top_n, nrow(transformed)))
-  matrix <- transformed[keep, , drop = FALSE]
+  matrix <- transformed
   if (!is.null(coldata) && "condition" %in% colnames(coldata)) {
     order_index <- order(coldata[colnames(matrix), "condition"], colnames(matrix))
     matrix <- matrix[, order_index, drop = FALSE]
@@ -538,17 +831,52 @@ plot_heatmap_panel <- function(transformed, title, top_n, coldata = NULL) {
   stats::heatmap(matrix, scale = "row", margins = c(8, 8), main = title)
 }
 
-plot_heatmap <- function(transformed, groups, path, title, top_n, coldata = NULL) {
+plot_heatmap <- function(
+  transformed,
+  filtered,
+  groups,
+  path,
+  heatmap_panel_tsv,
+  title,
+  top_n,
+  heatmap_modes,
+  heatmap_feature_lists,
+  fallback_mode,
+  level,
+  contrast_id,
+  coldata = NULL
+) {
+  panels <- unlist(
+    lapply(groups, function(group) {
+      heatmap_panels_for_group(
+        transformed,
+        filtered,
+        group,
+        top_n,
+        heatmap_modes,
+        heatmap_feature_lists,
+        fallback_mode,
+        level,
+        contrast_id
+      )
+    }),
+    recursive = FALSE
+  )
+  write_heatmap_panel_manifest(heatmap_panel_tsv, panels)
   ensure_parent(path)
   grDevices::pdf(path)
   on.exit(grDevices::dev.off(), add = TRUE)
-  for (group in groups) {
-    group_matrix <- transformed
-    if (group$name != "all") {
-      keep <- intersect(group$feature_ids, rownames(transformed))
-      group_matrix <- transformed[keep, , drop = FALSE]
+  if (!length(panels)) {
+    blank_panel(title, "No heatmap panels requested")
+    return()
+  }
+  for (panel in panels) {
+    panel_title <- paste(title, "-", panel$plot_label, "-", panel$heatmap_label)
+    if (panel$status == "blocked") {
+      blank_panel(panel_title, panel$reason)
+      next
     }
-    plot_heatmap_panel(group_matrix, paste(title, "-", group$label), top_n, coldata)
+    plot_heatmap_panel(panel$matrix, panel_title, coldata)
   }
 }
 
@@ -587,6 +915,7 @@ manifest_columns <- c(
   "pca_metrics_tsv",
   "sample_distance_pdf",
   "heatmap_pdf",
+  "heatmap_panel_tsv",
   "plot_group_tsv",
   "vst_tsv",
   "n_features",
@@ -601,6 +930,9 @@ render_row <- function(
   transcript_plot_groups,
   gene_biotype_plot_groups,
   transcript_biotype_plot_groups,
+  heatmap_modes,
+  heatmap_feature_lists,
+  heatmap_significant_fallback,
   pca_color_columns
 ) {
   if (!identical(row[["status"]], "ready")) {
@@ -616,6 +948,7 @@ render_row <- function(
       pca_metrics_tsv = optional_plot_path(row, "pca_metrics_tsv", "pca_metrics.tsv"),
       sample_distance_pdf = optional_plot_path(row, "sample_distance_pdf", "sample_distance.pdf"),
       heatmap_pdf = row[["heatmap_pdf"]],
+      heatmap_panel_tsv = optional_plot_path(row, "heatmap_panel_tsv", "heatmap_panels.tsv"),
       plot_group_tsv = optional_plot_path(row, "plot_group_tsv", "plot_groups.tsv"),
       vst_tsv = row[["vst_tsv"]],
       n_features = 0,
@@ -632,6 +965,7 @@ render_row <- function(
   pca_metrics_tsv <- optional_plot_path(row, "pca_metrics_tsv", "pca_metrics.tsv")
   sample_distance_pdf <- optional_plot_path(row, "sample_distance_pdf", "sample_distance.pdf")
   plot_group_tsv <- optional_plot_path(row, "plot_group_tsv", "plot_groups.tsv")
+  heatmap_panel_tsv <- optional_plot_path(row, "heatmap_panel_tsv", "heatmap_panels.tsv")
   plot_groups <- plot_groups_for_results(
     results,
     row[["level"]],
@@ -655,7 +989,21 @@ render_row <- function(
     }
   }
   plot_sample_distance(transformed, sample_distance_pdf, paste(title, "sample distance"), coldata)
-  plot_heatmap(transformed, plot_groups, row[["heatmap_pdf"]], paste(title, "heatmap"), top_n, coldata)
+  plot_heatmap(
+    transformed,
+    filtered,
+    plot_groups,
+    row[["heatmap_pdf"]],
+    heatmap_panel_tsv,
+    paste(title, "heatmap"),
+    top_n,
+    heatmap_modes,
+    heatmap_feature_lists,
+    heatmap_significant_fallback,
+    row[["level"]],
+    row[["contrast_id"]],
+    coldata
+  )
 
   data.frame(
     project = row[["project"]],
@@ -669,6 +1017,7 @@ render_row <- function(
     pca_metrics_tsv = pca_metrics_tsv,
     sample_distance_pdf = sample_distance_pdf,
     heatmap_pdf = row[["heatmap_pdf"]],
+    heatmap_panel_tsv = heatmap_panel_tsv,
     plot_group_tsv = plot_group_tsv,
     vst_tsv = row[["vst_tsv"]],
     n_features = nrow(results),
@@ -697,6 +1046,22 @@ main <- function() {
   transcript_plot_groups <- parse_list_arg(args[["transcript_plot_groups"]])
   gene_biotype_plot_groups <- parse_list_arg(args[["gene_biotype_plot_groups"]])
   transcript_biotype_plot_groups <- parse_list_arg(args[["transcript_biotype_plot_groups"]])
+  heatmap_modes <- parse_list_arg(args[["heatmap_modes"]])
+  if (!length(heatmap_modes)) {
+    heatmap_modes <- c("significant", "variable")
+  }
+  invalid_heatmap_modes <- setdiff(heatmap_modes, c("significant", "variable", "feature_list"))
+  if (length(invalid_heatmap_modes)) {
+    stop("Unsupported --heatmap-modes value(s): ", paste(invalid_heatmap_modes, collapse = ", "))
+  }
+  heatmap_feature_lists <- read_heatmap_feature_lists(args[["heatmap_feature_lists"]])
+  if (nrow(heatmap_feature_lists) > 0 && !"feature_list" %in% heatmap_modes) {
+    heatmap_modes <- c(heatmap_modes, "feature_list")
+  }
+  heatmap_significant_fallback <- args[["heatmap_significant_fallback"]]
+  if (!heatmap_significant_fallback %in% c("variable", "none")) {
+    stop("--heatmap-significant-fallback must be 'variable' or 'none'")
+  }
   pca_color_columns <- parse_list_arg(args[["pca_color_columns"]])
 
   plan <- read_tsv(plan_path)
@@ -735,6 +1100,9 @@ main <- function() {
         transcript_plot_groups,
         gene_biotype_plot_groups,
         transcript_biotype_plot_groups,
+        heatmap_modes,
+        heatmap_feature_lists,
+        heatmap_significant_fallback,
         pca_color_columns
       ),
       error = function(err) {
@@ -752,6 +1120,7 @@ main <- function() {
           pca_metrics_tsv = pca_metrics_tsv,
           sample_distance_pdf = optional_plot_path(row, "sample_distance_pdf", "sample_distance.pdf"),
           heatmap_pdf = row[["heatmap_pdf"]],
+          heatmap_panel_tsv = optional_plot_path(row, "heatmap_panel_tsv", "heatmap_panels.tsv"),
           plot_group_tsv = optional_plot_path(row, "plot_group_tsv", "plot_groups.tsv"),
           vst_tsv = row[["vst_tsv"]],
           n_features = 0,

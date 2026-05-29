@@ -78,6 +78,7 @@ SUMMARY_COLUMNS = [
     "pca_metrics_tsv",
     "sample_distance_pdf",
     "heatmap_pdf",
+    "heatmap_panel_tsv",
     "vst_tsv",
     "n_features",
     "n_significant",
@@ -356,6 +357,7 @@ def render_html(
         html_link(plan_row.get("pca_metrics_tsv", ""), "PCA metrics"),
         html_link(plan_row.get("sample_distance_pdf", ""), "sample-distance heatmap"),
         html_link(plan_row.get("heatmap_pdf", ""), "heatmap"),
+        html_link(plan_row.get("heatmap_panel_tsv", ""), "heatmap panels"),
         html_link(plan_row.get("vst_tsv", ""), "log2 counts"),
     ]
     links_html = " | ".join(link for link in links if link) or "No linked resources."
@@ -709,6 +711,7 @@ def blocked_summary(row: dict[str, str]) -> dict[str, str]:
         "pca_metrics_tsv": row.get("pca_metrics_tsv", ""),
         "sample_distance_pdf": row.get("sample_distance_pdf", ""),
         "heatmap_pdf": row.get("heatmap_pdf", ""),
+        "heatmap_panel_tsv": row.get("heatmap_panel_tsv", ""),
         "vst_tsv": row.get("vst_tsv", ""),
         "n_features": "0",
         "n_significant": "0",
@@ -886,6 +889,7 @@ def render_row(row: dict[str, str], top_n: int) -> dict[str, str]:
             "pca_metrics_tsv": row.get("pca_metrics_tsv", ""),
             "sample_distance_pdf": row.get("sample_distance_pdf", ""),
             "heatmap_pdf": row.get("heatmap_pdf", ""),
+            "heatmap_panel_tsv": row.get("heatmap_panel_tsv", ""),
             "vst_tsv": row.get("vst_tsv", ""),
             "n_features": str(len(result_rows)),
             "n_significant": str(len(filtered_rows)),

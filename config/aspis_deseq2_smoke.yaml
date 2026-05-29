@@ -24,6 +24,11 @@ deseq2_smoke:
   report_ranked_feature_set_permutations: 200
   report_ranked_feature_set_seed: 1
   report_ranked_feature_set_min_mapped: 1
+  report_heatmap_modes:
+    - significant
+    - variable
+  report_heatmap_feature_lists: ""
+  report_heatmap_significant_fallback: variable
   report_gene_biotype_plot_groups:
     - protein_coding
     - lncRNA

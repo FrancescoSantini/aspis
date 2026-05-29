@@ -3124,7 +3124,15 @@ rule render_smallrna_report_plots:
                 "report_pca_color_columns",
                 "condition,time,time_h,batch,batch_id,biospecimen,biospecimen_id,replicate,replicate_id",
             )
-        )
+        ),
+        heatmap_modes=joined_config_values(
+            SMALLRNA.get("report_heatmap_modes", "significant,variable")
+        ),
+        heatmap_feature_lists=optional_shell_arg(
+            "--heatmap-feature-lists",
+            joined_config_values(SMALLRNA.get("report_heatmap_feature_lists", "")),
+        ),
+        heatmap_significant_fallback=SMALLRNA.get("report_heatmap_significant_fallback", "variable")
     log:
         "logs/branches/smallrna/{project}.smallrna_report_plots.log"
     shell:
@@ -3138,6 +3146,9 @@ rule render_smallrna_report_plots:
           --padj {params.padj:q} \
           --log2fc {params.log2fc:q} \
           --pca-color-columns {params.pca_color_columns:q} \
+          --heatmap-modes {params.heatmap_modes:q} \
+          {params.heatmap_feature_lists} \
+          --heatmap-significant-fallback {params.heatmap_significant_fallback:q} \
           > {log:q} 2>&1
         """
 
@@ -4749,6 +4760,17 @@ rule render_rnaseq_differential_plots:
                 "protein_coding,lncRNA,pseudogene,snoRNA,snRNA,miRNA",
             )
         ),
+        heatmap_modes=joined_config_values(
+            RNASEQ_DIFFERENTIAL.get("report_heatmap_modes", "significant,variable")
+        ),
+        heatmap_feature_lists=optional_shell_arg(
+            "--heatmap-feature-lists",
+            joined_config_values(RNASEQ_DIFFERENTIAL.get("report_heatmap_feature_lists", "")),
+        ),
+        heatmap_significant_fallback=RNASEQ_DIFFERENTIAL.get(
+            "report_heatmap_significant_fallback",
+            "variable",
+        ),
         pca_color_columns=joined_config_values(
             RNASEQ_DIFFERENTIAL.get(
                 "report_pca_color_columns",
@@ -4771,6 +4793,9 @@ rule render_rnaseq_differential_plots:
           --transcript-plot-groups {params.transcript_plot_groups:q} \
           --gene-biotype-plot-groups {params.gene_biotype_plot_groups:q} \
           --transcript-biotype-plot-groups {params.transcript_biotype_plot_groups:q} \
+          --heatmap-modes {params.heatmap_modes:q} \
+          {params.heatmap_feature_lists} \
+          --heatmap-significant-fallback {params.heatmap_significant_fallback:q} \
           > {log:q} 2>&1
         """
 
@@ -5186,6 +5211,14 @@ rule render_deseq2_report_smoke_plots:
                 "protein_coding,lncRNA,pseudogene,snoRNA,snRNA,miRNA",
             )
         ),
+        heatmap_modes=joined_config_values(
+            DESEQ2_SMOKE.get("report_heatmap_modes", "significant,variable")
+        ),
+        heatmap_feature_lists=optional_shell_arg(
+            "--heatmap-feature-lists",
+            joined_config_values(DESEQ2_SMOKE.get("report_heatmap_feature_lists", "")),
+        ),
+        heatmap_significant_fallback=DESEQ2_SMOKE.get("report_heatmap_significant_fallback", "variable"),
         pca_color_columns=joined_config_values(
             DESEQ2_SMOKE.get(
                 "report_pca_color_columns",
@@ -5208,6 +5241,9 @@ rule render_deseq2_report_smoke_plots:
           --transcript-plot-groups {params.transcript_plot_groups:q} \
           --gene-biotype-plot-groups {params.gene_biotype_plot_groups:q} \
           --transcript-biotype-plot-groups {params.transcript_biotype_plot_groups:q} \
+          --heatmap-modes {params.heatmap_modes:q} \
+          {params.heatmap_feature_lists} \
+          --heatmap-significant-fallback {params.heatmap_significant_fallback:q} \
           > {log:q} 2>&1
         """
 

@@ -119,6 +119,11 @@ rnaseq_differential:
   report_ranked_feature_set_permutations: 1000
   report_ranked_feature_set_seed: 1
   report_ranked_feature_set_min_mapped: 100
+  report_heatmap_modes:
+    - significant
+    - variable
+  report_heatmap_feature_lists: ""
+  report_heatmap_significant_fallback: variable
   report_transcript_plot_groups:
     - all
     - known_compatible
@@ -272,6 +277,11 @@ smallrna:
   mirna_feature_set_min_overlap: 2
   mirna_feature_set_top_n: 20
   reports: true
+  report_heatmap_modes:
+    - significant
+    - variable
+  report_heatmap_feature_lists: ""
+  report_heatmap_significant_fallback: variable
   report_pca_color_columns:
     - condition
     - time
