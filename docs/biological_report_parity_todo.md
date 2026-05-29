@@ -48,6 +48,10 @@ reproducible modules.
 - Isoform-switch testing is not intentionally restricted to coding genes, and
   the report now separates coding, noncoding/mixed, and ambiguous/artifact
   switch events with an ncRNA-aware interpretation table.
+- ncRNA switch interpretation can optionally consume resource-backed TSV
+  annotations for conserved exons, RBP/miRNA motifs, embedded small-RNA loci,
+  and antisense overlaps, matched to the gained/lost switch regions when
+  coordinates are available.
 
 ## 1. DESeq2 Core Analysis
 
@@ -292,22 +296,25 @@ Current state:
   transcript length change, exon gain/loss, TSS/TES change, retained-intron
   annotation flags, antisense labels, coding-potential change, and an
   interpretation label.
+- When optional ncRNA annotation TSVs are supplied, reports add
+  resource-backed conserved-exon, motif, embedded small-RNA, and antisense
+  overlap labels to the ncRNA switch table. Resource rows can match by
+  transcript/gene identifier and, when coordinates are available, by overlap
+  with the gained/lost switch intervals.
 - Project-level isoform-switch HTML has separate coding, noncoding/mixed, and
   ambiguous/artifact sections.
 
 Remaining work:
 
-- Add richer ncRNA-specific consequences when optional annotation resources
-  are supplied:
+- Add richer ncRNA-specific consequences that require additional coordinate
+  context beyond transcript-exon overlap:
   - splice junction gain/loss;
-  - overlap with known ncRNA annotations;
-  - antisense overlap with coding genes beyond simple antisense biotype labels;
   - promoter/proximal gene context.
 - Treat coding-potential gain/loss as a useful warning, not as a requirement.
 
 ## 11. ncRNA Switch Interpretation
 
-Remaining work:
+Current state:
 
 - For lncRNAs, report features relevant to noncoding function:
   - gained/lost conserved exons;
@@ -315,10 +322,13 @@ Remaining work:
   - possible RBP/miRNA motif changes if resources are provided later.
 - For snoRNA/miRNA host genes, report whether the switch changes host
   transcript architecture around embedded small RNA loci.
+- The ncRNA switch table has optional resource-backed conserved-exon, motif,
+  host-small-RNA, and antisense-overlap fields.
+
+Remaining work:
+
 - For pseudogenes, label interpretation cautiously and avoid implying direct
   protein consequences.
-- Extend the ncRNA switch table with optional resource-backed conserved exon,
-  motif, host-small-RNA, and antisense-overlap fields.
 
 ## 12. Final Report Structure Target
 
