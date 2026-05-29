@@ -40,9 +40,11 @@ FEATURE_SET_COLUMNS = [
     "query_source",
     "target_source",
     "target_source_type",
+    "target_source_version",
     "target_universe_definition",
     "feature_set_source",
     "feature_set_collection",
+    "feature_set_version",
     "set_id",
     "description",
     "overlap",
@@ -62,9 +64,11 @@ FEATURE_SET_UNIVERSE_COLUMNS = [
     "query_source",
     "target_source",
     "target_source_type",
+    "target_source_version",
     "target_universe_definition",
     "feature_set_source",
     "feature_set_collection",
+    "feature_set_version",
     "n_feature_sets",
     "query_size",
     "target_universe_size",
@@ -78,6 +82,7 @@ FEATURE_SET_UNIVERSE_COLUMNS = [
 class FeatureSet:
     source: str
     collection: str
+    version: str
     set_id: str
     description: str
     features: frozenset[str]
@@ -129,6 +134,33 @@ def split_paths(paths_text: str) -> list[Path]:
     return [Path(path.strip()) for path in paths_text.split(",") if path.strip()]
 
 
+def first_existing(row: dict[str, str], names: list[str]) -> str:
+    for name in names:
+        value = row.get(name, "")
+        if value:
+            return value
+    return ""
+
+
+def resource_version(row: dict[str, str]) -> str:
+    return first_existing(
+        row,
+        [
+            "resource_version",
+            "version",
+            "source_version",
+            "database_version",
+            "collection_version",
+            "release",
+        ],
+    ) or "unknown"
+
+
+def grouped_feature_set_version(feature_sets: list[FeatureSet]) -> str:
+    versions = sorted({feature_set.version for feature_set in feature_sets if feature_set.version})
+    return ";".join(versions) if versions else "unknown"
+
+
 def read_gmt_feature_sets(paths_text: str) -> list[FeatureSet]:
     feature_sets: list[FeatureSet] = []
     for path in split_paths(paths_text):
@@ -144,6 +176,7 @@ def read_gmt_feature_sets(paths_text: str) -> list[FeatureSet]:
                     FeatureSet(
                         source=path.stem,
                         collection="gmt",
+                        version="unknown",
                         set_id=fields[0].strip(),
                         description=fields[1].strip(),
                         features=members,
@@ -156,7 +189,7 @@ def read_table_feature_sets(paths_text: str) -> list[FeatureSet]:
     feature_sets: list[FeatureSet] = []
     for path in split_paths(paths_text):
         columns, rows = read_table(path, {"set_id", "feature_id"})
-        groups: dict[tuple[str, str, str], dict[str, object]] = {}
+        groups: dict[tuple[str, str, str, str], dict[str, object]] = {}
         for line_number, row in enumerate(rows, start=2):
             set_id = row.get("set_id", "")
             feature_id = row.get("feature_id", "")
@@ -167,19 +200,21 @@ def read_table_feature_sets(paths_text: str) -> list[FeatureSet]:
             key = (
                 row.get("source", "") or path.stem,
                 row.get("collection", ""),
+                resource_version(row),
                 set_id,
             )
             group = groups.setdefault(key, {"description": row.get("description", ""), "features": set()})
             if not group["description"]:
                 group["description"] = row.get("description", "")
             group["features"].add(feature_id)
-        for (source, collection, set_id), group in groups.items():
+        for (source, collection, version, set_id), group in groups.items():
             features = frozenset(str(feature) for feature in group["features"])
             if features:
                 feature_sets.append(
                     FeatureSet(
                         source=source,
                         collection=collection,
+                        version=version,
                         set_id=set_id,
                         description=str(group["description"]),
                         features=features,
@@ -251,10 +286,21 @@ def target_source_type(row: dict[str, str]) -> str:
     return row.get("target_source_type", "") or row.get("source_type", "") or "unspecified"
 
 
-def target_resource_groups(mapping_rows: list[dict[str, str]]) -> dict[tuple[str, str], list[dict[str, str]]]:
-    groups: dict[tuple[str, str], list[dict[str, str]]] = {("all_sources", "all_types"): mapping_rows}
+def target_source_version(row: dict[str, str]) -> str:
+    return row.get("target_source_version", "") or row.get("source_version", "") or row.get("database_version", "") or "unknown"
+
+
+def aggregate_target_source_version(rows: list[dict[str, str]]) -> str:
+    versions = sorted({target_source_version(row) for row in rows if target_source_version(row)})
+    return ";".join(versions) if versions else "unknown"
+
+
+def target_resource_groups(mapping_rows: list[dict[str, str]]) -> dict[tuple[str, str, str], list[dict[str, str]]]:
+    groups: dict[tuple[str, str, str], list[dict[str, str]]] = {
+        ("all_sources", "all_types", aggregate_target_source_version(mapping_rows)): mapping_rows
+    }
     for row in mapping_rows:
-        groups.setdefault((target_source(row), target_source_type(row)), []).append(row)
+        groups.setdefault((target_source(row), target_source_type(row), target_source_version(row)), []).append(row)
     return groups
 
 
@@ -287,7 +333,7 @@ def feature_set_universe_rows(
     min_overlap: int,
 ) -> list[dict[str, str]]:
     rows: list[dict[str, str]] = []
-    for (source, source_type), group_rows in sorted(target_resource_groups(mapping_rows).items()):
+    for (source, source_type, source_version), group_rows in sorted(target_resource_groups(mapping_rows).items()):
         collections = target_collections(group_rows)
         universe = collections["all"]
         for collection, query in sorted(collections.items()):
@@ -298,6 +344,7 @@ def feature_set_universe_rows(
                 member_universe: set[str] = set()
                 for feature_set in grouped_sets:
                     member_universe.update(feature_set.features & universe)
+                grouped_version = grouped_feature_set_version(grouped_sets)
                 rows.append(
                     {
                         "contrast_id": contrast_id,
@@ -306,9 +353,11 @@ def feature_set_universe_rows(
                         "query_source": collection,
                         "target_source": source,
                         "target_source_type": source_type,
+                        "target_source_version": source_version,
                         "target_universe_definition": "significant_mirna_mapped_targets",
                         "feature_set_source": feature_set_source,
                         "feature_set_collection": feature_set_collection,
+                        "feature_set_version": grouped_version,
                         "n_feature_sets": str(len(grouped_sets)),
                         "query_size": str(len(query)),
                         "target_universe_size": str(len(universe)),
@@ -327,7 +376,7 @@ def enrichment_rows(
     min_overlap: int,
 ) -> list[dict[str, str]]:
     rows = []
-    for (source, source_type), group_rows in target_resource_groups(mapping_rows).items():
+    for (source, source_type, source_version), group_rows in target_resource_groups(mapping_rows).items():
         collections = target_collections(group_rows)
         universe = collections["all"]
         if not universe:
@@ -349,9 +398,11 @@ def enrichment_rows(
                         "query_source": collection,
                         "target_source": source,
                         "target_source_type": source_type,
+                        "target_source_version": source_version,
                         "target_universe_definition": "significant_mirna_mapped_targets",
                         "feature_set_source": feature_set.source,
                         "feature_set_collection": feature_set.collection,
+                        "feature_set_version": feature_set.version,
                         "set_id": feature_set.set_id,
                         "description": feature_set.description,
                         "overlap": str(len(overlap)),
