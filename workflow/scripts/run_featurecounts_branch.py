@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import re
 import shlex
 import shutil
 import subprocess
@@ -14,6 +15,8 @@ from pathlib import Path
 REQUIRED_SAMPLE_COLUMNS = {"library_id", "assay", "project", "layout", "bam"}
 REQUIRED_PLAN_COLUMNS = {"project", "assay", "status", "gene_counter", "annotation_gtf"}
 METADATA_COLUMNS = ["Geneid", "Chr", "Start", "End", "Strand", "Length"]
+GENE_ANNOTATION_COLUMNS = ["gene_name", "gene_biotype"]
+ATTR_RE = re.compile(r'([A-Za-z0-9_.-]+) "([^"]*)"')
 
 
 def parse_args() -> argparse.Namespace:
@@ -85,6 +88,34 @@ def executable_path(command: str) -> str:
     if resolved is None:
         raise FileNotFoundError(f"Required executable not found on PATH: {command}")
     return resolved
+
+
+def parse_attrs(text: str) -> dict[str, str]:
+    return {key: value for key, value in ATTR_RE.findall(text)}
+
+
+def read_gene_annotations(gtf_path: Path) -> dict[str, dict[str, str]]:
+    annotations: dict[str, dict[str, str]] = {}
+    if not gtf_path.exists():
+        return annotations
+    biotype_keys = ("gene_biotype", "gene_type", "transcript_biotype", "transcript_type", "biotype")
+    with gtf_path.open(encoding="utf-8") as handle:
+        for line in handle:
+            if not line.strip() or line.startswith("#"):
+                continue
+            fields = line.rstrip("\n").split("\t")
+            if len(fields) < 9:
+                continue
+            attrs = parse_attrs(fields[8])
+            gene_id = attrs.get("gene_id", "")
+            if not gene_id:
+                continue
+            current = annotations.setdefault(gene_id, {"gene_name": "", "gene_biotype": ""})
+            if not current["gene_name"]:
+                current["gene_name"] = attrs.get("gene_name", "") or attrs.get("gene", "")
+            if not current["gene_biotype"]:
+                current["gene_biotype"] = next((attrs[key] for key in biotype_keys if attrs.get(key)), "")
+    return annotations
 
 
 def run_featurecounts(
@@ -168,6 +199,7 @@ def write_merged_counts(
     metadata_path: Path,
     rows: list[dict[str, str]],
     fc_rows: list[dict[str, str]],
+    gene_annotations: dict[str, dict[str, str]],
 ) -> None:
     merged_metadata: dict[str, dict[str, str]] = {}
     counts_by_sample: dict[str, dict[str, int]] = {}
@@ -199,10 +231,17 @@ def write_merged_counts(
 
     metadata_path.parent.mkdir(parents=True, exist_ok=True)
     with metadata_path.open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(handle, fieldnames=METADATA_COLUMNS, delimiter="\t", lineterminator="\n")
+        writer = csv.DictWriter(
+            handle,
+            fieldnames=METADATA_COLUMNS + GENE_ANNOTATION_COLUMNS,
+            delimiter="\t",
+            lineterminator="\n",
+        )
         writer.writeheader()
         for gene_id in gene_ids:
-            writer.writerow(merged_metadata[gene_id])
+            output_row = dict(merged_metadata[gene_id])
+            output_row.update(gene_annotations.get(gene_id, {}))
+            writer.writerow({column: output_row.get(column, "") for column in METADATA_COLUMNS + GENE_ANNOTATION_COLUMNS})
 
 
 def write_manifest(path: Path, rows: list[dict[str, str]]) -> None:
@@ -254,7 +293,13 @@ def main() -> int:
         )
         for row in rows
     ]
-    write_merged_counts(Path(args.counts), Path(args.metadata), rows, fc_rows)
+    write_merged_counts(
+        Path(args.counts),
+        Path(args.metadata),
+        rows,
+        fc_rows,
+        read_gene_annotations(Path(plan["annotation_gtf"])),
+    )
     write_manifest(Path(args.manifest), fc_rows)
     write_done(Path(args.done), rows)
     return 0

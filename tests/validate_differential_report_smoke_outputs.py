@@ -28,6 +28,7 @@ SCHEMAS = {
         "ma_pdf",
         "pca_pdf",
         "heatmap_pdf",
+        "plot_group_tsv",
         "vst_tsv",
         "enrichment_manifest",
         "summary_html",
@@ -176,7 +177,7 @@ def main() -> int:
         )
         _, assets = read_tsv(report_dir / "asset_manifest.tsv")
         labels = {row["asset_label"] for row in assets if row.get("exists") == "true"}
-        required_labels = {"summary_html", "results", "volcano_pdf", "ma_pdf", "pca_pdf", "heatmap_pdf"}
+        required_labels = {"summary_html", "results", "volcano_pdf", "ma_pdf", "pca_pdf", "heatmap_pdf", "plot_group_tsv"}
         missing_labels = required_labels - labels
         if missing_labels:
             raise ValueError(f"{report_dir} asset manifest is missing existing assets: {sorted(missing_labels)}")

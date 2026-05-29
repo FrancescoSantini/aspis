@@ -221,6 +221,7 @@ def render_html(
         ("Full DESeq2 results", row["results"]),
         ("Filtered DESeq2 results", row["filtered"]),
         ("PCA metrics", row.get("pca_metrics_tsv", "")),
+        ("Plot groups", row.get("plot_group_tsv", "")),
         ("Enrichment manifest", row["enrichment_manifest"]),
     ]
     feature_set_results = resources.get("feature_set_results", {}).get("path", "")

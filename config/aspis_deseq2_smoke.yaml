@@ -24,6 +24,14 @@ deseq2_smoke:
   report_ranked_feature_set_permutations: 200
   report_ranked_feature_set_seed: 1
   report_ranked_feature_set_min_mapped: 1
+  report_gene_biotype_plot_groups:
+    - protein_coding
+    - lncRNA
+    - pseudogene
+  report_transcript_biotype_plot_groups:
+    - protein_coding
+    - lncRNA
+    - pseudogene
   samples: tests/differential/gene_samples.tsv
   gene_counts: tests/differential/gene_counts.tsv
   gene_metadata: tests/differential/gene_metadata.tsv

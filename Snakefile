@@ -4737,6 +4737,18 @@ rule render_rnaseq_differential_plots:
                 "all,known_compatible,novel_isoform,novel_locus,ambiguous,artifact",
             )
         ),
+        gene_biotype_plot_groups=joined_config_values(
+            RNASEQ_DIFFERENTIAL.get(
+                "report_gene_biotype_plot_groups",
+                "protein_coding,lncRNA,pseudogene,snoRNA,snRNA,miRNA",
+            )
+        ),
+        transcript_biotype_plot_groups=joined_config_values(
+            RNASEQ_DIFFERENTIAL.get(
+                "report_transcript_biotype_plot_groups",
+                "protein_coding,lncRNA,pseudogene,snoRNA,snRNA,miRNA",
+            )
+        ),
         pca_color_columns=joined_config_values(
             RNASEQ_DIFFERENTIAL.get(
                 "report_pca_color_columns",
@@ -4757,6 +4769,8 @@ rule render_rnaseq_differential_plots:
           --log2fc {params.log2fc:q} \
           --pca-color-columns {params.pca_color_columns:q} \
           --transcript-plot-groups {params.transcript_plot_groups:q} \
+          --gene-biotype-plot-groups {params.gene_biotype_plot_groups:q} \
+          --transcript-biotype-plot-groups {params.transcript_biotype_plot_groups:q} \
           > {log:q} 2>&1
         """
 
@@ -5154,6 +5168,24 @@ rule render_deseq2_report_smoke_plots:
         top_n=DESEQ2_SMOKE.get("report_top_n", DESEQ2_SMOKE.get("plot_top_n", 50)),
         padj=DESEQ2_SMOKE.get("padj", 0.1),
         log2fc=DESEQ2_SMOKE.get("log2fc", 1.0),
+        transcript_plot_groups=joined_config_values(
+            DESEQ2_SMOKE.get(
+                "report_transcript_plot_groups",
+                "all,known_compatible,novel_isoform,novel_locus,ambiguous,artifact",
+            )
+        ),
+        gene_biotype_plot_groups=joined_config_values(
+            DESEQ2_SMOKE.get(
+                "report_gene_biotype_plot_groups",
+                "protein_coding,lncRNA,pseudogene,snoRNA,snRNA,miRNA",
+            )
+        ),
+        transcript_biotype_plot_groups=joined_config_values(
+            DESEQ2_SMOKE.get(
+                "report_transcript_biotype_plot_groups",
+                "protein_coding,lncRNA,pseudogene,snoRNA,snRNA,miRNA",
+            )
+        ),
         pca_color_columns=joined_config_values(
             DESEQ2_SMOKE.get(
                 "report_pca_color_columns",
@@ -5173,6 +5205,9 @@ rule render_deseq2_report_smoke_plots:
           --padj {params.padj:q} \
           --log2fc {params.log2fc:q} \
           --pca-color-columns {params.pca_color_columns:q} \
+          --transcript-plot-groups {params.transcript_plot_groups:q} \
+          --gene-biotype-plot-groups {params.gene_biotype_plot_groups:q} \
+          --transcript-biotype-plot-groups {params.transcript_biotype_plot_groups:q} \
           > {log:q} 2>&1
         """
 
