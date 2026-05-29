@@ -122,6 +122,29 @@ Templates may use `{samples}`, `{aligned_samples}`, `{transcript_counts}`,
 `{transcript_metadata}`, `{annotation_gtf}`, `{outdir}`, `{project}`, and
 `{method}`.
 
+## Standard DTU Output Contract
+
+When a DTU command template runs successfully, ASPIS scans the method output
+directory for common tabular result files and writes:
+
+```text
+<method-outdir>/standardized_results.tsv
+```
+
+The standard table uses these columns:
+
+```text
+project, method, source_file, feature_id, gene_id, gene_name, event_type,
+statistic, log2_fold_change, delta_psi, pvalue, padj, direction, status
+```
+
+The parser accepts common DRIMSeq, DEXSeq, SUPPA2, and rMATS-style column names,
+including `gene_id`/`GeneID`, `feature_id`/`featureID`/`ID`, `pvalue`/`PValue`,
+`padj`/`FDR`, `log2FoldChange`/`logFC`, `dpsi`, and
+`IncLevelDifference`. If no recognizable result table is found, the method is
+still marked as completed, but the manifest records
+`standardized_status=no_results_found`.
+
 ## Environment Reports
 
 RNA-seq differential environment reports now expose optional tool availability

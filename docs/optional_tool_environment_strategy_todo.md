@@ -56,11 +56,15 @@ Completed:
 - Command-template fallback support remains the standard route for
   site-managed HPC installations.
 
+- Optional DTU/splicing command outputs are now normalized when they expose
+  common DRIMSeq, DEXSeq, SUPPA2, or rMATS-style tabular result columns. Each
+  completed method writes an ASPIS-standard `standardized_results.tsv`, and the
+  DTU method manifest records parser status and row counts.
+
 Remaining:
 
-- For each selected engine, add a wrapper that turns native output into
-  ASPIS-standard TSV manifests/tables when a native parser is not already
-  implemented.
+- Validate optional engine wrappers against real site installations and real
+  project outputs once those tools are available on the target HPC system.
 
 ## Acceptance Criteria
 
