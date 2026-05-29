@@ -258,17 +258,18 @@ Current state:
 - Reports include switch candidates, switch events, sequence/consequence
   tables, ORF/CDS/NMD fields, FASTA exports, SVG/HTML pages, and optional
   protein/domain annotation hooks.
+- The isoform-switch report can now natively normalize common optional
+  functional-annotation outputs into the internal annotation schema:
+  - InterProScan TSV;
+  - Pfam/HMMER `domtblout`;
+  - CPAT/CPC2 coding-potential TSVs;
+  - SignalP summary TSVs;
+  - DeepTMHMM/TMHMM GFF-like topology outputs;
+  - DeepLoc2 localization TSVs;
+  - IUPred2A tabular or raw score output.
 
 Remaining work:
 
-- Improve native parsing of external annotation outputs:
-  - InterProScan;
-  - Pfam/HMMER;
-  - CPAT/CPC2;
-  - SignalP;
-  - DeepTMHMM/TMHMM;
-  - DeepLoc2;
-  - IUPred2A/NetSurfP.
 - Prioritize switches with functional consequences:
   - gained/lost protein domain;
   - gained/lost signal peptide;
@@ -359,7 +360,6 @@ Desired isoform-switch report:
 
 Suggested order:
 
-1. Add native parsers for selected external functional annotation tools.
-2. Add first-class GO/Reactome/KEGG/MSigDB resource configuration docs.
-3. Add richer resource-backed ncRNA switch annotations.
-4. Add real-data validation notes once real projects are available.
+1. Add first-class GO/Reactome/KEGG/MSigDB resource configuration docs.
+2. Add richer resource-backed ncRNA switch annotations.
+3. Add real-data validation notes once real projects are available.
