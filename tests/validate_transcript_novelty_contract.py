@@ -307,6 +307,288 @@ def exercise_grouped_plots() -> None:
         raise ValueError(f"missing transcript biotype/novelty plot groups: {group_rows}")
 
 
+def exercise_transcript_novelty_report_summary() -> None:
+    report_dir = BASE / "report_summary"
+    results = report_dir / "transcript_results.tsv"
+    filtered = report_dir / "transcript_filtered.tsv"
+    deseq2_summary = report_dir / "deseq2_summary.tsv"
+    pca_metrics = report_dir / "pca_metrics.tsv"
+    enrichment_resources = report_dir / "enrichment_resources.tsv"
+    report_plan = report_dir / "report_plan.tsv"
+    summary_manifest = report_dir / "summary_manifest.tsv"
+    novelty_summary = report_dir / "novelty_summary.tsv"
+    rows = [
+        {
+            "transcript_id": "TX_KNOWN",
+            "baseMean": "100",
+            "log2FoldChange": "2.0",
+            "pvalue": "0.001",
+            "padj": "0.01",
+            "class_code": "=",
+            "transcript_novelty": "known",
+            "transcript_plot_group": "known_compatible",
+            "transcript_plot_label": "Known/reference-compatible",
+            "true_novel_candidate": "no",
+        },
+        {
+            "transcript_id": "TX_J",
+            "baseMean": "90",
+            "log2FoldChange": "-2.0",
+            "pvalue": "0.002",
+            "padj": "0.02",
+            "class_code": "j",
+            "transcript_novelty": "novel_isoform",
+            "transcript_plot_group": "novel_isoform",
+            "transcript_plot_label": "Novel isoform",
+            "true_novel_candidate": "yes",
+        },
+        {
+            "transcript_id": "TX_U",
+            "baseMean": "80",
+            "log2FoldChange": "0.5",
+            "pvalue": "0.1",
+            "padj": "0.2",
+            "class_code": "u",
+            "transcript_novelty": "novel_locus",
+            "transcript_plot_group": "novel_locus",
+            "transcript_plot_label": "Novel locus",
+            "true_novel_candidate": "yes",
+        },
+    ]
+    write_tsv(results, list(rows[0]), rows)
+    write_tsv(filtered, list(rows[0]), rows[:2])
+    write_tsv(
+        deseq2_summary,
+        ["status", "padj_threshold", "log2fc_threshold"],
+        [{"status": "ok", "padj_threshold": "0.1", "log2fc_threshold": "1.0"}],
+    )
+    write_tsv(
+        pca_metrics,
+        ["status", "pc1_variance_percent", "pc2_variance_percent"],
+        [{"status": "ok", "pc1_variance_percent": "40.0", "pc2_variance_percent": "20.0"}],
+    )
+    write_tsv(
+        enrichment_resources,
+        ["resource", "status", "path"],
+        [{"resource": "feature_set_results", "status": "ok", "path": str(report_dir / "feature_sets.tsv")}],
+    )
+    write_tsv(
+        report_plan,
+        [
+            "project",
+            "level",
+            "contrast_id",
+            "status",
+            "reason",
+            "results",
+            "filtered",
+            "deseq2_summary",
+            "volcano_pdf",
+            "ma_pdf",
+            "pca_pdf",
+            "pca_metrics_tsv",
+            "sample_distance_pdf",
+            "heatmap_pdf",
+            "heatmap_panel_tsv",
+            "plot_group_tsv",
+            "novelty_summary_tsv",
+            "vst_tsv",
+            "enrichment_manifest",
+            "summary_html",
+        ],
+        [
+            {
+                "project": "ASPIS_TRANSCRIPT_NOVELTY",
+                "level": "transcript",
+                "contrast_id": "treated_vs_control",
+                "status": "ready",
+                "reason": "",
+                "results": str(results),
+                "filtered": str(filtered),
+                "deseq2_summary": str(deseq2_summary),
+                "volcano_pdf": str(report_dir / "volcano.pdf"),
+                "ma_pdf": str(report_dir / "ma.pdf"),
+                "pca_pdf": str(report_dir / "pca.pdf"),
+                "pca_metrics_tsv": str(pca_metrics),
+                "sample_distance_pdf": str(report_dir / "sample_distance.pdf"),
+                "heatmap_pdf": str(report_dir / "heatmap.pdf"),
+                "heatmap_panel_tsv": str(report_dir / "heatmap_panels.tsv"),
+                "plot_group_tsv": str(report_dir / "plot_groups.tsv"),
+                "novelty_summary_tsv": str(novelty_summary),
+                "vst_tsv": str(report_dir / "vst.tsv"),
+                "enrichment_manifest": str(enrichment_resources),
+                "summary_html": str(report_dir / "summary.html"),
+            }
+        ],
+    )
+    run_command(
+        [
+            sys.executable,
+            "workflow/scripts/render_rnaseq_differential_summary.py",
+            "--plan",
+            str(report_plan),
+            "--manifest",
+            str(summary_manifest),
+            "--done",
+            str(report_dir / "summary.done"),
+            "--top-n",
+            "3",
+        ]
+    )
+    summary_rows = read_tsv(
+        novelty_summary,
+        {
+            "transcript_novelty",
+            "transcript_plot_group",
+            "n_tested",
+            "fraction_tested",
+            "n_significant",
+            "fraction_significant",
+            "n_up",
+            "n_down",
+            "n_true_novel_candidates",
+            "n_significant_true_novel_candidates",
+        },
+    )
+    by_novelty = {row["transcript_novelty"]: row for row in summary_rows}
+    if by_novelty["known"]["n_tested"] != "1" or by_novelty["known"]["fraction_tested"] != "0.333333":
+        raise ValueError(f"known transcript novelty counts were not summarized: {summary_rows}")
+    if by_novelty["novel_isoform"]["n_down"] != "1" or by_novelty["novel_isoform"]["n_significant_true_novel_candidates"] != "1":
+        raise ValueError(f"novel-isoform transcript novelty counts were not summarized: {summary_rows}")
+    if by_novelty["novel_locus"]["n_significant"] != "0" or by_novelty["novel_locus"]["n_true_novel_candidates"] != "1":
+        raise ValueError(f"novel-locus transcript novelty counts were not summarized: {summary_rows}")
+    html_text = (report_dir / "summary.html").read_text(encoding="utf-8")
+    if "Transcript Novelty Summary" not in html_text or "Known/reference-compatible" not in html_text:
+        raise ValueError("transcript novelty summary was not rendered in the contrast HTML")
+
+    plots_manifest = report_dir / "plots_manifest.tsv"
+    index_enrichment_manifest = report_dir / "index_enrichment_manifest.tsv"
+    report_index = report_dir / "report_index.html"
+    asset_manifest = report_dir / "asset_manifest.tsv"
+    write_tsv(
+        plots_manifest,
+        [
+            "project",
+            "level",
+            "contrast_id",
+            "status",
+            "reason",
+            "volcano_pdf",
+            "ma_pdf",
+            "pca_pdf",
+            "pca_metrics_tsv",
+            "sample_distance_pdf",
+            "heatmap_pdf",
+            "heatmap_panel_tsv",
+            "plot_group_tsv",
+            "vst_tsv",
+            "n_features",
+            "n_significant",
+        ],
+        [
+            {
+                "project": "ASPIS_TRANSCRIPT_NOVELTY",
+                "level": "transcript",
+                "contrast_id": "treated_vs_control",
+                "status": "ok",
+                "reason": "",
+                "volcano_pdf": str(report_dir / "volcano.pdf"),
+                "ma_pdf": str(report_dir / "ma.pdf"),
+                "pca_pdf": str(report_dir / "pca.pdf"),
+                "pca_metrics_tsv": str(pca_metrics),
+                "sample_distance_pdf": str(report_dir / "sample_distance.pdf"),
+                "heatmap_pdf": str(report_dir / "heatmap.pdf"),
+                "heatmap_panel_tsv": str(report_dir / "heatmap_panels.tsv"),
+                "plot_group_tsv": str(report_dir / "plot_groups.tsv"),
+                "vst_tsv": str(report_dir / "vst.tsv"),
+                "n_features": "3",
+                "n_significant": "2",
+            }
+        ],
+    )
+    write_tsv(
+        index_enrichment_manifest,
+        [
+            "project",
+            "level",
+            "contrast_id",
+            "status",
+            "reason",
+            "enrichment_manifest",
+            "ranked_features",
+            "significant_features",
+            "up_features",
+            "down_features",
+            "feature_set_universe",
+            "feature_set_results",
+            "feature_set_plot",
+            "ranked_feature_set_results",
+            "ranked_feature_set_plot",
+            "n_ranked",
+            "n_significant",
+            "n_up",
+            "n_down",
+            "n_feature_sets",
+            "n_feature_set_resources",
+            "n_feature_set_terms",
+            "n_ranked_feature_set_terms",
+        ],
+        [
+            {
+                "project": "ASPIS_TRANSCRIPT_NOVELTY",
+                "level": "transcript",
+                "contrast_id": "treated_vs_control",
+                "status": "ok",
+                "reason": "",
+                "enrichment_manifest": str(enrichment_resources),
+                "ranked_features": str(report_dir / "ranked.tsv"),
+                "significant_features": str(report_dir / "significant.tsv"),
+                "up_features": str(report_dir / "up.tsv"),
+                "down_features": str(report_dir / "down.tsv"),
+                "feature_set_universe": "",
+                "feature_set_results": "",
+                "feature_set_plot": "",
+                "ranked_feature_set_results": "",
+                "ranked_feature_set_plot": "",
+                "n_ranked": "3",
+                "n_significant": "2",
+                "n_up": "1",
+                "n_down": "1",
+                "n_feature_sets": "0",
+                "n_feature_set_resources": "0",
+                "n_feature_set_terms": "0",
+                "n_ranked_feature_set_terms": "0",
+            }
+        ],
+    )
+    run_command(
+        [
+            sys.executable,
+            "workflow/scripts/render_rnaseq_differential_report_index.py",
+            "--plan",
+            str(report_plan),
+            "--plots-manifest",
+            str(plots_manifest),
+            "--enrichment-manifest",
+            str(index_enrichment_manifest),
+            "--summary-manifest",
+            str(summary_manifest),
+            "--asset-manifest",
+            str(asset_manifest),
+            "--output",
+            str(report_index),
+            "--done",
+            str(report_dir / "report_index.done"),
+        ]
+    )
+    index_html = report_index.read_text(encoding="utf-8")
+    if "novelty" not in index_html:
+        raise ValueError("report index did not link the transcript novelty summary")
+    asset_rows = read_tsv(asset_manifest, {"asset_label", "path"})
+    if not any(row["asset_label"] == "novelty_summary_tsv" and row["path"] == str(novelty_summary) for row in asset_rows):
+        raise ValueError(f"report asset manifest did not include the transcript novelty summary: {asset_rows}")
+
+
 def exercise_gene_biotype_plots() -> None:
     plot_dir = BASE / "gene_plots"
     results = plot_dir / "gene_results.tsv"
@@ -524,6 +806,7 @@ def exercise_discovery_reports(counts: Path, metadata: Path) -> None:
 def main() -> int:
     counts, metadata = exercise_transcript_matrix()
     exercise_grouped_plots()
+    exercise_transcript_novelty_report_summary()
     exercise_gene_biotype_plots()
     exercise_discovery_reports(counts, metadata)
     return 0
