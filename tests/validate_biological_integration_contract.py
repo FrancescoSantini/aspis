@@ -325,6 +325,65 @@ def exercise_biotype_and_dtu(paths: dict[str, Path]) -> None:
         raise ValueError(f"unexpected DTU method rows: {method_rows}")
     if {row["status"] for row in method_rows} != {"planned"}:
         raise ValueError(f"unconfigured DTU methods should be planned: {method_rows}")
+    helper = INPUT / "write_fake_rmats.py"
+    helper.write_text(
+        "\n".join(
+            [
+                "import sys",
+                "from pathlib import Path",
+                "outdir = Path(sys.argv[1])",
+                "outdir.mkdir(parents=True, exist_ok=True)",
+                "path = outdir / 'SE.MATS.JC.txt'",
+                "path.write_text(",
+                "    'ID\\tGeneID\\tgeneSymbol\\tPValue\\tFDR\\tIncLevelDifference\\n'",
+                "    'EVENT1\\tGENE1\\tGene One\\t0.001\\t0.01\\t0.25\\n',",
+                "    encoding='utf-8',",
+                ")",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    executed_dir = BASE / "dtu_executed"
+    run_command(
+        [
+            sys.executable,
+            "workflow/scripts/run_rnaseq_dtu_methods.py",
+            "--plan",
+            str(dtu_dir / "dtu_plan.tsv"),
+            "--samples",
+            str(paths["rnaseq_samples"]),
+            "--aligned-samples",
+            str(aligned_samples),
+            "--transcript-counts",
+            str(transcript_counts),
+            "--transcript-metadata",
+            str(transcript_metadata),
+            "--annotation-gtf",
+            str(gtf),
+            "--outdir",
+            str(executed_dir / "methods"),
+            "--manifest",
+            str(executed_dir / "dtu_method_manifest.tsv"),
+            "--done",
+            str(executed_dir / "dtu_methods.done"),
+            "--project",
+            "ASPIS_CONTRACT",
+            "--method",
+            "rMATS",
+            "--rmats-command",
+            f"{sys.executable} {helper} {{outdir}}",
+        ]
+    )
+    executed_rows = read_tsv(executed_dir / "dtu_method_manifest.tsv", {"method", "status", "standardized_results", "standardized_result_count", "standardized_status"})
+    if executed_rows[0]["status"] != "completed" or executed_rows[0]["standardized_status"] != "ok":
+        raise ValueError(f"executed DTU method was not standardized: {executed_rows}")
+    standardized = read_tsv(Path(executed_rows[0]["standardized_results"]), {"method", "feature_id", "gene_id", "gene_name", "event_type", "pvalue", "padj", "delta_psi", "direction"})
+    expected = standardized[0]
+    if expected["feature_id"] != "EVENT1" or expected["gene_id"] != "GENE1" or expected["event_type"] != "SE":
+        raise ValueError(f"standardized rMATS row lost identifiers: {standardized}")
+    if expected["padj"] != "0.01" or expected["direction"] != "increased_usage":
+        raise ValueError(f"standardized rMATS row lost statistics: {standardized}")
 
 
 def main() -> int:
