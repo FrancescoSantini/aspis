@@ -148,6 +148,11 @@ rnaseq_differential:
   # feature_id/feature_name/start_aa/end_aa/description. These can be
   # InterProScan, Pfam/hmmscan, SignalP/TM/localization, or user-curated tables.
   isoform_switch_functional_annotation_tables: []
+  # Optional TSV(s) with ncRNA switch resources. Rows can match by transcript_id,
+  # gene_id, or chrom/start/end overlap with gained/lost switch intervals.
+  # Useful feature_type values: conserved_exon, rbp_motif, mirna_motif,
+  # host_small_rna, antisense_overlap.
+  isoform_switch_ncrna_annotation_tables: []
   # Optional command templates for advanced annotation tools. Templates may use
   # {aa_fasta}, {nt_fasta}, {outdir}, and {tool_name}. Leave empty to only
   # report tool availability and import precomputed annotation TSVs.
