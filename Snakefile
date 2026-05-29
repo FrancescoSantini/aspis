@@ -3132,7 +3132,13 @@ rule render_smallrna_report_plots:
             "--heatmap-feature-lists",
             joined_config_values(SMALLRNA.get("report_heatmap_feature_lists", "")),
         ),
-        heatmap_significant_fallback=SMALLRNA.get("report_heatmap_significant_fallback", "variable")
+        heatmap_significant_fallback=SMALLRNA.get("report_heatmap_significant_fallback", "variable"),
+        mirna_plot_groups=joined_config_values(
+            SMALLRNA.get(
+                "report_mirna_plot_groups",
+                "all,up,down,arm,target_source,target_source_type,target_evidence_type",
+            )
+        )
     log:
         "logs/branches/smallrna/{project}.smallrna_report_plots.log"
     shell:
@@ -3146,6 +3152,7 @@ rule render_smallrna_report_plots:
           --padj {params.padj:q} \
           --log2fc {params.log2fc:q} \
           --pca-color-columns {params.pca_color_columns:q} \
+          --mirna-plot-groups {params.mirna_plot_groups:q} \
           --heatmap-modes {params.heatmap_modes:q} \
           {params.heatmap_feature_lists} \
           --heatmap-significant-fallback {params.heatmap_significant_fallback:q} \

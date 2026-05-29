@@ -261,14 +261,18 @@ The report index is:
 <branch_dir>/smallrna/<PROJECT>/smallrna/differential/reports/index.html
 ```
 
-Per-contrast HTML summaries link the MA, volcano, PCA, heatmap plot, and
-heatmap panel manifest. Heatmap PDFs include top-significant and top-variable
-panels by default. To add curated panels, set `smallrna.report_heatmap_feature_lists`
-to one or more TSV/one-column files. TSV feature-list files can contain
-`feature_id` plus optional `feature_list`, `level`, `contrast_id`, and
-`plot_group` columns. When residual genome alignment is enabled, summaries also
-link the residual manifest, residual biotype matrix, and residual feature
-matrix.
+Per-contrast HTML summaries link the MA, volcano, PCA, heatmap plot, plot-group
+manifest, and heatmap panel manifest. miRNA plot PDFs use miRNA-specific groups:
+all miRNAs, significant up/down miRNAs, mature-arm groups inferred from 5p/3p
+IDs, and target-source/source-type/evidence groups when target mappings are
+available. Configure these with `smallrna.report_mirna_plot_groups`; the
+default is `all,up,down,arm,target_source,target_source_type,target_evidence_type`.
+Heatmap PDFs include top-significant and top-variable panels by default. To add
+curated panels, set `smallrna.report_heatmap_feature_lists` to one or more
+TSV/one-column files. TSV feature-list files can contain `feature_id` plus
+optional `feature_list`, `level`, `contrast_id`, and `plot_group` columns. When
+residual genome alignment is enabled, summaries also link the residual manifest,
+residual biotype matrix, and residual feature matrix.
 
 Important intermediate manifests are:
 
