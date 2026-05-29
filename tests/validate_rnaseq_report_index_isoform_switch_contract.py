@@ -29,9 +29,10 @@ def main() -> int:
         iso_html = tmp / "isoform_switch" / "index.html"
         iso_candidates = tmp / "isoform_switch" / "switch_candidates.tsv"
         iso_events = tmp / "isoform_switch" / "switch_event_summary.tsv"
+        iso_ncrna = tmp / "isoform_switch" / "ncrna_switch_interpretation.tsv"
         iso_plots = tmp / "isoform_switch" / "switch_plot_manifest.tsv"
         iso_plots_pdf = tmp / "isoform_switch" / "switch_plots.pdf"
-        for path in [iso_html, iso_candidates, iso_events, iso_plots, iso_plots_pdf]:
+        for path in [iso_html, iso_candidates, iso_events, iso_ncrna, iso_plots, iso_plots_pdf]:
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text("ok\n", encoding="utf-8")
 
@@ -49,6 +50,7 @@ def main() -> int:
                 "volcano_pdf",
                 "ma_pdf",
                 "pca_pdf",
+                "pca_metrics_tsv",
                 "heatmap_pdf",
                 "vst_tsv",
                 "enrichment_manifest",
@@ -77,6 +79,7 @@ def main() -> int:
                 "volcano_pdf",
                 "ma_pdf",
                 "pca_pdf",
+                "pca_metrics_tsv",
                 "heatmap_pdf",
                 "vst_tsv",
                 "n_features",
@@ -106,6 +109,7 @@ def main() -> int:
                 "significant_features",
                 "up_features",
                 "down_features",
+                "feature_set_universe",
                 "feature_set_results",
                 "feature_set_plot",
                 "ranked_feature_set_results",
@@ -115,6 +119,7 @@ def main() -> int:
                 "n_up",
                 "n_down",
                 "n_feature_sets",
+                "n_feature_set_resources",
                 "n_feature_set_terms",
                 "n_ranked_feature_set_terms",
             ],
@@ -147,6 +152,7 @@ def main() -> int:
                 "results",
                 "filtered",
                 "ma_pdf",
+                "pca_metrics_tsv",
                 "n_features",
                 "n_significant",
                 "n_up",
@@ -185,6 +191,8 @@ def main() -> int:
             str(iso_candidates),
             "--isoform-switch-events",
             str(iso_events),
+            "--isoform-switch-ncrna",
+            str(iso_ncrna),
             "--isoform-switch-plots",
             str(iso_plots),
             "--isoform-switch-plots-pdf",
@@ -205,9 +213,11 @@ def main() -> int:
         asset_text = (tmp / "asset_manifest.tsv").read_text(encoding="utf-8")
         assert "isoform switch report" in index_html
         assert "switch_candidates.tsv" in index_html
+        assert "ncrna_switch_interpretation.tsv" in index_html
         assert "switch_plots.pdf" in index_html
         assert "isoform_switch" in asset_text
         assert "candidate_table" in asset_text
+        assert "ncrna_switch_interpretation" in asset_text
         assert "plots_pdf" in asset_text
     print("rnaseq_report_index_isoform_switch\tok\tlinks and assets present")
     return 0

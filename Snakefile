@@ -530,6 +530,7 @@ def rnaseq_isoform_switch_report_outputs(project):
     return {
         "candidate_table": f"{base}/switch_candidates.tsv",
         "event_summary": f"{base}/switch_event_summary.tsv",
+        "ncrna_switch_table": f"{base}/ncrna_switch_interpretation.tsv",
         "sequence_table": f"{base}/switch_sequence_summary.tsv",
         "functional_annotation_table": f"{base}/functional_annotation_summary.tsv",
         "plot_manifest": f"{base}/switch_plot_manifest.tsv",
@@ -547,6 +548,7 @@ def rnaseq_isoform_switch_report_inputs(wildcards):
     return [
         outputs["candidate_table"],
         outputs["event_summary"],
+        outputs["ncrna_switch_table"],
         outputs["sequence_table"],
         outputs["functional_annotation_table"],
         outputs["plot_manifest"],
@@ -872,6 +874,7 @@ def branch_provenance_inputs(wildcards):
                                 [
                                     outputs["candidate_table"],
                                     outputs["event_summary"],
+                                    outputs["ncrna_switch_table"],
                                     outputs["sequence_table"],
                                     outputs["functional_annotation_table"],
                                     outputs["plot_manifest"],
@@ -1207,6 +1210,7 @@ def planned_branch_targets(wildcards):
                                         [
                                             outputs["candidate_table"],
                                             outputs["event_summary"],
+                                            outputs["ncrna_switch_table"],
                                             outputs["sequence_table"],
                                             outputs["functional_annotation_table"],
                                             outputs["plot_manifest"],
@@ -1505,7 +1509,7 @@ rule build_branch_provenance_bundle:
         outdir=f"{BRANCH_DIR}" + "/{assay}/{project}/provenance",
         configfile=RUN_CONFIGFILE,
         intake=INTAKE,
-        preflight_report=PREFLIGHT_REPORT
+        preflight_report=lambda wildcards: optional_shell_arg("--preflight-report", PREFLIGHT_REPORT)
     log:
         "logs/branches/{assay}/{project}.provenance.log"
     shell:
@@ -1522,7 +1526,7 @@ rule build_branch_provenance_bundle:
           --project {wildcards.project:q} \
           --configfile {params.configfile:q} \
           --intake {params.intake:q} \
-          --preflight-report {params.preflight_report:q} \
+          {params.preflight_report} \
           --artifacts {input:q} \
           > {log:q} 2>&1
         """
@@ -4144,6 +4148,7 @@ rule render_isoform_switch_report:
     output:
         candidate_table=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/isoform_switch/report/switch_candidates.tsv",
         event_summary=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/isoform_switch/report/switch_event_summary.tsv",
+        ncrna_switch_table=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/isoform_switch/report/ncrna_switch_interpretation.tsv",
         sequence_table=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/isoform_switch/report/switch_sequence_summary.tsv",
         functional_annotation_table=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/isoform_switch/report/functional_annotation_summary.tsv",
         plot_manifest=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/isoform_switch/report/switch_plot_manifest.tsv",
@@ -4202,6 +4207,7 @@ rule render_isoform_switch_report:
           --outdir {params.outdir:q} \
           --candidate-table {output.candidate_table:q} \
           --event-summary {output.event_summary:q} \
+          --ncrna-switch-table {output.ncrna_switch_table:q} \
           --sequence-table {output.sequence_table:q} \
           --functional-annotation-table {output.functional_annotation_table:q} \
           --plot-manifest {output.plot_manifest:q} \
@@ -4777,6 +4783,11 @@ rule render_rnaseq_differential_report_index:
             "event_summary",
             "--isoform-switch-events",
         ),
+        isoform_switch_ncrna=lambda wildcards: rnaseq_isoform_switch_report_arg(
+            wildcards,
+            "ncrna_switch_table",
+            "--isoform-switch-ncrna",
+        ),
         isoform_switch_plots=lambda wildcards: rnaseq_isoform_switch_report_arg(
             wildcards,
             "plot_manifest",
@@ -4805,6 +4816,7 @@ rule render_rnaseq_differential_report_index:
           {params.isoform_switch_html} \
           {params.isoform_switch_candidates} \
           {params.isoform_switch_events} \
+          {params.isoform_switch_ncrna} \
           {params.isoform_switch_plots} \
           {params.isoform_switch_plots_pdf} \
           > {log:q} 2>&1
