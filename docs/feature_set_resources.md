@@ -103,6 +103,59 @@ For smallRNA target-gene enrichment:
 - target-symbol-only resources are fragile unless the target table also uses
   symbols as `target_id`.
 
+## miRNA Target Table Evidence Labels
+
+Target tables may contain source-specific labels such as `source`,
+`source_type`, `database`, and `evidence`. ASPIS preserves those raw fields, but
+also emits a controlled `target_evidence_type` column so reports can be filtered
+consistently across mixed resources.
+
+Preferred target-table columns:
+
+```text
+mirna_id	target_id	target_symbol	database	source	source_type	target_evidence_type	resource_version	evidence
+```
+
+Accepted controlled `target_evidence_type` values:
+
+```text
+validated
+predicted
+conserved
+user_provided
+matched_expressed
+inverse_integrated
+unspecified
+mixed
+```
+
+For database target tables, use:
+
+- `validated` for experimentally supported target resources such as
+  miRTarBase/TarBase-style exports;
+- `predicted` for computational prediction resources such as
+  TargetScan/miRanda/miRWalk-style exports;
+- `conserved` when the source specifically represents conserved predictions or
+  conserved target relationships;
+- `user_provided` for project-curated target lists that do not come from a
+  named target database.
+
+When `target_evidence_type` is absent, ASPIS infers a controlled label from
+`source_type`, `database`, `source`, and `evidence` where possible. Raw
+`target_source_type` remains in the outputs, so source-specific detail is not
+lost.
+
+Matched RNA-seq integration uses additional controlled labels:
+
+- `matched_expressed` means the database target is present in matched RNA-seq
+  DESeq2/count outputs;
+- `inverse_integrated` means the matched RNA-seq target also has the expected
+  opposite miRNA/mRNA log2 fold-change direction. Anticorrelated subsets are
+  reported separately when matched sample-level counts allow correlation
+  testing.
+
+Aggregate rows spanning multiple evidence classes use `mixed`.
+
 ## Recommended Resource Layout
 
 Keep resources under a project-controlled directory:

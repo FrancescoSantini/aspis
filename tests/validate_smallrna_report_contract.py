@@ -128,11 +128,11 @@ def setup_inputs() -> dict[str, Path]:
         paths["targets"],
         ["mirna_id", "target_id", "target_symbol", "target_entrez", "database", "source", "source_type", "source_version", "evidence"],
         [
-            {"mirna_id": "hsa-miR-1-3p", "target_id": "GENE1", "target_symbol": "GENE1", "target_entrez": "1001", "database": "miRTarBase", "source": "validated_db", "source_type": "validated", "source_version": "miRTarBase_2026_01", "evidence": "strong"},
-            {"mirna_id": "hsa-miR-1-3p", "target_id": "GENE2", "target_symbol": "GENE2", "target_entrez": "1002", "database": "miRTarBase", "source": "validated_db", "source_type": "validated", "source_version": "miRTarBase_2026_01", "evidence": "strong"},
-            {"mirna_id": "hsa-miR-2-3p", "target_id": "GENE1", "target_symbol": "GENE1", "target_entrez": "1001", "database": "miRTarBase", "source": "validated_db", "source_type": "validated", "source_version": "miRTarBase_2026_01", "evidence": "strong"},
-            {"mirna_id": "hsa-miR-2-3p", "target_id": "GENE3", "target_symbol": "GENE3", "target_entrez": "1003", "database": "TargetScan", "source": "predicted_db", "source_type": "predicted", "source_version": "TargetScan_8.0", "evidence": "predicted"},
-            {"mirna_id": "hsa-miR-3-3p", "target_id": "GENE4", "target_symbol": "GENE4", "target_entrez": "1004", "database": "TargetScan", "source": "predicted_db", "source_type": "predicted", "source_version": "TargetScan_8.0", "evidence": "predicted"},
+            {"mirna_id": "hsa-miR-1-3p", "target_id": "GENE1", "target_symbol": "GENE1", "target_entrez": "1001", "database": "miRTarBase", "source": "validated_db", "source_type": "experimental", "source_version": "miRTarBase_2026_01", "evidence": "strong"},
+            {"mirna_id": "hsa-miR-1-3p", "target_id": "GENE2", "target_symbol": "GENE2", "target_entrez": "1002", "database": "miRTarBase", "source": "validated_db", "source_type": "experimental", "source_version": "miRTarBase_2026_01", "evidence": "strong"},
+            {"mirna_id": "hsa-miR-2-3p", "target_id": "GENE1", "target_symbol": "GENE1", "target_entrez": "1001", "database": "miRTarBase", "source": "validated_db", "source_type": "experimental", "source_version": "miRTarBase_2026_01", "evidence": "strong"},
+            {"mirna_id": "hsa-miR-2-3p", "target_id": "GENE3", "target_symbol": "GENE3", "target_entrez": "1003", "database": "TargetScan", "source": "predicted_db", "source_type": "computational", "source_version": "TargetScan_8.0", "evidence": "predicted"},
+            {"mirna_id": "hsa-miR-3-3p", "target_id": "GENE4", "target_symbol": "GENE4", "target_entrez": "1004", "database": "TargetScan", "source": "predicted_db", "source_type": "computational", "source_version": "TargetScan_8.0", "evidence": "predicted"},
         ],
     )
     write_tsv(
@@ -279,22 +279,30 @@ def validate_outputs(paths: dict[str, Path]) -> None:
         raise ValueError(f"Expected one ok target enrichment row, got {target_rows}")
     mapped_targets = read_tsv(
         Path(target_rows[0]["mirna_targets"]),
-        {"target_source", "target_source_type", "target_source_version"},
+        {"target_source", "target_source_type", "target_evidence_type", "target_source_version"},
     )
     if not any(row["target_source"] == "validated_db" and row["target_source_version"] == "miRTarBase_2026_01" for row in mapped_targets):
         raise ValueError(f"miRNA target mapping lost validated source version: {mapped_targets}")
+    if not any(row["target_source"] == "validated_db" and row["target_evidence_type"] == "validated" for row in mapped_targets):
+        raise ValueError(f"miRNA target mapping lost controlled validated evidence type: {mapped_targets}")
+    if not any(row["target_source"] == "predicted_db" and row["target_evidence_type"] == "predicted" for row in mapped_targets):
+        raise ValueError(f"miRNA target mapping lost controlled predicted evidence type: {mapped_targets}")
     target_universe = read_tsv(
         Path(target_rows[0]["target_universe"]),
-        {"target_source", "target_source_type", "target_source_version"},
+        {"target_source", "target_source_type", "target_evidence_type", "target_source_version"},
     )
     if not any(row["target_source"] == "predicted_db" and row["target_source_version"] == "TargetScan_8.0" for row in target_universe):
         raise ValueError(f"target universe lost predicted source version: {target_universe}")
+    if not any(row["target_source"] == "all_sources" and row["target_evidence_type"] == "mixed" for row in target_universe):
+        raise ValueError(f"target universe lacks mixed aggregate evidence label: {target_universe}")
     target_enrichment = read_tsv(
         Path(target_rows[0]["target_enrichment"]),
-        {"target_source", "target_source_type", "target_source_version"},
+        {"target_source", "target_source_type", "target_evidence_type", "target_evidence_types", "target_source_version"},
     )
     if not any(row["target_source"] == "validated_db" and row["target_source_version"] == "miRTarBase_2026_01" for row in target_enrichment):
         raise ValueError(f"target enrichment lost validated source version: {target_enrichment}")
+    if not any(row["target_source"] == "validated_db" and row["target_evidence_type"] == "validated" for row in target_enrichment):
+        raise ValueError(f"target enrichment lost controlled validated evidence type: {target_enrichment}")
 
     target_feature_rows = read_tsv(
         paths["target_feature_set_manifest"],
@@ -320,6 +328,7 @@ def validate_outputs(paths: dict[str, Path]) -> None:
             "query_source",
             "target_source",
             "target_source_type",
+            "target_evidence_type",
             "target_source_version",
             "target_universe_definition",
             "feature_set_source",
@@ -342,6 +351,10 @@ def validate_outputs(paths: dict[str, Path]) -> None:
             raise ValueError(f"Target feature-set universe query source mismatch: {row}")
         if row["feature_set_version"] != "toy_pathway_2026_05":
             raise ValueError(f"Target feature-set universe lost feature-set version: {row}")
+        if row["target_source"] == "all_sources" and row["target_evidence_type"] != "mixed":
+            raise ValueError(f"Target feature-set universe lost mixed aggregate evidence label: {row}")
+        if row["target_source"] == "validated_db" and row["target_evidence_type"] != "validated":
+            raise ValueError(f"Target feature-set universe lost controlled validated evidence label: {row}")
         if row["target_source"] == "validated_db" and row["target_source_version"] != "miRTarBase_2026_01":
             raise ValueError(f"Target feature-set universe lost target-source version: {row}")
     feature_set_results = read_tsv(
@@ -351,6 +364,7 @@ def validate_outputs(paths: dict[str, Path]) -> None:
             "query_source",
             "target_source",
             "target_source_type",
+            "target_evidence_type",
             "target_source_version",
             "target_universe_definition",
             "feature_set_version",
@@ -368,6 +382,8 @@ def validate_outputs(paths: dict[str, Path]) -> None:
             raise ValueError(f"Target feature-set result query source mismatch: {row}")
         if row["feature_set_version"] != "toy_pathway_2026_05":
             raise ValueError(f"Target feature-set result lost feature-set version: {row}")
+        if row["target_source"] == "predicted_db" and row["target_evidence_type"] != "predicted":
+            raise ValueError(f"Target feature-set result lost controlled predicted evidence label: {row}")
         if row["target_source"] == "predicted_db" and row["target_source_version"] != "TargetScan_8.0":
             raise ValueError(f"Target feature-set result lost target-source version: {row}")
     plan_rows = read_tsv(
@@ -436,6 +452,7 @@ def validate_outputs(paths: dict[str, Path]) -> None:
         "hsa-miR-1-3p" not in text
         or "Target enrichment" not in text
         or "Target-gene feature sets" not in text
+        or "target_evidence_type" not in text
         or "volcano plot" not in text
     ):
         raise ValueError("Summary HTML lacks expected miRNA, target-enrichment, feature-set, or plot content")
