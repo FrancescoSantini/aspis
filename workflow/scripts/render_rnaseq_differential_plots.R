@@ -13,6 +13,7 @@ parse_args <- function(argv) {
     transcript_plot_groups = "all,known_compatible,novel_isoform,novel_locus,ambiguous,artifact",
     gene_biotype_plot_groups = "protein_coding,lncRNA,pseudogene,snoRNA,snRNA,miRNA",
     transcript_biotype_plot_groups = "protein_coding,lncRNA,pseudogene,snoRNA,snRNA,miRNA",
+    mirna_plot_groups = "all,up,down,arm,target_source,target_source_type,target_evidence_type",
     heatmap_modes = "significant,variable",
     heatmap_feature_lists = "",
     heatmap_significant_fallback = "variable"
@@ -163,7 +164,156 @@ requested_biotypes_present <- function(values, requested_biotypes) {
   unique(clean_values[selected])
 }
 
-plot_groups_for_results <- function(results, level, requested_groups, gene_biotype_groups, transcript_biotype_groups) {
+append_plot_group <- function(groups, name, label, type, subset, feature_column) {
+  if (nrow(subset) == 0 || name %in% vapply(groups, function(group) group$name, character(1))) {
+    return(groups)
+  }
+  groups[[length(groups) + 1]] <- list(
+    name = name,
+    label = label,
+    type = type,
+    results = subset,
+    feature_ids = as.character(subset[[feature_column]])
+  )
+  groups
+}
+
+mirna_arm <- function(feature_ids) {
+  ids <- tolower(as.character(feature_ids))
+  ifelse(
+    grepl("(^|[-_])5p$", ids),
+    "5p",
+    ifelse(grepl("(^|[-_])3p$", ids), "3p", "unannotated_arm")
+  )
+}
+
+split_group_values <- function(values) {
+  values <- unique(trimws(unlist(strsplit(as.character(values), "[,;|]"))))
+  values[!is.na(values) & values != ""]
+}
+
+read_mirna_target_rows <- function(path) {
+  if (is.null(path) || is.na(path) || path == "" || !file.exists(path)) {
+    return(data.frame())
+  }
+  read_tsv(path)
+}
+
+mirna_target_feature_ids <- function(targets) {
+  if (nrow(targets) == 0) {
+    return(character())
+  }
+  id_column <- first_existing_column(
+    targets,
+    c("mirna_id", "mature_mirna_id", "miRNA", "mirna", "mature_id", "Geneid", "feature_id")
+  )
+  if (id_column == "") {
+    return(character())
+  }
+  as.character(targets[[id_column]])
+}
+
+add_mirna_target_groups <- function(groups, results, feature_column, target_rows, group_column, group_type, label_prefix) {
+  if (!nrow(target_rows) || !(group_column %in% colnames(target_rows))) {
+    return(groups)
+  }
+  result_ids <- as.character(results[[feature_column]])
+  for (value in sort(split_group_values(target_rows[[group_column]]))) {
+    members <- unique(mirna_target_feature_ids(target_rows[target_rows[[group_column]] == value, , drop = FALSE]))
+    matched_ids <- intersect(members, result_ids)
+    if (!length(matched_ids)) {
+      next
+    }
+    subset <- results[result_ids %in% matched_ids, , drop = FALSE]
+    groups <- append_plot_group(
+      groups,
+      paste(group_type, safe_group_name(value), sep = "__"),
+      paste(label_prefix, value, sep = ": "),
+      group_type,
+      subset,
+      feature_column
+    )
+  }
+  groups
+}
+
+add_mirna_plot_groups <- function(groups, results, requested_groups, padj_cutoff, log2fc_cutoff, plan_row) {
+  requested <- requested_groups[requested_groups != ""]
+  if (!length(requested)) {
+    requested <- c("all", "up", "down", "arm", "target_source", "target_source_type", "target_evidence_type")
+  }
+  feature_column <- feature_id_column(results)
+  log2fc <- if ("log2FoldChange" %in% colnames(results)) numeric_column(results, "log2FoldChange") else rep(NA_real_, nrow(results))
+  padj <- if ("padj" %in% colnames(results)) numeric_column(results, "padj") else rep(NA_real_, nrow(results))
+  significant <- !is.na(padj) & padj < padj_cutoff & !is.na(log2fc) & abs(log2fc) >= log2fc_cutoff
+
+  if ("up" %in% requested || "direction" %in% requested || "regulated" %in% requested) {
+    groups <- append_plot_group(
+      groups,
+      "mirna_up",
+      "Upregulated miRNAs",
+      "mirna_direction",
+      results[significant & log2fc > 0, , drop = FALSE],
+      feature_column
+    )
+  }
+  if ("down" %in% requested || "direction" %in% requested || "regulated" %in% requested) {
+    groups <- append_plot_group(
+      groups,
+      "mirna_down",
+      "Downregulated miRNAs",
+      "mirna_direction",
+      results[significant & log2fc < 0, , drop = FALSE],
+      feature_column
+    )
+  }
+
+  if ("arm" %in% requested || "mature_arm" %in% requested) {
+    arm <- if ("arm" %in% colnames(results)) as.character(results[["arm"]]) else mirna_arm(results[[feature_column]])
+    for (value in c("5p", "3p")) {
+      subset <- results[arm == value, , drop = FALSE]
+      groups <- append_plot_group(
+        groups,
+        paste("mirna_arm", value, sep = "__"),
+        paste("Mature arm", value, sep = ": "),
+        "mirna_arm",
+        subset,
+        feature_column
+      )
+    }
+  }
+
+  target_rows <- read_mirna_target_rows(plan_row[["mirna_targets"]])
+  if ("target_source" %in% requested) {
+    groups <- add_mirna_target_groups(
+      groups, results, feature_column, target_rows, "target_source", "mirna_target_source", "Target source"
+    )
+  }
+  if ("target_source_type" %in% requested) {
+    groups <- add_mirna_target_groups(
+      groups, results, feature_column, target_rows, "target_source_type", "mirna_target_source_type", "Target source type"
+    )
+  }
+  if ("target_evidence_type" %in% requested) {
+    groups <- add_mirna_target_groups(
+      groups, results, feature_column, target_rows, "target_evidence_type", "mirna_target_evidence_type", "Target evidence"
+    )
+  }
+
+  groups
+}
+
+plot_groups_for_results <- function(
+  results,
+  level,
+  requested_groups,
+  gene_biotype_groups,
+  transcript_biotype_groups,
+  mirna_plot_groups,
+  padj_cutoff,
+  log2fc_cutoff,
+  plan_row = list()
+) {
   feature_column <- feature_id_column(results)
   groups <- list(list(
     name = "all",
@@ -172,6 +322,11 @@ plot_groups_for_results <- function(results, level, requested_groups, gene_bioty
     results = results,
     feature_ids = as.character(results[[feature_column]])
   ))
+
+  if (level == "mirna") {
+    return(add_mirna_plot_groups(groups, results, mirna_plot_groups, padj_cutoff, log2fc_cutoff, plan_row))
+  }
+
   biotype_column <- biotype_column_for_level(results, level)
   if (level != "transcript" && biotype_column == "") {
     return(groups)
@@ -930,6 +1085,7 @@ render_row <- function(
   transcript_plot_groups,
   gene_biotype_plot_groups,
   transcript_biotype_plot_groups,
+  mirna_plot_groups,
   heatmap_modes,
   heatmap_feature_lists,
   heatmap_significant_fallback,
@@ -971,7 +1127,11 @@ render_row <- function(
     row[["level"]],
     transcript_plot_groups,
     gene_biotype_plot_groups,
-    transcript_biotype_plot_groups
+    transcript_biotype_plot_groups,
+    mirna_plot_groups,
+    padj_cutoff,
+    log2fc_cutoff,
+    row
   )
   write_plot_group_manifest(plot_group_tsv, row[["level"]], row[["contrast_id"]], plot_groups)
   plot_volcano(plot_groups, row[["volcano_pdf"]], paste(title, "volcano"), padj_cutoff, log2fc_cutoff)
@@ -1046,6 +1206,7 @@ main <- function() {
   transcript_plot_groups <- parse_list_arg(args[["transcript_plot_groups"]])
   gene_biotype_plot_groups <- parse_list_arg(args[["gene_biotype_plot_groups"]])
   transcript_biotype_plot_groups <- parse_list_arg(args[["transcript_biotype_plot_groups"]])
+  mirna_plot_groups <- parse_list_arg(args[["mirna_plot_groups"]])
   heatmap_modes <- parse_list_arg(args[["heatmap_modes"]])
   if (!length(heatmap_modes)) {
     heatmap_modes <- c("significant", "variable")
@@ -1100,6 +1261,7 @@ main <- function() {
         transcript_plot_groups,
         gene_biotype_plot_groups,
         transcript_biotype_plot_groups,
+        mirna_plot_groups,
         heatmap_modes,
         heatmap_feature_lists,
         heatmap_significant_fallback,
