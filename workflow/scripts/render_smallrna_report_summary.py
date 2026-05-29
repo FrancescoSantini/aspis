@@ -49,6 +49,9 @@ SUMMARY_COLUMNS = [
     "mirna_mrna_target_feature_set_universe",
     "mirna_mrna_target_feature_set_results",
     "mirna_mrna_target_feature_set_plot",
+    "mirna_mrna_target_ranked_feature_set_universe",
+    "mirna_mrna_target_ranked_feature_set_results",
+    "mirna_mrna_target_ranked_feature_set_plot",
     "target_feature_set_manifest",
     "target_feature_set_universe",
     "target_feature_set_results",
@@ -83,6 +86,7 @@ SUMMARY_COLUMNS = [
     "n_inverse_integrated_targets",
     "n_inverse_anticorrelated_targets",
     "n_mirna_mrna_target_feature_set_terms",
+    "n_mirna_mrna_target_ranked_feature_set_terms",
     "n_target_feature_set_terms",
     "n_smallrna_length_stages",
     "n_smallrna_arms",
@@ -242,6 +246,7 @@ def render_html(
     target_mode_summary: list[dict[str, str]],
     target_feature_sets: list[dict[str, str]],
     mirna_mrna_target_feature_sets: list[dict[str, str]],
+    mirna_mrna_target_ranked_feature_sets: list[dict[str, str]],
     residual_manifest: list[dict[str, str]],
     residual_biotypes: list[dict[str, str]],
     residual_features: list[dict[str, str]],
@@ -264,6 +269,14 @@ def render_html(
     mirna_mrna_feature_set_preview = sorted(
         mirna_mrna_target_feature_sets,
         key=lambda row: (parse_float(row.get("padj", "")) or 1.0, row.get("collection", ""), row.get("set_id", "")),
+    )[:top_n]
+    mirna_mrna_ranked_feature_set_preview = sorted(
+        mirna_mrna_target_ranked_feature_sets,
+        key=lambda row: (
+            -(abs(parse_float(row.get("enrichment_score", "")) or 0.0)),
+            row.get("collection", ""),
+            row.get("set_id", ""),
+        ),
     )[:top_n]
     integration_preview = sorted(
         integration_pairs,
@@ -303,6 +316,8 @@ def render_html(
         html_link(plan_row.get("mirna_mrna_target_mode_summary", ""), "target-mode summary"),
         html_link(plan_row.get("mirna_mrna_target_feature_set_universe", ""), "inverse target feature-set universe"),
         html_link(plan_row.get("mirna_mrna_target_feature_set_results", ""), "inverse target feature sets"),
+        html_link(plan_row.get("mirna_mrna_target_ranked_feature_set_universe", ""), "ranked inverse target feature-set universe"),
+        html_link(plan_row.get("mirna_mrna_target_ranked_feature_set_results", ""), "ranked inverse target feature sets"),
         html_link(plan_row.get("target_feature_set_universe", ""), "target feature-set universe"),
         html_link(plan_row.get("target_feature_set_results", ""), "target feature sets"),
         html_link(plan_row.get("smallrna_length_distribution", ""), "length distribution"),
@@ -361,6 +376,7 @@ def render_html(
         ("Inverse integrated targets", str(len(inverse_integrated_targets))),
         ("Inverse anticorrelated targets", str(len(inverse_anticorrelated_targets))),
         ("Inverse target feature-set terms", str(len(mirna_mrna_target_feature_sets))),
+        ("Ranked inverse target feature-set terms", str(len(mirna_mrna_target_ranked_feature_sets))),
         ("Target feature-set terms", str(len(target_feature_sets))),
         ("Length QC stages", str(len({row.get("stage", "") for row in length_stage_summary}))),
         ("Arm classes", str(len(arm_summary))),
@@ -473,6 +489,21 @@ def render_html(
         for column in ["collection", "set_id", "description", "overlap", "query_size", "universe_size", "padj", "targets"]
         if mirna_mrna_feature_set_preview and column in mirna_mrna_feature_set_preview[0]
     ]
+    mirna_mrna_ranked_feature_set_columns = [
+        column
+        for column in [
+            "collection",
+            "set_id",
+            "description",
+            "set_size",
+            "ranked_targets",
+            "enrichment_score",
+            "direction",
+            "leading_edge_size",
+            "leading_edge_targets",
+        ]
+        if mirna_mrna_ranked_feature_set_preview and column in mirna_mrna_ranked_feature_set_preview[0]
+    ]
     length_stage_columns = [
         column
         for column in ["stage", "library_id", "total_reads", "modal_length", "mean_length", "min_length", "max_length"]
@@ -529,6 +560,10 @@ def render_html(
   <h2>Inverse miRNA-target feature sets</h2>
   {embedded_svg(plan_row.get("mirna_mrna_target_feature_set_plot", ""))}
   {html_table(mirna_mrna_feature_set_preview, mirna_mrna_feature_set_columns)}
+  <h2>Ranked inverse miRNA-target feature sets</h2>
+  <p class="note">Ranked target feature-set enrichment ranks matched RNA-seq target genes by the target DE statistic when available, then by signed p-value or log2 fold change. This is a GSEA-style running-score summary, not a permutation-based fgsea p-value.</p>
+  {embedded_svg(plan_row.get("mirna_mrna_target_ranked_feature_set_plot", ""))}
+  {html_table(mirna_mrna_ranked_feature_set_preview, mirna_mrna_ranked_feature_set_columns)}
   <h2>Read-length and arm QC</h2>
   {embedded_svg(plan_row.get("smallrna_length_plot", ""))}
   {html_table(length_stage_summary, length_stage_columns)}
@@ -578,6 +613,9 @@ def blocked_summary(row: dict[str, str]) -> dict[str, str]:
         "mirna_mrna_target_feature_set_universe": row.get("mirna_mrna_target_feature_set_universe", ""),
         "mirna_mrna_target_feature_set_results": row.get("mirna_mrna_target_feature_set_results", ""),
         "mirna_mrna_target_feature_set_plot": row.get("mirna_mrna_target_feature_set_plot", ""),
+        "mirna_mrna_target_ranked_feature_set_universe": row.get("mirna_mrna_target_ranked_feature_set_universe", ""),
+        "mirna_mrna_target_ranked_feature_set_results": row.get("mirna_mrna_target_ranked_feature_set_results", ""),
+        "mirna_mrna_target_ranked_feature_set_plot": row.get("mirna_mrna_target_ranked_feature_set_plot", ""),
         "target_feature_set_manifest": row.get("target_feature_set_manifest", ""),
         "target_feature_set_universe": row.get("target_feature_set_universe", ""),
         "target_feature_set_results": row.get("target_feature_set_results", ""),
@@ -612,6 +650,7 @@ def blocked_summary(row: dict[str, str]) -> dict[str, str]:
         "n_inverse_integrated_targets": "0",
         "n_inverse_anticorrelated_targets": "0",
         "n_mirna_mrna_target_feature_set_terms": "0",
+        "n_mirna_mrna_target_ranked_feature_set_terms": "0",
         "n_target_feature_set_terms": "0",
         "n_smallrna_length_stages": "0",
         "n_smallrna_arms": "0",
@@ -648,6 +687,10 @@ def render_row(row: dict[str, str], top_n: int) -> dict[str, str]:
             row.get("mirna_mrna_target_feature_set_results", ""),
             {"set_id"},
         )
+        _, mirna_mrna_target_ranked_feature_sets = read_existing(
+            row.get("mirna_mrna_target_ranked_feature_set_results", ""),
+            {"set_id"},
+        )
         _, target_feature_sets = read_existing(row.get("target_feature_set_results", ""), {"set_id"})
         _, length_stage_summary = read_existing(row.get("smallrna_length_stage_summary", ""), {"stage", "library_id"})
         _, arm_summary = read_existing(row.get("smallrna_arm_summary", ""), {"arm"})
@@ -672,6 +715,7 @@ def render_row(row: dict[str, str], top_n: int) -> dict[str, str]:
             target_mode_summary,
             target_feature_sets,
             mirna_mrna_target_feature_sets,
+            mirna_mrna_target_ranked_feature_sets,
             residual_manifest,
             residual_biotypes,
             residual_features,
@@ -733,6 +777,9 @@ def render_row(row: dict[str, str], top_n: int) -> dict[str, str]:
             "mirna_mrna_target_feature_set_universe": row.get("mirna_mrna_target_feature_set_universe", ""),
             "mirna_mrna_target_feature_set_results": row.get("mirna_mrna_target_feature_set_results", ""),
             "mirna_mrna_target_feature_set_plot": row.get("mirna_mrna_target_feature_set_plot", ""),
+            "mirna_mrna_target_ranked_feature_set_universe": row.get("mirna_mrna_target_ranked_feature_set_universe", ""),
+            "mirna_mrna_target_ranked_feature_set_results": row.get("mirna_mrna_target_ranked_feature_set_results", ""),
+            "mirna_mrna_target_ranked_feature_set_plot": row.get("mirna_mrna_target_ranked_feature_set_plot", ""),
             "target_feature_set_manifest": row.get("target_feature_set_manifest", ""),
             "target_feature_set_universe": row.get("target_feature_set_universe", ""),
             "target_feature_set_results": row.get("target_feature_set_results", ""),
@@ -767,6 +814,7 @@ def render_row(row: dict[str, str], top_n: int) -> dict[str, str]:
             "n_inverse_integrated_targets": str(len(inverse_integrated_targets)),
             "n_inverse_anticorrelated_targets": str(len(inverse_anticorrelated_targets)),
             "n_mirna_mrna_target_feature_set_terms": str(len(mirna_mrna_target_feature_sets)),
+            "n_mirna_mrna_target_ranked_feature_set_terms": str(len(mirna_mrna_target_ranked_feature_sets)),
             "n_target_feature_set_terms": str(len(target_feature_sets)),
             "n_smallrna_length_stages": str(len({item.get("stage", "") for item in length_stage_summary})),
             "n_smallrna_arms": str(len(arm_summary)),
