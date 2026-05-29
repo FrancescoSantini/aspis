@@ -1,0 +1,14 @@
+name: aspis-functional-annotation
+channels:
+  - conda-forge
+  - bioconda
+  - nodefaults
+dependencies:
+  - python=3.11
+  - pandas
+  - biopython
+  - seqkit
+  - hmmer
+  - cpat
+  - r-base
+  - r-optparse

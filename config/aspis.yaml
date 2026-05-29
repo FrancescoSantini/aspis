@@ -370,9 +370,18 @@ environment:
   rnaseq_isoform_switch_optional_tools:
     - hmmscan
     - interproscan.sh
+    - cpat
+    - CPC2.py
     - signalp
     - deeptmhmm
+    - tmhmm
+    - deeploc2
     - iupred2a.py
+  rnaseq_dtu_optional_tools:
+    - R::DRIMSeq
+    - R::DEXSeq
+    - suppa.py
+    - rmats.py
   smallrna_required_tools:
     - cutadapt
     - bowtie

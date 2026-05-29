@@ -198,6 +198,17 @@ def configured_version_args(key):
     return [str(item).strip() for item in value if str(item).strip()]
 
 
+def unique_tool_list(*tool_lists):
+    seen = set()
+    tools = []
+    for tool_list in tool_lists:
+        for tool in tool_list:
+            if tool and tool not in seen:
+                seen.add(tool)
+                tools.append(tool)
+    return tools
+
+
 SUPPORTED_RNASEQ_DIFFERENTIAL_LEVELS = {"gene", "transcript", "isoform_switch"}
 _raw_rnaseq_differential_levels = RNASEQ_DIFFERENTIAL.get("levels", ["gene"])
 if isinstance(_raw_rnaseq_differential_levels, str):
@@ -306,10 +317,32 @@ if "isoform_switch" in RNASEQ_DIFFERENTIAL_LEVELS and "R::IsoformSwitchAnalyzeR"
 RNASEQ_ISOFORM_SWITCH_OPTIONAL_TOOLS = (
     configured_tool_list(
         "rnaseq_isoform_switch_optional_tools",
-        ["hmmscan", "interproscan.sh", "signalp", "deeptmhmm", "iupred2a.py"],
+        [
+            "hmmscan",
+            "interproscan.sh",
+            "cpat",
+            "CPC2.py",
+            "signalp",
+            "deeptmhmm",
+            "tmhmm",
+            "deeploc2",
+            "iupred2a.py",
+        ],
     )
     if RNASEQ_ISOFORM_SWITCH_REPORTS_ENABLED
     else []
+)
+RNASEQ_DTU_OPTIONAL_TOOLS = (
+    configured_tool_list(
+        "rnaseq_dtu_optional_tools",
+        ["R::DRIMSeq", "R::DEXSeq", "suppa.py", "rmats.py"],
+    )
+    if RNASEQ_DTU_RUN
+    else []
+)
+RNASEQ_DIFFERENTIAL_OPTIONAL_TOOLS = unique_tool_list(
+    RNASEQ_ISOFORM_SWITCH_OPTIONAL_TOOLS,
+    RNASEQ_DTU_OPTIONAL_TOOLS,
 )
 SMALLRNA_REQUIRED_TOOLS = configured_tool_list(
     "smallrna_required_tools",
@@ -3993,7 +4026,7 @@ rule check_rnaseq_differential_environment:
         f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/environment_report.tsv"
     params:
         required_tools=RNASEQ_DIFFERENTIAL_REQUIRED_TOOLS,
-        optional_tools=[],
+        optional_tools=RNASEQ_DIFFERENTIAL_OPTIONAL_TOOLS,
         minimum_versions=MINIMUM_VERSION_ARGS,
         recommended_versions=RECOMMENDED_VERSION_ARGS
     log:
