@@ -61,6 +61,7 @@ FEATURE_SET_COLUMNS = [
     "query_source",
     "feature_set_source",
     "feature_set_collection",
+    "feature_set_version",
     "set_id",
     "description",
     "mapping_mode",
@@ -81,6 +82,7 @@ RANKED_FEATURE_SET_COLUMNS = [
     "contrast_id",
     "feature_set_source",
     "feature_set_collection",
+    "feature_set_version",
     "set_id",
     "description",
     "mapping_mode",
@@ -101,6 +103,7 @@ FEATURE_SET_UNIVERSE_COLUMNS = [
     "level",
     "feature_set_source",
     "feature_set_collection",
+    "feature_set_version",
     "mapping_mode",
     "feature_set_count",
     "tested_features",
@@ -128,6 +131,7 @@ STAT_COLUMNS = {
 class FeatureSet:
     source: str
     collection: str
+    version: str
     set_id: str
     description: str
     features: frozenset[str]
@@ -296,6 +300,33 @@ def split_paths(paths_text: str) -> list[Path]:
     return [Path(path.strip()) for path in paths_text.split(",") if path.strip()]
 
 
+def first_existing(row: dict[str, str], names: list[str]) -> str:
+    for name in names:
+        value = row.get(name, "")
+        if value:
+            return value
+    return ""
+
+
+def resource_version(row: dict[str, str]) -> str:
+    return first_existing(
+        row,
+        [
+            "resource_version",
+            "version",
+            "source_version",
+            "database_version",
+            "collection_version",
+            "release",
+        ],
+    ) or "unknown"
+
+
+def grouped_feature_set_version(feature_sets: list[FeatureSet]) -> str:
+    versions = sorted({feature_set.version for feature_set in feature_sets if feature_set.version})
+    return ";".join(versions) if versions else "unknown"
+
+
 def read_gmt_feature_sets(paths_text: str) -> list[FeatureSet]:
     feature_sets: list[FeatureSet] = []
     for path in split_paths(paths_text):
@@ -311,6 +342,7 @@ def read_gmt_feature_sets(paths_text: str) -> list[FeatureSet]:
                     FeatureSet(
                         source=path.stem,
                         collection="gmt",
+                        version="unknown",
                         set_id=fields[0].strip(),
                         description=fields[1].strip(),
                         features=members,
@@ -323,7 +355,7 @@ def read_table_feature_sets(paths_text: str) -> list[FeatureSet]:
     feature_sets: list[FeatureSet] = []
     for path in split_paths(paths_text):
         columns, rows = read_table(path, {"set_id", "feature_id"})
-        groups: dict[tuple[str, str, str], dict[str, object]] = {}
+        groups: dict[tuple[str, str, str, str], dict[str, object]] = {}
         has_description = "description" in columns
         has_source = "source" in columns
         has_collection = "collection" in columns
@@ -336,7 +368,7 @@ def read_table_feature_sets(paths_text: str) -> list[FeatureSet]:
                 raise ValueError(f"Feature-set table {path}:{line_number} has empty feature_id")
             source = row.get("source", "") if has_source else ""
             collection = row.get("collection", "") if has_collection else ""
-            key = (source or path.stem, collection, set_id)
+            key = (source or path.stem, collection, resource_version(row), set_id)
             group = groups.setdefault(
                 key,
                 {
@@ -347,7 +379,7 @@ def read_table_feature_sets(paths_text: str) -> list[FeatureSet]:
             if not group["description"] and has_description:
                 group["description"] = row.get("description", "")
             group["features"].add(feature_id)
-        for (source, collection, set_id), group in groups.items():
+        for (source, collection, version, set_id), group in groups.items():
             features = frozenset(str(feature) for feature in group["features"])
             if not features:
                 continue
@@ -355,6 +387,7 @@ def read_table_feature_sets(paths_text: str) -> list[FeatureSet]:
                 FeatureSet(
                     source=source,
                     collection=collection,
+                    version=version,
                     set_id=set_id,
                     description=str(group["description"]),
                     features=features,
@@ -424,6 +457,7 @@ def enrichment_rows(
     rows: list[dict[str, str]] = []
     for (source, collection_name), grouped_sets in feature_set_groups(feature_sets).items():
         resource_members = resource_universe(grouped_sets)
+        grouped_version = grouped_feature_set_version(grouped_sets)
         final_universe = mapped_universe & resource_members
         if not final_universe:
             continue
@@ -444,6 +478,7 @@ def enrichment_rows(
                         "query_source": collection,
                         "feature_set_source": source,
                         "feature_set_collection": collection_name,
+                        "feature_set_version": feature_set.version,
                         "set_id": feature_set.set_id,
                         "description": feature_set.description,
                         "mapping_mode": map_mode,
@@ -562,6 +597,7 @@ def ranked_feature_set_rows(
     rows: list[dict[str, str]] = []
     for (source, collection_name), grouped_sets in feature_set_groups(feature_sets).items():
         resource_members = resource_universe(grouped_sets)
+        grouped_version = grouped_feature_set_version(grouped_sets)
         final_universe = mapped_universe & resource_members
         if not final_universe:
             continue
@@ -599,6 +635,7 @@ def ranked_feature_set_rows(
                     "contrast_id": contrast_id,
                     "feature_set_source": source,
                     "feature_set_collection": collection_name,
+                    "feature_set_version": feature_set.version,
                     "set_id": feature_set.set_id,
                     "description": feature_set.description,
                     "mapping_mode": map_mode,
@@ -643,6 +680,7 @@ def feature_set_universe_rows(
     rows: list[dict[str, str]] = []
     for (source, collection), grouped_sets in sorted(feature_set_groups(feature_sets).items()):
         resource_members = resource_universe(grouped_sets)
+        grouped_version = grouped_feature_set_version(grouped_sets)
         final_universe = mapped_universe & resource_members
         rows.append(
             {
@@ -650,6 +688,7 @@ def feature_set_universe_rows(
                 "level": level,
                 "feature_set_source": source,
                 "feature_set_collection": collection,
+                "feature_set_version": grouped_version,
                 "mapping_mode": map_mode,
                 "feature_set_count": str(len(grouped_sets)),
                 "tested_features": str(tested_count),

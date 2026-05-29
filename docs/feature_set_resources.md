@@ -58,22 +58,24 @@ set_id	feature_id
 Optional columns:
 
 ```text
-source	collection	description
+source	collection	description	resource_version
 ```
 
 Recommended convention:
 
 ```text
-set_id	feature_id	source	collection	description
-GO:0006955	STAT1	GO_2026-05	BP	immune response
-R-HSA-913531	STAT1	Reactome_2026-05	Reactome	interferon signaling
-hsa04630	STAT1	KEGG_2026-05	KEGG	JAK-STAT signaling pathway
-HALLMARK_INTERFERON_GAMMA_RESPONSE	STAT1	MSigDB_2026.1	H	hallmark interferon gamma response
+set_id	feature_id	source	collection	resource_version	description
+GO:0006955	STAT1	GO	BP	2026-05	immune response
+R-HSA-913531	STAT1	Reactome	Reactome	2026-05	interferon signaling
+hsa04630	STAT1	KEGG	KEGG	2026-05	JAK-STAT signaling pathway
+HALLMARK_INTERFERON_GAMMA_RESPONSE	STAT1	MSigDB	H	2026.1	hallmark interferon gamma response
 ```
 
-Until a dedicated resource-version column is added, put the release/version in
-the `source` field, for example `GO_2026-05`, `Reactome_2026-05`,
-`KEGG_2026-05`, or `MSigDB_2026.1`.
+ASPIS records resource versions in enrichment universe and result tables when
+TSV resources provide one of these optional columns: `resource_version`,
+`version`, `source_version`, `database_version`, `collection_version`, or
+`release`. Plain GMT files do not carry structured version metadata, so they
+are reported as `unknown` unless converted to TSV or encoded into the file stem.
 
 ## ID Matching Rules
 
@@ -140,10 +142,10 @@ Use one TSV row per gene-term membership.
 Recommended columns:
 
 ```text
-set_id	feature_id	source	collection	description
-GO:0006955	ENSG00000115415	GO_2026-05	BP	immune response
-GO:0005515	ENSG00000115415	GO_2026-05	MF	protein binding
-GO:0005634	ENSG00000115415	GO_2026-05	CC	nucleus
+set_id	feature_id	source	collection	resource_version	description
+GO:0006955	ENSG00000115415	GO	BP	2026-05	immune response
+GO:0005515	ENSG00000115415	GO	MF	2026-05	protein binding
+GO:0005634	ENSG00000115415	GO	CC	2026-05	nucleus
 ```
 
 Keep BP, MF, and CC either as separate files or as one file with
@@ -154,8 +156,8 @@ Keep BP, MF, and CC either as separate files or as one file with
 Reactome resources should be gene-to-pathway membership tables:
 
 ```text
-set_id	feature_id	source	collection	description
-R-HSA-913531	ENSG00000115415	Reactome_2026-05	Reactome	interferon signaling
+set_id	feature_id	source	collection	resource_version	description
+R-HSA-913531	ENSG00000115415	Reactome	Reactome	2026-05	interferon signaling
 ```
 
 If you use MSigDB Reactome collections instead, GMT is fine, but record that in
@@ -166,8 +168,8 @@ the file name or source label so the report provenance is clear.
 KEGG resources should be pathway membership tables:
 
 ```text
-set_id	feature_id	source	collection	description
-hsa04630	ENSG00000115415	KEGG_2026-05	KEGG	JAK-STAT signaling pathway
+set_id	feature_id	source	collection	resource_version	description
+hsa04630	ENSG00000115415	KEGG	KEGG	2026-05	JAK-STAT signaling pathway
 ```
 
 Use organism-specific pathway IDs and an identifier namespace that matches your
@@ -182,13 +184,14 @@ rnaseq_differential:
   report_feature_sets: resources/feature_sets/msigdb_hallmark.gmt,resources/feature_sets/msigdb_c2_cp_reactome.gmt
 ```
 
-If you convert MSigDB to TSV, use `source` for the MSigDB release and
-`collection` for the collection/subcollection:
+If you convert MSigDB to TSV, use `source` for the database family,
+`collection` for the collection/subcollection, and `resource_version` for the
+MSigDB release:
 
 ```text
-set_id	feature_id	source	collection	description
-HALLMARK_INTERFERON_GAMMA_RESPONSE	STAT1	MSigDB_2026.1	H	hallmark interferon gamma response
-REACTOME_INTERFERON_SIGNALING	STAT1	MSigDB_2026.1	C2:CP:REACTOME	interferon signaling
+set_id	feature_id	source	collection	resource_version	description
+HALLMARK_INTERFERON_GAMMA_RESPONSE	STAT1	MSigDB	H	2026.1	hallmark interferon gamma response
+REACTOME_INTERFERON_SIGNALING	STAT1	MSigDB	C2:CP:REACTOME	2026.1	interferon signaling
 ```
 
 ## Interpretation
