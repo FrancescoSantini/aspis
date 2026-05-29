@@ -43,6 +43,8 @@ SUMMARY_COLUMNS = [
     "mirna_mrna_pairs",
     "mirna_mrna_summary",
     "mirna_mrna_plot",
+    "mirna_mrna_target_modes",
+    "mirna_mrna_target_mode_summary",
     "mirna_mrna_target_feature_set_manifest",
     "mirna_mrna_target_feature_set_universe",
     "mirna_mrna_target_feature_set_results",
@@ -77,6 +79,9 @@ SUMMARY_COLUMNS = [
     "n_mirna_mrna_pairs",
     "n_mirna_mrna_inverse_pairs",
     "n_mirna_mrna_anticorrelated_pairs",
+    "n_expressed_targets",
+    "n_inverse_integrated_targets",
+    "n_inverse_anticorrelated_targets",
     "n_mirna_mrna_target_feature_set_terms",
     "n_target_feature_set_terms",
     "n_smallrna_length_stages",
@@ -233,6 +238,8 @@ def render_html(
     target_source_summary: list[dict[str, str]],
     integration_pairs: list[dict[str, str]],
     integration_summary: list[dict[str, str]],
+    target_mode_rows: list[dict[str, str]],
+    target_mode_summary: list[dict[str, str]],
     target_feature_sets: list[dict[str, str]],
     mirna_mrna_target_feature_sets: list[dict[str, str]],
     residual_manifest: list[dict[str, str]],
@@ -292,6 +299,8 @@ def render_html(
         html_link(plan_row.get("target_source_summary", ""), "target source summary"),
         html_link(plan_row.get("mirna_mrna_pairs", ""), "miRNA-mRNA pairs"),
         html_link(plan_row.get("mirna_mrna_summary", ""), "miRNA-mRNA summary"),
+        html_link(plan_row.get("mirna_mrna_target_modes", ""), "expressed/inverse target modes"),
+        html_link(plan_row.get("mirna_mrna_target_mode_summary", ""), "target-mode summary"),
         html_link(plan_row.get("mirna_mrna_target_feature_set_universe", ""), "inverse target feature-set universe"),
         html_link(plan_row.get("mirna_mrna_target_feature_set_results", ""), "inverse target feature sets"),
         html_link(plan_row.get("target_feature_set_universe", ""), "target feature-set universe"),
@@ -319,6 +328,21 @@ def render_html(
     anticorrelated_pairs = [
         row for row in integration_pairs if (parse_float(row.get("pearson", "")) or 0.0) < 0
     ]
+    expressed_targets = {
+        row.get("target_id", "")
+        for row in target_mode_rows
+        if row.get("target_id", "") and row.get("target_analysis_mode") == "expressed_target" and row.get("collection") == "all"
+    }
+    inverse_integrated_targets = {
+        row.get("target_id", "")
+        for row in target_mode_rows
+        if row.get("target_id", "") and row.get("target_analysis_mode") == "inverse_integrated_target" and row.get("collection") == "inverse"
+    }
+    inverse_anticorrelated_targets = {
+        row.get("target_id", "")
+        for row in target_mode_rows
+        if row.get("target_id", "") and row.get("target_analysis_mode") == "inverse_integrated_target" and row.get("collection") == "inverse_anticorrelated"
+    }
     metrics = [
         ("Features tested", str(len(result_rows))),
         ("Significant miRNAs", str(len(filtered_rows))),
@@ -333,6 +357,9 @@ def render_html(
         ("miRNA-mRNA pairs", str(len(integration_pairs))),
         ("Inverse pairs", str(len(inverse_pairs))),
         ("Anticorrelated pairs", str(len(anticorrelated_pairs))),
+        ("Expressed targets", str(len(expressed_targets))),
+        ("Inverse integrated targets", str(len(inverse_integrated_targets))),
+        ("Inverse anticorrelated targets", str(len(inverse_anticorrelated_targets))),
         ("Inverse target feature-set terms", str(len(mirna_mrna_target_feature_sets))),
         ("Target feature-set terms", str(len(target_feature_sets))),
         ("Length QC stages", str(len({row.get("stage", "") for row in length_stage_summary}))),
@@ -375,6 +402,21 @@ def render_html(
             "target_source",
         ]
         if integration_preview and column in integration_preview[0]
+    ]
+    target_mode_summary_columns = [
+        column
+        for column in [
+            "target_analysis_mode",
+            "collection",
+            "query_source",
+            "n_pairs",
+            "n_mirnas",
+            "n_targets",
+            "n_inverse_pairs",
+            "n_anticorrelated_pairs",
+            "median_pearson",
+        ]
+        if target_mode_summary and column in target_mode_summary[0]
     ]
     feature_set_columns = [
         column
@@ -447,6 +489,9 @@ def render_html(
   {embedded_svg(plan_row.get("mirna_mrna_plot", ""))}
   {html_table(integration_summary, integration_summary_columns)}
   {html_table(integration_preview, integration_columns)}
+  <h2>Expressed and inverse target modes</h2>
+  <p class="note">Expressed-target mode keeps database targets that are present in matched RNA-seq differential results. Inverse-integrated mode further requires opposite miRNA and mRNA log2 fold-change directions, with a separate anticorrelated subset when sample-level matched counts support it.</p>
+  {html_table(target_mode_summary, target_mode_summary_columns)}
   <h2>Inverse miRNA-target feature sets</h2>
   {embedded_svg(plan_row.get("mirna_mrna_target_feature_set_plot", ""))}
   {html_table(mirna_mrna_feature_set_preview, mirna_mrna_feature_set_columns)}
@@ -493,6 +538,8 @@ def blocked_summary(row: dict[str, str]) -> dict[str, str]:
         "mirna_mrna_pairs": row.get("mirna_mrna_pairs", ""),
         "mirna_mrna_summary": row.get("mirna_mrna_summary", ""),
         "mirna_mrna_plot": row.get("mirna_mrna_plot", ""),
+        "mirna_mrna_target_modes": row.get("mirna_mrna_target_modes", ""),
+        "mirna_mrna_target_mode_summary": row.get("mirna_mrna_target_mode_summary", ""),
         "mirna_mrna_target_feature_set_manifest": row.get("mirna_mrna_target_feature_set_manifest", ""),
         "mirna_mrna_target_feature_set_universe": row.get("mirna_mrna_target_feature_set_universe", ""),
         "mirna_mrna_target_feature_set_results": row.get("mirna_mrna_target_feature_set_results", ""),
@@ -527,6 +574,9 @@ def blocked_summary(row: dict[str, str]) -> dict[str, str]:
         "n_mirna_mrna_pairs": "0",
         "n_mirna_mrna_inverse_pairs": "0",
         "n_mirna_mrna_anticorrelated_pairs": "0",
+        "n_expressed_targets": "0",
+        "n_inverse_integrated_targets": "0",
+        "n_inverse_anticorrelated_targets": "0",
         "n_mirna_mrna_target_feature_set_terms": "0",
         "n_target_feature_set_terms": "0",
         "n_smallrna_length_stages": "0",
@@ -558,6 +608,8 @@ def render_row(row: dict[str, str], top_n: int) -> dict[str, str]:
         _, target_source_summary = read_existing(row.get("target_source_summary", ""))
         _, integration_pairs = read_existing(row.get("mirna_mrna_pairs", ""))
         _, integration_summary = read_existing(row.get("mirna_mrna_summary", ""))
+        _, target_mode_rows = read_existing(row.get("mirna_mrna_target_modes", ""))
+        _, target_mode_summary = read_existing(row.get("mirna_mrna_target_mode_summary", ""))
         _, mirna_mrna_target_feature_sets = read_existing(
             row.get("mirna_mrna_target_feature_set_results", ""),
             {"set_id"},
@@ -582,6 +634,8 @@ def render_row(row: dict[str, str], top_n: int) -> dict[str, str]:
             target_source_summary,
             integration_pairs,
             integration_summary,
+            target_mode_rows,
+            target_mode_summary,
             target_feature_sets,
             mirna_mrna_target_feature_sets,
             residual_manifest,
@@ -603,6 +657,21 @@ def render_row(row: dict[str, str], top_n: int) -> dict[str, str]:
         anticorrelated_pairs = [
             item for item in integration_pairs if (parse_float(item.get("pearson", "")) or 0.0) < 0
         ]
+        expressed_targets = {
+            item.get("target_id", "")
+            for item in target_mode_rows
+            if item.get("target_id", "") and item.get("target_analysis_mode") == "expressed_target" and item.get("collection") == "all"
+        }
+        inverse_integrated_targets = {
+            item.get("target_id", "")
+            for item in target_mode_rows
+            if item.get("target_id", "") and item.get("target_analysis_mode") == "inverse_integrated_target" and item.get("collection") == "inverse"
+        }
+        inverse_anticorrelated_targets = {
+            item.get("target_id", "")
+            for item in target_mode_rows
+            if item.get("target_id", "") and item.get("target_analysis_mode") == "inverse_integrated_target" and item.get("collection") == "inverse_anticorrelated"
+        }
         return {
             "project": row.get("project", ""),
             "assay": "smallrna",
@@ -624,6 +693,8 @@ def render_row(row: dict[str, str], top_n: int) -> dict[str, str]:
             "mirna_mrna_pairs": row.get("mirna_mrna_pairs", ""),
             "mirna_mrna_summary": row.get("mirna_mrna_summary", ""),
             "mirna_mrna_plot": row.get("mirna_mrna_plot", ""),
+            "mirna_mrna_target_modes": row.get("mirna_mrna_target_modes", ""),
+            "mirna_mrna_target_mode_summary": row.get("mirna_mrna_target_mode_summary", ""),
             "mirna_mrna_target_feature_set_manifest": row.get("mirna_mrna_target_feature_set_manifest", ""),
             "mirna_mrna_target_feature_set_universe": row.get("mirna_mrna_target_feature_set_universe", ""),
             "mirna_mrna_target_feature_set_results": row.get("mirna_mrna_target_feature_set_results", ""),
@@ -658,6 +729,9 @@ def render_row(row: dict[str, str], top_n: int) -> dict[str, str]:
             "n_mirna_mrna_pairs": str(len(integration_pairs)),
             "n_mirna_mrna_inverse_pairs": str(len(inverse_pairs)),
             "n_mirna_mrna_anticorrelated_pairs": str(len(anticorrelated_pairs)),
+            "n_expressed_targets": str(len(expressed_targets)),
+            "n_inverse_integrated_targets": str(len(inverse_integrated_targets)),
+            "n_inverse_anticorrelated_targets": str(len(inverse_anticorrelated_targets)),
             "n_mirna_mrna_target_feature_set_terms": str(len(mirna_mrna_target_feature_sets)),
             "n_target_feature_set_terms": str(len(target_feature_sets)),
             "n_smallrna_length_stages": str(len({item.get("stage", "") for item in length_stage_summary})),
