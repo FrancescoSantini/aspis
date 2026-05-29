@@ -384,6 +384,160 @@ def exercise_biotype_and_dtu(paths: dict[str, Path]) -> None:
         raise ValueError(f"standardized rMATS row lost identifiers: {standardized}")
     if expected["padj"] != "0.01" or expected["direction"] != "increased_usage":
         raise ValueError(f"standardized rMATS row lost statistics: {standardized}")
+    exercise_rnaseq_report_dtu_assets(dtu_dir / "dtu_plan.tsv", executed_dir / "dtu_method_manifest.tsv")
+
+
+def exercise_rnaseq_report_dtu_assets(dtu_plan: Path, dtu_manifest: Path) -> None:
+    report_dir = BASE / "rnaseq_report_index"
+    contrast = "treated_vs_control__time_h_24"
+    base_row = {
+        "project": "ASPIS_CONTRACT",
+        "level": "transcript",
+        "contrast_id": contrast,
+        "status": "ok",
+        "reason": "",
+        "results": str(INPUT / "rnaseq_gene_results.tsv"),
+        "filtered": str(INPUT / "rnaseq_gene_filtered.tsv"),
+        "summary_html": str(report_dir / "summary.html"),
+        "volcano_pdf": str(report_dir / "volcano.pdf"),
+        "ma_pdf": str(report_dir / "ma.pdf"),
+        "pca_pdf": str(report_dir / "pca.pdf"),
+        "pca_metrics_tsv": str(report_dir / "pca_metrics.tsv"),
+        "heatmap_pdf": str(report_dir / "heatmap.pdf"),
+        "heatmap_panel_tsv": str(report_dir / "heatmap_panel.tsv"),
+        "vst_tsv": str(report_dir / "vst.tsv"),
+        "enrichment_manifest": str(report_dir / "enrichment_manifest.tsv"),
+        "ranked_features": str(report_dir / "ranked_features.tsv"),
+        "significant_features": str(report_dir / "significant_features.tsv"),
+        "up_features": str(report_dir / "up_features.tsv"),
+        "down_features": str(report_dir / "down_features.tsv"),
+        "feature_set_universe": str(report_dir / "feature_set_universe.tsv"),
+        "feature_set_results": str(report_dir / "feature_set_results.tsv"),
+        "feature_set_plot": str(report_dir / "feature_set_plot.pdf"),
+        "ranked_feature_set_results": str(report_dir / "ranked_feature_set_results.tsv"),
+        "ranked_feature_set_plot": str(report_dir / "ranked_feature_set_plot.pdf"),
+        "n_features": "2",
+        "n_significant": "1",
+        "n_up": "1",
+        "n_down": "0",
+        "n_ranked": "2",
+        "n_feature_sets": "1",
+        "n_feature_set_resources": "1",
+        "n_feature_set_terms": "1",
+        "n_ranked_feature_set_terms": "1",
+    }
+    plan_columns = [
+        "project",
+        "level",
+        "contrast_id",
+        "status",
+        "reason",
+        "results",
+        "filtered",
+        "summary_html",
+        "volcano_pdf",
+        "ma_pdf",
+        "pca_pdf",
+        "pca_metrics_tsv",
+        "heatmap_pdf",
+        "heatmap_panel_tsv",
+        "vst_tsv",
+        "enrichment_manifest",
+    ]
+    plots_columns = [
+        "project",
+        "level",
+        "contrast_id",
+        "status",
+        "reason",
+        "volcano_pdf",
+        "ma_pdf",
+        "pca_pdf",
+        "pca_metrics_tsv",
+        "heatmap_pdf",
+        "heatmap_panel_tsv",
+        "vst_tsv",
+        "n_features",
+        "n_significant",
+    ]
+    enrichment_columns = [
+        "project",
+        "level",
+        "contrast_id",
+        "status",
+        "reason",
+        "enrichment_manifest",
+        "ranked_features",
+        "significant_features",
+        "up_features",
+        "down_features",
+        "feature_set_universe",
+        "feature_set_results",
+        "feature_set_plot",
+        "ranked_feature_set_results",
+        "ranked_feature_set_plot",
+        "n_ranked",
+        "n_significant",
+        "n_up",
+        "n_down",
+        "n_feature_sets",
+        "n_feature_set_resources",
+        "n_feature_set_terms",
+        "n_ranked_feature_set_terms",
+    ]
+    summary_columns = [
+        "project",
+        "level",
+        "contrast_id",
+        "status",
+        "reason",
+        "summary_html",
+        "results",
+        "filtered",
+        "ma_pdf",
+        "pca_metrics_tsv",
+        "n_features",
+        "n_significant",
+        "n_up",
+        "n_down",
+    ]
+    write_tsv(report_dir / "report_plan.tsv", plan_columns, [base_row])
+    write_tsv(report_dir / "plots_manifest.tsv", plots_columns, [base_row])
+    write_tsv(report_dir / "enrichment_manifest.tsv", enrichment_columns, [base_row])
+    write_tsv(report_dir / "summary_manifest.tsv", summary_columns, [base_row])
+    run_command(
+        [
+            sys.executable,
+            "workflow/scripts/render_rnaseq_differential_report_index.py",
+            "--plan",
+            str(report_dir / "report_plan.tsv"),
+            "--plots-manifest",
+            str(report_dir / "plots_manifest.tsv"),
+            "--enrichment-manifest",
+            str(report_dir / "enrichment_manifest.tsv"),
+            "--summary-manifest",
+            str(report_dir / "summary_manifest.tsv"),
+            "--dtu-plan",
+            str(dtu_plan),
+            "--dtu-method-manifest",
+            str(dtu_manifest),
+            "--asset-manifest",
+            str(report_dir / "asset_manifest.tsv"),
+            "--output",
+            str(report_dir / "index.html"),
+            "--done",
+            str(report_dir / "report_index.done"),
+        ]
+    )
+    assets = read_tsv(report_dir / "asset_manifest.tsv", {"asset_group", "asset_label", "path"})
+    dtu_assets = [row for row in assets if row["asset_group"] == "dtu"]
+    if not any(row["asset_label"] == "dtu_method_manifest" for row in dtu_assets):
+        raise ValueError(f"DTU manifest was not exposed as a report asset: {dtu_assets}")
+    if not any(row["asset_label"] == "rMATS_standardized_results" for row in dtu_assets):
+        raise ValueError(f"standardized DTU results were not exposed as report assets: {dtu_assets}")
+    html_text = (report_dir / "index.html").read_text(encoding="utf-8")
+    if "DTU / splicing methods" not in html_text or "standardized rows: 1" not in html_text:
+        raise ValueError("DTU summary was not rendered in the RNA-seq report index")
 
 
 def main() -> int:
