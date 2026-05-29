@@ -52,6 +52,9 @@ reproducible modules.
   annotations for conserved exons, RBP/miRNA motifs, embedded small-RNA loci,
   and antisense overlaps, matched to the gained/lost switch regions when
   coordinates are available.
+- Pseudogene isoform switches are explicitly interpreted as transcript
+  architecture changes, with a caution label that avoids implying protein
+  consequence from pseudogene annotations.
 
 ## 1. DESeq2 Core Analysis
 
@@ -324,11 +327,12 @@ Current state:
   transcript architecture around embedded small RNA loci.
 - The ncRNA switch table has optional resource-backed conserved-exon, motif,
   host-small-RNA, and antisense-overlap fields.
+- Pseudogene switches are labeled cautiously as transcript-architecture
+  changes rather than protein-consequence events.
 
 Remaining work:
 
-- For pseudogenes, label interpretation cautiously and avoid implying direct
-  protein consequences.
+- No remaining ncRNA switch interpretation items in this section.
 
 ## 12. Final Report Structure Target
 
@@ -370,5 +374,7 @@ Desired isoform-switch report:
 
 Suggested order:
 
-1. Add richer resource-backed ncRNA switch annotations.
-2. Add real-data validation notes once real projects are available.
+1. Prioritize coding isoform switches with predicted functional consequences.
+2. Add a coding-switch summary section distinct from the ncRNA interpretation
+   table.
+3. Add real-data validation notes once real projects are available.

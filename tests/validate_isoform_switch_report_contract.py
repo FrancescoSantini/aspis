@@ -76,6 +76,10 @@ def main() -> int:
             + "\t".join(["lnc_short", "geneB", "LncB", "-0.31", "0.02", "0.65", "0.34", "", "", "noncoding"])
             + "\n"
             + "\t".join(["lnc_long", "geneB", "LncB", "0.31", "0.02", "0.35", "0.66", "", "", "noncoding"])
+            + "\n"
+            + "\t".join(["pg_short", "geneC", "PseudoC", "-0.24", "0.03", "0.62", "0.38", "2", "", "low_potential"])
+            + "\n"
+            + "\t".join(["pg_long", "geneC", "PseudoC", "0.24", "0.03", "0.38", "0.62", "2", "", "low_potential"])
             + "\n",
         )
         write(
@@ -87,7 +91,7 @@ def main() -> int:
         )
         write(
             nt_fasta,
-            ">tx_known\nATGGCCATGGCC\n>tx_novel\nATGGCCATGGCCCCCGGG\n>lnc_short\nATGATGATG\n>lnc_long\nATGATGATGCCCCCCCC\n",
+            ">tx_known\nATGGCCATGGCC\n>tx_novel\nATGGCCATGGCCCCCGGG\n>lnc_short\nATGATGATG\n>lnc_long\nATGATGATGCCCCCCCC\n>pg_short\nATGCGT\n>pg_long\nATGCGTAAAAAA\n",
         )
         write(
             aa_fasta,
@@ -117,6 +121,10 @@ def main() -> int:
             + "\t".join(["lnc_short", "geneB", "reference_compatible", "known", "known_compatible", "=", "lncRNA", "lncRNA"])
             + "\n"
             + "\t".join(["lnc_long", "geneB", "novel_isoform", "novel", "novel_isoform", "j", "lncRNA", "lncRNA"])
+            + "\n"
+            + "\t".join(["pg_short", "geneC", "reference_compatible", "known", "known_compatible", "=", "processed_pseudogene", "processed_pseudogene"])
+            + "\n"
+            + "\t".join(["pg_long", "geneC", "novel_isoform", "novel", "novel_isoform", "j", "processed_pseudogene", "processed_pseudogene"])
             + "\n",
         )
         write(
@@ -132,7 +140,10 @@ def main() -> int:
             'chr1\tASPIS\texon\t1\t6\t.\t+\t.\tgene_id "geneA"; transcript_id "tx_context"; gene_name "GeneA"; gene_biotype "protein_coding"; transcript_biotype "protein_coding";\n'
             'chr2\tASPIS\texon\t10\t18\t.\t+\t.\tgene_id "geneB"; transcript_id "lnc_short"; gene_name "LncB"; gene_biotype "lncRNA"; transcript_biotype "lncRNA";\n'
             'chr2\tASPIS\texon\t10\t18\t.\t+\t.\tgene_id "geneB"; transcript_id "lnc_long"; gene_name "LncB"; gene_biotype "lncRNA"; transcript_biotype "lncRNA";\n'
-            'chr2\tASPIS\texon\t80\t86\t.\t+\t.\tgene_id "geneB"; transcript_id "lnc_long"; gene_name "LncB"; gene_biotype "lncRNA"; transcript_biotype "lncRNA";\n',
+            'chr2\tASPIS\texon\t80\t86\t.\t+\t.\tgene_id "geneB"; transcript_id "lnc_long"; gene_name "LncB"; gene_biotype "lncRNA"; transcript_biotype "lncRNA";\n'
+            'chr3\tASPIS\texon\t20\t25\t.\t+\t.\tgene_id "geneC"; transcript_id "pg_short"; gene_name "PseudoC"; gene_biotype "processed_pseudogene"; transcript_biotype "processed_pseudogene";\n'
+            'chr3\tASPIS\texon\t20\t25\t.\t+\t.\tgene_id "geneC"; transcript_id "pg_long"; gene_name "PseudoC"; gene_biotype "processed_pseudogene"; transcript_biotype "processed_pseudogene";\n'
+            'chr3\tASPIS\texon\t110\t115\t.\t+\t.\tgene_id "geneC"; transcript_id "pg_long"; gene_name "PseudoC"; gene_biotype "processed_pseudogene"; transcript_biotype "processed_pseudogene";\n',
         )
         write(
             annotations,
@@ -350,7 +361,7 @@ def main() -> int:
         sequences = read_rows(outdir / "switch_sequence_summary.tsv")
         annotation_rows = read_rows(outdir / "functional_annotation_summary.tsv")
         plots = read_rows(outdir / "switch_plot_manifest.tsv")
-        assert len(events) == 2, events
+        assert len(events) == 3, events
         assert {row["switch_biotype_class"] for row in events} >= {"coding", "noncoding"}, events
         assert {row["switch_role"] for row in candidates} >= {"switch_in", "switch_out"}, candidates
         assert any(row["gene_biotype"] == "lncRNA" and row["switch_biotype_class"] == "noncoding" for row in candidates)
@@ -358,6 +369,13 @@ def main() -> int:
         assert candidates[0]["reason_selected"]
         assert any(row["gene_id"] == "geneB" and row["interpretation_label"] == "noncoding_structure_change" for row in ncrna_rows), ncrna_rows
         assert any(row["gene_id"] == "geneB" and row["transcript_length_change"] for row in ncrna_rows), ncrna_rows
+        pseudogene_events = [row for row in events if row["gene_id"] == "geneC"]
+        assert pseudogene_events, events
+        assert pseudogene_events[0]["switch_interpretation_label"] == "pseudogene_transcript_architecture_change", pseudogene_events
+        pseudogene_rows = [row for row in ncrna_rows if row["gene_id"] == "geneC"]
+        assert pseudogene_rows, ncrna_rows
+        assert all(row["pseudogene_caution"] == "interpret_as_transcript_architecture_not_protein_consequence" for row in pseudogene_rows), pseudogene_rows
+        assert all(row["interpretation_label"] == "pseudogene_transcript_architecture_change" for row in pseudogene_rows), pseudogene_rows
         lnc_long_rows = [row for row in ncrna_rows if row["gene_id"] == "geneB" and row["isoform_id"] == "lnc_long"]
         assert lnc_long_rows, ncrna_rows
         assert "cons_exon_1" in lnc_long_rows[0]["conserved_exon_change"], lnc_long_rows
