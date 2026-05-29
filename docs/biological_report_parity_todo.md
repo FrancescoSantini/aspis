@@ -155,14 +155,14 @@ Current state:
 - Transcript-level pathway testing defaults to parent-gene mapping when
   feature metadata supplies transcript-to-gene IDs, while transcript-native
   resources still work when user-provided features match transcript IDs.
+- GO, Reactome, KEGG, MSigDB, and custom feature-set configuration is now
+  documented in `docs/feature_set_resources.md`, with accepted GMT/TSV schemas,
+  ID-matching rules, recommended project resource layout, interpretation notes,
+  and a reusable config fragment in
+  `config/aspis_feature_set_resources.example.yaml`.
 
 Remaining work:
 
-- Add first-class support/documentation for common resources:
-  - GO BP/MF/CC;
-  - Reactome;
-  - KEGG/MSigDB-style collections;
-  - user-provided GMT/TSV.
 - Add resource-version fields when standard resources are configured.
 
 ## 6. RNA-seq Ranked Enrichment / GSEA
@@ -360,6 +360,5 @@ Desired isoform-switch report:
 
 Suggested order:
 
-1. Add first-class GO/Reactome/KEGG/MSigDB resource configuration docs.
-2. Add richer resource-backed ncRNA switch annotations.
-3. Add real-data validation notes once real projects are available.
+1. Add richer resource-backed ncRNA switch annotations.
+2. Add real-data validation notes once real projects are available.
