@@ -18,6 +18,7 @@ MANIFEST_COLUMNS = [
     "reason",
     "target_manifest",
     "mirna_targets",
+    "target_universe",
     "target_enrichment",
     "target_summary",
     "target_source_summary",
@@ -25,6 +26,7 @@ MANIFEST_COLUMNS = [
     "n_mirnas_significant",
     "n_target_rows",
     "n_targets",
+    "n_target_resources",
     "n_enrichment_terms",
 ]
 CONTRAST_MANIFEST_COLUMNS = ["contrast_id", "resource", "status", "reason", "path", "n_rows"]
@@ -46,7 +48,11 @@ TARGET_MAPPING_COLUMNS = [
 ]
 TARGET_ENRICHMENT_COLUMNS = [
     "contrast_id",
+    "target_analysis_mode",
     "collection",
+    "query_source",
+    "target_source",
+    "target_source_type",
     "target_id",
     "target_symbol",
     "target_entrez",
@@ -56,10 +62,33 @@ TARGET_ENRICHMENT_COLUMNS = [
     "overlap",
     "target_mirna_count",
     "query_size",
+    "tested_mirnas",
+    "mapped_tested_mirnas",
+    "resource_mirnas",
+    "final_mirna_universe_size",
+    "target_universe_size",
+    "resource_mapping_loss",
     "universe_size",
     "pvalue",
     "padj",
     "mirnas",
+]
+TARGET_UNIVERSE_COLUMNS = [
+    "contrast_id",
+    "target_analysis_mode",
+    "target_source",
+    "target_source_type",
+    "tested_mirnas",
+    "mapped_tested_mirnas",
+    "resource_mirnas",
+    "final_mirna_universe_size",
+    "target_universe_size",
+    "resource_mapping_loss",
+    "significant_query_size",
+    "up_query_size",
+    "down_query_size",
+    "target_rows",
+    "min_overlap",
 ]
 SUMMARY_COLUMNS = [
     "contrast_id",
@@ -274,12 +303,62 @@ def targets_by_mirna(target_rows: list[dict[str, str]]) -> dict[str, list[dict[s
     return grouped
 
 
+def target_resource_groups(target_rows: list[dict[str, str]]) -> dict[tuple[str, str], list[dict[str, str]]]:
+    groups: dict[tuple[str, str], list[dict[str, str]]] = {("all_sources", "all_types"): target_rows}
+    for row in target_rows:
+        source = row.get("target_source", "") or "unspecified"
+        source_type = row.get("target_source_type", "") or "unspecified"
+        groups.setdefault((source, source_type), []).append(row)
+    return groups
+
+
 def target_groups(target_rows: list[dict[str, str]], universe: set[str]) -> dict[str, list[dict[str, str]]]:
     grouped: dict[str, list[dict[str, str]]] = {}
     for row in target_rows:
         if row["mirna_id"] in universe:
             grouped.setdefault(row["target_id"], []).append(row)
     return grouped
+
+
+def target_universe_rows(
+    contrast_id: str,
+    result_features: set[str],
+    selected: dict[str, dict[str, str]],
+    target_rows: list[dict[str, str]],
+    min_overlap: int,
+) -> list[dict[str, str]]:
+    rows = []
+    significant = set(selected)
+    up = {mirna_id for mirna_id, row in selected.items() if direction(row) == "up"}
+    down = {mirna_id for mirna_id, row in selected.items() if direction(row) == "down"}
+    for (target_source, target_source_type), grouped_rows in sorted(target_resource_groups(target_rows).items()):
+        resource_mirnas = {row["mirna_id"] for row in grouped_rows}
+        final_universe = result_features & resource_mirnas
+        targets = {
+            row["target_id"]
+            for row in grouped_rows
+            if row.get("target_id", "") and row.get("mirna_id", "") in final_universe
+        }
+        rows.append(
+            {
+                "contrast_id": contrast_id,
+                "target_analysis_mode": "database_target",
+                "target_source": target_source,
+                "target_source_type": target_source_type,
+                "tested_mirnas": str(len(result_features)),
+                "mapped_tested_mirnas": str(len(final_universe)),
+                "resource_mirnas": str(len(resource_mirnas)),
+                "final_mirna_universe_size": str(len(final_universe)),
+                "target_universe_size": str(len(targets)),
+                "resource_mapping_loss": str(len(result_features) - len(final_universe)),
+                "significant_query_size": str(len(significant & final_universe)),
+                "up_query_size": str(len(up & final_universe)),
+                "down_query_size": str(len(down & final_universe)),
+                "target_rows": str(len(grouped_rows)),
+                "min_overlap": str(min_overlap),
+            }
+        )
+    return rows
 
 
 def joined(values: set[str]) -> str:
@@ -315,53 +394,73 @@ def enrichment_rows(
     target_rows: list[dict[str, str]],
     min_overlap: int,
 ) -> list[dict[str, str]]:
-    by_mirna = targets_by_mirna(target_rows)
-    universe = result_features & set(by_mirna)
-    groups = target_groups(target_rows, universe)
-    collections = {
-        "all": set(selected) & universe,
-        "up": {mirna_id for mirna_id, row in selected.items() if direction(row) == "up"} & universe,
-        "down": {mirna_id for mirna_id, row in selected.items() if direction(row) == "down"} & universe,
-    }
+    significant = set(selected)
+    up = {mirna_id for mirna_id, row in selected.items() if direction(row) == "up"}
+    down = {mirna_id for mirna_id, row in selected.items() if direction(row) == "down"}
     rows = []
-    for collection, query in collections.items():
-        if not query:
+    for (target_source, target_source_type), grouped_rows in target_resource_groups(target_rows).items():
+        source_mirnas = {row["mirna_id"] for row in grouped_rows}
+        universe = result_features & source_mirnas
+        if not universe:
             continue
-        for target_id, entries in groups.items():
-            target_mirnas = {entry["mirna_id"] for entry in entries}
-            overlap = query & target_mirnas
-            if len(overlap) < min_overlap:
+        groups = target_groups(grouped_rows, universe)
+        target_universe_size = len(groups)
+        resource_mapping_loss = len(result_features) - len(universe)
+        collections = {
+            "all": significant & universe,
+            "up": up & universe,
+            "down": down & universe,
+        }
+        for collection, query in collections.items():
+            if not query:
                 continue
-            symbols = {entry.get("target_symbol", "") for entry in entries}
-            entrez = {entry.get("target_entrez", "") for entry in entries}
-            databases = {entry.get("database", "") for entry in entries}
-            target_sources = {entry.get("target_source", "") for entry in entries}
-            source_types = {entry.get("target_source_type", "") for entry in entries}
-            rows.append(
-                {
-                    "contrast_id": contrast_id,
-                    "collection": collection,
-                    "target_id": target_id,
-                    "target_symbol": joined(symbols),
-                    "target_entrez": joined(entrez),
-                    "databases": joined(databases),
-                    "target_sources": joined(target_sources),
-                    "target_source_types": joined(source_types),
-                    "overlap": str(len(overlap)),
-                    "target_mirna_count": str(len(target_mirnas)),
-                    "query_size": str(len(query)),
-                    "universe_size": str(len(universe)),
-                    "pvalue": f"{hypergeom_tail(len(overlap), len(target_mirnas), len(query), len(universe)):.8g}",
-                    "padj": "",
-                    "mirnas": joined(overlap),
-                }
-            )
+            for target_id, entries in groups.items():
+                target_mirnas = {entry["mirna_id"] for entry in entries}
+                overlap = query & target_mirnas
+                if len(overlap) < min_overlap:
+                    continue
+                symbols = {entry.get("target_symbol", "") for entry in entries}
+                entrez = {entry.get("target_entrez", "") for entry in entries}
+                databases = {entry.get("database", "") for entry in entries}
+                target_sources = {entry.get("target_source", "") for entry in entries}
+                source_types = {entry.get("target_source_type", "") for entry in entries}
+                rows.append(
+                    {
+                        "contrast_id": contrast_id,
+                        "target_analysis_mode": "database_target",
+                        "collection": collection,
+                        "query_source": collection,
+                        "target_source": target_source,
+                        "target_source_type": target_source_type,
+                        "target_id": target_id,
+                        "target_symbol": joined(symbols),
+                        "target_entrez": joined(entrez),
+                        "databases": joined(databases),
+                        "target_sources": joined(target_sources),
+                        "target_source_types": joined(source_types),
+                        "overlap": str(len(overlap)),
+                        "target_mirna_count": str(len(target_mirnas)),
+                        "query_size": str(len(query)),
+                        "tested_mirnas": str(len(result_features)),
+                        "mapped_tested_mirnas": str(len(universe)),
+                        "resource_mirnas": str(len(source_mirnas)),
+                        "final_mirna_universe_size": str(len(universe)),
+                        "target_universe_size": str(target_universe_size),
+                        "resource_mapping_loss": str(resource_mapping_loss),
+                        "universe_size": str(len(universe)),
+                        "pvalue": f"{hypergeom_tail(len(overlap), len(target_mirnas), len(query), len(universe)):.8g}",
+                        "padj": "",
+                        "mirnas": joined(overlap),
+                    }
+                )
     bh_adjust(rows)
     rows.sort(
         key=lambda row: (
             parse_float(row.get("padj", "")) or 1.0,
             -(int(row.get("overlap", "0") or "0")),
             row["collection"],
+            row["target_source"],
+            row["target_source_type"],
             row["target_id"],
         )
     )
@@ -478,6 +577,7 @@ def blocked_output(row: dict[str, str], outdir: Path, reason: str) -> dict[str, 
         row["contrast_id"],
         [
             ("mirna_targets", "blocked", reason, "", 0),
+            ("target_universe", "blocked", reason, "", 0),
             ("target_enrichment", "blocked", reason, "", 0),
             ("target_summary", "blocked", reason, "", 0),
             ("target_source_summary", "blocked", reason, "", 0),
@@ -490,6 +590,7 @@ def blocked_output(row: dict[str, str], outdir: Path, reason: str) -> dict[str, 
         "reason": reason,
         "target_manifest": str(target_manifest),
         "mirna_targets": "",
+        "target_universe": "",
         "target_enrichment": "",
         "target_summary": "",
         "target_source_summary": "",
@@ -497,6 +598,7 @@ def blocked_output(row: dict[str, str], outdir: Path, reason: str) -> dict[str, 
         "n_mirnas_significant": "0",
         "n_target_rows": "0",
         "n_targets": "0",
+        "n_target_resources": "0",
         "n_enrichment_terms": "0",
     }
 
@@ -514,6 +616,7 @@ def render_contrast(
     paths = {
         "target_manifest": contrast_dir / "target_manifest.tsv",
         "mirna_targets": contrast_dir / "mirna_targets.tsv",
+        "target_universe": contrast_dir / "target_universe.tsv",
         "target_enrichment": contrast_dir / "target_enrichment.tsv",
         "target_summary": contrast_dir / "target_summary.tsv",
         "target_source_summary": contrast_dir / "target_source_summary.tsv",
@@ -526,9 +629,11 @@ def render_contrast(
         by_mirna = targets_by_mirna(target_rows)
         selected = {mirna_id: feature_row for mirna_id, feature_row in filtered_rows.items()}
         mapping = mapping_rows(row["contrast_id"], selected, by_mirna)
+        universe = target_universe_rows(row["contrast_id"], result_ids, selected, target_rows, min_overlap)
         enriched = enrichment_rows(row["contrast_id"], result_ids, selected, target_rows, min_overlap)
         summary = summary_rows(row["contrast_id"], selected, mapping)
         write_table(paths["mirna_targets"], TARGET_MAPPING_COLUMNS, mapping)
+        write_table(paths["target_universe"], TARGET_UNIVERSE_COLUMNS, universe)
         write_table(paths["target_enrichment"], TARGET_ENRICHMENT_COLUMNS, enriched)
         write_table(paths["target_summary"], SUMMARY_COLUMNS, summary)
         write_table(paths["target_source_summary"], SUMMARY_COLUMNS, summary)
@@ -538,6 +643,7 @@ def render_contrast(
             row["contrast_id"],
             [
                 ("mirna_targets", "ok", "", str(paths["mirna_targets"]), len(mapping)),
+                ("target_universe", "ok", "", str(paths["target_universe"]), len(universe)),
                 ("target_enrichment", "ok", "", str(paths["target_enrichment"]), len(enriched)),
                 ("target_summary", "ok", "", str(paths["target_summary"]), len(summary)),
                 ("target_source_summary", "ok", "", str(paths["target_source_summary"]), len(summary)),
@@ -550,6 +656,7 @@ def render_contrast(
             "reason": "",
             "target_manifest": str(paths["target_manifest"]),
             "mirna_targets": str(paths["mirna_targets"]),
+            "target_universe": str(paths["target_universe"]),
             "target_enrichment": str(paths["target_enrichment"]),
             "target_summary": str(paths["target_summary"]),
             "target_source_summary": str(paths["target_source_summary"]),
@@ -557,6 +664,7 @@ def render_contrast(
             "n_mirnas_significant": str(len(selected)),
             "n_target_rows": str(len(mapping)),
             "n_targets": str(len({mapping_row["target_id"] for mapping_row in mapping})),
+            "n_target_resources": str(len(universe)),
             "n_enrichment_terms": str(len(enriched)),
         }
     except Exception as exc:

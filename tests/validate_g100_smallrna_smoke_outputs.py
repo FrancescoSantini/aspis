@@ -13,6 +13,44 @@ BRANCH = BASE / "branches/smallrna/ASPIS_SMALLRNA_TEST"
 SMALLRNA = BRANCH / "smallrna"
 SUMMARY = BASE / "g100_smallrna_smoke_summary.tsv"
 PCA_NOTE_FRAGMENT = "not automatically a failed analysis"
+TARGET_UNIVERSE_COLUMNS = {
+    "contrast_id",
+    "target_analysis_mode",
+    "target_source",
+    "target_source_type",
+    "tested_mirnas",
+    "mapped_tested_mirnas",
+    "resource_mirnas",
+    "final_mirna_universe_size",
+    "target_universe_size",
+    "resource_mapping_loss",
+    "significant_query_size",
+    "up_query_size",
+    "down_query_size",
+    "target_rows",
+    "min_overlap",
+}
+TARGET_ENRICHMENT_COLUMNS = {
+    "contrast_id",
+    "target_analysis_mode",
+    "collection",
+    "query_source",
+    "target_source",
+    "target_source_type",
+    "target_id",
+    "target_symbol",
+    "overlap",
+    "query_size",
+    "tested_mirnas",
+    "mapped_tested_mirnas",
+    "resource_mirnas",
+    "final_mirna_universe_size",
+    "target_universe_size",
+    "resource_mapping_loss",
+    "universe_size",
+    "padj",
+    "mirnas",
+}
 
 
 def read_tsv(path: Path, required_columns: set[str]) -> tuple[list[str], list[dict[str, str]]]:
@@ -175,6 +213,7 @@ def validate_reports() -> str:
             "heatmap_pdf",
             "vst_tsv",
             "summary_html",
+            "target_universe",
         },
         "plots/plots_manifest.tsv": {
             "contrast_id",
@@ -195,6 +234,7 @@ def validate_reports() -> str:
             "n_targets",
             "n_enrichment_terms",
             "n_target_feature_set_terms",
+            "target_universe",
             "n_residual_input_reads",
             "n_residual_genome_aligned_reads",
             "n_residual_biotypes",
@@ -236,6 +276,7 @@ def validate_reports() -> str:
     required_labels = {
         "summary_html",
         "results",
+        "target_universe",
         "target_feature_set_results",
         "volcano_pdf",
         "ma_pdf",
@@ -249,6 +290,27 @@ def validate_reports() -> str:
     _, summary_rows = read_tsv(reports / "summaries/summary_manifest.tsv", schemas["summaries/summary_manifest.tsv"])
     for row in summary_rows:
         require_path(row["summary_html"], reports / "summaries/summary_manifest.tsv", "summary_html")
+        require_path(row["target_universe"], reports / "summaries/summary_manifest.tsv", "target_universe")
+        _, universe_rows = read_tsv(Path(row["target_universe"]), TARGET_UNIVERSE_COLUMNS)
+        if not any(item["target_source"] == "all_sources" for item in universe_rows):
+            raise ValueError(f"{row['target_universe']} lacks aggregate all_sources universe provenance")
+        if not any(item["target_source"] != "all_sources" for item in universe_rows):
+            raise ValueError(f"{row['target_universe']} lacks source-specific universe provenance")
+        for universe_row in universe_rows:
+            if universe_row["target_analysis_mode"] != "database_target":
+                raise ValueError(f"Unexpected target analysis mode in {row['target_universe']}: {universe_row}")
+            if int(universe_row["tested_mirnas"] or "0") < int(universe_row["mapped_tested_mirnas"] or "0"):
+                raise ValueError(f"Invalid target universe sizes in {row['target_universe']}: {universe_row}")
+        _, target_enrichment_rows = read_tsv(Path(row["target_enrichment"]), TARGET_ENRICHMENT_COLUMNS)
+        if not any(item["target_source"] != "all_sources" for item in target_enrichment_rows):
+            raise ValueError(f"{row['target_enrichment']} lacks source-specific enrichment rows")
+        for enrichment_row in target_enrichment_rows:
+            if enrichment_row["target_analysis_mode"] != "database_target":
+                raise ValueError(f"Unexpected target analysis mode in {row['target_enrichment']}: {enrichment_row}")
+            if enrichment_row["query_source"] != enrichment_row["collection"]:
+                raise ValueError(f"Target enrichment query source mismatch in {row['target_enrichment']}: {enrichment_row}")
+            if enrichment_row["universe_size"] != enrichment_row["final_mirna_universe_size"]:
+                raise ValueError(f"Target enrichment universe mismatch in {row['target_enrichment']}: {enrichment_row}")
         text = Path(row["summary_html"]).read_text(encoding="utf-8")
         if PCA_NOTE_FRAGMENT not in text:
             raise ValueError(f"{row['summary_html']} is missing the PCA interpretation note")
