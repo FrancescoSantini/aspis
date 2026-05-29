@@ -131,6 +131,10 @@ FEATURE_SET_UNIVERSE_COLUMNS = [
     "up_query_size",
     "down_query_size",
     "ranked_query_size",
+    "ranked_min_mapped_features",
+    "ranked_mapping_fraction",
+    "ranked_mapping_status",
+    "ranked_mapping_warning",
     "min_overlap",
 ]
 STAT_COLUMNS = {
@@ -202,6 +206,12 @@ def parse_args() -> argparse.Namespace:
         type=int,
         default=1,
         help="Base random seed for deterministic ranked feature-set permutations",
+    )
+    parser.add_argument(
+        "--ranked-feature-set-min-mapped",
+        type=int,
+        default=100,
+        help="Warn when fewer ranked features map to a configured feature-set resource",
     )
     return parser.parse_args()
 
@@ -858,6 +868,7 @@ def feature_set_universe_rows(
     feature_lists: FeatureLists,
     feature_sets: list[FeatureSet],
     min_overlap: int,
+    min_ranked_mapped: int,
 ) -> list[dict[str, str]]:
     mapped_universe = feature_ids(feature_lists.ranked)
     tested_count = len(original_feature_ids(feature_lists.ranked))
@@ -870,6 +881,16 @@ def feature_set_universe_rows(
         resource_members = resource_universe(grouped_sets)
         grouped_version = grouped_feature_set_version(grouped_sets)
         final_universe = mapped_universe & resource_members
+        ranked_mapping_fraction = len(final_universe) / mapped_count if mapped_count else 0.0
+        if len(final_universe) < min_ranked_mapped:
+            ranked_mapping_status = "warning"
+            ranked_mapping_warning = (
+                f"only {len(final_universe)} ranked feature(s) map to this resource; "
+                f"recommended minimum is {min_ranked_mapped}"
+            )
+        else:
+            ranked_mapping_status = "ok"
+            ranked_mapping_warning = ""
         rows.append(
             {
                 "contrast_id": contrast_id,
@@ -888,6 +909,10 @@ def feature_set_universe_rows(
                 "up_query_size": str(len(up & final_universe)),
                 "down_query_size": str(len(down & final_universe)),
                 "ranked_query_size": str(len(final_universe)),
+                "ranked_min_mapped_features": str(min_ranked_mapped),
+                "ranked_mapping_fraction": f"{ranked_mapping_fraction:.6g}",
+                "ranked_mapping_status": ranked_mapping_status,
+                "ranked_mapping_warning": ranked_mapping_warning,
                 "min_overlap": str(min_overlap),
             }
         )
@@ -942,6 +967,7 @@ def write_feature_lists(
     top_n: int,
     permutations: int,
     seed: int,
+    min_ranked_mapped: int,
 ) -> tuple[FeatureLists, dict[str, str], list[dict[str, str]]]:
     result_columns, result_rows = read_table(Path(row["results"]))
     filtered_columns, filtered_rows = read_table(Path(row["filtered"]))
@@ -990,6 +1016,7 @@ def write_feature_lists(
         feature_lists,
         feature_sets,
         min_overlap,
+        min_ranked_mapped,
     )
     term_rows = enrichment_rows(row["contrast_id"], row.get("level", ""), map_mode, feature_lists, feature_sets, min_overlap)
     ranked_term_rows = ranked_feature_set_rows(
@@ -1148,6 +1175,7 @@ def render_row(
     top_n: int,
     permutations: int,
     seed: int,
+    min_ranked_mapped: int,
 ) -> dict[str, str]:
     output = empty_output(row)
     if row["status"] != "ready":
@@ -1155,7 +1183,15 @@ def render_row(
         write_blocked_contrast_manifest(row, reason)
         return {**output, "status": "blocked", "reason": reason}
     try:
-        _, paths, _ = write_feature_lists(row, feature_sets, min_overlap, top_n, permutations, seed)
+        _, paths, _ = write_feature_lists(
+            row,
+            feature_sets,
+            min_overlap,
+            top_n,
+            permutations,
+            seed,
+            min_ranked_mapped,
+        )
         return {**output, **paths, "status": "ok", "reason": ""}
     except Exception as exc:
         return {**output, "status": "failed", "reason": str(exc)}
@@ -1183,6 +1219,8 @@ def main() -> int:
         raise ValueError("--feature-set-top-n must be positive")
     if args.ranked_feature_set_permutations < 0:
         raise ValueError("--ranked-feature-set-permutations must be >= 0")
+    if args.ranked_feature_set_min_mapped < 0:
+        raise ValueError("--ranked-feature-set-min-mapped must be >= 0")
     _, plan_rows = read_table(Path(args.plan), REQUIRED_PLAN_COLUMNS)
     if not plan_rows:
         raise ValueError("Differential report plan has no rows")
@@ -1195,6 +1233,7 @@ def main() -> int:
             args.feature_set_top_n,
             args.ranked_feature_set_permutations,
             args.ranked_feature_set_seed,
+            args.ranked_feature_set_min_mapped,
         )
         for row in plan_rows
     ]
