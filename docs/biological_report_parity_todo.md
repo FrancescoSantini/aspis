@@ -167,10 +167,15 @@ Current state:
   ID-matching rules, recommended project resource layout, interpretation notes,
   and a reusable config fragment in
   `config/aspis_feature_set_resources.example.yaml`.
+- Feature-set ORA and ranked enrichment preserve optional resource version
+  fields from TSV resources (`resource_version`, `version`, `source_version`,
+  `database_version`, `collection_version`, or `release`) in universe and
+  result tables. GMT resources are labeled `unknown` unless converted to TSV
+  with an explicit version column.
 
 Remaining work:
 
-- Add resource-version fields when standard resources are configured.
+- No remaining RNA-seq ORA provenance items in this section.
 
 ## 6. RNA-seq Ranked Enrichment / GSEA
 
@@ -223,10 +228,12 @@ Current state:
     miRNA/mRNA log2 fold-change direction;
   - inverse anticorrelated subsets when matched sample-level counts support a
     negative miRNA-mRNA correlation.
+- miRNA target enrichment and target-gene feature-set enrichment preserve
+  optional target-source and feature-set resource versions in target mapping,
+  universe, and result tables.
 
 Remaining work:
 
-- Report target database/source versions when available.
 - Add first-class controlled labels/documentation for target evidence types:
   - validated;
   - predicted;
@@ -245,6 +252,8 @@ Current state:
 - Target-gene feature-set enrichment now writes query/universe/source
   provenance for database-target feature sets and inverse miRNA-mRNA target
   feature sets.
+- Target-gene feature-set outputs preserve feature-set resource versions, and
+  database-target mode also carries target-source versions.
 
 Remaining work:
 
@@ -376,5 +385,5 @@ Desired isoform-switch report:
 Suggested order:
 
 1. Add real-data validation notes once real projects are available.
-2. Revisit resource-version provenance for standard enrichment and target
-   resources when the project resource layout is finalized.
+2. Add first-class controlled labels/documentation for miRNA target evidence
+   types.

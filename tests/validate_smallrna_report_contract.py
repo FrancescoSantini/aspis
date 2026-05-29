@@ -126,26 +126,26 @@ def setup_inputs() -> dict[str, Path]:
     )
     write_tsv(
         paths["targets"],
-        ["mirna_id", "target_id", "target_symbol", "target_entrez", "database", "source", "source_type", "evidence"],
+        ["mirna_id", "target_id", "target_symbol", "target_entrez", "database", "source", "source_type", "source_version", "evidence"],
         [
-            {"mirna_id": "hsa-miR-1-3p", "target_id": "GENE1", "target_symbol": "GENE1", "target_entrez": "1001", "database": "miRTarBase", "source": "validated_db", "source_type": "validated", "evidence": "strong"},
-            {"mirna_id": "hsa-miR-1-3p", "target_id": "GENE2", "target_symbol": "GENE2", "target_entrez": "1002", "database": "miRTarBase", "source": "validated_db", "source_type": "validated", "evidence": "strong"},
-            {"mirna_id": "hsa-miR-2-3p", "target_id": "GENE1", "target_symbol": "GENE1", "target_entrez": "1001", "database": "miRTarBase", "source": "validated_db", "source_type": "validated", "evidence": "strong"},
-            {"mirna_id": "hsa-miR-2-3p", "target_id": "GENE3", "target_symbol": "GENE3", "target_entrez": "1003", "database": "TargetScan", "source": "predicted_db", "source_type": "predicted", "evidence": "predicted"},
-            {"mirna_id": "hsa-miR-3-3p", "target_id": "GENE4", "target_symbol": "GENE4", "target_entrez": "1004", "database": "TargetScan", "source": "predicted_db", "source_type": "predicted", "evidence": "predicted"},
+            {"mirna_id": "hsa-miR-1-3p", "target_id": "GENE1", "target_symbol": "GENE1", "target_entrez": "1001", "database": "miRTarBase", "source": "validated_db", "source_type": "validated", "source_version": "miRTarBase_2026_01", "evidence": "strong"},
+            {"mirna_id": "hsa-miR-1-3p", "target_id": "GENE2", "target_symbol": "GENE2", "target_entrez": "1002", "database": "miRTarBase", "source": "validated_db", "source_type": "validated", "source_version": "miRTarBase_2026_01", "evidence": "strong"},
+            {"mirna_id": "hsa-miR-2-3p", "target_id": "GENE1", "target_symbol": "GENE1", "target_entrez": "1001", "database": "miRTarBase", "source": "validated_db", "source_type": "validated", "source_version": "miRTarBase_2026_01", "evidence": "strong"},
+            {"mirna_id": "hsa-miR-2-3p", "target_id": "GENE3", "target_symbol": "GENE3", "target_entrez": "1003", "database": "TargetScan", "source": "predicted_db", "source_type": "predicted", "source_version": "TargetScan_8.0", "evidence": "predicted"},
+            {"mirna_id": "hsa-miR-3-3p", "target_id": "GENE4", "target_symbol": "GENE4", "target_entrez": "1004", "database": "TargetScan", "source": "predicted_db", "source_type": "predicted", "source_version": "TargetScan_8.0", "evidence": "predicted"},
         ],
     )
     write_tsv(
         paths["feature_sets"],
-        ["source", "collection", "set_id", "description", "feature_id"],
+        ["source", "collection", "resource_version", "set_id", "description", "feature_id"],
         [
-            {"source": "toy", "collection": "target_process", "set_id": "target_shared", "description": "Shared targets", "feature_id": "GENE1"},
-            {"source": "toy", "collection": "target_process", "set_id": "target_shared", "description": "Shared targets", "feature_id": "GENE2"},
-            {"source": "toy", "collection": "target_process", "set_id": "target_shared", "description": "Shared targets", "feature_id": "GENE3"},
-            {"source": "toy", "collection": "target_process", "set_id": "target_up", "description": "Up-miRNA targets", "feature_id": "GENE1"},
-            {"source": "toy", "collection": "target_process", "set_id": "target_up", "description": "Up-miRNA targets", "feature_id": "GENE2"},
-            {"source": "toy", "collection": "target_process", "set_id": "target_down", "description": "Down-miRNA targets", "feature_id": "GENE3"},
-            {"source": "toy", "collection": "target_process", "set_id": "target_other", "description": "Background targets", "feature_id": "GENE4"},
+            {"source": "toy", "collection": "target_process", "resource_version": "toy_pathway_2026_05", "set_id": "target_shared", "description": "Shared targets", "feature_id": "GENE1"},
+            {"source": "toy", "collection": "target_process", "resource_version": "toy_pathway_2026_05", "set_id": "target_shared", "description": "Shared targets", "feature_id": "GENE2"},
+            {"source": "toy", "collection": "target_process", "resource_version": "toy_pathway_2026_05", "set_id": "target_shared", "description": "Shared targets", "feature_id": "GENE3"},
+            {"source": "toy", "collection": "target_process", "resource_version": "toy_pathway_2026_05", "set_id": "target_up", "description": "Up-miRNA targets", "feature_id": "GENE1"},
+            {"source": "toy", "collection": "target_process", "resource_version": "toy_pathway_2026_05", "set_id": "target_up", "description": "Up-miRNA targets", "feature_id": "GENE2"},
+            {"source": "toy", "collection": "target_process", "resource_version": "toy_pathway_2026_05", "set_id": "target_down", "description": "Down-miRNA targets", "feature_id": "GENE3"},
+            {"source": "toy", "collection": "target_process", "resource_version": "toy_pathway_2026_05", "set_id": "target_other", "description": "Background targets", "feature_id": "GENE4"},
         ],
     )
     return paths
@@ -271,6 +271,31 @@ def run_report_contract(paths: dict[str, Path]) -> None:
 
 
 def validate_outputs(paths: dict[str, Path]) -> None:
+    target_rows = read_tsv(
+        paths["target_manifest"],
+        {"contrast_id", "status", "mirna_targets", "target_universe", "target_enrichment"},
+    )
+    if len(target_rows) != 1 or target_rows[0]["status"] != "ok":
+        raise ValueError(f"Expected one ok target enrichment row, got {target_rows}")
+    mapped_targets = read_tsv(
+        Path(target_rows[0]["mirna_targets"]),
+        {"target_source", "target_source_type", "target_source_version"},
+    )
+    if not any(row["target_source"] == "validated_db" and row["target_source_version"] == "miRTarBase_2026_01" for row in mapped_targets):
+        raise ValueError(f"miRNA target mapping lost validated source version: {mapped_targets}")
+    target_universe = read_tsv(
+        Path(target_rows[0]["target_universe"]),
+        {"target_source", "target_source_type", "target_source_version"},
+    )
+    if not any(row["target_source"] == "predicted_db" and row["target_source_version"] == "TargetScan_8.0" for row in target_universe):
+        raise ValueError(f"target universe lost predicted source version: {target_universe}")
+    target_enrichment = read_tsv(
+        Path(target_rows[0]["target_enrichment"]),
+        {"target_source", "target_source_type", "target_source_version"},
+    )
+    if not any(row["target_source"] == "validated_db" and row["target_source_version"] == "miRTarBase_2026_01" for row in target_enrichment):
+        raise ValueError(f"target enrichment lost validated source version: {target_enrichment}")
+
     target_feature_rows = read_tsv(
         paths["target_feature_set_manifest"],
         {
@@ -295,9 +320,11 @@ def validate_outputs(paths: dict[str, Path]) -> None:
             "query_source",
             "target_source",
             "target_source_type",
+            "target_source_version",
             "target_universe_definition",
             "feature_set_source",
             "feature_set_collection",
+            "feature_set_version",
             "query_size",
             "target_universe_size",
             "feature_set_member_universe_size",
@@ -313,6 +340,10 @@ def validate_outputs(paths: dict[str, Path]) -> None:
             raise ValueError(f"Unexpected target feature-set analysis mode: {row}")
         if row["query_source"] != row["collection"]:
             raise ValueError(f"Target feature-set universe query source mismatch: {row}")
+        if row["feature_set_version"] != "toy_pathway_2026_05":
+            raise ValueError(f"Target feature-set universe lost feature-set version: {row}")
+        if row["target_source"] == "validated_db" and row["target_source_version"] != "miRTarBase_2026_01":
+            raise ValueError(f"Target feature-set universe lost target-source version: {row}")
     feature_set_results = read_tsv(
         Path(target_feature_rows[0]["target_feature_set_results"]),
         {
@@ -320,7 +351,9 @@ def validate_outputs(paths: dict[str, Path]) -> None:
             "query_source",
             "target_source",
             "target_source_type",
+            "target_source_version",
             "target_universe_definition",
+            "feature_set_version",
             "feature_set_member_universe_size",
             "target_rows",
             "set_id",
@@ -333,6 +366,10 @@ def validate_outputs(paths: dict[str, Path]) -> None:
             raise ValueError(f"Unexpected target feature-set result mode: {row}")
         if row["query_source"] != row["collection"]:
             raise ValueError(f"Target feature-set result query source mismatch: {row}")
+        if row["feature_set_version"] != "toy_pathway_2026_05":
+            raise ValueError(f"Target feature-set result lost feature-set version: {row}")
+        if row["target_source"] == "predicted_db" and row["target_source_version"] != "TargetScan_8.0":
+            raise ValueError(f"Target feature-set result lost target-source version: {row}")
     plan_rows = read_tsv(
         paths["report_plan"],
         {

@@ -35,6 +35,7 @@ FEATURE_SET_COLUMNS = [
     "target_universe_definition",
     "feature_set_source",
     "feature_set_collection",
+    "feature_set_version",
     "set_id",
     "description",
     "overlap",
@@ -54,6 +55,7 @@ FEATURE_SET_UNIVERSE_COLUMNS = [
     "target_universe_definition",
     "feature_set_source",
     "feature_set_collection",
+    "feature_set_version",
     "n_feature_sets",
     "query_size",
     "target_universe_size",
@@ -67,6 +69,7 @@ FEATURE_SET_UNIVERSE_COLUMNS = [
 class FeatureSet:
     source: str
     collection: str
+    version: str
     set_id: str
     description: str
     features: frozenset[str]
@@ -111,6 +114,33 @@ def split_paths(paths_text: str) -> list[Path]:
     return [Path(path.strip()) for path in paths_text.split(",") if path.strip()]
 
 
+def first_existing(row: dict[str, str], names: list[str]) -> str:
+    for name in names:
+        value = row.get(name, "")
+        if value:
+            return value
+    return ""
+
+
+def resource_version(row: dict[str, str]) -> str:
+    return first_existing(
+        row,
+        [
+            "resource_version",
+            "version",
+            "source_version",
+            "database_version",
+            "collection_version",
+            "release",
+        ],
+    ) or "unknown"
+
+
+def grouped_feature_set_version(feature_sets: list[FeatureSet]) -> str:
+    versions = sorted({feature_set.version for feature_set in feature_sets if feature_set.version})
+    return ";".join(versions) if versions else "unknown"
+
+
 def read_gmt_feature_sets(paths_text: str) -> list[FeatureSet]:
     feature_sets: list[FeatureSet] = []
     for path in split_paths(paths_text):
@@ -121,7 +151,7 @@ def read_gmt_feature_sets(paths_text: str) -> list[FeatureSet]:
                     raise ValueError(f"GMT row {path}:{line_number} has fewer than 3 columns")
                 members = frozenset(feature for feature in fields[2:] if feature)
                 if members:
-                    feature_sets.append(FeatureSet(path.stem, "gmt", fields[0].strip(), fields[1].strip(), members))
+                    feature_sets.append(FeatureSet(path.stem, "gmt", "unknown", fields[0].strip(), fields[1].strip(), members))
     return feature_sets
 
 
@@ -129,17 +159,17 @@ def read_table_feature_sets(paths_text: str) -> list[FeatureSet]:
     feature_sets: list[FeatureSet] = []
     for path in split_paths(paths_text):
         _columns, rows = read_table(path, {"set_id", "feature_id"})
-        groups: dict[tuple[str, str, str], dict[str, object]] = {}
+        groups: dict[tuple[str, str, str, str], dict[str, object]] = {}
         for row in rows:
-            key = (row.get("source", "") or path.stem, row.get("collection", ""), row["set_id"])
+            key = (row.get("source", "") or path.stem, row.get("collection", ""), resource_version(row), row["set_id"])
             group = groups.setdefault(key, {"description": row.get("description", ""), "features": set()})
             if not group["description"]:
                 group["description"] = row.get("description", "")
             group["features"].add(row["feature_id"])
-        for (source, collection, set_id), group in groups.items():
+        for (source, collection, version, set_id), group in groups.items():
             features = frozenset(str(feature) for feature in group["features"])
             if features:
-                feature_sets.append(FeatureSet(source, collection, set_id, str(group["description"]), features))
+                feature_sets.append(FeatureSet(source, collection, version, set_id, str(group["description"]), features))
     return feature_sets
 
 
@@ -244,6 +274,7 @@ def feature_set_universe_rows(
             member_universe: set[str] = set()
             for feature_set in grouped_sets:
                 member_universe.update(feature_set.features & universe)
+            grouped_version = grouped_feature_set_version(grouped_sets)
             rows.append(
                 {
                     "contrast_id": contrast_id,
@@ -253,6 +284,7 @@ def feature_set_universe_rows(
                     "target_universe_definition": "integrated_mirna_mrna_targets",
                     "feature_set_source": feature_set_source,
                     "feature_set_collection": feature_set_collection,
+                    "feature_set_version": grouped_version,
                     "n_feature_sets": str(len(grouped_sets)),
                     "query_size": str(len(query)),
                     "target_universe_size": str(len(universe)),
@@ -291,6 +323,7 @@ def enrichment_rows(
                     "target_universe_definition": "integrated_mirna_mrna_targets",
                     "feature_set_source": feature_set.source,
                     "feature_set_collection": feature_set.collection,
+                    "feature_set_version": feature_set.version,
                     "set_id": feature_set.set_id,
                     "description": feature_set.description,
                     "overlap": str(len(overlap)),

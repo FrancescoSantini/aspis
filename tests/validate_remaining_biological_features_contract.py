@@ -153,11 +153,11 @@ def exercise_inverse_target_featuresets() -> Path:
     feature_sets = INPUT / "target_sets.tsv"
     write_tsv(
         feature_sets,
-        ["set_id", "description", "feature_id", "source", "collection"],
+        ["set_id", "description", "feature_id", "source", "collection", "resource_version"],
         [
-            {"set_id": "SET_INVERSE", "description": "inverse targets", "feature_id": "GENE1", "source": "toy", "collection": "pathway"},
-            {"set_id": "SET_INVERSE", "description": "inverse targets", "feature_id": "GENE2", "source": "toy", "collection": "pathway"},
-            {"set_id": "SET_OTHER", "description": "other", "feature_id": "GENE3", "source": "toy", "collection": "pathway"},
+            {"set_id": "SET_INVERSE", "description": "inverse targets", "feature_id": "GENE1", "source": "toy", "collection": "pathway", "resource_version": "toy_pathway_2026_05"},
+            {"set_id": "SET_INVERSE", "description": "inverse targets", "feature_id": "GENE2", "source": "toy", "collection": "pathway", "resource_version": "toy_pathway_2026_05"},
+            {"set_id": "SET_OTHER", "description": "other", "feature_id": "GENE3", "source": "toy", "collection": "pathway", "resource_version": "toy_pathway_2026_05"},
         ],
     )
     outdir = BASE / "mirna_mrna_target_sets"
@@ -195,6 +195,7 @@ def exercise_inverse_target_featuresets() -> Path:
             "collection",
             "query_source",
             "target_universe_definition",
+            "feature_set_version",
             "query_size",
             "target_universe_size",
             "feature_set_member_universe_size",
@@ -204,6 +205,8 @@ def exercise_inverse_target_featuresets() -> Path:
         raise ValueError(f"inverse target feature-set universe has unexpected mode: {universe}")
     if any(item["query_source"] != item["collection"] for item in universe):
         raise ValueError(f"inverse target feature-set universe has inconsistent query source: {universe}")
+    if any(item["feature_set_version"] != "toy_pathway_2026_05" for item in universe):
+        raise ValueError(f"inverse target feature-set universe lost resource version: {universe}")
     results = read_tsv(
         Path(row["mirna_mrna_target_feature_set_results"]),
         {
@@ -211,6 +214,7 @@ def exercise_inverse_target_featuresets() -> Path:
             "collection",
             "query_source",
             "target_universe_definition",
+            "feature_set_version",
             "set_id",
             "overlap",
             "feature_set_member_universe_size",
@@ -220,6 +224,8 @@ def exercise_inverse_target_featuresets() -> Path:
         raise ValueError(f"inverse target feature-set results have unexpected mode: {results}")
     if any(item["query_source"] != item["collection"] for item in results):
         raise ValueError(f"inverse target feature-set results have inconsistent query source: {results}")
+    if any(item["feature_set_version"] != "toy_pathway_2026_05" for item in results):
+        raise ValueError(f"inverse target feature-set results lost resource version: {results}")
     if "inverse" not in {result["collection"] for result in results}:
         raise ValueError(f"inverse target collection missing from results: {results}")
     return manifest
@@ -457,10 +463,10 @@ def exercise_ranked_enrichment() -> Path:
     )
     write_tsv(
         feature_sets,
-        ["set_id", "description", "feature_id", "source", "collection"],
+        ["set_id", "description", "feature_id", "source", "collection", "resource_version"],
         [
-            {"set_id": "SET_TOP", "description": "top ranked genes", "feature_id": "GENE1", "source": "toy", "collection": "pathway"},
-            {"set_id": "SET_TOP", "description": "top ranked genes", "feature_id": "GENE2", "source": "toy", "collection": "pathway"},
+            {"set_id": "SET_TOP", "description": "top ranked genes", "feature_id": "GENE1", "source": "toy", "collection": "pathway", "resource_version": "toy_pathway_2026_05"},
+            {"set_id": "SET_TOP", "description": "top ranked genes", "feature_id": "GENE2", "source": "toy", "collection": "pathway", "resource_version": "toy_pathway_2026_05"},
         ],
     )
     manifest = BASE / "rnaseq_enrichment" / "enrichment_manifest.tsv"
@@ -485,7 +491,9 @@ def exercise_ranked_enrichment() -> Path:
     row = read_tsv(manifest, {"ranked_feature_set_results", "n_ranked_feature_set_terms"})[0]
     if int(row["n_ranked_feature_set_terms"]) < 1:
         raise ValueError(f"ranked enrichment did not produce terms: {row}")
-    read_tsv(Path(row["ranked_feature_set_results"]), {"enrichment_score", "leading_edge_features"})
+    ranked_rows = read_tsv(Path(row["ranked_feature_set_results"]), {"enrichment_score", "leading_edge_features", "feature_set_version"})
+    if any(item["feature_set_version"] != "toy_pathway_2026_05" for item in ranked_rows):
+        raise ValueError(f"ranked enrichment lost resource version: {ranked_rows}")
     return manifest
 
 
