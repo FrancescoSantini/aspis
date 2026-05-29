@@ -10,7 +10,9 @@ parse_args <- function(argv) {
     padj = "0.1",
     log2fc = "1.0",
     pca_color_columns = "condition,time,time_h,batch,batch_id,biospecimen,biospecimen_id,replicate,replicate_id",
-    transcript_plot_groups = "all,known_compatible,novel_isoform,novel_locus,ambiguous,artifact"
+    transcript_plot_groups = "all,known_compatible,novel_isoform,novel_locus,ambiguous,artifact",
+    gene_biotype_plot_groups = "protein_coding,lncRNA,pseudogene,snoRNA,snRNA,miRNA",
+    transcript_biotype_plot_groups = "protein_coding,lncRNA,pseudogene,snoRNA,snRNA,miRNA"
   )
   i <- 1
   while (i <= length(argv)) {
@@ -110,35 +112,156 @@ group_label <- function(results, group_name) {
   group_name
 }
 
-plot_groups_for_results <- function(results, requested_groups) {
+safe_group_name <- function(value) {
+  cleaned <- gsub("[^A-Za-z0-9]+", "_", tolower(trimws(value)))
+  cleaned <- gsub("^_+|_+$", "", cleaned)
+  ifelse(cleaned == "", "unclassified", cleaned)
+}
+
+biotype_label <- function(value) {
+  if (is.null(value) || is.na(value) || value == "") {
+    return("unclassified")
+  }
+  value
+}
+
+first_existing_column <- function(table, columns) {
+  matched <- columns[columns %in% colnames(table)]
+  if (length(matched)) {
+    return(matched[[1]])
+  }
+  ""
+}
+
+biotype_column_for_level <- function(results, level) {
+  if (level == "transcript") {
+    return(first_existing_column(
+      results,
+      c("transcript_biotype", "transcript_type", "gene_biotype", "gene_type", "biotype", "feature_type")
+    ))
+  }
+  first_existing_column(results, c("gene_biotype", "gene_type", "biotype", "feature_type"))
+}
+
+requested_biotypes_present <- function(values, requested_biotypes) {
+  clean_values <- values[!is.na(values) & values != ""]
+  if (!length(clean_values)) {
+    return(character())
+  }
+  if (!length(requested_biotypes)) {
+    return(unique(clean_values))
+  }
+  requested_keys <- safe_group_name(requested_biotypes)
+  value_keys <- safe_group_name(clean_values)
+  selected <- vapply(seq_along(clean_values), function(index) {
+    value_key <- value_keys[[index]]
+    any(value_key %in% requested_keys | grepl(paste(requested_keys, collapse = "|"), value_key))
+  }, logical(1))
+  unique(clean_values[selected])
+}
+
+plot_groups_for_results <- function(results, level, requested_groups, gene_biotype_groups, transcript_biotype_groups) {
   feature_column <- feature_id_column(results)
   groups <- list(list(
     name = "all",
     label = "All features",
+    type = "all",
     results = results,
     feature_ids = as.character(results[[feature_column]])
   ))
-  if (!("transcript_plot_group" %in% colnames(results))) {
+  biotype_column <- biotype_column_for_level(results, level)
+  if (level != "transcript" && biotype_column == "") {
     return(groups)
   }
-  requested <- requested_groups[requested_groups != ""]
-  if (!length(requested)) {
-    requested <- unique(results$transcript_plot_group[results$transcript_plot_group != ""])
+
+  if (level == "transcript" && "transcript_plot_group" %in% colnames(results)) {
+    requested <- requested_groups[requested_groups != ""]
+    if (!length(requested)) {
+      requested <- unique(results$transcript_plot_group[results$transcript_plot_group != ""])
+    }
+    requested <- unique(requested[requested != "all"])
+    for (group_name in requested) {
+      subset <- results[results$transcript_plot_group == group_name, , drop = FALSE]
+      if (nrow(subset) == 0) {
+        next
+      }
+      groups[[length(groups) + 1]] <- list(
+        name = group_name,
+        label = group_label(subset, group_name),
+        type = "transcript_novelty",
+        results = subset,
+        feature_ids = as.character(subset[[feature_column]])
+      )
+    }
   }
-  requested <- unique(requested[requested != "all"])
-  for (group_name in requested) {
-    subset <- results[results$transcript_plot_group == group_name, , drop = FALSE]
+
+  if (biotype_column == "") {
+    return(groups)
+  }
+  requested_biotypes <- if (level == "transcript") transcript_biotype_groups else gene_biotype_groups
+  present_biotypes <- requested_biotypes_present(as.character(results[[biotype_column]]), requested_biotypes)
+  for (biotype in present_biotypes) {
+    subset <- results[safe_group_name(results[[biotype_column]]) == safe_group_name(biotype), , drop = FALSE]
     if (nrow(subset) == 0) {
       next
     }
+    group_type <- ifelse(level == "transcript", "transcript_biotype", "gene_biotype")
     groups[[length(groups) + 1]] <- list(
-      name = group_name,
-      label = group_label(subset, group_name),
+      name = paste(group_type, safe_group_name(biotype), sep = "__"),
+      label = paste(ifelse(level == "transcript", "Transcript biotype", "Gene biotype"), biotype_label(biotype), sep = ": "),
+      type = group_type,
       results = subset,
       feature_ids = as.character(subset[[feature_column]])
     )
   }
+
+  if (level == "transcript" && "transcript_plot_group" %in% colnames(results) && length(present_biotypes)) {
+    requested <- requested_groups[requested_groups != "" & requested_groups != "all"]
+    if (!length(requested)) {
+      requested <- unique(results$transcript_plot_group[results$transcript_plot_group != ""])
+    }
+    for (group_name in unique(requested)) {
+      novelty_subset <- results[results$transcript_plot_group == group_name, , drop = FALSE]
+      if (nrow(novelty_subset) == 0) {
+        next
+      }
+      for (biotype in present_biotypes) {
+        subset <- novelty_subset[
+          safe_group_name(novelty_subset[[biotype_column]]) == safe_group_name(biotype),
+          ,
+          drop = FALSE
+        ]
+        if (nrow(subset) == 0) {
+          next
+        }
+        groups[[length(groups) + 1]] <- list(
+          name = paste("transcript_novelty_biotype", group_name, safe_group_name(biotype), sep = "__"),
+          label = paste(group_label(subset, group_name), biotype_label(biotype), sep = " / "),
+          type = "transcript_novelty_biotype",
+          results = subset,
+          feature_ids = as.character(subset[[feature_column]])
+        )
+      }
+    }
+  }
+
   groups
+}
+
+write_plot_group_manifest <- function(path, level, contrast_id, groups) {
+  ensure_parent(path)
+  rows <- do.call(rbind, lapply(groups, function(group) {
+    data.frame(
+      level = level,
+      contrast_id = contrast_id,
+      plot_group = group$name,
+      plot_group_type = group$type,
+      plot_label = group$label,
+      n_features = nrow(group$results),
+      check.names = FALSE
+    )
+  }))
+  write.table(rows, path, sep = "\t", quote = FALSE, row.names = FALSE)
 }
 
 plot_volcano_panel <- function(results, title, padj_cutoff, log2fc_cutoff) {
@@ -191,22 +314,20 @@ plot_volcano <- function(groups, path, title, padj_cutoff, log2fc_cutoff) {
   }
 }
 
-plot_ma <- function(results, path, title, padj_cutoff, log2fc_cutoff) {
+plot_ma_panel <- function(results, title, padj_cutoff, log2fc_cutoff) {
   ensure_columns(results, c("baseMean", "log2FoldChange", "padj"), "DESeq2 results")
   base_mean <- numeric_column(results, "baseMean")
   log2fc <- numeric_column(results, "log2FoldChange")
   padj <- numeric_column(results, "padj")
   keep <- !is.na(base_mean) & !is.na(log2fc) & !is.na(padj)
   if (!any(keep)) {
-    blank_pdf(path, title, "No valid baseMean/log2FoldChange/padj rows")
+    blank_panel(title, "No valid baseMean/log2FoldChange/padj rows")
     return()
   }
   x <- log10(base_mean[keep] + 1)
   y <- log2fc[keep]
   significant <- padj[keep] < padj_cutoff & abs(y) >= log2fc_cutoff
 
-  ensure_parent(path)
-  grDevices::pdf(path)
   plot(
     x,
     y,
@@ -217,7 +338,15 @@ plot_ma <- function(results, path, title, padj_cutoff, log2fc_cutoff) {
     main = title
   )
   abline(h = c(-log2fc_cutoff, 0, log2fc_cutoff), col = c("#737373", "#bdbdbd", "#737373"), lty = c(2, 1, 2))
-  grDevices::dev.off()
+}
+
+plot_ma <- function(groups, path, title, padj_cutoff, log2fc_cutoff) {
+  ensure_parent(path)
+  grDevices::pdf(path)
+  on.exit(grDevices::dev.off(), add = TRUE)
+  for (group in groups) {
+    plot_ma_panel(group$results, paste(title, "-", group$label), padj_cutoff, log2fc_cutoff)
+  }
 }
 
 read_feature_matrix <- function(path, label) {
@@ -458,12 +587,22 @@ manifest_columns <- c(
   "pca_metrics_tsv",
   "sample_distance_pdf",
   "heatmap_pdf",
+  "plot_group_tsv",
   "vst_tsv",
   "n_features",
   "n_significant"
 )
 
-render_row <- function(row, top_n, padj_cutoff, log2fc_cutoff, transcript_plot_groups, pca_color_columns) {
+render_row <- function(
+  row,
+  top_n,
+  padj_cutoff,
+  log2fc_cutoff,
+  transcript_plot_groups,
+  gene_biotype_plot_groups,
+  transcript_biotype_plot_groups,
+  pca_color_columns
+) {
   if (!identical(row[["status"]], "ready")) {
     return(data.frame(
       project = row[["project"]],
@@ -477,6 +616,7 @@ render_row <- function(row, top_n, padj_cutoff, log2fc_cutoff, transcript_plot_g
       pca_metrics_tsv = optional_plot_path(row, "pca_metrics_tsv", "pca_metrics.tsv"),
       sample_distance_pdf = optional_plot_path(row, "sample_distance_pdf", "sample_distance.pdf"),
       heatmap_pdf = row[["heatmap_pdf"]],
+      plot_group_tsv = optional_plot_path(row, "plot_group_tsv", "plot_groups.tsv"),
       vst_tsv = row[["vst_tsv"]],
       n_features = 0,
       n_significant = 0,
@@ -491,9 +631,17 @@ render_row <- function(row, top_n, padj_cutoff, log2fc_cutoff, transcript_plot_g
   coldata <- read_coldata(row[["coldata"]], colnames(transformed))
   pca_metrics_tsv <- optional_plot_path(row, "pca_metrics_tsv", "pca_metrics.tsv")
   sample_distance_pdf <- optional_plot_path(row, "sample_distance_pdf", "sample_distance.pdf")
-  plot_groups <- plot_groups_for_results(results, transcript_plot_groups)
+  plot_group_tsv <- optional_plot_path(row, "plot_group_tsv", "plot_groups.tsv")
+  plot_groups <- plot_groups_for_results(
+    results,
+    row[["level"]],
+    transcript_plot_groups,
+    gene_biotype_plot_groups,
+    transcript_biotype_plot_groups
+  )
+  write_plot_group_manifest(plot_group_tsv, row[["level"]], row[["contrast_id"]], plot_groups)
   plot_volcano(plot_groups, row[["volcano_pdf"]], paste(title, "volcano"), padj_cutoff, log2fc_cutoff)
-  plot_ma(results, row[["ma_pdf"]], paste(title, "MA"), padj_cutoff, log2fc_cutoff)
+  plot_ma(plot_groups, row[["ma_pdf"]], paste(title, "MA"), padj_cutoff, log2fc_cutoff)
   plot_pca(transformed, row[["pca_pdf"]], paste(title, "PCA"), coldata, pca_color_columns)
   if (ncol(transformed) < 2 || nrow(transformed) < 2) {
     write_pca_metrics(pca_metrics_tsv, "blocked", "PCA requires at least two samples and two features", transformed = transformed)
@@ -521,6 +669,7 @@ render_row <- function(row, top_n, padj_cutoff, log2fc_cutoff, transcript_plot_g
     pca_metrics_tsv = pca_metrics_tsv,
     sample_distance_pdf = sample_distance_pdf,
     heatmap_pdf = row[["heatmap_pdf"]],
+    plot_group_tsv = plot_group_tsv,
     vst_tsv = row[["vst_tsv"]],
     n_features = nrow(results),
     n_significant = nrow(filtered),
@@ -546,6 +695,8 @@ main <- function() {
     stop("--log2fc must be a non-negative number")
   }
   transcript_plot_groups <- parse_list_arg(args[["transcript_plot_groups"]])
+  gene_biotype_plot_groups <- parse_list_arg(args[["gene_biotype_plot_groups"]])
+  transcript_biotype_plot_groups <- parse_list_arg(args[["transcript_biotype_plot_groups"]])
   pca_color_columns <- parse_list_arg(args[["pca_color_columns"]])
 
   plan <- read_tsv(plan_path)
@@ -576,7 +727,16 @@ main <- function() {
   for (i in seq_len(nrow(plan))) {
     row <- as.list(plan[i, , drop = FALSE])
     rows[[i]] <- tryCatch(
-      render_row(row, top_n, padj_cutoff, log2fc_cutoff, transcript_plot_groups, pca_color_columns),
+      render_row(
+        row,
+        top_n,
+        padj_cutoff,
+        log2fc_cutoff,
+        transcript_plot_groups,
+        gene_biotype_plot_groups,
+        transcript_biotype_plot_groups,
+        pca_color_columns
+      ),
       error = function(err) {
         pca_metrics_tsv <- optional_plot_path(row, "pca_metrics_tsv", "pca_metrics.tsv")
         try(write_pca_metrics(pca_metrics_tsv, "failed", conditionMessage(err)), silent = TRUE)
@@ -592,6 +752,7 @@ main <- function() {
           pca_metrics_tsv = pca_metrics_tsv,
           sample_distance_pdf = optional_plot_path(row, "sample_distance_pdf", "sample_distance.pdf"),
           heatmap_pdf = row[["heatmap_pdf"]],
+          plot_group_tsv = optional_plot_path(row, "plot_group_tsv", "plot_groups.tsv"),
           vst_tsv = row[["vst_tsv"]],
           n_features = 0,
           n_significant = 0,

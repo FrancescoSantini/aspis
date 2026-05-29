@@ -116,6 +116,14 @@ rnaseq_differential:
     - novel_locus
     - ambiguous
     - artifact
+  report_gene_biotype_plot_groups:
+    - protein_coding
+    - lncRNA
+    - pseudogene
+  report_transcript_biotype_plot_groups:
+    - protein_coding
+    - lncRNA
+    - pseudogene
   rscript_command: Rscript
   deseq2_script: workflow/scripts/run_deseq2_feature.R
   isoform_switch_script: workflow/scripts/run_isoform_switch_contrast.R
