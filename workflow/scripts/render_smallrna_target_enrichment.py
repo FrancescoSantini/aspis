@@ -44,6 +44,7 @@ TARGET_MAPPING_COLUMNS = [
     "target_source_table",
     "target_source",
     "target_source_type",
+    "target_source_version",
     "evidence",
 ]
 TARGET_ENRICHMENT_COLUMNS = [
@@ -53,6 +54,7 @@ TARGET_ENRICHMENT_COLUMNS = [
     "query_source",
     "target_source",
     "target_source_type",
+    "target_source_version",
     "target_id",
     "target_symbol",
     "target_entrez",
@@ -78,6 +80,7 @@ TARGET_UNIVERSE_COLUMNS = [
     "target_analysis_mode",
     "target_source",
     "target_source_type",
+    "target_source_version",
     "tested_mirnas",
     "mapped_tested_mirnas",
     "resource_mirnas",
@@ -95,6 +98,7 @@ SUMMARY_COLUMNS = [
     "collection",
     "target_source",
     "target_source_type",
+    "target_source_version",
     "n_mirnas",
     "n_target_rows",
     "n_targets",
@@ -162,6 +166,33 @@ def optional_column(columns: list[str], candidates: list[str]) -> str:
     return next((candidate for candidate in candidates if candidate in columns), "")
 
 
+def first_existing(row: dict[str, str], names: list[str]) -> str:
+    for name in names:
+        value = row.get(name, "")
+        if value:
+            return value
+    return ""
+
+
+def target_source_version(row: dict[str, str]) -> str:
+    return first_existing(
+        row,
+        [
+            "target_source_version",
+            "source_version",
+            "database_version",
+            "resource_version",
+            "version",
+            "release",
+        ],
+    ) or "unknown"
+
+
+def aggregate_target_source_version(rows: list[dict[str, str]]) -> str:
+    versions = sorted({target_source_version(row) for row in rows if target_source_version(row)})
+    return ";".join(versions) if versions else "unknown"
+
+
 def parse_float(value: str) -> float | None:
     if value == "" or value.upper() == "NA":
         return None
@@ -204,6 +235,7 @@ def read_target_table(path: Path) -> list[dict[str, str]]:
     database_col = optional_column(columns, ["database", "db"])
     source_col = optional_column(columns, ["source"])
     source_type_col = optional_column(columns, ["source_type", "target_source_type", "evidence_type"])
+    source_version_col = optional_column(columns, ["source_version", "target_source_version", "database_version", "resource_version", "version", "release"])
     evidence_col = optional_column(columns, ["evidence", "support"])
 
     target_rows = []
@@ -224,6 +256,7 @@ def read_target_table(path: Path) -> list[dict[str, str]]:
                 "source": row.get(source_col, "") if source_col else "",
                 "target_source": row.get(source_col, "") if source_col else path.stem,
                 "target_source_type": row.get(source_type_col, "") if source_type_col else "unspecified",
+                "target_source_version": row.get(source_version_col, "") if source_version_col else "unknown",
                 "evidence": row.get(evidence_col, "") if evidence_col else "",
             }
         )
@@ -303,12 +336,15 @@ def targets_by_mirna(target_rows: list[dict[str, str]]) -> dict[str, list[dict[s
     return grouped
 
 
-def target_resource_groups(target_rows: list[dict[str, str]]) -> dict[tuple[str, str], list[dict[str, str]]]:
-    groups: dict[tuple[str, str], list[dict[str, str]]] = {("all_sources", "all_types"): target_rows}
+def target_resource_groups(target_rows: list[dict[str, str]]) -> dict[tuple[str, str, str], list[dict[str, str]]]:
+    groups: dict[tuple[str, str, str], list[dict[str, str]]] = {
+        ("all_sources", "all_types", aggregate_target_source_version(target_rows)): target_rows
+    }
     for row in target_rows:
         source = row.get("target_source", "") or "unspecified"
         source_type = row.get("target_source_type", "") or "unspecified"
-        groups.setdefault((source, source_type), []).append(row)
+        source_version = target_source_version(row)
+        groups.setdefault((source, source_type, source_version), []).append(row)
     return groups
 
 
@@ -331,7 +367,7 @@ def target_universe_rows(
     significant = set(selected)
     up = {mirna_id for mirna_id, row in selected.items() if direction(row) == "up"}
     down = {mirna_id for mirna_id, row in selected.items() if direction(row) == "down"}
-    for (target_source, target_source_type), grouped_rows in sorted(target_resource_groups(target_rows).items()):
+    for (target_source, target_source_type, source_version), grouped_rows in sorted(target_resource_groups(target_rows).items()):
         resource_mirnas = {row["mirna_id"] for row in grouped_rows}
         final_universe = result_features & resource_mirnas
         targets = {
@@ -345,6 +381,7 @@ def target_universe_rows(
                 "target_analysis_mode": "database_target",
                 "target_source": target_source,
                 "target_source_type": target_source_type,
+                "target_source_version": source_version,
                 "tested_mirnas": str(len(result_features)),
                 "mapped_tested_mirnas": str(len(final_universe)),
                 "resource_mirnas": str(len(resource_mirnas)),
@@ -398,7 +435,7 @@ def enrichment_rows(
     up = {mirna_id for mirna_id, row in selected.items() if direction(row) == "up"}
     down = {mirna_id for mirna_id, row in selected.items() if direction(row) == "down"}
     rows = []
-    for (target_source, target_source_type), grouped_rows in target_resource_groups(target_rows).items():
+    for (target_source, target_source_type, source_version), grouped_rows in target_resource_groups(target_rows).items():
         source_mirnas = {row["mirna_id"] for row in grouped_rows}
         universe = result_features & source_mirnas
         if not universe:
@@ -432,6 +469,7 @@ def enrichment_rows(
                         "query_source": collection,
                         "target_source": target_source,
                         "target_source_type": target_source_type,
+                        "target_source_version": source_version,
                         "target_id": target_id,
                         "target_symbol": joined(symbols),
                         "target_entrez": joined(entrez),
@@ -480,20 +518,22 @@ def summary_rows(
     rows = []
     for collection, mirnas in collections.items():
         target_rows = [row for row in mapping if row["mirna_id"] in mirnas]
-        source_groups = {("*", "*"): target_rows}
+        source_groups = {("*", "*", aggregate_target_source_version(target_rows)): target_rows}
         for target_row in target_rows:
             key = (
                 target_row.get("target_source", "") or "unspecified",
                 target_row.get("target_source_type", "") or "unspecified",
+                target_source_version(target_row),
             )
             source_groups.setdefault(key, []).append(target_row)
-        for (target_source, target_source_type), grouped_rows in sorted(source_groups.items()):
+        for (target_source, target_source_type, source_version), grouped_rows in sorted(source_groups.items()):
             rows.append(
                 {
                     "contrast_id": contrast_id,
                     "collection": collection,
                     "target_source": target_source,
                     "target_source_type": target_source_type,
+                    "target_source_version": source_version,
                     "n_mirnas": str(len({row["mirna_id"] for row in grouped_rows}) if grouped_rows else len(mirnas)),
                     "n_target_rows": str(len(grouped_rows)),
                     "n_targets": str(len({row["target_id"] for row in grouped_rows})),

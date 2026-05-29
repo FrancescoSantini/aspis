@@ -62,11 +62,12 @@ def build_inputs() -> dict[str, Path]:
     )
     write_tsv(
         feature_sets,
-        ["source", "collection", "set_id", "description", "feature_id"],
+        ["source", "collection", "resource_version", "set_id", "description", "feature_id"],
         [
             {
                 "source": "toy_pathways",
                 "collection": "go_bp",
+                "resource_version": "toy_go_2026_05",
                 "set_id": "known_signal",
                 "description": "Known signal",
                 "feature_id": "G1",
@@ -74,6 +75,7 @@ def build_inputs() -> dict[str, Path]:
             {
                 "source": "toy_pathways",
                 "collection": "go_bp",
+                "resource_version": "toy_go_2026_05",
                 "set_id": "known_signal",
                 "description": "Known signal",
                 "feature_id": "G2",
@@ -81,6 +83,7 @@ def build_inputs() -> dict[str, Path]:
             {
                 "source": "toy_pathways",
                 "collection": "go_bp",
+                "resource_version": "toy_go_2026_05",
                 "set_id": "known_signal",
                 "description": "Known signal",
                 "feature_id": "GX",
@@ -88,6 +91,7 @@ def build_inputs() -> dict[str, Path]:
             {
                 "source": "toy_pathways",
                 "collection": "go_bp",
+                "resource_version": "toy_go_2026_05",
                 "set_id": "unmapped_only",
                 "description": "Unmapped only",
                 "feature_id": "GY",
@@ -165,6 +169,7 @@ def main() -> int:
     expected_universe = {
         "feature_set_source": "toy_pathways",
         "feature_set_collection": "go_bp",
+        "feature_set_version": "toy_go_2026_05",
         "mapping_mode": "native",
         "tested_features": "4",
         "mapped_tested_features": "4",
@@ -193,6 +198,8 @@ def main() -> int:
             raise ValueError(f"{enrichment_path} did not use the final resource universe: {row}")
         if row["resource_mapping_loss"] != "2":
             raise ValueError(f"{enrichment_path} did not record resource mapping loss: {row}")
+        if row["feature_set_version"] != "toy_go_2026_05":
+            raise ValueError(f"{enrichment_path} did not preserve resource version: {row}")
 
     ranked_rows = [
         row
@@ -203,6 +210,8 @@ def main() -> int:
         raise ValueError(f"{ranked_path} has no toy_pathways known_signal ranked rows")
     if ranked_rows[0]["universe_size"] != ranked_rows[0]["final_universe_size"]:
         raise ValueError(f"{ranked_path} did not use the final resource universe: {ranked_rows[0]}")
+    if ranked_rows[0]["feature_set_version"] != "toy_go_2026_05":
+        raise ValueError(f"{ranked_path} did not preserve resource version: {ranked_rows[0]}")
 
     shutil.rmtree(BASE)
     print("RNA-seq enrichment universe contract ok")

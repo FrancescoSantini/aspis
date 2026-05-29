@@ -12,7 +12,8 @@ rnaseq_differential:
     resources/feature_sets/msigdb_hallmark.gmt,
     resources/feature_sets/msigdb_c2_cp_reactome.gmt
 
-  # TSV files: set_id, feature_id, optional source, collection, description.
+  # TSV files: set_id, feature_id, optional source, collection, description,
+  # and resource_version/version/source_version/database_version/release.
   # Good for GO BP/MF/CC, Reactome, KEGG, and custom exported resources.
   report_feature_set_tables: >-
     resources/feature_sets/go_bp.tsv,
@@ -27,6 +28,8 @@ rnaseq_differential:
 smallrna:
   # Target-gene feature sets use the same GMT/TSV contracts, but feature_id
   # must match the normalized target_id emitted by the miRNA target table.
+  # miRNA target tables can also carry source_version/database_version/release;
+  # those values are preserved in target enrichment provenance outputs.
   target_feature_sets: resources/feature_sets/msigdb_hallmark.gmt
   target_feature_set_tables: >-
     resources/feature_sets/go_bp.tsv,
@@ -35,4 +38,3 @@ smallrna:
 
   target_feature_set_min_overlap: 5
   target_feature_set_top_n: 30
-
