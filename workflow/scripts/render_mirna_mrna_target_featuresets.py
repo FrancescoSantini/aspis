@@ -21,10 +21,15 @@ MANIFEST_COLUMNS = [
     "mirna_mrna_target_feature_set_universe",
     "mirna_mrna_target_feature_set_results",
     "mirna_mrna_target_feature_set_plot",
+    "mirna_mrna_target_ranked_feature_set_universe",
+    "mirna_mrna_target_ranked_feature_set_results",
+    "mirna_mrna_target_ranked_feature_set_plot",
     "n_targets",
     "n_feature_sets",
     "n_feature_set_universe_rows",
     "n_feature_set_terms",
+    "n_ranked_feature_set_universe_rows",
+    "n_ranked_feature_set_terms",
 ]
 CONTRAST_MANIFEST_COLUMNS = ["contrast_id", "resource", "status", "reason", "path", "n_rows"]
 FEATURE_SET_COLUMNS = [
@@ -65,6 +70,47 @@ FEATURE_SET_UNIVERSE_COLUMNS = [
     "target_pairs",
     "min_overlap",
 ]
+RANKED_FEATURE_SET_COLUMNS = [
+    "contrast_id",
+    "target_analysis_mode",
+    "collection",
+    "query_source",
+    "target_evidence_type",
+    "target_universe_definition",
+    "feature_set_source",
+    "feature_set_collection",
+    "feature_set_version",
+    "set_id",
+    "description",
+    "set_size",
+    "ranked_targets",
+    "feature_set_member_universe_size",
+    "target_pairs",
+    "ranking_metric",
+    "enrichment_score",
+    "leading_edge_size",
+    "direction",
+    "leading_edge_targets",
+]
+RANKED_FEATURE_SET_UNIVERSE_COLUMNS = [
+    "contrast_id",
+    "target_analysis_mode",
+    "collection",
+    "query_source",
+    "target_evidence_type",
+    "target_universe_definition",
+    "feature_set_source",
+    "feature_set_collection",
+    "feature_set_version",
+    "n_feature_sets",
+    "ranked_targets",
+    "target_universe_size",
+    "feature_set_member_universe_size",
+    "target_pairs",
+    "ranking_metric",
+    "min_overlap",
+]
+RANKING_METRIC = "target_stat_else_signed_log10_pvalue_else_log2fc"
 
 
 @dataclass(frozen=True)
@@ -191,6 +237,20 @@ def parse_float(value: str) -> float | None:
     return parsed
 
 
+def target_rank_score(row: dict[str, str]) -> float:
+    stat = parse_float(row.get("target_stat", ""))
+    if stat is not None:
+        return stat
+    log2fc = parse_float(row.get("target_log2FoldChange", ""))
+    pvalue = parse_float(row.get("target_pvalue", "")) or parse_float(row.get("target_padj", ""))
+    if log2fc is not None and pvalue is not None and pvalue > 0:
+        sign = 1.0 if log2fc >= 0 else -1.0
+        return sign * -math.log10(max(pvalue, 1e-300))
+    if log2fc is not None:
+        return log2fc
+    return 0.0
+
+
 def log_choose(n: int, k: int) -> float:
     if k < 0 or k > n:
         return float("-inf")
@@ -250,6 +310,30 @@ def target_collections(pairs: list[dict[str, str]]) -> dict[str, set[str]]:
             row["target_id"] for row in pairs if row.get("regulation_class") == "mirna_down_target_up"
         },
     }
+
+
+def target_pair_count(pairs: list[dict[str, str]], targets: set[str]) -> int:
+    return sum(1 for row in pairs if row.get("target_id", "") in targets)
+
+
+def ranked_targets(pairs: list[dict[str, str]], targets: set[str]) -> list[dict[str, str]]:
+    best_by_target: dict[str, dict[str, str]] = {}
+    for row in pairs:
+        target_id = row.get("target_id", "")
+        if not target_id or target_id not in targets:
+            continue
+        score = target_rank_score(row)
+        current = best_by_target.get(target_id)
+        if current is None or abs(score) > abs(parse_float(current.get("rank_score", "")) or 0.0):
+            best_by_target[target_id] = {
+                "target_id": target_id,
+                "rank_score": f"{score:.8g}",
+            }
+    return sorted(
+        best_by_target.values(),
+        key=lambda item: (parse_float(item.get("rank_score", "")) or 0.0, item["target_id"]),
+        reverse=True,
+    )
 
 
 def feature_set_groups(feature_sets: list[FeatureSet]) -> dict[tuple[str, str], list[FeatureSet]]:
@@ -345,6 +429,117 @@ def enrichment_rows(
     return rows
 
 
+def ranked_feature_set_universe_rows(
+    contrast_id: str,
+    pairs: list[dict[str, str]],
+    feature_sets: list[FeatureSet],
+    min_overlap: int,
+) -> list[dict[str, str]]:
+    rows: list[dict[str, str]] = []
+    collections = target_collections(pairs)
+    for collection, targets in sorted(collections.items()):
+        ranked = ranked_targets(pairs, targets)
+        ranked_universe = {row["target_id"] for row in ranked}
+        if not ranked_universe:
+            continue
+        for (feature_set_source, feature_set_collection), grouped_sets in sorted(feature_set_groups(feature_sets).items()):
+            member_universe: set[str] = set()
+            for feature_set in grouped_sets:
+                member_universe.update(feature_set.features & ranked_universe)
+            rows.append(
+                {
+                    "contrast_id": contrast_id,
+                    "target_analysis_mode": "inverse_integrated_target_ranked_feature_set",
+                    "collection": collection,
+                    "query_source": collection,
+                    "target_evidence_type": "inverse_integrated",
+                    "target_universe_definition": "matched RNA-seq-ranked targets from integrated miRNA-mRNA pairs",
+                    "feature_set_source": feature_set_source,
+                    "feature_set_collection": feature_set_collection,
+                    "feature_set_version": grouped_feature_set_version(grouped_sets),
+                    "n_feature_sets": str(len(grouped_sets)),
+                    "ranked_targets": str(len(ranked_universe)),
+                    "target_universe_size": str(len(ranked_universe)),
+                    "feature_set_member_universe_size": str(len(member_universe)),
+                    "target_pairs": str(target_pair_count(pairs, ranked_universe)),
+                    "ranking_metric": RANKING_METRIC,
+                    "min_overlap": str(min_overlap),
+                }
+            )
+    return rows
+
+
+def ranked_feature_set_rows(
+    contrast_id: str,
+    pairs: list[dict[str, str]],
+    feature_sets: list[FeatureSet],
+    min_overlap: int,
+) -> list[dict[str, str]]:
+    rows: list[dict[str, str]] = []
+    collections = target_collections(pairs)
+    for collection, targets in collections.items():
+        ranked = ranked_targets(pairs, targets)
+        universe = [row["target_id"] for row in ranked]
+        if not universe:
+            continue
+        universe_set = set(universe)
+        scores = [abs(parse_float(row.get("rank_score", "")) or 0.0) for row in ranked]
+        for feature_set in feature_sets:
+            members = feature_set.features & universe_set
+            if len(members) < min_overlap:
+                continue
+            miss_penalty = 1.0 / max(1, len(universe) - len(members))
+            member_weight = sum(score for feature, score in zip(universe, scores) if feature in members) or float(len(members))
+            running = 0.0
+            best_abs = 0.0
+            best_score = 0.0
+            leading_edge_index = -1
+            for index, (feature, score) in enumerate(zip(universe, scores)):
+                if feature in members:
+                    running += score / member_weight
+                else:
+                    running -= miss_penalty
+                if abs(running) > best_abs:
+                    best_abs = abs(running)
+                    best_score = running
+                    leading_edge_index = index
+            leading_edge = [feature for feature in universe[: leading_edge_index + 1] if feature in members]
+            rows.append(
+                {
+                    "contrast_id": contrast_id,
+                    "target_analysis_mode": "inverse_integrated_target_ranked_feature_set",
+                    "collection": collection,
+                    "query_source": collection,
+                    "target_evidence_type": "inverse_integrated",
+                    "target_universe_definition": "matched RNA-seq-ranked targets from integrated miRNA-mRNA pairs",
+                    "feature_set_source": feature_set.source,
+                    "feature_set_collection": feature_set.collection,
+                    "feature_set_version": feature_set.version,
+                    "set_id": feature_set.set_id,
+                    "description": feature_set.description,
+                    "set_size": str(len(members)),
+                    "ranked_targets": str(len(universe)),
+                    "feature_set_member_universe_size": str(len(members)),
+                    "target_pairs": str(target_pair_count(pairs, universe_set)),
+                    "ranking_metric": RANKING_METRIC,
+                    "enrichment_score": f"{best_score:.8g}",
+                    "leading_edge_size": str(len(leading_edge)),
+                    "direction": "rna_target_up" if best_score >= 0 else "rna_target_down",
+                    "leading_edge_targets": ",".join(leading_edge),
+                }
+            )
+    rows.sort(
+        key=lambda row: (
+            -(abs(parse_float(row.get("enrichment_score", "")) or 0.0)),
+            row["collection"],
+            row["feature_set_source"],
+            row["feature_set_collection"],
+            row["set_id"],
+        )
+    )
+    return rows
+
+
 def write_svg(path: Path, rows: list[dict[str, str]], top_n: int) -> None:
     selected = rows[:top_n]
     width = 980
@@ -388,6 +583,41 @@ def write_svg(path: Path, rows: list[dict[str, str]], top_n: int) -> None:
     path.write_text("\n".join(elements) + "\n", encoding="utf-8")
 
 
+def write_ranked_svg(path: Path, rows: list[dict[str, str]], top_n: int) -> None:
+    selected = rows[:top_n]
+    width = 980
+    row_height = 34
+    height = max(220, 84 + row_height * max(1, len(selected)))
+    left = 340
+    plot_width = 500
+    max_score = max((abs(parse_float(row.get("enrichment_score", "")) or 0.0) for row in selected), default=1.0)
+    max_score = max(max_score, 1.0)
+    elements = [
+        f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}">',
+        '<rect width="100%" height="100%" fill="#ffffff"/>',
+        '<text x="32" y="28" font-family="sans-serif" font-size="18" font-weight="700">Ranked inverse target feature-set enrichment</text>',
+        f'<line x1="{left}" y1="{height - 40}" x2="{left + plot_width}" y2="{height - 40}" stroke="#777"/>',
+    ]
+    if not selected:
+        elements.append('<text x="32" y="82" font-family="sans-serif" font-size="14">No ranked target feature sets.</text>')
+    for index, row in enumerate(selected):
+        y = 62 + index * row_height
+        score = parse_float(row.get("enrichment_score", "")) or 0.0
+        x = left + ((score / max_score) + 1.0) * plot_width / 2.0
+        label = f"{row.get('feature_set_collection') or row.get('feature_set_source')}:{row.get('set_id')}"
+        if len(label) > 46:
+            label = label[:43] + "..."
+        color = "#b2182b" if score >= 0 else "#2166ac"
+        radius = min(16, 4 + int(row.get("leading_edge_size", "1") or "1"))
+        elements.append(f'<text x="32" y="{y + 4}" font-family="sans-serif" font-size="12">{html.escape(label)}</text>')
+        elements.append(f'<line x1="{left}" y1="{y}" x2="{left + plot_width}" y2="{y}" stroke="#eeeeee"/>')
+        elements.append(f'<circle cx="{x:.1f}" cy="{y}" r="{radius}" fill="{color}" fill-opacity="0.82"/>')
+        elements.append(f'<text x="{x + radius + 6:.1f}" y="{y + 4}" font-family="sans-serif" font-size="11">{score:.3g}</text>')
+    elements.append("</svg>")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("\n".join(elements) + "\n", encoding="utf-8")
+
+
 def blocked_row(row: dict[str, str], outdir: Path, reason: str) -> dict[str, str]:
     contrast_dir = outdir / row["contrast_id"]
     manifest = contrast_dir / "target_feature_set_manifest.tsv"
@@ -411,6 +641,22 @@ def blocked_row(row: dict[str, str], outdir: Path, reason: str) -> dict[str, str
                 "path": "",
                 "n_rows": "0",
             },
+            {
+                "contrast_id": row["contrast_id"],
+                "resource": "target_ranked_feature_set_universe",
+                "status": "blocked",
+                "reason": reason,
+                "path": "",
+                "n_rows": "0",
+            },
+            {
+                "contrast_id": row["contrast_id"],
+                "resource": "target_ranked_feature_set_results",
+                "status": "blocked",
+                "reason": reason,
+                "path": "",
+                "n_rows": "0",
+            },
         ],
     )
     return {
@@ -421,10 +667,15 @@ def blocked_row(row: dict[str, str], outdir: Path, reason: str) -> dict[str, str
         "mirna_mrna_target_feature_set_universe": "",
         "mirna_mrna_target_feature_set_results": "",
         "mirna_mrna_target_feature_set_plot": "",
+        "mirna_mrna_target_ranked_feature_set_universe": "",
+        "mirna_mrna_target_ranked_feature_set_results": "",
+        "mirna_mrna_target_ranked_feature_set_plot": "",
         "n_targets": "0",
         "n_feature_sets": "0",
         "n_feature_set_universe_rows": "0",
         "n_feature_set_terms": "0",
+        "n_ranked_feature_set_universe_rows": "0",
+        "n_ranked_feature_set_terms": "0",
     }
 
 
@@ -439,13 +690,21 @@ def render_contrast(row: dict[str, str], outdir: Path, feature_sets: list[Featur
         "universe": contrast_dir / "target_feature_set_universe.tsv",
         "results": contrast_dir / "target_feature_set_enrichment.tsv",
         "plot": contrast_dir / "target_feature_set_enrichment.svg",
+        "ranked_universe": contrast_dir / "target_ranked_feature_set_universe.tsv",
+        "ranked_results": contrast_dir / "target_ranked_feature_set_enrichment.tsv",
+        "ranked_plot": contrast_dir / "target_ranked_feature_set_enrichment.svg",
     }
     _columns, pairs = read_table(Path(row["mirna_mrna_pairs"]), PAIR_COLUMNS)
     universe = feature_set_universe_rows(row["contrast_id"], pairs, feature_sets, min_overlap)
     results = enrichment_rows(row["contrast_id"], pairs, feature_sets, min_overlap)
+    ranked_universe = ranked_feature_set_universe_rows(row["contrast_id"], pairs, feature_sets, min_overlap)
+    ranked_results = ranked_feature_set_rows(row["contrast_id"], pairs, feature_sets, min_overlap)
     write_table(paths["universe"], FEATURE_SET_UNIVERSE_COLUMNS, universe)
     write_table(paths["results"], FEATURE_SET_COLUMNS, results)
     write_svg(paths["plot"], results, top_n)
+    write_table(paths["ranked_universe"], RANKED_FEATURE_SET_UNIVERSE_COLUMNS, ranked_universe)
+    write_table(paths["ranked_results"], RANKED_FEATURE_SET_COLUMNS, ranked_results)
+    write_ranked_svg(paths["ranked_plot"], ranked_results, top_n)
     write_table(
         paths["manifest"],
         CONTRAST_MANIFEST_COLUMNS,
@@ -453,6 +712,9 @@ def render_contrast(row: dict[str, str], outdir: Path, feature_sets: list[Featur
             {"contrast_id": row["contrast_id"], "resource": "target_feature_set_universe", "status": "ok", "reason": "", "path": str(paths["universe"]), "n_rows": str(len(universe))},
             {"contrast_id": row["contrast_id"], "resource": "target_feature_set_results", "status": "ok", "reason": "", "path": str(paths["results"]), "n_rows": str(len(results))},
             {"contrast_id": row["contrast_id"], "resource": "target_feature_set_plot", "status": "ok", "reason": "", "path": str(paths["plot"]), "n_rows": str(len(results))},
+            {"contrast_id": row["contrast_id"], "resource": "target_ranked_feature_set_universe", "status": "ok", "reason": "", "path": str(paths["ranked_universe"]), "n_rows": str(len(ranked_universe))},
+            {"contrast_id": row["contrast_id"], "resource": "target_ranked_feature_set_results", "status": "ok", "reason": "", "path": str(paths["ranked_results"]), "n_rows": str(len(ranked_results))},
+            {"contrast_id": row["contrast_id"], "resource": "target_ranked_feature_set_plot", "status": "ok", "reason": "", "path": str(paths["ranked_plot"]), "n_rows": str(len(ranked_results))},
         ],
     )
     return {
@@ -463,10 +725,15 @@ def render_contrast(row: dict[str, str], outdir: Path, feature_sets: list[Featur
         "mirna_mrna_target_feature_set_universe": str(paths["universe"]),
         "mirna_mrna_target_feature_set_results": str(paths["results"]),
         "mirna_mrna_target_feature_set_plot": str(paths["plot"]),
+        "mirna_mrna_target_ranked_feature_set_universe": str(paths["ranked_universe"]),
+        "mirna_mrna_target_ranked_feature_set_results": str(paths["ranked_results"]),
+        "mirna_mrna_target_ranked_feature_set_plot": str(paths["ranked_plot"]),
         "n_targets": str(len(target_collections(pairs)["all_pairs"])),
         "n_feature_sets": str(len(feature_sets)),
         "n_feature_set_universe_rows": str(len(universe)),
         "n_feature_set_terms": str(len(results)),
+        "n_ranked_feature_set_universe_rows": str(len(ranked_universe)),
+        "n_ranked_feature_set_terms": str(len(ranked_results)),
     }
 
 

@@ -256,6 +256,14 @@ smallRNA target-gene enrichment is interpreted as potentially regulated target
 processes. It is not direct evidence that a pathway is activated or repressed
 unless matched RNA-seq integration supports the target expression direction.
 
+When matched RNA-seq is available, ASPIS also writes ranked target feature-set
+outputs for inverse miRNA-mRNA integrations. These outputs rank target genes by
+the matched RNA-seq target DE statistic when available, falling back to signed
+`-log10(pvalue/padj)` or target log2 fold change. They are GSEA-style
+running-score summaries over matched target genes, not permutation-based fgsea
+p-values. ORA-style target feature sets and ranked target feature sets are kept
+as separate report assets.
+
 ## Minimum Practical Checks
 
 Before a real run:

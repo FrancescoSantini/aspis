@@ -137,11 +137,11 @@ def exercise_inverse_target_featuresets() -> Path:
     pairs = INPUT / "mirna_mrna_pairs.tsv"
     write_tsv(
         pairs,
-        ["mirna_id", "target_id", "regulation_class", "pearson"],
+        ["mirna_id", "target_id", "regulation_class", "pearson", "target_stat", "target_pvalue", "target_log2FoldChange"],
         [
-            {"mirna_id": "hsa-miR-1-5p", "target_id": "GENE1", "regulation_class": "mirna_up_target_down", "pearson": "-0.9"},
-            {"mirna_id": "hsa-miR-2-3p", "target_id": "GENE2", "regulation_class": "mirna_down_target_up", "pearson": "-0.8"},
-            {"mirna_id": "hsa-miR-3-5p", "target_id": "GENE3", "regulation_class": "same_direction", "pearson": "0.7"},
+            {"mirna_id": "hsa-miR-1-5p", "target_id": "GENE1", "regulation_class": "mirna_up_target_down", "pearson": "-0.9", "target_stat": "-5", "target_pvalue": "0.0001", "target_log2FoldChange": "-2"},
+            {"mirna_id": "hsa-miR-2-3p", "target_id": "GENE2", "regulation_class": "mirna_down_target_up", "pearson": "-0.8", "target_stat": "4", "target_pvalue": "0.0002", "target_log2FoldChange": "2"},
+            {"mirna_id": "hsa-miR-3-5p", "target_id": "GENE3", "regulation_class": "same_direction", "pearson": "0.7", "target_stat": "1", "target_pvalue": "0.2", "target_log2FoldChange": "0.3"},
         ],
     )
     integration_manifest = INPUT / "mirna_mrna_manifest.tsv"
@@ -157,6 +157,7 @@ def exercise_inverse_target_featuresets() -> Path:
         [
             {"set_id": "SET_INVERSE", "description": "inverse targets", "feature_id": "GENE1", "source": "toy", "collection": "pathway", "resource_version": "toy_pathway_2026_05"},
             {"set_id": "SET_INVERSE", "description": "inverse targets", "feature_id": "GENE2", "source": "toy", "collection": "pathway", "resource_version": "toy_pathway_2026_05"},
+            {"set_id": "SET_TARGET_DOWN", "description": "target-down genes", "feature_id": "GENE1", "source": "toy", "collection": "pathway", "resource_version": "toy_pathway_2026_05"},
             {"set_id": "SET_OTHER", "description": "other", "feature_id": "GENE3", "source": "toy", "collection": "pathway", "resource_version": "toy_pathway_2026_05"},
         ],
     )
@@ -184,7 +185,14 @@ def exercise_inverse_target_featuresets() -> Path:
     )
     row = read_tsv(
         manifest,
-        {"status", "mirna_mrna_target_feature_set_universe", "mirna_mrna_target_feature_set_results"},
+        {
+            "status",
+            "mirna_mrna_target_feature_set_universe",
+            "mirna_mrna_target_feature_set_results",
+            "mirna_mrna_target_ranked_feature_set_universe",
+            "mirna_mrna_target_ranked_feature_set_results",
+            "n_ranked_feature_set_terms",
+        },
     )[0]
     if row["status"] != "ok":
         raise ValueError(f"inverse target feature-set manifest was not ok: {row}")
@@ -234,6 +242,44 @@ def exercise_inverse_target_featuresets() -> Path:
         raise ValueError(f"inverse target feature-set results lost resource version: {results}")
     if "inverse" not in {result["collection"] for result in results}:
         raise ValueError(f"inverse target collection missing from results: {results}")
+    if int(row["n_ranked_feature_set_terms"]) < 1:
+        raise ValueError(f"ranked inverse target feature-set terms missing: {row}")
+    ranked_universe = read_tsv(
+        Path(row["mirna_mrna_target_ranked_feature_set_universe"]),
+        {
+            "target_analysis_mode",
+            "collection",
+            "target_evidence_type",
+            "ranking_metric",
+            "ranked_targets",
+            "feature_set_version",
+        },
+    )
+    if any(item["target_analysis_mode"] != "inverse_integrated_target_ranked_feature_set" for item in ranked_universe):
+        raise ValueError(f"ranked inverse target feature-set universe has unexpected mode: {ranked_universe}")
+    if any(item["target_evidence_type"] != "inverse_integrated" for item in ranked_universe):
+        raise ValueError(f"ranked inverse target feature-set universe lost evidence type: {ranked_universe}")
+    if any(item["ranking_metric"] != "target_stat_else_signed_log10_pvalue_else_log2fc" for item in ranked_universe):
+        raise ValueError(f"ranked inverse target feature-set universe lost ranking metric: {ranked_universe}")
+    ranked_results = read_tsv(
+        Path(row["mirna_mrna_target_ranked_feature_set_results"]),
+        {
+            "target_analysis_mode",
+            "collection",
+            "target_evidence_type",
+            "ranking_metric",
+            "enrichment_score",
+            "direction",
+            "leading_edge_targets",
+            "feature_set_version",
+        },
+    )
+    if any(item["target_analysis_mode"] != "inverse_integrated_target_ranked_feature_set" for item in ranked_results):
+        raise ValueError(f"ranked inverse target feature-set results have unexpected mode: {ranked_results}")
+    if "inverse" not in {item["collection"] for item in ranked_results}:
+        raise ValueError(f"ranked inverse target collection missing from results: {ranked_results}")
+    if not any(item["direction"] == "rna_target_down" for item in ranked_results):
+        raise ValueError(f"ranked inverse target results do not expose target-down direction: {ranked_results}")
     return manifest
 
 
@@ -262,18 +308,18 @@ def exercise_mirna_mrna_target_modes() -> Path:
     rnaseq_counts = INPUT / "gene_normalized.tsv"
     write_tsv(
         small_results,
-        ["Geneid", "baseMean", "log2FoldChange", "pvalue", "padj"],
+        ["Geneid", "baseMean", "log2FoldChange", "stat", "pvalue", "padj"],
         [
-            {"Geneid": "hsa-miR-1-5p", "baseMean": "50", "log2FoldChange": "2", "pvalue": "0.001", "padj": "0.01"},
-            {"Geneid": "hsa-miR-2-3p", "baseMean": "50", "log2FoldChange": "-2", "pvalue": "0.001", "padj": "0.01"},
+            {"Geneid": "hsa-miR-1-5p", "baseMean": "50", "log2FoldChange": "2", "stat": "5", "pvalue": "0.001", "padj": "0.01"},
+            {"Geneid": "hsa-miR-2-3p", "baseMean": "50", "log2FoldChange": "-2", "stat": "-5", "pvalue": "0.001", "padj": "0.01"},
         ],
     )
     write_tsv(
         rnaseq_results,
-        ["Geneid", "baseMean", "log2FoldChange", "pvalue", "padj"],
+        ["Geneid", "baseMean", "log2FoldChange", "stat", "pvalue", "padj"],
         [
-            {"Geneid": "GENE1", "baseMean": "50", "log2FoldChange": "-2", "pvalue": "0.001", "padj": "0.01"},
-            {"Geneid": "GENE2", "baseMean": "50", "log2FoldChange": "2", "pvalue": "0.001", "padj": "0.01"},
+            {"Geneid": "GENE1", "baseMean": "50", "log2FoldChange": "-2", "stat": "-6", "pvalue": "0.001", "padj": "0.01"},
+            {"Geneid": "GENE2", "baseMean": "50", "log2FoldChange": "2", "stat": "6", "pvalue": "0.001", "padj": "0.01"},
         ],
     )
     write_tsv(

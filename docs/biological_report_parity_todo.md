@@ -253,15 +253,16 @@ Current state:
   feature sets.
 - Target-gene feature-set outputs preserve feature-set resource versions, and
   database-target mode also carries target-source versions.
+- Matched miRNA-mRNA integration now emits ranked target-gene feature-set
+  outputs for integrated target pairs. Target genes are ranked by matched
+  RNA-seq target DE statistics where available, falling back to signed
+  p-value/log2FC ranking, and inverse-direction collections are reported
+  separately from ORA-style target feature sets.
 
 Remaining work:
 
 - Label target enrichment as "potentially regulated target processes", not as
   directly observed mRNA pathway activation.
-- Add target-gene GSEA when matched RNA-seq exists:
-  - rank target genes by RNA-seq DE statistic;
-  - restrict to genes targeted by DE miRNAs or use target evidence as a filter;
-  - report inverse-direction subsets separately.
 - Keep miRNA-ID gene-set enrichment separate from target-gene enrichment, and
   only run it when a true miRNA gene-set resource is provided.
 
@@ -384,4 +385,5 @@ Desired isoform-switch report:
 Suggested order:
 
 1. Add real-data validation notes once real projects are available.
-2. Add target-gene GSEA when matched RNA-seq exists.
+2. Add miRNA-ID gene-set enrichment only when a true miRNA gene-set resource is
+   provided.

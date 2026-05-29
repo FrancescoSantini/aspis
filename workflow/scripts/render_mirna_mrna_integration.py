@@ -42,8 +42,12 @@ PAIR_COLUMNS = [
     "pearson",
     "matched_samples",
     "mirna_log2FoldChange",
+    "mirna_stat",
+    "mirna_pvalue",
     "mirna_padj",
     "target_log2FoldChange",
+    "target_stat",
+    "target_pvalue",
     "target_padj",
 ]
 SUMMARY_COLUMNS = [
@@ -70,8 +74,12 @@ TARGET_MODE_COLUMNS = [
     "pearson",
     "matched_samples",
     "mirna_log2FoldChange",
+    "mirna_stat",
+    "mirna_pvalue",
     "mirna_padj",
     "target_log2FoldChange",
+    "target_stat",
+    "target_pvalue",
     "target_padj",
 ]
 TARGET_MODE_SUMMARY_COLUMNS = [
@@ -501,8 +509,12 @@ def render_contrast(
                 "pearson": f"{correlation:.6g}",
                 "matched_samples": str(len(matches)),
                 "mirna_log2FoldChange": mirna_result.get("log2FoldChange", ""),
+                "mirna_stat": mirna_result.get("stat", ""),
+                "mirna_pvalue": mirna_result.get("pvalue", ""),
                 "mirna_padj": mirna_result.get("padj", ""),
                 "target_log2FoldChange": gene_result.get("log2FoldChange", ""),
+                "target_stat": gene_result.get("stat", ""),
+                "target_pvalue": gene_result.get("pvalue", ""),
                 "target_padj": gene_result.get("padj", ""),
             }
         )
