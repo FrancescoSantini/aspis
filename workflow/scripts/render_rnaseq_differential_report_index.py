@@ -7,6 +7,7 @@ import argparse
 import csv
 import html
 import os
+from collections import Counter
 from pathlib import Path
 from typing import Optional
 
@@ -108,6 +109,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--isoform-switch-ncrna", default="", help="Optional isoform-switch ncRNA interpretation table")
     parser.add_argument("--isoform-switch-plots", default="", help="Optional isoform-switch plot manifest")
     parser.add_argument("--isoform-switch-plots-pdf", default="", help="Optional isoform-switch multi-page plot PDF")
+    parser.add_argument("--dtu-plan", default="", help="Optional DTU/splicing plan TSV")
+    parser.add_argument("--dtu-method-manifest", default="", help="Optional DTU/splicing method manifest TSV")
     parser.add_argument("--asset-manifest", required=True, help="Report asset inventory TSV")
     parser.add_argument("--output", required=True, help="Report index HTML")
     parser.add_argument("--done", required=True, help="Completion sentinel")
@@ -122,6 +125,19 @@ def read_table(path: Path, required: set[str]) -> list[dict[str, str]]:
         missing = required - set(reader.fieldnames)
         if missing:
             raise ValueError(f"TSV {path} is missing columns: {sorted(missing)}")
+        return [{key: (value or "").strip() for key, value in row.items()} for row in reader]
+
+
+def read_optional_table(path_text: str) -> list[dict[str, str]]:
+    if not path_text:
+        return []
+    path = Path(path_text)
+    if not path.is_file():
+        return []
+    with path.open(newline="", encoding="utf-8") as handle:
+        reader = csv.DictReader(handle, delimiter="\t")
+        if reader.fieldnames is None:
+            return []
         return [{key: (value or "").strip() for key, value in row.items()} for row in reader]
 
 
@@ -184,6 +200,57 @@ def link_list(items: list[tuple[str, str]], html_path: Path) -> str:
     links = [file_link(label, path, html_path) for label, path in items]
     links = [link for link in links if link]
     return "<br>".join(links)
+
+
+def safe_int(value: str) -> int:
+    try:
+        return int(float(value))
+    except (TypeError, ValueError):
+        return 0
+
+
+def format_counts(values: Counter[str]) -> str:
+    return ", ".join(f"{key}: {value}" for key, value in sorted(values.items())) or "none"
+
+
+def render_dtu_summary(
+    plan_rows: list[dict[str, str]],
+    method_rows: list[dict[str, str]],
+    output: Path,
+) -> str:
+    if not plan_rows and not method_rows:
+        return ""
+    plan = plan_rows[0] if plan_rows else {}
+    method_status = Counter(row.get("status", "unknown") or "unknown" for row in method_rows)
+    standardized_status = Counter(
+        row.get("standardized_status", "not_run") or "not_run"
+        for row in method_rows
+        if row.get("standardized_status", "") or row.get("status", "") == "completed"
+    )
+    standardized_rows = sum(safe_int(row.get("standardized_result_count", "")) for row in method_rows)
+    plan_link = link_list(
+        [
+            ("plan", plan_rows[0].get("_plan_path", "") if plan_rows else ""),
+            ("method manifest", method_rows[0].get("_manifest_path", "") if method_rows else ""),
+        ],
+        output,
+    )
+    resources = []
+    for row in method_rows:
+        method = row.get("method", "method") or "method"
+        standardized = row.get("standardized_results", "")
+        if standardized:
+            resources.append(file_link(f"{method} standardized results", standardized, output))
+    resource_html = "<br>".join(link for link in resources if link)
+    return f"""
+  <section class="dtu-summary">
+    <h2>DTU / splicing methods</h2>
+    <div class="counts">plan status: {html.escape(plan.get("status", "") or "not_configured")}; candidate methods: {html.escape(plan.get("candidate_methods", "") or plan.get("method", ""))}</div>
+    <div class="counts">method status: {html.escape(format_counts(method_status))}; standardized status: {html.escape(format_counts(standardized_status))}; standardized rows: {standardized_rows}</div>
+    <div class="counts">resources: {plan_link}</div>
+    {f'<div class="counts">standardized result tables: {resource_html}</div>' if resource_html else ''}
+  </section>
+"""
 
 
 def merged_rows(
@@ -361,6 +428,10 @@ def render_html(
     isoform_switch_ncrna: str = "",
     isoform_switch_plots: str = "",
     isoform_switch_plots_pdf: str = "",
+    dtu_plan: str = "",
+    dtu_method_manifest: str = "",
+    dtu_plan_rows: list[dict[str, str]] | None = None,
+    dtu_method_rows: list[dict[str, str]] | None = None,
 ) -> str:
     project_names = sorted({row["project"] for row in rows})
     title = "RNA-seq differential report index"
@@ -379,10 +450,13 @@ def render_html(
             ("isoform switch ncRNA interpretation", isoform_switch_ncrna),
             ("isoform switch plots", isoform_switch_plots),
             ("isoform switch PDF", isoform_switch_plots_pdf),
+            ("DTU plan", dtu_plan),
+            ("DTU method manifest", dtu_method_manifest),
         ],
         output,
     )
     project_links_html = f'<div class="counts">project resources: {project_links}</div>' if project_links else ""
+    dtu_summary = render_dtu_summary(dtu_plan_rows or [], dtu_method_rows or [], output)
     return f"""<!doctype html>
 <html lang="en">
 <head>
@@ -409,6 +483,7 @@ def render_html(
   <h1>{html.escape(title)}</h1>
   <div class="counts">contrasts: {len(rows)}; ok: {ok}; blocked: {blocked}; failed: {failed}</div>
   {project_links_html}
+  {dtu_summary}
   <table>
     <thead>
       <tr>
@@ -480,7 +555,7 @@ ASSET_FIELDS = [
 def write_asset_manifest(
     path: Path,
     rows: list[dict[str, str]],
-    project_assets: Optional[list[tuple[str, str, str, str]]] = None,
+    project_assets: Optional[list[tuple[str, str, str, str, str, str]]] = None,
 ) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", newline="", encoding="utf-8") as handle:
@@ -507,17 +582,17 @@ def write_asset_manifest(
                 )
         if project_assets:
             project = rows[0]["project"] if rows else ""
-            for label, kind, asset_path, status in project_assets:
+            for group, level, label, kind, asset_path, status in project_assets:
                 if not asset_path:
                     continue
                 writer.writerow(
                     {
                         "project": project,
                         "assay": "rnaseq",
-                        "level": "isoform_switch",
+                        "level": level,
                         "contrast_id": "project",
                         "status": status,
-                        "asset_group": "isoform_switch",
+                        "asset_group": group,
                         "asset_label": label,
                         "asset_kind": kind,
                         "path": asset_path,
@@ -552,6 +627,12 @@ def main() -> int:
         "summary",
     )
     rows = merged_rows(plan_rows, plots_by_key, enrichment_by_key, summaries_by_key)
+    dtu_plan_rows = read_optional_table(args.dtu_plan)
+    for row in dtu_plan_rows:
+        row["_plan_path"] = args.dtu_plan
+    dtu_method_rows = read_optional_table(args.dtu_method_manifest)
+    for row in dtu_method_rows:
+        row["_manifest_path"] = args.dtu_method_manifest
     output = Path(args.output)
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(
@@ -566,17 +647,35 @@ def main() -> int:
             args.isoform_switch_ncrna,
             args.isoform_switch_plots,
             args.isoform_switch_plots_pdf,
+            args.dtu_plan,
+            args.dtu_method_manifest,
+            dtu_plan_rows,
+            dtu_method_rows,
         ),
         encoding="utf-8",
     )
     project_assets = [
-        ("report_html", "html", args.isoform_switch_html, "ok"),
-        ("candidate_table", "table", args.isoform_switch_candidates, "ok"),
-        ("event_summary", "table", args.isoform_switch_events, "ok"),
-        ("ncrna_switch_interpretation", "table", args.isoform_switch_ncrna, "ok"),
-        ("plot_manifest", "manifest", args.isoform_switch_plots, "ok"),
-        ("plots_pdf", "plot", args.isoform_switch_plots_pdf, "ok"),
+        ("isoform_switch", "isoform_switch", "report_html", "html", args.isoform_switch_html, "ok"),
+        ("isoform_switch", "isoform_switch", "candidate_table", "table", args.isoform_switch_candidates, "ok"),
+        ("isoform_switch", "isoform_switch", "event_summary", "table", args.isoform_switch_events, "ok"),
+        ("isoform_switch", "isoform_switch", "ncrna_switch_interpretation", "table", args.isoform_switch_ncrna, "ok"),
+        ("isoform_switch", "isoform_switch", "plot_manifest", "manifest", args.isoform_switch_plots, "ok"),
+        ("isoform_switch", "isoform_switch", "plots_pdf", "plot", args.isoform_switch_plots_pdf, "ok"),
+        ("dtu", "dtu", "dtu_plan", "table", args.dtu_plan, dtu_plan_rows[0].get("status", "planned") if dtu_plan_rows else "not_configured"),
+        ("dtu", "dtu", "dtu_method_manifest", "manifest", args.dtu_method_manifest, "ok" if dtu_method_rows else "not_configured"),
     ]
+    for row in dtu_method_rows:
+        method = row.get("method", "method") or "method"
+        project_assets.append(
+            (
+                "dtu",
+                "dtu",
+                f"{method}_standardized_results",
+                "table",
+                row.get("standardized_results", ""),
+                row.get("standardized_status", "") or row.get("status", ""),
+            )
+        )
     write_asset_manifest(Path(args.asset_manifest), rows, project_assets)
     write_done(Path(args.done), rows)
     return 0

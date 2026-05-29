@@ -362,13 +362,38 @@ def summarize_mirna_mrna(rows: list[dict[str, str]], artifacts: list[Path]) -> N
 
 
 def summarize_dtu(rows: list[dict[str, str]], artifacts: list[Path]) -> None:
-    plan = read_tsv(table_by_name(artifacts, "dtu_plan.tsv") or Path(""))
-    if not plan:
+    plan_path = table_by_name(artifacts, "dtu_plan.tsv")
+    plan = read_tsv(plan_path or Path(""))
+    if plan:
+        add_context(rows, "dtu", "plan_rows", len(plan), str(plan_path))
+        for key in ("method", "status", "reason", "candidate_methods"):
+            if key in plan[0]:
+                add_context(rows, "dtu", key, plan[0].get(key, ""), str(plan_path))
+    manifest_path = table_by_name(artifacts, "dtu_method_manifest.tsv")
+    manifest = read_tsv(manifest_path or Path(""))
+    if not manifest:
         return
-    add_context(rows, "dtu", "plan_rows", len(plan), "dtu_plan.tsv")
-    for key in ("method", "status", "reason", "candidate_methods"):
-        if key in plan[0]:
-            add_context(rows, "dtu", key, plan[0].get(key, ""), "dtu_plan.tsv")
+    add_context(rows, "dtu", "method_manifest_rows", len(manifest), str(manifest_path))
+    if "method" in manifest[0]:
+        add_context(rows, "dtu", "methods", sorted({record.get("method", "") for record in manifest}), str(manifest_path))
+    if "status" in manifest[0]:
+        add_context(rows, "dtu", "method_status_counts", dict_count(manifest, "status"), str(manifest_path))
+    if "standardized_status" in manifest[0]:
+        add_context(rows, "dtu", "standardized_status_counts", dict_count(manifest, "standardized_status"), str(manifest_path))
+        standardized_methods = sorted(
+            record.get("method", "")
+            for record in manifest
+            if record.get("standardized_status") == "ok"
+        )
+        add_context(rows, "dtu", "standardized_methods", standardized_methods, str(manifest_path))
+    if "standardized_result_count" in manifest[0]:
+        add_context(
+            rows,
+            "dtu",
+            "standardized_result_rows",
+            sum(int(safe_float(record.get("standardized_result_count", ""))) for record in manifest),
+            str(manifest_path),
+        )
 
 
 def safe_float(value: str) -> float:

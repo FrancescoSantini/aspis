@@ -145,6 +145,12 @@ including `gene_id`/`GeneID`, `feature_id`/`featureID`/`ID`, `pvalue`/`PValue`,
 still marked as completed, but the manifest records
 `standardized_status=no_results_found`.
 
+When RNA-seq differential reports are enabled, the project report index links
+the DTU plan, the DTU method manifest, and any standardized DTU result tables.
+The branch provenance bundle also summarizes DTU method status, standardized
+parser status, and total standardized result rows so optional splicing engines
+are auditable even when they are site-managed tools.
+
 ## Environment Reports
 
 RNA-seq differential environment reports now expose optional tool availability
