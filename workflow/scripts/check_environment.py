@@ -32,6 +32,22 @@ VERSION_COMMANDS = {
     "Rscript": ["Rscript", "--version"],
     "vdb-validate": ["vdb-validate", "--version"],
 }
+VERSION_COMMANDS.update(
+    {
+        "hmmscan": ["hmmscan", "-h"],
+        "interproscan.sh": ["interproscan.sh", "--version"],
+        "cpat": ["cpat", "--version"],
+        "CPC2.py": ["CPC2.py", "--version"],
+        "signalp": ["signalp", "--version"],
+        "deeptmhmm": ["deeptmhmm", "--version"],
+        "tmhmm": ["tmhmm", "--version"],
+        "deeploc2": ["deeploc2", "--version"],
+        "iupred2a.py": ["iupred2a.py", "--version"],
+        "suppa.py": ["suppa.py", "--version"],
+        "rmats.py": ["rmats.py", "--version"],
+        "rmats": ["rmats", "--version"],
+    }
+)
 
 KEYWORD_VERSION_RE = re.compile(
     r"(?i)(?:version|v)\s*[:=]?\s*([0-9]+(?:\.[0-9]+)*(?:[A-Za-z][A-Za-z0-9._-]*)?)"

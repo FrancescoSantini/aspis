@@ -198,7 +198,30 @@ library-size imbalance, low detected-feature samples, unexpected clustering,
 unexpected smallRNA length profiles, strandedness conflicts, and missing or
 implausible biotype annotations.
 
-## 6. Compare Against Legacy Outputs
+## 6. Check Optional Advanced Tool Environments
+
+The core `aspis-smk9` environment is enough for the standard RNA-seq and
+smallRNA layers. Optional advanced layers can require separate tools or large
+external databases. Before enabling isoform-switch functional annotation or DTU
+engines, read:
+
+```text
+docs/optional_tool_environments.md
+```
+
+When `isoform_switch` is enabled in `rnaseq_differential.levels`, the RNA-seq
+differential environment report includes optional functional-annotation tools
+such as `hmmscan`, `interproscan.sh`, `cpat`, `CPC2.py`, `signalp`,
+`deeptmhmm`, `tmhmm`, `deeploc2`, and `iupred2a.py`. When
+`rnaseq_dtu.run: true`, it also reports optional DTU tools such as
+`R::DRIMSeq`, `R::DEXSeq`, `suppa.py`, and `rmats.py`.
+
+Missing optional tools do not fail the standard DESeq2 workflow. They indicate
+that the corresponding optional annotation or DTU command templates should be
+left empty, pointed at a site-managed installation, or run from one of the
+optional conda environments in `envs/`.
+
+## 7. Compare Against Legacy Outputs
 
 When legacy outputs exist for the same project, compare key tables before
 judging plot parity. The helper below is intentionally generic so it can compare

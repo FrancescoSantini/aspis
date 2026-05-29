@@ -1,0 +1,15 @@
+name: aspis-splicing
+channels:
+  - conda-forge
+  - bioconda
+  - nodefaults
+dependencies:
+  - python=3.11
+  - pandas
+  - biopython
+  - r-base
+  - r-optparse
+  - bioconductor-drimseq
+  - bioconductor-dexseq
+  - bioconductor-stager
+  - suppa
