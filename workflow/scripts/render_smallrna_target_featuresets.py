@@ -16,23 +16,31 @@ REQUIRED_TARGET_MANIFEST_COLUMNS = {
     "status",
     "reason",
     "mirna_targets",
+    "target_universe",
 }
-MAPPING_COLUMNS = {"target_id", "direction"}
+MAPPING_COLUMNS = {"target_id", "direction", "target_source", "target_source_type"}
 MANIFEST_COLUMNS = [
     "contrast_id",
     "status",
     "reason",
     "target_feature_set_manifest",
+    "target_feature_set_universe",
     "target_feature_set_results",
     "target_feature_set_plot",
     "n_targets",
     "n_target_feature_sets",
+    "n_target_feature_set_universe_rows",
     "n_target_feature_set_terms",
 ]
 CONTRAST_MANIFEST_COLUMNS = ["contrast_id", "resource", "status", "reason", "path", "n_rows"]
 FEATURE_SET_COLUMNS = [
     "contrast_id",
+    "target_analysis_mode",
     "collection",
+    "query_source",
+    "target_source",
+    "target_source_type",
+    "target_universe_definition",
     "feature_set_source",
     "feature_set_collection",
     "set_id",
@@ -41,9 +49,28 @@ FEATURE_SET_COLUMNS = [
     "set_size",
     "query_size",
     "universe_size",
+    "feature_set_member_universe_size",
+    "target_rows",
     "pvalue",
     "padj",
     "targets",
+]
+FEATURE_SET_UNIVERSE_COLUMNS = [
+    "contrast_id",
+    "target_analysis_mode",
+    "collection",
+    "query_source",
+    "target_source",
+    "target_source_type",
+    "target_universe_definition",
+    "feature_set_source",
+    "feature_set_collection",
+    "n_feature_sets",
+    "query_size",
+    "target_universe_size",
+    "feature_set_member_universe_size",
+    "target_rows",
+    "min_overlap",
 ]
 
 
@@ -216,6 +243,21 @@ def joined(values: set[str]) -> str:
     return ",".join(sorted(value for value in values if value))
 
 
+def target_source(row: dict[str, str]) -> str:
+    return row.get("target_source", "") or row.get("source", "") or "unspecified"
+
+
+def target_source_type(row: dict[str, str]) -> str:
+    return row.get("target_source_type", "") or row.get("source_type", "") or "unspecified"
+
+
+def target_resource_groups(mapping_rows: list[dict[str, str]]) -> dict[tuple[str, str], list[dict[str, str]]]:
+    groups: dict[tuple[str, str], list[dict[str, str]]] = {("all_sources", "all_types"): mapping_rows}
+    for row in mapping_rows:
+        groups.setdefault((target_source(row), target_source_type(row)), []).append(row)
+    return groups
+
+
 def target_collections(mapping_rows: list[dict[str, str]]) -> dict[str, set[str]]:
     all_targets = {row["target_id"] for row in mapping_rows if row.get("target_id", "")}
     up_targets = {
@@ -231,47 +273,106 @@ def target_collections(mapping_rows: list[dict[str, str]]) -> dict[str, set[str]
     return {"all": all_targets, "up": up_targets, "down": down_targets}
 
 
+def feature_set_groups(feature_sets: list[FeatureSet]) -> dict[tuple[str, str], list[FeatureSet]]:
+    groups: dict[tuple[str, str], list[FeatureSet]] = {}
+    for feature_set in feature_sets:
+        groups.setdefault((feature_set.source, feature_set.collection), []).append(feature_set)
+    return groups
+
+
+def feature_set_universe_rows(
+    contrast_id: str,
+    mapping_rows: list[dict[str, str]],
+    feature_sets: list[FeatureSet],
+    min_overlap: int,
+) -> list[dict[str, str]]:
+    rows: list[dict[str, str]] = []
+    for (source, source_type), group_rows in sorted(target_resource_groups(mapping_rows).items()):
+        collections = target_collections(group_rows)
+        universe = collections["all"]
+        for collection, query in sorted(collections.items()):
+            query = query & universe
+            if not query:
+                continue
+            for (feature_set_source, feature_set_collection), grouped_sets in sorted(feature_set_groups(feature_sets).items()):
+                member_universe: set[str] = set()
+                for feature_set in grouped_sets:
+                    member_universe.update(feature_set.features & universe)
+                rows.append(
+                    {
+                        "contrast_id": contrast_id,
+                        "target_analysis_mode": "database_target_feature_set",
+                        "collection": collection,
+                        "query_source": collection,
+                        "target_source": source,
+                        "target_source_type": source_type,
+                        "target_universe_definition": "significant_mirna_mapped_targets",
+                        "feature_set_source": feature_set_source,
+                        "feature_set_collection": feature_set_collection,
+                        "n_feature_sets": str(len(grouped_sets)),
+                        "query_size": str(len(query)),
+                        "target_universe_size": str(len(universe)),
+                        "feature_set_member_universe_size": str(len(member_universe)),
+                        "target_rows": str(len(group_rows)),
+                        "min_overlap": str(min_overlap),
+                    }
+                )
+    return rows
+
+
 def enrichment_rows(
     contrast_id: str,
     mapping_rows: list[dict[str, str]],
     feature_sets: list[FeatureSet],
     min_overlap: int,
 ) -> list[dict[str, str]]:
-    collections = target_collections(mapping_rows)
-    universe = collections["all"]
     rows = []
-    for collection, query in collections.items():
-        query = query & universe
-        if not query:
+    for (source, source_type), group_rows in target_resource_groups(mapping_rows).items():
+        collections = target_collections(group_rows)
+        universe = collections["all"]
+        if not universe:
             continue
-        for feature_set in feature_sets:
-            set_members = feature_set.features & universe
-            overlap = query & set_members
-            if len(overlap) < min_overlap:
+        for collection, query in collections.items():
+            query = query & universe
+            if not query:
                 continue
-            rows.append(
-                {
-                    "contrast_id": contrast_id,
-                    "collection": collection,
-                    "feature_set_source": feature_set.source,
-                    "feature_set_collection": feature_set.collection,
-                    "set_id": feature_set.set_id,
-                    "description": feature_set.description,
-                    "overlap": str(len(overlap)),
-                    "set_size": str(len(set_members)),
-                    "query_size": str(len(query)),
-                    "universe_size": str(len(universe)),
-                    "pvalue": f"{hypergeom_tail(len(overlap), len(set_members), len(query), len(universe)):.8g}",
-                    "padj": "",
-                    "targets": joined(overlap),
-                }
-            )
+            for feature_set in feature_sets:
+                set_members = feature_set.features & universe
+                overlap = query & set_members
+                if len(overlap) < min_overlap:
+                    continue
+                rows.append(
+                    {
+                        "contrast_id": contrast_id,
+                        "target_analysis_mode": "database_target_feature_set",
+                        "collection": collection,
+                        "query_source": collection,
+                        "target_source": source,
+                        "target_source_type": source_type,
+                        "target_universe_definition": "significant_mirna_mapped_targets",
+                        "feature_set_source": feature_set.source,
+                        "feature_set_collection": feature_set.collection,
+                        "set_id": feature_set.set_id,
+                        "description": feature_set.description,
+                        "overlap": str(len(overlap)),
+                        "set_size": str(len(set_members)),
+                        "query_size": str(len(query)),
+                        "universe_size": str(len(universe)),
+                        "feature_set_member_universe_size": str(len(set_members)),
+                        "target_rows": str(len(group_rows)),
+                        "pvalue": f"{hypergeom_tail(len(overlap), len(set_members), len(query), len(universe)):.8g}",
+                        "padj": "",
+                        "targets": joined(overlap),
+                    }
+                )
     bh_adjust(rows)
     rows.sort(
         key=lambda row: (
             parse_float(row.get("padj", "")) or 1.0,
             -(int(row.get("overlap", "0") or "0")),
             row["collection"],
+            row["target_source"],
+            row["target_source_type"],
             row["feature_set_source"],
             row["feature_set_collection"],
             row["set_id"],
@@ -355,6 +456,7 @@ def blocked_output(row: dict[str, str], outdir: Path, reason: str) -> dict[str, 
         manifest,
         row["contrast_id"],
         [
+            ("target_feature_set_universe", "blocked", reason, "", 0),
             ("target_feature_set_results", "blocked", reason, "", 0),
             ("target_feature_set_plot", "blocked", reason, "", 0),
         ],
@@ -364,10 +466,12 @@ def blocked_output(row: dict[str, str], outdir: Path, reason: str) -> dict[str, 
         "status": "blocked",
         "reason": reason,
         "target_feature_set_manifest": str(manifest),
+        "target_feature_set_universe": "",
         "target_feature_set_results": "",
         "target_feature_set_plot": "",
         "n_targets": "0",
         "n_target_feature_sets": "0",
+        "n_target_feature_set_universe_rows": "0",
         "n_target_feature_set_terms": "0",
     }
 
@@ -384,18 +488,22 @@ def render_contrast(
     contrast_dir = outdir / row["contrast_id"]
     paths = {
         "manifest": contrast_dir / "target_feature_set_manifest.tsv",
+        "universe": contrast_dir / "target_feature_set_universe.tsv",
         "results": contrast_dir / "target_feature_set_enrichment.tsv",
         "plot": contrast_dir / "target_feature_set_enrichment.svg",
     }
     try:
         _, mapping_rows = read_table(Path(row["mirna_targets"]), MAPPING_COLUMNS)
+        universe = feature_set_universe_rows(row["contrast_id"], mapping_rows, feature_sets, min_overlap)
         terms = enrichment_rows(row["contrast_id"], mapping_rows, feature_sets, min_overlap)
+        write_table(paths["universe"], FEATURE_SET_UNIVERSE_COLUMNS, universe)
         write_table(paths["results"], FEATURE_SET_COLUMNS, terms)
         write_enrichment_svg(paths["plot"], terms, top_n)
         write_contrast_manifest(
             paths["manifest"],
             row["contrast_id"],
             [
+                ("target_feature_set_universe", "ok", "", str(paths["universe"]), len(universe)),
                 ("target_feature_set_results", "ok", "", str(paths["results"]), len(terms)),
                 ("target_feature_set_plot", "ok", "", str(paths["plot"]), len(terms)),
             ],
@@ -405,10 +513,12 @@ def render_contrast(
             "status": "ok",
             "reason": "",
             "target_feature_set_manifest": str(paths["manifest"]),
+            "target_feature_set_universe": str(paths["universe"]),
             "target_feature_set_results": str(paths["results"]),
             "target_feature_set_plot": str(paths["plot"]),
             "n_targets": str(len(target_collections(mapping_rows)["all"])),
             "n_target_feature_sets": str(len(feature_sets)),
+            "n_target_feature_set_universe_rows": str(len(universe)),
             "n_target_feature_set_terms": str(len(terms)),
         }
     except Exception as exc:

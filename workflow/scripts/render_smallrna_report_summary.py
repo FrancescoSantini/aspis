@@ -44,9 +44,11 @@ SUMMARY_COLUMNS = [
     "mirna_mrna_summary",
     "mirna_mrna_plot",
     "mirna_mrna_target_feature_set_manifest",
+    "mirna_mrna_target_feature_set_universe",
     "mirna_mrna_target_feature_set_results",
     "mirna_mrna_target_feature_set_plot",
     "target_feature_set_manifest",
+    "target_feature_set_universe",
     "target_feature_set_results",
     "target_feature_set_plot",
     "residual_manifest",
@@ -290,7 +292,9 @@ def render_html(
         html_link(plan_row.get("target_source_summary", ""), "target source summary"),
         html_link(plan_row.get("mirna_mrna_pairs", ""), "miRNA-mRNA pairs"),
         html_link(plan_row.get("mirna_mrna_summary", ""), "miRNA-mRNA summary"),
+        html_link(plan_row.get("mirna_mrna_target_feature_set_universe", ""), "inverse target feature-set universe"),
         html_link(plan_row.get("mirna_mrna_target_feature_set_results", ""), "inverse target feature sets"),
+        html_link(plan_row.get("target_feature_set_universe", ""), "target feature-set universe"),
         html_link(plan_row.get("target_feature_set_results", ""), "target feature sets"),
         html_link(plan_row.get("smallrna_length_distribution", ""), "length distribution"),
         html_link(plan_row.get("smallrna_arm_summary", ""), "arm summary"),
@@ -374,12 +378,23 @@ def render_html(
     ]
     feature_set_columns = [
         column
-        for column in ["collection", "set_id", "description", "overlap", "query_size", "padj", "targets"]
+        for column in [
+            "collection",
+            "target_source",
+            "target_source_type",
+            "set_id",
+            "description",
+            "overlap",
+            "query_size",
+            "universe_size",
+            "padj",
+            "targets",
+        ]
         if feature_set_preview and column in feature_set_preview[0]
     ]
     mirna_mrna_feature_set_columns = [
         column
-        for column in ["collection", "set_id", "description", "overlap", "query_size", "padj", "targets"]
+        for column in ["collection", "set_id", "description", "overlap", "query_size", "universe_size", "padj", "targets"]
         if mirna_mrna_feature_set_preview and column in mirna_mrna_feature_set_preview[0]
     ]
     length_stage_columns = [
@@ -479,9 +494,11 @@ def blocked_summary(row: dict[str, str]) -> dict[str, str]:
         "mirna_mrna_summary": row.get("mirna_mrna_summary", ""),
         "mirna_mrna_plot": row.get("mirna_mrna_plot", ""),
         "mirna_mrna_target_feature_set_manifest": row.get("mirna_mrna_target_feature_set_manifest", ""),
+        "mirna_mrna_target_feature_set_universe": row.get("mirna_mrna_target_feature_set_universe", ""),
         "mirna_mrna_target_feature_set_results": row.get("mirna_mrna_target_feature_set_results", ""),
         "mirna_mrna_target_feature_set_plot": row.get("mirna_mrna_target_feature_set_plot", ""),
         "target_feature_set_manifest": row.get("target_feature_set_manifest", ""),
+        "target_feature_set_universe": row.get("target_feature_set_universe", ""),
         "target_feature_set_results": row.get("target_feature_set_results", ""),
         "target_feature_set_plot": row.get("target_feature_set_plot", ""),
         "residual_manifest": row.get("residual_manifest", ""),
@@ -608,9 +625,11 @@ def render_row(row: dict[str, str], top_n: int) -> dict[str, str]:
             "mirna_mrna_summary": row.get("mirna_mrna_summary", ""),
             "mirna_mrna_plot": row.get("mirna_mrna_plot", ""),
             "mirna_mrna_target_feature_set_manifest": row.get("mirna_mrna_target_feature_set_manifest", ""),
+            "mirna_mrna_target_feature_set_universe": row.get("mirna_mrna_target_feature_set_universe", ""),
             "mirna_mrna_target_feature_set_results": row.get("mirna_mrna_target_feature_set_results", ""),
             "mirna_mrna_target_feature_set_plot": row.get("mirna_mrna_target_feature_set_plot", ""),
             "target_feature_set_manifest": row.get("target_feature_set_manifest", ""),
+            "target_feature_set_universe": row.get("target_feature_set_universe", ""),
             "target_feature_set_results": row.get("target_feature_set_results", ""),
             "target_feature_set_plot": row.get("target_feature_set_plot", ""),
             "residual_manifest": row.get("residual_manifest", ""),

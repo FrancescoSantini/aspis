@@ -182,10 +182,44 @@ def exercise_inverse_target_featuresets() -> Path:
             "10",
         ]
     )
-    row = read_tsv(manifest, {"status", "mirna_mrna_target_feature_set_results"})[0]
+    row = read_tsv(
+        manifest,
+        {"status", "mirna_mrna_target_feature_set_universe", "mirna_mrna_target_feature_set_results"},
+    )[0]
     if row["status"] != "ok":
         raise ValueError(f"inverse target feature-set manifest was not ok: {row}")
-    results = read_tsv(Path(row["mirna_mrna_target_feature_set_results"]), {"collection", "set_id", "overlap"})
+    universe = read_tsv(
+        Path(row["mirna_mrna_target_feature_set_universe"]),
+        {
+            "target_analysis_mode",
+            "collection",
+            "query_source",
+            "target_universe_definition",
+            "query_size",
+            "target_universe_size",
+            "feature_set_member_universe_size",
+        },
+    )
+    if any(item["target_analysis_mode"] != "inverse_integrated_target_feature_set" for item in universe):
+        raise ValueError(f"inverse target feature-set universe has unexpected mode: {universe}")
+    if any(item["query_source"] != item["collection"] for item in universe):
+        raise ValueError(f"inverse target feature-set universe has inconsistent query source: {universe}")
+    results = read_tsv(
+        Path(row["mirna_mrna_target_feature_set_results"]),
+        {
+            "target_analysis_mode",
+            "collection",
+            "query_source",
+            "target_universe_definition",
+            "set_id",
+            "overlap",
+            "feature_set_member_universe_size",
+        },
+    )
+    if any(item["target_analysis_mode"] != "inverse_integrated_target_feature_set" for item in results):
+        raise ValueError(f"inverse target feature-set results have unexpected mode: {results}")
+    if any(item["query_source"] != item["collection"] for item in results):
+        raise ValueError(f"inverse target feature-set results have inconsistent query source: {results}")
     if "inverse" not in {result["collection"] for result in results}:
         raise ValueError(f"inverse target collection missing from results: {results}")
     return manifest

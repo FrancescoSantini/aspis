@@ -126,13 +126,13 @@ def setup_inputs() -> dict[str, Path]:
     )
     write_tsv(
         paths["targets"],
-        ["mirna_id", "target_id", "target_symbol", "target_entrez", "database", "evidence"],
+        ["mirna_id", "target_id", "target_symbol", "target_entrez", "database", "source", "source_type", "evidence"],
         [
-            {"mirna_id": "hsa-miR-1-3p", "target_id": "GENE1", "target_symbol": "GENE1", "target_entrez": "1001", "database": "miRTarBase", "evidence": "strong"},
-            {"mirna_id": "hsa-miR-1-3p", "target_id": "GENE2", "target_symbol": "GENE2", "target_entrez": "1002", "database": "miRTarBase", "evidence": "strong"},
-            {"mirna_id": "hsa-miR-2-3p", "target_id": "GENE1", "target_symbol": "GENE1", "target_entrez": "1001", "database": "miRTarBase", "evidence": "strong"},
-            {"mirna_id": "hsa-miR-2-3p", "target_id": "GENE3", "target_symbol": "GENE3", "target_entrez": "1003", "database": "TargetScan", "evidence": "predicted"},
-            {"mirna_id": "hsa-miR-3-3p", "target_id": "GENE4", "target_symbol": "GENE4", "target_entrez": "1004", "database": "TargetScan", "evidence": "predicted"},
+            {"mirna_id": "hsa-miR-1-3p", "target_id": "GENE1", "target_symbol": "GENE1", "target_entrez": "1001", "database": "miRTarBase", "source": "validated_db", "source_type": "validated", "evidence": "strong"},
+            {"mirna_id": "hsa-miR-1-3p", "target_id": "GENE2", "target_symbol": "GENE2", "target_entrez": "1002", "database": "miRTarBase", "source": "validated_db", "source_type": "validated", "evidence": "strong"},
+            {"mirna_id": "hsa-miR-2-3p", "target_id": "GENE1", "target_symbol": "GENE1", "target_entrez": "1001", "database": "miRTarBase", "source": "validated_db", "source_type": "validated", "evidence": "strong"},
+            {"mirna_id": "hsa-miR-2-3p", "target_id": "GENE3", "target_symbol": "GENE3", "target_entrez": "1003", "database": "TargetScan", "source": "predicted_db", "source_type": "predicted", "evidence": "predicted"},
+            {"mirna_id": "hsa-miR-3-3p", "target_id": "GENE4", "target_symbol": "GENE4", "target_entrez": "1004", "database": "TargetScan", "source": "predicted_db", "source_type": "predicted", "evidence": "predicted"},
         ],
     )
     write_tsv(
@@ -273,12 +273,66 @@ def run_report_contract(paths: dict[str, Path]) -> None:
 def validate_outputs(paths: dict[str, Path]) -> None:
     target_feature_rows = read_tsv(
         paths["target_feature_set_manifest"],
-        {"contrast_id", "status", "target_feature_set_results", "target_feature_set_plot", "n_target_feature_set_terms"},
+        {
+            "contrast_id",
+            "status",
+            "target_feature_set_universe",
+            "target_feature_set_results",
+            "target_feature_set_plot",
+            "n_target_feature_set_terms",
+        },
     )
     if len(target_feature_rows) != 1 or target_feature_rows[0]["status"] != "ok":
         raise ValueError(f"Expected one ok target feature-set row, got {target_feature_rows}")
     if int(target_feature_rows[0]["n_target_feature_set_terms"]) < 1:
         raise ValueError(f"Expected target feature-set enrichment terms, got {target_feature_rows[0]}")
+    feature_set_universe = read_tsv(
+        Path(target_feature_rows[0]["target_feature_set_universe"]),
+        {
+            "contrast_id",
+            "target_analysis_mode",
+            "collection",
+            "query_source",
+            "target_source",
+            "target_source_type",
+            "target_universe_definition",
+            "feature_set_source",
+            "feature_set_collection",
+            "query_size",
+            "target_universe_size",
+            "feature_set_member_universe_size",
+            "min_overlap",
+        },
+    )
+    if not any(row["target_source"] == "all_sources" for row in feature_set_universe):
+        raise ValueError("Target feature-set universe lacks aggregate all_sources provenance")
+    if not any(row["target_source"] != "all_sources" for row in feature_set_universe):
+        raise ValueError("Target feature-set universe lacks source-specific provenance")
+    for row in feature_set_universe:
+        if row["target_analysis_mode"] != "database_target_feature_set":
+            raise ValueError(f"Unexpected target feature-set analysis mode: {row}")
+        if row["query_source"] != row["collection"]:
+            raise ValueError(f"Target feature-set universe query source mismatch: {row}")
+    feature_set_results = read_tsv(
+        Path(target_feature_rows[0]["target_feature_set_results"]),
+        {
+            "target_analysis_mode",
+            "query_source",
+            "target_source",
+            "target_source_type",
+            "target_universe_definition",
+            "feature_set_member_universe_size",
+            "target_rows",
+            "set_id",
+        },
+    )
+    if not any(row["target_source"] != "all_sources" for row in feature_set_results):
+        raise ValueError("Target feature-set results lack source-specific rows")
+    for row in feature_set_results:
+        if row["target_analysis_mode"] != "database_target_feature_set":
+            raise ValueError(f"Unexpected target feature-set result mode: {row}")
+        if row["query_source"] != row["collection"]:
+            raise ValueError(f"Target feature-set result query source mismatch: {row}")
     plan_rows = read_tsv(
         paths["report_plan"],
         {
@@ -286,6 +340,7 @@ def validate_outputs(paths: dict[str, Path]) -> None:
             "status",
             "summary_html",
             "mirna_targets",
+            "target_feature_set_universe",
             "target_feature_set_results",
             "volcano_pdf",
             "ma_pdf",
@@ -355,7 +410,16 @@ def validate_outputs(paths: dict[str, Path]) -> None:
         {"project", "assay", "level", "contrast_id", "asset_group", "asset_label", "asset_kind", "path", "exists"},
     )
     labels = {row["asset_label"] for row in asset_rows if row.get("exists") == "true"}
-    required_labels = {"summary_html", "results", "target_feature_set_results", "volcano_pdf", "ma_pdf", "pca_pdf", "heatmap_pdf"}
+    required_labels = {
+        "summary_html",
+        "results",
+        "target_feature_set_universe",
+        "target_feature_set_results",
+        "volcano_pdf",
+        "ma_pdf",
+        "pca_pdf",
+        "heatmap_pdf",
+    }
     missing_labels = required_labels - labels
     if missing_labels:
         raise ValueError(f"SmallRNA report asset manifest is missing existing assets: {sorted(missing_labels)}")
