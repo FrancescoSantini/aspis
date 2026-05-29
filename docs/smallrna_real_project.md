@@ -106,11 +106,14 @@ before trusting differential contrasts.
 
 ## Target Tables
 
-`smallrna.target_table` and `smallrna.target_tables` are local TSV contracts.
-Use `target_table` for one source, or `target_tables` for a list of sources.
-Each table may represent validated targets, predicted targets, conserved
-targets, or targets filtered to expressed RNA-seq genes. The miRNA column can be
-named one of:
+`smallrna.target_table`, `smallrna.target_tables`, and
+`smallrna.target_cache` are local TSV contracts. Use `target_table` for one
+source, `target_tables` for a list of curated/project sources, or
+`target_cache` for a cached database export such as a local multiMiR TSV. ASPIS
+does not retrieve target databases on the cluster; cached exports are consumed
+offline. Each table may represent validated targets, predicted targets,
+conserved targets, or targets filtered to expressed RNA-seq genes. The miRNA
+column can be named one of:
 
 ```text
 mirna_id, mature_mirna_id, miRNA, mirna, mature_id
@@ -119,19 +122,22 @@ mirna_id, mature_mirna_id, miRNA, mirna, mature_id
 The target column can be named one of:
 
 ```text
-target_id, target_symbol, target_gene, gene_symbol, target_entrez, gene_id
+target_id, target_symbol, target_gene, gene_symbol, target_entrez, gene_id,
+target_ensembl, target
 ```
 
 Optional target columns are:
 
 ```text
 target_symbol, target_gene, gene_symbol, target_entrez, EntrezID, entrez_id,
-database, db, source, source_type, target_source_type, evidence_type, evidence,
-support
+database, db, source, source_type, target_source_type, evidence_type, type,
+target_evidence_type, evidence, support, support_type, experiment, pubmed_id
 ```
 
-`source` and `source_type` are propagated into target enrichment summaries and
-reports, so mixed target sources remain auditable.
+`source`, `database`, `source_type`, `type`, and evidence columns are
+propagated into target enrichment summaries and reports, so mixed target
+sources remain auditable. For multiMiR-style caches, `database` is used as the
+target source when a dedicated `source` column is absent.
 
 `smallrna.target_feature_set_tables` must be one or more comma-separated TSV
 files with required columns:

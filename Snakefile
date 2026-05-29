@@ -359,6 +359,11 @@ SMALLRNA_TARGET_TABLE_INPUTS = []
 if SMALLRNA.get("target_table", ""):
     SMALLRNA_TARGET_TABLE_INPUTS.append(SMALLRNA.get("target_table", ""))
 SMALLRNA_TARGET_TABLE_INPUTS.extend(config_value_list(SMALLRNA.get("target_tables", "")))
+SMALLRNA_TARGET_CACHE_INPUTS = config_value_list(SMALLRNA.get("target_cache", ""))
+SMALLRNA_TARGET_INPUTS = []
+for target_input in SMALLRNA_TARGET_TABLE_INPUTS + SMALLRNA_TARGET_CACHE_INPUTS:
+    if target_input not in SMALLRNA_TARGET_INPUTS:
+        SMALLRNA_TARGET_INPUTS.append(target_input)
 SMALLRNA_TARGET_FEATURE_SET_FILES = config_value_list(SMALLRNA.get("target_feature_sets", ""))
 SMALLRNA_TARGET_FEATURE_SET_TABLES = config_value_list(SMALLRNA.get("target_feature_set_tables", ""))
 SMALLRNA_TARGET_FEATURE_SET_RUN = SMALLRNA_TARGET_ENRICHMENT_RUN and bool(
@@ -498,8 +503,11 @@ if SMALLRNA_DIFFERENTIAL_RUN and not SMALLRNA_QUANTIFICATION_RUN:
     raise ValueError("smallrna.differential_run requires smallrna.quantification_run: true")
 if SMALLRNA_TARGET_ENRICHMENT_RUN and not SMALLRNA_DIFFERENTIAL_RUN:
     raise ValueError("smallrna.target_enrichment_mode: table requires smallrna.differential_run: true")
-if SMALLRNA_TARGET_ENRICHMENT_RUN and not SMALLRNA_TARGET_TABLE_INPUTS:
-    raise ValueError("smallrna.target_enrichment_mode: table requires smallrna.target_table or smallrna.target_tables")
+if SMALLRNA_TARGET_ENRICHMENT_RUN and not SMALLRNA_TARGET_INPUTS:
+    raise ValueError(
+        "smallrna.target_enrichment_mode: table requires "
+        "smallrna.target_table, smallrna.target_tables, or smallrna.target_cache"
+    )
 if (SMALLRNA_TARGET_FEATURE_SET_FILES or SMALLRNA_TARGET_FEATURE_SET_TABLES) and not SMALLRNA_TARGET_ENRICHMENT_RUN:
     raise ValueError("smallrna target feature sets require smallrna.target_enrichment_mode: table")
 if (SMALLRNA_MIRNA_FEATURE_SET_FILES or SMALLRNA_MIRNA_FEATURE_SET_TABLES) and not SMALLRNA_DIFFERENTIAL_RUN:
@@ -2157,6 +2165,14 @@ rule plan_smallrna:
             if SMALLRNA.get("target_table", "")
             else ""
         ),
+        target_tables_flag=optional_shell_arg(
+            "--target-tables",
+            joined_config_values(SMALLRNA_TARGET_TABLE_INPUTS),
+        ),
+        target_cache_flag=optional_shell_arg(
+            "--target-cache",
+            joined_config_values(SMALLRNA_TARGET_CACHE_INPUTS),
+        ),
         reports=str(as_bool(SMALLRNA.get("reports", True), True)).lower()
     log:
         "logs/branches/smallrna/{project}.smallrna_plan.log"
@@ -2187,6 +2203,8 @@ rule plan_smallrna:
           --min-replicates {params.min_replicates:q} \
           --target-enrichment-mode {params.target_enrichment_mode:q} \
           {params.target_table_flag} \
+          {params.target_tables_flag} \
+          {params.target_cache_flag} \
           --reports {params.reports:q} \
           > {log:q} 2>&1
         """
@@ -2709,7 +2727,7 @@ rule render_smallrna_target_enrichment:
         plan=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/smallrna_plan.tsv",
         deseq2_manifest=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/differential/mirna_deseq2/deseq2_manifest.tsv",
         deseq2_done=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/differential/mirna_deseq2/deseq2.done",
-        target_tables=SMALLRNA_TARGET_TABLE_INPUTS
+        target_tables=SMALLRNA_TARGET_INPUTS
     output:
         manifest=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/differential/target_enrichment/target_manifest.tsv",
         done=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/differential/target_enrichment/target_enrichment.done"
@@ -2718,6 +2736,10 @@ rule render_smallrna_target_enrichment:
         target_tables_flag=optional_shell_arg(
             "--target-tables",
             joined_config_values(SMALLRNA_TARGET_TABLE_INPUTS),
+        ),
+        target_cache_flag=optional_shell_arg(
+            "--target-cache",
+            joined_config_values(SMALLRNA_TARGET_CACHE_INPUTS),
         ),
         min_overlap=SMALLRNA.get("target_min_overlap", 1),
         top_n=SMALLRNA.get("target_top_n", 20)
@@ -2730,6 +2752,7 @@ rule render_smallrna_target_enrichment:
           --smallrna-plan {input.plan:q} \
           --deseq2-manifest {input.deseq2_manifest:q} \
           {params.target_tables_flag} \
+          {params.target_cache_flag} \
           --outdir {params.outdir:q} \
           --manifest {output.manifest:q} \
           --done {output.done:q} \

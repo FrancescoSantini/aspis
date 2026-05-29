@@ -124,6 +124,9 @@ smallrna:
     # columns to label validated, predicted, conserved, or expressed targets.
     - /path/to/smallrna/validated_targets.tsv
     - /path/to/smallrna/predicted_targets.tsv
+  # Optional cached database export, for example a local multiMiR TSV. This is
+  # consumed offline and never triggers network retrieval on the cluster.
+  target_cache: /path/to/smallrna/multimir_cache.tsv
   target_min_overlap: 1
   target_top_n: 20
   target_feature_sets: ""

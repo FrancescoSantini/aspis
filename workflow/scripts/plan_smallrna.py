@@ -55,6 +55,8 @@ def parse_args() -> argparse.Namespace:
         help="Target-enrichment source mode",
     )
     parser.add_argument("--target-table", default="", help="Local miRNA target table for table mode")
+    parser.add_argument("--target-tables", default="", help="Comma-separated local target tables for table mode")
+    parser.add_argument("--target-cache", default="", help="Comma-separated cached target-resource TSVs")
     parser.add_argument("--reports", default="true", help="Whether smallRNA reports are requested")
     return parser.parse_args()
 
@@ -73,6 +75,40 @@ def read_table(path: Path, required: set[str]) -> tuple[list[str], list[dict[str
 
 def existing_path(path_text: str) -> bool:
     return bool(path_text) and Path(path_text).exists()
+
+
+def split_config_values(text: str) -> list[str]:
+    return [item.strip() for item in text.split(",") if item.strip()]
+
+
+def target_input_paths(args: argparse.Namespace) -> list[str]:
+    paths = []
+    if args.target_table:
+        paths.append(args.target_table)
+    paths.extend(split_config_values(args.target_tables))
+    paths.extend(split_config_values(args.target_cache))
+    unique_paths = []
+    for path in paths:
+        if path not in unique_paths:
+            unique_paths.append(path)
+    return unique_paths
+
+
+def existing_target_input(args: argparse.Namespace) -> bool:
+    paths = target_input_paths(args)
+    return bool(paths) and all(existing_path(path) for path in paths)
+
+
+def target_missing_reason(args: argparse.Namespace) -> str:
+    paths = target_input_paths(args)
+    if not paths:
+        return "target table/cache is not configured"
+    missing = [path for path in paths if not existing_path(path)]
+    if missing and len(missing) == len(paths):
+        return "target table/cache does not exist: " + ",".join(missing)
+    if missing:
+        return "target table/cache has missing path(s): " + ",".join(missing)
+    return ""
 
 
 def existing_bowtie_index(prefix: str) -> bool:
@@ -267,8 +303,8 @@ def build_rows(args: argparse.Namespace) -> list[dict[str, str]]:
     target_errors = [] if differential_status == "ready" else ["deseq2_mirna is not ready"]
     if args.target_enrichment_mode == "disabled":
         target_errors.append("target enrichment is disabled")
-    elif args.target_enrichment_mode == "table" and not existing_path(args.target_table):
-        target_errors.append(missing_path_reason("target table", args.target_table))
+    elif args.target_enrichment_mode == "table" and not existing_target_input(args):
+        target_errors.append(target_missing_reason(args))
     target_status, target_reason = status_from_errors(target_errors)
     target_runner_status = "implemented" if args.target_enrichment_mode == "table" else "planned"
 
@@ -402,11 +438,13 @@ def build_rows(args: argparse.Namespace) -> list[dict[str, str]]:
             reason=target_reason,
             runner_status=target_runner_status,
             libraries=libraries,
-            key_inputs=[args.target_table],
+            key_inputs=target_input_paths(args),
             expected_outputs=["differential/target_enrichment/target_manifest.tsv"],
             parameters=[
                 f"target_enrichment_mode={args.target_enrichment_mode}",
                 f"target_table={args.target_table}" if args.target_table else "",
+                f"target_tables={args.target_tables}" if args.target_tables else "",
+                f"target_cache={args.target_cache}" if args.target_cache else "",
             ],
         ),
         row(

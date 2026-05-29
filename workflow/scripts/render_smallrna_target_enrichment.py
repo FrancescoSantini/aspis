@@ -117,7 +117,16 @@ STAT_COLUMNS = {
     "padj",
 }
 MIRNA_COLUMNS = ["mirna_id", "mature_mirna_id", "miRNA", "mirna", "mature_id"]
-TARGET_COLUMNS = ["target_id", "target_symbol", "target_gene", "gene_symbol", "target_entrez", "gene_id"]
+TARGET_COLUMNS = [
+    "target_id",
+    "target_symbol",
+    "target_gene",
+    "gene_symbol",
+    "target_entrez",
+    "gene_id",
+    "target_ensembl",
+    "target",
+]
 EVIDENCE_TYPE_ALIASES = {
     "validated": "validated",
     "validation": "validated",
@@ -170,6 +179,11 @@ def parse_args() -> argparse.Namespace:
         "--target-tables",
         default="",
         help="Comma-separated local miRNA target table TSVs. Each table may carry source/source_type columns.",
+    )
+    parser.add_argument(
+        "--target-cache",
+        default="",
+        help="Comma-separated cached target-resource TSVs, e.g. local multiMiR-style exports.",
     )
     parser.add_argument("--outdir", required=True, help="Output directory")
     parser.add_argument("--manifest", required=True, help="Output target-enrichment manifest TSV")
@@ -329,10 +343,10 @@ def read_target_table(path: Path) -> list[dict[str, str]]:
     entrez_col = optional_column(columns, ["target_entrez", "EntrezID", "entrez_id"])
     database_col = optional_column(columns, ["database", "db"])
     source_col = optional_column(columns, ["source"])
-    source_type_col = optional_column(columns, ["source_type", "target_source_type", "evidence_type"])
+    source_type_col = optional_column(columns, ["source_type", "target_source_type", "evidence_type", "type"])
     evidence_type_col = optional_column(columns, ["target_evidence_type", "controlled_evidence_type"])
     source_version_col = optional_column(columns, ["source_version", "target_source_version", "database_version", "resource_version", "version", "release"])
-    evidence_col = optional_column(columns, ["evidence", "support"])
+    evidence_col = optional_column(columns, ["evidence", "support", "support_type", "experiment", "pubmed_id"])
 
     target_rows = []
     for line_number, row in enumerate(rows, start=2):
@@ -363,7 +377,7 @@ def read_target_table(path: Path) -> list[dict[str, str]]:
                 "target_entrez": row.get(entrez_col, "") if entrez_col else "",
                 "database": database,
                 "source": source,
-                "target_source": source if source else path.stem,
+                "target_source": source or database or path.stem,
                 "target_source_type": source_type,
                 "target_evidence_type": evidence_type,
                 "target_source_version": row.get(source_version_col, "") if source_version_col else "unknown",
@@ -373,11 +387,12 @@ def read_target_table(path: Path) -> list[dict[str, str]]:
     return target_rows
 
 
-def read_target_tables(single_table: str, table_list: str) -> list[dict[str, str]]:
+def read_target_tables(single_table: str, table_list: str, cache_list: str) -> list[dict[str, str]]:
     paths: list[Path] = []
     if single_table:
         paths.append(Path(single_table))
     paths.extend(split_paths(table_list))
+    paths.extend(split_paths(cache_list))
     unique_paths: list[Path] = []
     seen = set()
     for path in paths:
@@ -877,7 +892,7 @@ def main() -> int:
         raise ValueError("DESeq2 manifest has no rows")
     outdir = Path(args.outdir)
     stage_blocker = target_stage_blocker(Path(args.smallrna_plan))
-    target_rows = read_target_tables(args.target_table, args.target_tables)
+    target_rows = read_target_tables(args.target_table, args.target_tables, args.target_cache)
     if stage_blocker:
         rows = [blocked_output(row, outdir, stage_blocker) for row in deseq2_rows]
     else:
