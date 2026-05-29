@@ -33,6 +33,13 @@ def main() -> int:
         metadata = tmp / "transcript_metadata.tsv"
         gtf = tmp / "annotated.gtf"
         annotations = tmp / "domains.tsv"
+        interproscan = tmp / "interproscan.tsv"
+        pfam_domtblout = tmp / "pfam.domtblout"
+        coding_potential = tmp / "coding_potential.tsv"
+        signalp = tmp / "signalp.tsv"
+        deeptmhmm = tmp / "deeptmhmm.gff3"
+        deeploc = tmp / "deeploc2.tsv"
+        iupred = tmp / "iupred2a.tsv"
         outdir = tmp / "report"
 
         write(
@@ -133,6 +140,71 @@ def main() -> int:
             + "\t".join(["tx_novel", "toy", "domain", "PF00001", "Catalytic fold", "2", "5", "toy switched domain"])
             + "\n",
         )
+        write(
+            interproscan,
+            "\t".join(
+                [
+                    "tx_novel",
+                    "md5",
+                    "6",
+                    "Pfam",
+                    "PF00002",
+                    "Transferase signature",
+                    "3",
+                    "6",
+                    "1.0E-8",
+                    "T",
+                    "2026-01-01",
+                    "IPR000002",
+                    "Transferase domain",
+                ]
+            )
+            + "\n",
+        )
+        write(
+            pfam_domtblout,
+            "# target name accession tlen query name accession qlen E-value score bias # of c-Evalue i-Evalue score bias hmm from hmm to ali from ali to env from env to acc description\n"
+            "PF00003 PF00003.1 120 tx_novel - 6 1e-20 80.0 0.0 1 1 1e-20 1e-20 80.0 0.0 1 8 2 5 2 5 0.99 Zinc finger domain\n",
+        )
+        write(
+            coding_potential,
+            "\t".join(["ID", "mRNA_size", "ORF_size", "coding_prob", "coding_label"])
+            + "\n"
+            + "\t".join(["tx_novel", "18", "18", "0.93", "coding"])
+            + "\n",
+        )
+        write(
+            signalp,
+            "\t".join(["# ID", "Prediction", "OTHER", "SP(Sec/SPI)", "CS Position"])
+            + "\n"
+            + "\t".join(["tx_novel", "SP", "0.01", "0.99", "CS pos: 4-5. Pr: 0.90"])
+            + "\n",
+        )
+        write(
+            deeptmhmm,
+            "##gff-version 3\n"
+            "tx_novel\tDeepTMHMM\tTMhelix\t2\t5\t0.95\t.\t.\tID=tx_novel.tm1\n",
+        )
+        write(
+            deeploc,
+            "\t".join(["Protein_ID", "Localizations", "Signals", "Score"])
+            + "\n"
+            + "\t".join(["tx_novel", "Nucleus", "No signal", "0.77"])
+            + "\n",
+        )
+        write(
+            iupred,
+            "\t".join(["protein_id", "position", "aa", "iupred2"])
+            + "\n"
+            + "\t".join(["tx_novel", "1", "M", "0.20"])
+            + "\n"
+            + "\t".join(["tx_novel", "2", "A", "0.82"])
+            + "\n"
+            + "\t".join(["tx_novel", "3", "M", "0.73"])
+            + "\n"
+            + "\t".join(["tx_novel", "4", "A", "0.30"])
+            + "\n",
+        )
 
         command = [
             sys.executable,
@@ -172,7 +244,18 @@ def main() -> int:
             "--top-n",
             "5",
             "--functional-annotation-tables",
-            str(annotations),
+            ",".join(
+                [
+                    str(annotations),
+                    str(interproscan),
+                    str(pfam_domtblout),
+                    str(coding_potential),
+                    str(signalp),
+                    str(deeptmhmm),
+                    str(deeploc),
+                    str(iupred),
+                ]
+            ),
         ]
         completed = subprocess.run(command, check=False, capture_output=True, text=True)
         if completed.returncode:
@@ -198,6 +281,13 @@ def main() -> int:
         assert any(row["isoform_id"] == "tx_novel" and row["gained_exon_coordinates"] for row in sequences)
         assert any(row["isoform_id"] == "tx_novel" and row["affected_aa_sequence"] for row in sequences)
         assert any(row["feature_name"] == "Catalytic fold" for row in annotation_rows)
+        assert any(row["source"] == "interproscan:Pfam" and row["feature_id"] == "IPR000002" for row in annotation_rows)
+        assert any(row["source"] == "hmmer_domtblout" and row["feature_id"] == "PF00003.1" for row in annotation_rows)
+        assert any(row["feature_type"] == "coding_potential" and row["feature_name"] == "coding" for row in annotation_rows)
+        assert any(row["feature_type"] == "signal_peptide" and row["end_aa"] == "4" for row in annotation_rows)
+        assert any(row["feature_type"] == "transmembrane" and row["start_aa"] == "2" for row in annotation_rows)
+        assert any(row["feature_type"] == "localization" and row["feature_name"] == "Nucleus" for row in annotation_rows)
+        assert any(row["feature_type"] == "disorder" and row["start_aa"] == "2" and row["end_aa"] == "3" for row in annotation_rows)
         assert Path(plots[0]["plot_svg"]).exists(), plots
         assert Path(plots[0]["event_html"]).exists(), plots
         assert Path(plots[0]["nt_fasta"]).exists(), plots
