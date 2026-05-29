@@ -12,6 +12,7 @@ BASE = Path("results/smallrna_report_smoke")
 BRANCH = BASE / "branches/smallrna/ASPIS_SMALLRNA_TEST"
 SMALLRNA = BRANCH / "smallrna"
 SUMMARY = BASE / "g100_smallrna_smoke_summary.tsv"
+PCA_NOTE_FRAGMENT = "not automatically a failed analysis"
 
 
 def read_tsv(path: Path, required_columns: set[str]) -> tuple[list[str], list[dict[str, str]]]:
@@ -122,6 +123,15 @@ def validate_quantification_and_deseq2() -> str:
         {
             "contrast_id",
             "status",
+            "effective_design_formula",
+            "contrast",
+            "n_samples",
+            "n_features_input",
+            "n_features_tested",
+            "n_significant",
+            "padj_threshold",
+            "log2fc_threshold",
+            "min_count",
             "results",
             "filtered",
             "normalized_counts",
@@ -132,6 +142,17 @@ def validate_quantification_and_deseq2() -> str:
     ok_rows = [row for row in rows if row["status"] == "ok"]
     if len(ok_rows) != 1:
         raise ValueError(f"Expected one ok miRNA DESeq2 contrast, got {len(ok_rows)}")
+    for column in [
+        "effective_design_formula",
+        "n_samples",
+        "n_features_input",
+        "n_features_tested",
+        "padj_threshold",
+        "log2fc_threshold",
+        "min_count",
+    ]:
+        if not ok_rows[0].get(column, ""):
+            raise ValueError(f"miRNA DESeq2 manifest did not record {column}: {ok_rows[0]}")
     for column in ["results", "filtered", "normalized_counts", "summary", "feature_metadata"]:
         require_path(ok_rows[0][column], manifest_path, column)
     return "miRNA featureCounts and DESeq2 outputs present"
@@ -228,6 +249,9 @@ def validate_reports() -> str:
     _, summary_rows = read_tsv(reports / "summaries/summary_manifest.tsv", schemas["summaries/summary_manifest.tsv"])
     for row in summary_rows:
         require_path(row["summary_html"], reports / "summaries/summary_manifest.tsv", "summary_html")
+        text = Path(row["summary_html"]).read_text(encoding="utf-8")
+        if PCA_NOTE_FRAGMENT not in text:
+            raise ValueError(f"{row['summary_html']} is missing the PCA interpretation note")
     index = reports / "index.html"
     if not index.exists():
         raise FileNotFoundError(f"Missing expected report index: {index}")

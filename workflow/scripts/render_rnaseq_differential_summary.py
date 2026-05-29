@@ -45,6 +45,11 @@ MANIFEST_COLUMNS = [
     "n_up",
     "n_down",
 ]
+PCA_INTERPRETATION_NOTE = (
+    "Lack of clear PCA clustering is not automatically a failed analysis; it can reflect weak "
+    "biological effect, small sample size, strong individual variation, batch or covariate "
+    "structure, or limited design power."
+)
 
 
 def parse_args() -> argparse.Namespace:
@@ -238,6 +243,7 @@ def render_html(
     table {{ border-collapse: collapse; margin: 16px 0; width: 100%; }}
     th, td {{ border: 1px solid #d0d7de; padding: 6px 8px; text-align: left; }}
     th {{ background: #f6f8fa; }}
+    .note {{ background: #f6f8fa; border-left: 4px solid #57606a; margin: 12px 0 18px; padding: 10px 12px; }}
     .plots {{ display: grid; gap: 18px; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }}
     .plot object {{ border: 1px solid #d0d7de; height: 360px; width: 100%; }}
   </style>
@@ -249,6 +255,7 @@ def render_html(
 {metric_rows}
   </table>
   <h2>Plots</h2>
+  <p class="note">{html.escape(PCA_INTERPRETATION_NOTE)}</p>
   <div class="plots">
 {plots}
   </div>
