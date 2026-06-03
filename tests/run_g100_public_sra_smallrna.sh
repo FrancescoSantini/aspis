@@ -93,12 +93,16 @@ fi
     materialize_library:disk_mb=20000 \
     preprocess_smallrna_branch:runtime=60 \
     preprocess_smallrna_branch:mem_mb=4000 \
+    run_branch_fastqc_file:runtime=30 \
+    run_branch_fastqc_file:mem_mb=4000 \
     run_branch_fastqc:runtime=30 \
-    run_branch_fastqc:mem_mb=4000 \
+    run_branch_fastqc:mem_mb=1000 \
     run_branch_multiqc:runtime=30 \
     run_branch_multiqc:mem_mb=4000 \
+    run_preprocessed_smallrna_fastqc_file:runtime=30 \
+    run_preprocessed_smallrna_fastqc_file:mem_mb=4000 \
     run_preprocessed_smallrna_fastqc:runtime=30 \
-    run_preprocessed_smallrna_fastqc:mem_mb=4000 \
+    run_preprocessed_smallrna_fastqc:mem_mb=1000 \
     run_preprocessed_smallrna_multiqc:runtime=30 \
     run_preprocessed_smallrna_multiqc:mem_mb=4000
 
