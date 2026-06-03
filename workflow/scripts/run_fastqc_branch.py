@@ -171,12 +171,8 @@ def run_fastqc(
         *shlex.split(extra_args),
         *[str(path) for path in staged_fastqs],
     ]
-    print("[CMD] " + shlex.join(command))
-    completed = subprocess.run(command, check=False, capture_output=True, text=True)
-    if completed.stdout:
-        print(completed.stdout, end="")
-    if completed.stderr:
-        print(completed.stderr, end="")
+    print("[CMD] " + shlex.join(command), flush=True)
+    completed = subprocess.run(command, check=False)
     if completed.returncode != 0:
         raise RuntimeError(f"FastQC exited with status {completed.returncode}")
 

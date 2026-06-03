@@ -546,6 +546,18 @@ def optional_shell_arg(flag, value):
     return shell_arg(flag, value)
 
 
+def optional_shell_list_arg(flag, values):
+    if values is None:
+        return ""
+    if isinstance(values, str):
+        items = [item for item in values.split() if item.strip()]
+    else:
+        items = [str(item).strip() for item in values if str(item).strip()]
+    if not items:
+        return ""
+    return " ".join([flag] + [shlex.quote(item) for item in items])
+
+
 def joined_config_values(value):
     if value is None:
         return ""
@@ -1819,13 +1831,17 @@ rule build_branch_design:
     params:
         condition_col=DESIGN.get("condition_col", "condition"),
         control_label=DESIGN.get("control_label", "control"),
-        covariates=" ".join(DESIGN.get("covariates", [])),
-        contrast_by=lambda wildcards: " ".join(
+        covariates_flag=optional_shell_list_arg(
+            "--covariates",
+            config_value_list(DESIGN.get("covariates", [])),
+        ),
+        contrast_by_flag=lambda wildcards: optional_shell_list_arg(
+            "--contrast-by",
             config_value_list(
                 RNASEQ_DIFFERENTIAL.get("contrast_by", [])
                 if wildcards.assay == "rnaseq"
                 else SMALLRNA.get("contrast_by", [])
-            )
+            ),
         ),
         min_condition_groups=DESIGN.get("min_condition_groups", 2),
         min_replicates_per_group=lambda wildcards: (
@@ -1838,9 +1854,24 @@ rule build_branch_design:
             if wildcards.assay == "rnaseq"
             else SMALLRNA.get("design_formula", DESIGN.get("model_formula", ""))
         ),
-        blocking_factors=" ".join(config_value_list(DESIGN.get("blocking_factors", []))),
-        batch_factors=" ".join(config_value_list(DESIGN.get("batch_factors", []))),
-        interaction_terms=" ".join(config_value_list(DESIGN.get("interaction_terms", [])))
+        model_formula_flag=lambda wildcards: optional_shell_arg(
+            "--model-formula",
+            RNASEQ_DIFFERENTIAL.get("design_formula", DESIGN.get("model_formula", ""))
+            if wildcards.assay == "rnaseq"
+            else SMALLRNA.get("design_formula", DESIGN.get("model_formula", "")),
+        ),
+        blocking_factors_flag=optional_shell_list_arg(
+            "--blocking-factors",
+            config_value_list(DESIGN.get("blocking_factors", [])),
+        ),
+        batch_factors_flag=optional_shell_list_arg(
+            "--batch-factors",
+            config_value_list(DESIGN.get("batch_factors", [])),
+        ),
+        interaction_terms_flag=optional_shell_list_arg(
+            "--interaction-terms",
+            config_value_list(DESIGN.get("interaction_terms", [])),
+        )
     log:
         "logs/branches/{assay}/{project}.design.log"
     shell:
@@ -1855,12 +1886,12 @@ rule build_branch_design:
           --control-label {params.control_label:q} \
           --min-condition-groups {params.min_condition_groups:q} \
           --min-replicates-per-group {params.min_replicates_per_group:q} \
-          --covariates {params.covariates} \
-          --contrast-by {params.contrast_by} \
-          --model-formula {params.model_formula:q} \
-          --blocking-factors {params.blocking_factors} \
-          --batch-factors {params.batch_factors} \
-          --interaction-terms {params.interaction_terms} \
+          {params.covariates_flag} \
+          {params.contrast_by_flag} \
+          {params.model_formula_flag} \
+          {params.blocking_factors_flag} \
+          {params.batch_factors_flag} \
+          {params.interaction_terms_flag} \
           > {log:q} 2>&1
         """
 
