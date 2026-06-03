@@ -1,0 +1,36 @@
+# Local first-pass smallRNA-only config for Francesco's legacy PhD samples.
+#
+# Use this with tests/run_local_smallrna_project.sh when you want the existing
+# smallRNA real-project preflight before running a small local target.
+
+intake: config/intake_phdpipe_smallrna_real.tsv
+
+paths:
+  raw_dir: work/phdpipe_smallrna_real/raw
+  metadata_dir: meta/phdpipe_smallrna_real/materialized
+  manifest: meta/phdpipe_smallrna_real/materialized_manifest.tsv
+  analysis_plan: meta/phdpipe_smallrna_real/analysis_plan.tsv
+  environment_report: meta/phdpipe_smallrna_real/environment_report.tsv
+  execution_report: meta/phdpipe_smallrna_real/execution_report.tsv
+  sra_cache_dir: cache/phdpipe_smallrna_real/sra
+  scratch_dir: work/phdpipe_smallrna_real/tmp
+  branch_dir: results/phdpipe_smallrna_real/branches
+
+materialization:
+  local_link_mode: symlink
+  public_metadata_mode: "off"
+
+design:
+  condition_col: condition
+  control_label: control
+  covariates:
+    - time_h
+  min_condition_groups: 2
+
+smallrna:
+  run: false
+  contrast_by:
+    - time_h
+
+biological_qc:
+  run: false

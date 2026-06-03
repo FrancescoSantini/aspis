@@ -1,0 +1,52 @@
+# Local first-pass config for Francesco's legacy PhD pipeline samples.
+#
+# This config is intended for explicit branch-QC targets such as branch
+# samples.tsv, raw FASTQ inspection, FastQC, and MultiQC. It keeps expensive
+# alignment, quantification, and differential layers disabled while checking
+# that the old local RNA-seq/smallRNA sample layout maps cleanly to ASPIS.
+# Running rule all will still request the standard RNA-seq preprocessing
+# contracts for rnaseq branches; use explicit branch targets for the first pass
+# if you want to avoid fastp.
+
+intake: config/intake_phdpipe_real.tsv
+
+paths:
+  raw_dir: work/phdpipe_real/raw
+  metadata_dir: meta/phdpipe_real/materialized
+  manifest: meta/phdpipe_real/materialized_manifest.tsv
+  analysis_plan: meta/phdpipe_real/analysis_plan.tsv
+  environment_report: meta/phdpipe_real/environment_report.tsv
+  execution_report: meta/phdpipe_real/execution_report.tsv
+  sra_cache_dir: cache/phdpipe_real/sra
+  scratch_dir: work/phdpipe_real/tmp
+  branch_dir: results/phdpipe_real/branches
+
+materialization:
+  local_link_mode: symlink
+  public_metadata_mode: "off"
+
+design:
+  condition_col: condition
+  control_label: control
+  covariates:
+    - time_h
+  min_condition_groups: 2
+
+rnaseq_alignment:
+  run: false
+
+rnaseq_quantification:
+  run: false
+
+rnaseq_differential:
+  run: false
+  contrast_by:
+    - time_h
+
+smallrna:
+  run: false
+  contrast_by:
+    - time_h
+
+biological_qc:
+  run: false
