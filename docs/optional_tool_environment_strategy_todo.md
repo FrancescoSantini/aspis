@@ -1,24 +1,18 @@
 # Optional Tool Environment Strategy TODO
 
-This document tracks the concern originally captured in GitHub issue #69:
-advanced optional isoform-switch and differential transcript usage engines are
-now configurable, but ASPIS still needs a clear reproducibility strategy for
-their software environments and output parsing.
+This document tracks the reproducibility strategy for advanced optional
+isoform-switch, functional-annotation, and differential transcript/splicing
+engines.
 
 ## Concern
 
-The advanced isoform-switch and DTU layers expose configurable command hooks,
-but it is not yet explicit which optional tools are guaranteed by ASPIS
-environments and which remain user-provided external tools.
+The core ASPIS workflow should remain runnable from `envs/aspis-snakemake.yaml`,
+but some advanced interpretation tools have large databases, licenses, or
+site-specific installation requirements. Users must be able to tell which tools
+are bundled, which are available through optional conda environments, and which
+must be supplied externally.
 
-This should be resolved before treating those advanced layers as fully
-production-ready.
-
-## Why This Matters
-
-Users should not have to guess whether tools such as the following are expected
-to be present in the main ASPIS conda environment, in optional per-module
-environments, or installed externally:
+Examples:
 
 - InterProScan;
 - Pfam/HMMER;
@@ -33,58 +27,54 @@ environments, or installed externally:
 - DRIMSeq;
 - DEXSeq.
 
-The current command-template hooks are useful for HPC/site-specific
-installations, but they do not yet provide a complete reproducible dependency
-story.
+## Completed
 
-## TODO
-
-Completed:
-
-- The environment split is documented in `docs/optional_tool_environments.md`:
-  keep `aspis-smk9` as the stable core, add optional conda envs for feasible
-  functional-annotation and splicing tools, and keep licensed/database-heavy
-  tools externally managed.
-- Optional conda specs now exist for first-pass feasible tools:
+- The environment split is documented in `docs/optional_tool_environments.md`.
+- Core workflow tools are kept in `aspis-smk9`.
+- Optional conda specs exist for feasible tools:
   `envs/aspis-functional-annotation.yaml` and `envs/aspis-splicing.yaml`.
-- RNA-seq differential environment reports now include optional isoform-switch
-  and DTU tool groups when the corresponding layers are enabled.
-- Project config examples document which environment keys define optional
-  isoform-switch and DTU tool checks.
-- Real-data readiness docs now point users to the optional environment strategy
-  before enabling advanced isoform-switch annotation or DTU engines.
-- Command-template fallback support remains the standard route for
-  site-managed HPC installations.
+- RNA-seq differential environment reports include optional isoform-switch and
+  DTU tool groups when the corresponding layers are enabled.
+- Project config examples document optional isoform-switch and DTU tool checks.
+- Command-template fallback remains available for HPC/site-managed tools.
+- Optional DTU/splicing command outputs are normalized when they expose common
+  DRIMSeq, DEXSeq, SUPPA2, or rMATS-style tabular columns.
+- RNA-seq report indexes and branch provenance bundles expose DTU plans, method
+  manifests, standardized parser status, and standardized result tables.
+- Isoform-switch now runs on a small real BEAS_2B subset and produces event-level
+  report pages and `switch.svg` plots when enabled.
+- RNA-seq report indexes now make the isoform-switch layer visible as `ok`,
+  `missing`, or `not_requested`.
 
-- Optional DTU/splicing command outputs are now normalized when they expose
-  common DRIMSeq, DEXSeq, SUPPA2, or rMATS-style tabular result columns. Each
-  completed method writes an ASPIS-standard `standardized_results.tsv`, and the
-  DTU method manifest records parser status and row counts.
-- RNA-seq report indexes and branch provenance bundles now expose DTU plans,
-  method manifests, standardized parser status, and standardized result tables.
+## Remaining Work
 
-Remaining:
-
-- Validate optional engine wrappers against real site installations and real
-  project outputs once those tools are available on the target HPC system.
+- Validate optional wrappers against real site installations and real project
+  outputs once those tools are available on the target HPC system.
+- Separate core isoform-switch outputs from optional consequence annotation in
+  the documentation and reports. Event tables and exon diagrams are core;
+  InterPro/Pfam/SignalP/TMHMM/CPAT-style consequence layers are optional.
+- Improve isoform-switch gene-name, biotype, and event-class annotation before
+  treating real-data event summaries as biologically polished.
+- Make optional consequence-tool absence visible in the report as
+  `not_configured`, not as an apparent biological zero.
+- Add example feature-set resources and target resources for real human analyses
+  so ORA/GSEA and smallRNA target sections can be tested offline.
+- Validate smallRNA target and miRNA-mRNA integration reports on matched real
+  RNA-seq/smallRNA samples once target resources are configured.
+- Add example environment-report snippets showing how missing optional tools
+  appear in a dry run.
+- Confirm that externally managed tools can be used without polluting the core
+  `aspis-smk9` environment.
 
 ## Acceptance Criteria
 
 - A user can tell from the docs whether an optional advanced method is bundled,
   conda-installable, or externally managed.
-- Dry-run/environment reports expose missing optional tools clearly.
+- Dry-run and environment reports expose missing optional tools clearly.
+- Optional tools can fail or be absent without breaking core RNA-seq or smallRNA
+  analysis.
 - At least the selected first-pass engines have reproducible env specs and
   standardized ASPIS output parsing.
-
-## Proposed Environment Split
-
-The implemented split is:
-
-- `aspis-smk9`: core stable pipeline tools.
-- `aspis-functional-annotation`: heavy isoform-switch consequence tools, where
-  packaging is feasible.
-- `aspis-splicing`: optional event-level splicing and DTU engines.
-
-Some tools may remain external because of large databases, licensing, or
-non-conda setup. Those cases should still be represented in ASPIS through clear
-config keys, environment reports, and standardized output manifests.
+- Reports distinguish `disabled`, `not_configured`, `missing`, `failed`, and
+  biologically empty successful outputs.
+- Core reports stay readable even when optional tools are absent.
