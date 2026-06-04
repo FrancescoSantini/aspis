@@ -7,6 +7,8 @@ import argparse
 import csv
 import html
 import os
+import shutil
+import subprocess
 from pathlib import Path
 
 
@@ -38,9 +40,17 @@ MANIFEST_COLUMNS = [
     "summary_html",
     "results",
     "filtered",
+    "volcano_pdf",
+    "volcano_preview",
     "ma_pdf",
+    "ma_preview",
+    "pca_pdf",
+    "pca_preview",
     "pca_metrics_tsv",
     "sample_distance_pdf",
+    "sample_distance_preview",
+    "heatmap_pdf",
+    "heatmap_preview",
     "heatmap_panel_tsv",
     "novelty_summary_tsv",
     "n_features",
@@ -112,8 +122,60 @@ def numeric_value(row: dict[str, str], column: str) -> float | None:
         return None
 
 
-def relative_link(target: str, html_path: Path) -> str:
-    return os.path.relpath(target, start=html_path.parent)
+def relative_link(target: str | Path, html_path: Path) -> str:
+    return os.path.relpath(target, start=html_path.parent).replace(os.sep, "/")
+
+
+def safe_preview_stem(label: str, source: Path) -> str:
+    safe_label = "".join(character if character.isalnum() else "_" for character in label.lower()).strip("_")
+    return safe_label or source.stem
+
+
+def render_pdf_preview(pdf_path_text: str, html_path: Path, label: str) -> str:
+    if not pdf_path_text:
+        return ""
+    pdf_path = Path(pdf_path_text)
+    if not pdf_path.exists():
+        return ""
+    preview_dir = html_path.parent / "plot_previews"
+    preview_dir.mkdir(parents=True, exist_ok=True)
+    preview_path = preview_dir / f"{safe_preview_stem(label, pdf_path)}.png"
+    if preview_path.exists() and preview_path.stat().st_mtime >= pdf_path.stat().st_mtime:
+        return str(preview_path)
+
+    pdftoppm = shutil.which("pdftoppm")
+    if pdftoppm:
+        prefix = preview_path.with_suffix("")
+        completed = subprocess.run(
+            [pdftoppm, "-singlefile", "-png", "-r", "160", str(pdf_path), str(prefix)],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        if completed.returncode == 0 and preview_path.exists():
+            return str(preview_path)
+
+    imagemagick = shutil.which("magick") or shutil.which("convert")
+    if imagemagick:
+        command = (
+            [imagemagick, str(pdf_path) + "[0]", str(preview_path)]
+            if Path(imagemagick).name == "magick"
+            else [imagemagick, str(pdf_path) + "[0]", str(preview_path)]
+        )
+        completed = subprocess.run(command, check=False, capture_output=True, text=True)
+        if completed.returncode == 0 and preview_path.exists():
+            return str(preview_path)
+    return ""
+
+
+def render_pdf_previews(row: dict[str, str], html_path: Path) -> dict[str, str]:
+    return {
+        "volcano_preview": render_pdf_preview(row.get("volcano_pdf", ""), html_path, "volcano"),
+        "ma_preview": render_pdf_preview(row.get("ma_pdf", ""), html_path, "ma"),
+        "pca_preview": render_pdf_preview(row.get("pca_pdf", ""), html_path, "pca"),
+        "sample_distance_preview": render_pdf_preview(row.get("sample_distance_pdf", ""), html_path, "sample_distance"),
+        "heatmap_preview": render_pdf_preview(row.get("heatmap_pdf", ""), html_path, "heatmap"),
+    }
 
 
 def first_feature_column(rows: list[dict[str, str]]) -> str:
@@ -324,19 +386,41 @@ def transcript_novelty_section(level: str, novelty_rows: list[dict[str, str]]) -
   </table>"""
 
 
-def artifact_panel(label: str, path: str, html_path: Path, mime_type: str) -> str:
-    link = html.escape(relative_link(path, html_path))
+def artifact_panel(
+    label: str,
+    path: str,
+    html_path: Path,
+    mime_type: str,
+    preview_path: str = "",
+) -> str:
     title = html.escape(label)
+    if not path:
+        return f"""<section class="plot">
+    <h3>{title}</h3>
+    <p class="plot-note">No plot file was recorded for this panel.</p>
+  </section>"""
+    link = html.escape(relative_link(path, html_path))
+    if preview_path:
+        preview_link = html.escape(relative_link(preview_path, html_path))
+        return f"""<section class="plot">
+    <h3>{title}</h3>
+    <a href="{link}"><img src="{preview_link}" alt="{title} preview"></a>
+    <p class="plot-source"><a href="{link}">Open full source plot</a></p>
+  </section>"""
+    if mime_type.startswith("image/"):
+        return f"""<section class="plot">
+    <h3>{title}</h3>
+    <a href="{link}"><img src="{link}" alt="{title}"></a>
+  </section>"""
     return f"""<section class="plot">
     <h3>{title}</h3>
-    <object data="{link}" type="{mime_type}">
-      <a href="{link}">{title}</a>
-    </object>
+    <p class="plot-note">Preview could not be generated. Use the full source plot link.</p>
+    <p class="plot-source"><a href="{link}">Open full source plot</a></p>
   </section>"""
 
 
-def plot_panel(label: str, path: str, html_path: Path) -> str:
-    return artifact_panel(label, path, html_path, "application/pdf")
+def plot_panel(label: str, path: str, html_path: Path, preview_path: str = "") -> str:
+    return artifact_panel(label, path, html_path, "application/pdf", preview_path)
 
 
 def enrichment_panel(resources: dict[str, dict[str, str]], html_path: Path) -> str:
@@ -365,16 +449,24 @@ def render_html(
         for key, value in metrics.items()
     )
     output = Path(row["summary_html"])
+    preview_paths = render_pdf_previews(row, output)
     plot_panels = [
-        plot_panel("Volcano", row["volcano_pdf"], output),
-        plot_panel("MA", row["ma_pdf"], output),
-        plot_panel("PCA", row["pca_pdf"], output),
+        plot_panel("Volcano", row["volcano_pdf"], output, preview_paths["volcano_preview"]),
+        plot_panel("MA", row["ma_pdf"], output, preview_paths["ma_preview"]),
+        plot_panel("PCA", row["pca_pdf"], output, preview_paths["pca_preview"]),
     ]
     if row.get("sample_distance_pdf", ""):
-        plot_panels.append(plot_panel("Sample Distance", row["sample_distance_pdf"], output))
+        plot_panels.append(
+            plot_panel(
+                "Sample Distance",
+                row["sample_distance_pdf"],
+                output,
+                preview_paths["sample_distance_preview"],
+            )
+        )
     plot_panels.extend(
         [
-            plot_panel("Heatmap", row["heatmap_pdf"], output),
+            plot_panel("Heatmap", row["heatmap_pdf"], output, preview_paths["heatmap_preview"]),
             enrichment_panel(resources, output),
         ]
     )
@@ -413,8 +505,9 @@ def render_html(
     th, td {{ border: 1px solid #d0d7de; padding: 6px 8px; text-align: left; }}
     th {{ background: #f6f8fa; }}
     .note {{ background: #f6f8fa; border-left: 4px solid #57606a; margin: 12px 0 18px; padding: 10px 12px; }}
-    .plots {{ display: grid; gap: 18px; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }}
-    .plot object {{ border: 1px solid #d0d7de; height: 360px; width: 100%; }}
+    .plots {{ display: grid; gap: 28px; grid-template-columns: 1fr; }}
+    .plot img {{ border: 1px solid #d0d7de; display: block; height: auto; max-width: 100%; }}
+    .plot-source, .plot-note {{ color: #57606a; margin: 0.4rem 0 0; }}
   </style>
 </head>
 <body>
@@ -481,6 +574,7 @@ def render_ready_row(row: dict[str, str], top_n: int) -> dict[str, str]:
     output = Path(row["summary_html"])
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(render_html(row, metrics, filtered_rows, resources, novelty_rows, top_n), encoding="utf-8")
+    preview_paths = render_pdf_previews(row, output)
     return {
         "project": row["project"],
         "level": row["level"],
@@ -490,9 +584,17 @@ def render_ready_row(row: dict[str, str], top_n: int) -> dict[str, str]:
         "summary_html": str(output),
         "results": row["results"],
         "filtered": row["filtered"],
+        "volcano_pdf": row.get("volcano_pdf", ""),
+        "volcano_preview": preview_paths.get("volcano_preview", ""),
         "ma_pdf": row.get("ma_pdf", ""),
+        "ma_preview": preview_paths.get("ma_preview", ""),
+        "pca_pdf": row.get("pca_pdf", ""),
+        "pca_preview": preview_paths.get("pca_preview", ""),
         "pca_metrics_tsv": row.get("pca_metrics_tsv", ""),
         "sample_distance_pdf": row.get("sample_distance_pdf", ""),
+        "sample_distance_preview": preview_paths.get("sample_distance_preview", ""),
+        "heatmap_pdf": row.get("heatmap_pdf", ""),
+        "heatmap_preview": preview_paths.get("heatmap_preview", ""),
         "heatmap_panel_tsv": row.get("heatmap_panel_tsv", ""),
         "novelty_summary_tsv": novelty_summary_tsv,
         "n_features": str(len(result_rows)),
@@ -516,9 +618,17 @@ def render_rows(plan_rows: list[dict[str, str]], top_n: int) -> list[dict[str, s
                     "summary_html": row["summary_html"],
                     "results": row["results"],
                     "filtered": row["filtered"],
+                    "volcano_pdf": row.get("volcano_pdf", ""),
+                    "volcano_preview": "",
                     "ma_pdf": row.get("ma_pdf", ""),
+                    "ma_preview": "",
+                    "pca_pdf": row.get("pca_pdf", ""),
+                    "pca_preview": "",
                     "pca_metrics_tsv": row.get("pca_metrics_tsv", ""),
                     "sample_distance_pdf": row.get("sample_distance_pdf", ""),
+                    "sample_distance_preview": "",
+                    "heatmap_pdf": row.get("heatmap_pdf", ""),
+                    "heatmap_preview": "",
                     "heatmap_panel_tsv": row.get("heatmap_panel_tsv", ""),
                     "novelty_summary_tsv": row.get("novelty_summary_tsv", ""),
                     "n_features": "0",
@@ -538,8 +648,17 @@ def render_rows(plan_rows: list[dict[str, str]], top_n: int) -> list[dict[str, s
             failed["n_significant"] = "0"
             failed["n_up"] = "0"
             failed["n_down"] = "0"
+            failed["volcano_pdf"] = row.get("volcano_pdf", "")
+            failed["volcano_preview"] = ""
             failed["ma_pdf"] = row.get("ma_pdf", "")
+            failed["ma_preview"] = ""
+            failed["pca_pdf"] = row.get("pca_pdf", "")
+            failed["pca_preview"] = ""
             failed["pca_metrics_tsv"] = row.get("pca_metrics_tsv", "")
+            failed["sample_distance_pdf"] = row.get("sample_distance_pdf", "")
+            failed["sample_distance_preview"] = ""
+            failed["heatmap_pdf"] = row.get("heatmap_pdf", "")
+            failed["heatmap_preview"] = ""
             failed["heatmap_panel_tsv"] = row.get("heatmap_panel_tsv", "")
             output_rows.append(failed)
     return output_rows
