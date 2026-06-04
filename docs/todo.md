@@ -7,9 +7,10 @@ here so that remaining work is tracked in one place.
 
 While the complete private FASTQ dataset is still uploading to G100, use
 `docs/work_while_uploading.md` to track useful work that does not require the
-full dataset. Completed report-readability and usage-documentation work has
-been removed from that active list; the remaining tracks are resource
-preparation, real config/intake review, and eventual Snakefile modularization.
+full dataset. Completed report-readability, usage-documentation, and resource
+inventory work has been removed from that active list. Real-data-dependent
+preflight, final config review, and full validation items are tracked here
+instead.
 
 ## Current Validation Status
 
@@ -32,10 +33,19 @@ Tasks:
 
 - Run the complete BEAS_2B and HEP_G2 RNA-seq and smallRNA datasets through the
   current root `Snakefile` on G100.
+- After upload paths are final, run `validate_project_inputs.py` preflight on
+  the real G100 RNA-seq and smallRNA configs before full submission.
+- Confirm every real intake row has stable `library_id`, `biospecimen_id`,
+  `project`, `assay`, `input_1`, `input_2`, and design columns.
+- Confirm real configs use G100 paths, not WSL/local paths, and do not point to
+  synthetic smoke-test references.
+- Confirm SLURM partition settings: download/materialization work can use the
+  download partition, and normal analysis work can use the production partition.
 - Validate both local FASTQ and public run-accession materialization paths on
   real-sized data.
 - Compare ASPIS count matrices, DESeq2 contrast tables, normalized counts,
-  enrichment inputs, and report inventories against the old project outputs.
+  enrichment inputs, preflight reports, and report inventories against the old
+  project outputs.
 - Record which differences are expected because of changed tools, references,
   thresholds, or design formulas.
 - Keep an explicit validation matrix by assay, project, branch, workflow layer,
@@ -304,6 +314,9 @@ Future tasks:
   after run-level handling is stable.
 - Consider optional local mate discovery as a preflight assistant, not as silent
   production behavior.
+- Add actual `prepare_resources` targets only after real-data validation proves
+  which resources are worth automating; keep them opt-in, pinned by release,
+  URL, output directory, and checksum.
 - Consider content-based assay checks that produce confidence/status reports
   rather than silently routing uncertain samples.
 

@@ -6,13 +6,15 @@ real-data run, but they do not replace full real-data validation.
 
 Completed items have been removed from the active list. Report readability,
 plot/report layout safeguards, status wording, README usage cleanup, TODO
-consolidation, and operational-doc consistency are already implemented and
-tracked in the commit history.
+consolidation, operational-doc consistency, resource inventory, and recipe
+preflight checks are already implemented and tracked in the commit history.
 
-## 1. Finalize Reference Resource Declarations
+Upload-dependent preflight and final real-config review items are tracked in
+`docs/todo.md`.
 
-Purpose: make real analyses reproducible without pretending that automatic
-resource download can safely guess the correct biological reference.
+## 1. Finish Offline Resource Examples And Provenance
+
+Purpose: make enrichment and target reports informative as soon as real data run.
 
 Implemented now:
 
@@ -27,40 +29,13 @@ Implemented now:
 - Enabled recipes must be pinned by release/version, source URL, output
   directory, and checksum unless `allow_unchecked: true` is written explicitly.
 
-Still to do:
+Still useful before upload finishes:
 
-- Add actual `prepare_resources` Snakemake targets only after real-data
-  validation proves which resources are worth automating.
 - Add non-empty ORA/GSEA resource examples that are small enough to commit.
 - Keep downloaded FASTA/GTF/GMT/index files out of git and document only their
   expected paths, release, checksums, and provenance.
 
-## 2. Harden Real Configs And Preflight Checks
-
-Purpose: fail before spending G100 allocation when a project has a path,
-resource, or design problem that can be detected on the login node.
-
-Implemented now:
-
-- `validate_project_inputs.py` validates that `resources` is structured as an
-  inventory mapping.
-- `validate_project_inputs.py` validates enabled `resource_recipes` before the
-  analysis starts.
-- RNA-seq and smallRNA project templates show the intended resource structure
-  without requiring users to edit many repeated paths manually.
-
-Still to do:
-
-- Run preflight on the real HPC config after upload paths are final.
-- Confirm all real intake rows have stable `library_id`, `biospecimen_id`,
-  `project`, `assay`, `input_1`, `input_2`, and design columns.
-- Confirm real configs use HPC paths, not WSL paths.
-- Confirm SLURM partition settings:
-  - download/materialization work can use the download partition.
-  - normal analysis work can use the production partition.
-- Confirm real configs do not force synthetic smoke-test reference paths.
-
-## 3. Make The Snakefile Easier To Maintain
+## 2. Make The Snakefile Easier To Maintain
 
 Purpose: reduce future fragility without changing the user entry point.
 
