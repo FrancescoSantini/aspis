@@ -27,6 +27,12 @@ Concrete work:
 Success condition: a collaborator can start from the run index and understand
 what each report section is for without opening the code or reading a chat log.
 
+Implementation coverage: the run dashboard, branch report, RNA-seq and smallRNA
+differential report indexes, contrast summary pages, biological-warning pages,
+isoform-switch pages, enrichment SVG placeholders, and technical PDF renderer
+now include explanatory text or clearer status handling. Full validation still
+requires reading the regenerated reports from complete real data.
+
 ## 2. Improve TODO And Usage Documentation Consistency
 
 Purpose: keep the repository self-explanatory while the real run is pending.
@@ -44,6 +50,11 @@ Concrete work:
   to locate.
 
 Success condition: a future ASPIS run can be prepared from repository docs alone.
+
+Implementation coverage: README, `docs/todo.md`, `docs/real_data_readiness.md`,
+and this note now point to the same entry points and status vocabulary. The
+older parity/TODO-style notes remain as historical detail, but `docs/todo.md`
+is the canonical backlog.
 
 ## 3. Prepare ORA/GSEA And SmallRNA Target Resources
 

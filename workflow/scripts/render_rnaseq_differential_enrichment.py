@@ -721,7 +721,8 @@ def write_enrichment_svg(path: Path, rows: list[dict[str, str]], top_n: int) -> 
         path.write_text(
             f"""<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}">
   <rect width="100%" height="100%" fill="#ffffff"/>
-  <text x="40" y="70" font-family="sans-serif" font-size="18">No feature-set enrichment terms</text>
+  <text x="40" y="70" font-family="sans-serif" font-size="18">No feature-set enrichment terms passed the configured thresholds</text>
+  <text x="40" y="98" font-family="sans-serif" font-size="13" fill="#57606a">Check the enrichment manifest to distinguish no terms from missing resources.</text>
 </svg>
 """,
             encoding="utf-8",
@@ -939,7 +940,8 @@ def write_ranked_enrichment_svg(path: Path, rows: list[dict[str, str]], top_n: i
         f'<line x1="{margin_left}" y1="{height - margin_bottom}" x2="{width - margin_right}" y2="{height - margin_bottom}" stroke="#777"/>',
     ]
     if not selected:
-        elements.append('<text x="40" y="72" font-family="sans-serif" font-size="14">No ranked feature-set terms</text>')
+        elements.append('<text x="40" y="72" font-family="sans-serif" font-size="14">No ranked feature-set terms passed the configured thresholds</text>')
+        elements.append('<text x="40" y="98" font-family="sans-serif" font-size="12" fill="#57606a">Check the enrichment manifest to distinguish no terms from missing resources.</text>')
     for index, row in enumerate(selected):
         y = margin_top + index * row_height + 18
         score = parse_float(row.get("normalized_enrichment_score", "")) or 0.0
@@ -1054,46 +1056,22 @@ def write_feature_lists(
         "n_feature_set_terms": str(len(term_rows)),
         "n_ranked_feature_set_terms": str(len(ranked_term_rows)),
     }
+    universe_status = "not_configured" if not feature_sets else "insufficient_mapping" if not universe_rows else "ok"
+    universe_reason = "No feature set GMT or table configured" if not feature_sets else "No tested features mapped to configured feature sets" if not universe_rows else ""
+    term_status = "not_configured" if not feature_sets else "no_significant_terms" if not term_rows else "ok"
+    term_reason = "No feature set GMT or table configured" if not feature_sets else "No ORA terms passed configured overlap/significance thresholds" if not term_rows else ""
+    ranked_status = "not_configured" if not feature_sets else "no_significant_terms" if not ranked_term_rows else "ok"
+    ranked_reason = "No feature set GMT or table configured" if not feature_sets else "No ranked feature-set terms passed configured thresholds" if not ranked_term_rows else ""
     resources = [
         ("ranked_features", paths["ranked_features"], "ok", "", len(ranked)),
         ("significant_features", paths["significant_features"], "ok", "", len(significant)),
         ("up_features", paths["up_features"], "ok", "", len(up)),
         ("down_features", paths["down_features"], "ok", "", len(down)),
-        (
-            "feature_set_universe",
-            paths["feature_set_universe"],
-            "ok" if feature_sets else "not_configured",
-            "" if feature_sets else "No feature set GMT or table configured",
-            len(universe_rows),
-        ),
-        (
-            "feature_set_results",
-            paths["feature_set_results"],
-            "ok" if feature_sets else "not_configured",
-            "" if feature_sets else "No feature set GMT or table configured",
-            len(term_rows),
-        ),
-        (
-            "feature_set_plot",
-            paths["feature_set_plot"],
-            "ok" if feature_sets else "not_configured",
-            "" if feature_sets else "No feature set GMT or table configured",
-            len(term_rows),
-        ),
-        (
-            "ranked_feature_set_results",
-            paths["ranked_feature_set_results"],
-            "ok" if feature_sets else "not_configured",
-            "" if feature_sets else "No feature set GMT or table configured",
-            len(ranked_term_rows),
-        ),
-        (
-            "ranked_feature_set_plot",
-            paths["ranked_feature_set_plot"],
-            "ok" if feature_sets else "not_configured",
-            "" if feature_sets else "No feature set GMT or table configured",
-            len(ranked_term_rows),
-        ),
+        ("feature_set_universe", paths["feature_set_universe"], universe_status, universe_reason, len(universe_rows)),
+        ("feature_set_results", paths["feature_set_results"], term_status, term_reason, len(term_rows)),
+        ("feature_set_plot", paths["feature_set_plot"], term_status, term_reason, len(term_rows)),
+        ("ranked_feature_set_results", paths["ranked_feature_set_results"], ranked_status, ranked_reason, len(ranked_term_rows)),
+        ("ranked_feature_set_plot", paths["ranked_feature_set_plot"], ranked_status, ranked_reason, len(ranked_term_rows)),
     ]
     write_table(
         Path(row["enrichment_manifest"]),

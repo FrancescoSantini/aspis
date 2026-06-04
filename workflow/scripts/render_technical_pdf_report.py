@@ -331,10 +331,14 @@ class PdfReport:
         else:
             image = image.convert("RGB")
         image.thumbnail((self.content_width, max_height), RESAMPLE)
-        caption_height = font_height(self.fonts["small_bold"]) + 10
+        caption_lines = wrap_text(self.draw, caption, self.fonts["small_bold"], self.content_width)
+        caption_line_height = font_height(self.fonts["small_bold"])
+        caption_height = caption_line_height * len(caption_lines) + 10
         self.ensure(caption_height + image.height + 28)
-        self.draw.text((MARGIN, self.y), caption, font=self.fonts["small_bold"], fill=TEXT)
-        self.y += caption_height
+        for line in caption_lines:
+            self.draw.text((MARGIN, self.y), line, font=self.fonts["small_bold"], fill=TEXT)
+            self.y += caption_line_height
+        self.y += 10
         x = MARGIN + (self.content_width - image.width) // 2
         self.draw.rectangle((x - 1, self.y - 1, x + image.width + 1, self.y + image.height + 1), outline=BORDER)
         self.pages[-1].paste(image, (x, self.y))
@@ -547,6 +551,11 @@ def render_report(args: argparse.Namespace) -> int:
     )
     report.text(
         "The HTML index and TSV files remain the source of truth for complete tables, exact paths, and machine-readable provenance.",
+        "body",
+        MUTED,
+    )
+    report.text(
+        "Report statuses distinguish missing configuration from completed analyses with no significant findings. Treat blocked, disabled, not_configured, resource_missing, and no_significant_terms as different states when reviewing results.",
         "body",
         MUTED,
     )

@@ -700,7 +700,8 @@ def write_enrichment_svg(path: Path, rows: list[dict[str, str]], top_n: int) -> 
         path.write_text(
             f"""<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}">
   <rect width="100%" height="100%" fill="#ffffff"/>
-  <text x="40" y="70" font-family="sans-serif" font-size="18">No miRNA target enrichment terms</text>
+  <text x="40" y="70" font-family="sans-serif" font-size="18">No miRNA target enrichment terms passed the configured thresholds</text>
+  <text x="40" y="98" font-family="sans-serif" font-size="13" fill="#57606a">Check target_manifest.tsv for resource and mapping status.</text>
 </svg>
 """,
             encoding="utf-8",
@@ -822,16 +823,20 @@ def render_contrast(
         write_table(paths["target_summary"], SUMMARY_COLUMNS, summary)
         write_table(paths["target_source_summary"], SUMMARY_COLUMNS, summary)
         write_enrichment_svg(paths["target_enrichment_plot"], enriched, top_n)
+        universe_status = "insufficient_mapping" if not universe else "ok"
+        universe_reason = "No tested miRNAs mapped to configured target resources" if not universe else ""
+        enrichment_status = "no_significant_terms" if not enriched else "ok"
+        enrichment_reason = "No target terms passed configured overlap/significance thresholds" if not enriched else ""
         write_contrast_manifest(
             paths["target_manifest"],
             row["contrast_id"],
             [
                 ("mirna_targets", "ok", "", str(paths["mirna_targets"]), len(mapping)),
-                ("target_universe", "ok", "", str(paths["target_universe"]), len(universe)),
-                ("target_enrichment", "ok", "", str(paths["target_enrichment"]), len(enriched)),
+                ("target_universe", universe_status, universe_reason, str(paths["target_universe"]), len(universe)),
+                ("target_enrichment", enrichment_status, enrichment_reason, str(paths["target_enrichment"]), len(enriched)),
                 ("target_summary", "ok", "", str(paths["target_summary"]), len(summary)),
                 ("target_source_summary", "ok", "", str(paths["target_source_summary"]), len(summary)),
-                ("target_enrichment_plot", "ok", "", str(paths["target_enrichment_plot"]), len(enriched)),
+                ("target_enrichment_plot", enrichment_status, enrichment_reason, str(paths["target_enrichment_plot"]), len(enriched)),
             ],
         )
         return {

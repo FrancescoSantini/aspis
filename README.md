@@ -314,6 +314,22 @@ results/<run_id>/branches/smallrna/<project>/smallrna/differential/reports/index
 results/<run_id>/branches/smallrna/<project>/smallrna/differential/reports/technical_report.pdf
 ```
 
+What the main report families are for:
+
+- Run dashboard: top-level navigation, branch readiness, environment checks,
+  execution reports, and links into each assay/project branch.
+- Branch report: compact map of one assay/project, including samples, design,
+  raw QC, preprocessing QC, alignment, quantification, differential layers,
+  warnings, provenance, and report entry points.
+- Differential report index: contrast-level status, tables, plot links,
+  enrichment status, optional isoform-switch/DTU links, and the technical PDF.
+- Contrast summaries: human-readable plot previews with links to full source
+  PDFs/SVGs and complete TSV tables.
+- Warning reports: triage pages for design, sample QC, strandedness, biotype,
+  residual-genome, length-profile, and DESeq2 warning checks.
+- Technical PDFs: compact meeting/review documents; they are not the complete
+  machine-readable result record.
+
 Use the HTML reports for navigation and complete links. Use
 `technical_report.pdf` as a compact plot-and-small-table digest for meetings or
 biologist-facing review. The TSV files remain the source of truth for complete

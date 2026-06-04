@@ -469,7 +469,7 @@ def render_html(path: Path, rows: list[dict[str, str]], args: argparse.Namespace
             + "</tr>"
         )
     if not body:
-        body.append(f'<tr><td colspan="{len(WARNING_COLUMNS)}">No biological warnings were raised.</td></tr>')
+        body.append(f'<tr><td colspan="{len(WARNING_COLUMNS)}">No biological warnings were raised by the configured checks. This means ASPIS did not detect these specific warning patterns; it is not a statement that the biology is automatically correct.</td></tr>')
     header = "".join(f"<th>{html.escape(column)}</th>" for column in WARNING_COLUMNS)
     metrics = " ".join(f"{key}: {value}" for key, value in severity_counts.items())
     content = f"""<!doctype html>
@@ -478,14 +478,23 @@ def render_html(path: Path, rows: list[dict[str, str]], args: argparse.Namespace
   <meta charset="utf-8">
   <title>{html.escape(args.project)} {html.escape(args.assay)} biological warnings</title>
   <style>
-    body {{ font-family: Arial, sans-serif; margin: 2rem; color: #222; }}
+    body {{ font-family: system-ui, -apple-system, Segoe UI, sans-serif; margin: 24px; max-width: 1440px; color: #24292f; }}
+    .note {{ background: #f6f8fa; border-left: 4px solid #57606a; margin: 12px 0 18px; padding: 10px 12px; }}
+    .severity-guide {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 0.75rem; margin: 1rem 0 1.5rem; }}
+    .severity-guide div {{ border: 1px solid #d0d7de; border-radius: 6px; padding: 0.75rem; }}
     table {{ border-collapse: collapse; width: 100%; font-size: 0.92rem; }}
-    th, td {{ border: 1px solid #ddd; padding: 0.45rem; text-align: left; vertical-align: top; }}
-    th {{ background: #f2f2f2; }}
+    th, td {{ border: 1px solid #d0d7de; padding: 0.45rem; text-align: left; vertical-align: top; }}
+    th {{ background: #f6f8fa; }}
   </style>
 </head>
 <body>
   <h1>{html.escape(args.project)} {html.escape(args.assay)} biological warnings</h1>
+  <p class="note">This page aggregates design, sample-level QC, strandedness, biotype, transcript-discovery, residual-genome, length-profile, and DESeq2 warning checks for this branch. It is a triage page: warnings identify what should be inspected before biological interpretation.</p>
+  <div class="severity-guide">
+    <div><strong>error</strong><br>A configured analysis layer is blocked or produced an invalid state.</div>
+    <div><strong>warning</strong><br>The run completed, but the result needs manual inspection before interpretation.</div>
+    <div><strong>info</strong><br>Contextual notes, including successful analyses with no significant signal.</div>
+  </div>
   <p>{html.escape(metrics)}</p>
   <table><thead><tr>{header}</tr></thead><tbody>{''.join(body)}</tbody></table>
 </body>

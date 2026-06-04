@@ -55,6 +55,12 @@ Acceptance criteria:
 
 The report layer is functional but still too developer-oriented in places.
 
+Current baseline: run-level, branch-level, differential, smallRNA, warning,
+isoform-switch, enrichment-placeholder, and technical-PDF reports now include
+reader guidance and clearer resource statuses. The remaining work is mostly
+real-data review of readability, long labels, and whether biologists can follow
+the output without code context.
+
 Tasks:
 
 - Add concise explanatory text to run-level, branch-level, differential,

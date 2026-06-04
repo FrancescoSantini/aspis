@@ -578,7 +578,8 @@ def write_enrichment_svg(path: Path, rows: list[dict[str, str]], top_n: int) -> 
         path.write_text(
             f"""<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}">
   <rect width="100%" height="100%" fill="#ffffff"/>
-  <text x="40" y="70" font-family="sans-serif" font-size="18">No miRNA-ID feature-set enrichment terms</text>
+  <text x="40" y="70" font-family="sans-serif" font-size="18">No miRNA-ID feature-set enrichment terms passed the configured thresholds</text>
+  <text x="40" y="98" font-family="sans-serif" font-size="13" fill="#57606a">Check mirna_feature_set_manifest.tsv for resource and mapping status.</text>
 </svg>
 """,
             encoding="utf-8",
@@ -627,7 +628,8 @@ def write_ranked_svg(path: Path, rows: list[dict[str, str]], top_n: int) -> None
         path.write_text(
             f"""<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}">
   <rect width="100%" height="100%" fill="#ffffff"/>
-  <text x="40" y="70" font-family="sans-serif" font-size="18">No ranked miRNA-ID feature-set terms</text>
+  <text x="40" y="70" font-family="sans-serif" font-size="18">No ranked miRNA-ID feature-set terms passed the configured thresholds</text>
+  <text x="40" y="98" font-family="sans-serif" font-size="13" fill="#57606a">Check mirna_feature_set_manifest.tsv for resource and mapping status.</text>
 </svg>
 """,
             encoding="utf-8",
@@ -741,16 +743,22 @@ def render_contrast(row: dict[str, str], feature_sets: list[FeatureSet], outdir:
         write_table(paths["ranked_universe"], RANKED_UNIVERSE_COLUMNS, ranked_universe)
         write_table(paths["ranked_results"], RANKED_COLUMNS, ranked_terms)
         write_ranked_svg(paths["ranked_plot"], ranked_terms, top_n)
+        universe_status = "insufficient_mapping" if not universe else "ok"
+        universe_reason = "No tested miRNAs mapped to configured miRNA-ID feature sets" if not universe else ""
+        term_status = "no_significant_terms" if not terms else "ok"
+        term_reason = "No miRNA-ID feature-set terms passed configured overlap/significance thresholds" if not terms else ""
+        ranked_status = "no_significant_terms" if not ranked_terms else "ok"
+        ranked_reason = "No ranked miRNA-ID feature-set terms passed configured thresholds" if not ranked_terms else ""
         write_contrast_manifest(
             paths["manifest"],
             row["contrast_id"],
             [
-                ("mirna_feature_set_universe", "ok", "", str(paths["universe"]), len(universe)),
-                ("mirna_feature_set_results", "ok", "", str(paths["results"]), len(terms)),
-                ("mirna_feature_set_plot", "ok", "", str(paths["plot"]), len(terms)),
-                ("mirna_ranked_feature_set_universe", "ok", "", str(paths["ranked_universe"]), len(ranked_universe)),
-                ("mirna_ranked_feature_set_results", "ok", "", str(paths["ranked_results"]), len(ranked_terms)),
-                ("mirna_ranked_feature_set_plot", "ok", "", str(paths["ranked_plot"]), len(ranked_terms)),
+                ("mirna_feature_set_universe", universe_status, universe_reason, str(paths["universe"]), len(universe)),
+                ("mirna_feature_set_results", term_status, term_reason, str(paths["results"]), len(terms)),
+                ("mirna_feature_set_plot", term_status, term_reason, str(paths["plot"]), len(terms)),
+                ("mirna_ranked_feature_set_universe", "ok" if ranked_universe else "insufficient_mapping", "No ranked miRNAs mapped to configured miRNA-ID feature sets" if not ranked_universe else "", str(paths["ranked_universe"]), len(ranked_universe)),
+                ("mirna_ranked_feature_set_results", ranked_status, ranked_reason, str(paths["ranked_results"]), len(ranked_terms)),
+                ("mirna_ranked_feature_set_plot", ranked_status, ranked_reason, str(paths["ranked_plot"]), len(ranked_terms)),
             ],
         )
         return {

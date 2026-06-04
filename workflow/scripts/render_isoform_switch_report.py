@@ -2379,6 +2379,7 @@ def render_event_html(
     pre {{ white-space: pre-wrap; word-break: break-word; background: #f6f8fa; padding: 12px; }}
     img {{ max-width: 100%; border: 1px solid #d0d7de; }}
     .note {{ background: #f6f8fa; border-left: 4px solid #57606a; margin: 12px 0 18px; padding: 10px 12px; }}
+    table {{ display: block; overflow-x: auto; }}
   </style>
 </head>
 <body>
@@ -2739,12 +2740,14 @@ def render_project_html(event_rows: list[dict[str, str]], coding_switch_rows: li
     a {{ color: #0969da; text-decoration: none; }}
     a:hover {{ text-decoration: underline; }}
     .note {{ background: #f6f8fa; border-left: 4px solid #57606a; margin: 12px 0 18px; padding: 10px 12px; }}
+    table {{ display: block; overflow-x: auto; }}
   </style>
 </head>
 <body>
   <h1>Isoform-switch report</h1>
   <p>Events are ranked by absolute isoform fraction change and split into coding, noncoding/mixed, and ambiguous sections. Coding switches are additionally prioritized by predicted functional consequences. Noncoding switches are interpreted through transcript architecture rather than requiring ORF/domain evidence.</p>
   <p class="note">Use this page as an index of candidate events. The event links open per-gene pages with exon diagrams, switch-in/switch-out isoforms, coding or noncoding interpretation tables, optional functional annotations, and sequence extracts.</p>
+  <p class="note">Isoform-switch calls are candidate transcript-usage changes. Prioritize events by effect size, replicate support, annotation quality, and biological plausibility; optional consequence annotation is supportive evidence, not a required condition for a valid switch.</p>
   {''.join(tables)}
 </body>
 </html>

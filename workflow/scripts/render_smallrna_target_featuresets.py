@@ -472,7 +472,8 @@ def write_enrichment_svg(path: Path, rows: list[dict[str, str]], top_n: int) -> 
         path.write_text(
             f"""<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}">
   <rect width="100%" height="100%" fill="#ffffff"/>
-  <text x="40" y="70" font-family="sans-serif" font-size="18">No target feature-set enrichment terms</text>
+  <text x="40" y="70" font-family="sans-serif" font-size="18">No target feature-set enrichment terms passed the configured thresholds</text>
+  <text x="40" y="98" font-family="sans-serif" font-size="13" fill="#57606a">Check target_feature_set_manifest.tsv for mapping status.</text>
 </svg>
 """,
             encoding="utf-8",
@@ -575,13 +576,17 @@ def render_contrast(
         write_table(paths["universe"], FEATURE_SET_UNIVERSE_COLUMNS, universe)
         write_table(paths["results"], FEATURE_SET_COLUMNS, terms)
         write_enrichment_svg(paths["plot"], terms, top_n)
+        universe_status = "insufficient_mapping" if not universe else "ok"
+        universe_reason = "No targets mapped to configured feature-set resources" if not universe else ""
+        term_status = "no_significant_terms" if not terms else "ok"
+        term_reason = "No target feature-set terms passed configured overlap/significance thresholds" if not terms else ""
         write_contrast_manifest(
             paths["manifest"],
             row["contrast_id"],
             [
-                ("target_feature_set_universe", "ok", "", str(paths["universe"]), len(universe)),
-                ("target_feature_set_results", "ok", "", str(paths["results"]), len(terms)),
-                ("target_feature_set_plot", "ok", "", str(paths["plot"]), len(terms)),
+                ("target_feature_set_universe", universe_status, universe_reason, str(paths["universe"]), len(universe)),
+                ("target_feature_set_results", term_status, term_reason, str(paths["results"]), len(terms)),
+                ("target_feature_set_plot", term_status, term_reason, str(paths["plot"]), len(terms)),
             ],
         )
         return {
