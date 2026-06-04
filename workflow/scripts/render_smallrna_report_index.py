@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import csv
 import html
+import os
 from pathlib import Path
 
 
@@ -103,10 +104,22 @@ def read_table(path: Path, required: set[str]) -> list[dict[str, str]]:
         return [{key: (value or "").strip() for key, value in row.items()} for row in reader]
 
 
-def link(path_text: str, label: str) -> str:
+def local_href(path_text: str, base_dir: Path) -> str:
     if not path_text:
         return ""
-    escaped = html.escape(path_text)
+    if "://" in path_text or path_text.startswith("#"):
+        return path_text
+    path = Path(path_text)
+    if path.is_absolute():
+        return path.as_posix()
+    return os.path.relpath(path, start=base_dir).replace(os.sep, "/")
+
+
+def link(path_text: str, label: str, base_dir: Path) -> str:
+    href = local_href(path_text, base_dir)
+    if not href:
+        return ""
+    escaped = html.escape(href)
     return f'<a href="{escaped}">{html.escape(label)}</a>'
 
 
@@ -212,41 +225,41 @@ def render_index(path: Path, rows: list[dict[str, str]], warnings_html: str = ""
         resources = " | ".join(
             value
             for value in [
-                link(row.get("summary_html", ""), "summary"),
-                link(row.get("results", ""), "results"),
-                link(row.get("filtered", ""), "significant"),
-                link(row.get("mirna_targets", ""), "targets"),
-                link(row.get("target_universe", ""), "target universe"),
-                link(row.get("target_enrichment", ""), "target processes"),
-                link(row.get("target_source_summary", ""), "target sources"),
-                link(row.get("mirna_mrna_pairs", ""), "miRNA-mRNA pairs"),
-                link(row.get("mirna_mrna_summary", ""), "miRNA-mRNA summary"),
-                link(row.get("mirna_mrna_target_modes", ""), "target modes"),
-                link(row.get("mirna_mrna_target_mode_summary", ""), "target-mode summary"),
-                link(row.get("mirna_mrna_target_feature_set_universe", ""), "inverse feature-set universe"),
-                link(row.get("mirna_mrna_target_feature_set_results", ""), "inverse target feature sets"),
-                link(row.get("mirna_mrna_target_ranked_feature_set_universe", ""), "ranked inverse feature-set universe"),
-                link(row.get("mirna_mrna_target_ranked_feature_set_results", ""), "ranked inverse target feature sets"),
-                link(row.get("target_feature_set_universe", ""), "feature-set universe"),
-                link(row.get("target_feature_set_results", ""), "feature sets"),
-                link(row.get("mirna_feature_set_universe", ""), "miRNA-ID feature-set universe"),
-                link(row.get("mirna_feature_set_results", ""), "miRNA-ID feature sets"),
-                link(row.get("mirna_ranked_feature_set_universe", ""), "ranked miRNA-ID feature-set universe"),
-                link(row.get("mirna_ranked_feature_set_results", ""), "ranked miRNA-ID feature sets"),
-                link(row.get("smallrna_length_distribution", ""), "lengths"),
-                link(row.get("smallrna_arm_summary", ""), "arms"),
-                link(row.get("smallrna_isomir_length_summary", ""), "mapped length spectrum"),
-                link(row.get("residual_manifest", ""), "residual manifest"),
-                link(row.get("residual_biotype_counts", ""), "residual biotypes"),
-                link(row.get("residual_feature_counts", ""), "residual features"),
-                link(row.get("volcano_pdf", ""), "volcano"),
-                link(row.get("ma_pdf", ""), "MA"),
-                link(row.get("pca_pdf", ""), "PCA"),
-                link(row.get("pca_metrics_tsv", ""), "PCA metrics"),
-                link(row.get("sample_distance_pdf", ""), "sample distance"),
-                link(row.get("heatmap_pdf", ""), "heatmap"),
-                link(row.get("heatmap_panel_tsv", ""), "heatmap panels"),
-                link(row.get("vst_tsv", ""), "log2 counts"),
+                link(row.get("summary_html", ""), "summary", path.parent),
+                link(row.get("results", ""), "results", path.parent),
+                link(row.get("filtered", ""), "significant", path.parent),
+                link(row.get("mirna_targets", ""), "targets", path.parent),
+                link(row.get("target_universe", ""), "target universe", path.parent),
+                link(row.get("target_enrichment", ""), "target processes", path.parent),
+                link(row.get("target_source_summary", ""), "target sources", path.parent),
+                link(row.get("mirna_mrna_pairs", ""), "miRNA-mRNA pairs", path.parent),
+                link(row.get("mirna_mrna_summary", ""), "miRNA-mRNA summary", path.parent),
+                link(row.get("mirna_mrna_target_modes", ""), "target modes", path.parent),
+                link(row.get("mirna_mrna_target_mode_summary", ""), "target-mode summary", path.parent),
+                link(row.get("mirna_mrna_target_feature_set_universe", ""), "inverse feature-set universe", path.parent),
+                link(row.get("mirna_mrna_target_feature_set_results", ""), "inverse target feature sets", path.parent),
+                link(row.get("mirna_mrna_target_ranked_feature_set_universe", ""), "ranked inverse feature-set universe", path.parent),
+                link(row.get("mirna_mrna_target_ranked_feature_set_results", ""), "ranked inverse target feature sets", path.parent),
+                link(row.get("target_feature_set_universe", ""), "feature-set universe", path.parent),
+                link(row.get("target_feature_set_results", ""), "feature sets", path.parent),
+                link(row.get("mirna_feature_set_universe", ""), "miRNA-ID feature-set universe", path.parent),
+                link(row.get("mirna_feature_set_results", ""), "miRNA-ID feature sets", path.parent),
+                link(row.get("mirna_ranked_feature_set_universe", ""), "ranked miRNA-ID feature-set universe", path.parent),
+                link(row.get("mirna_ranked_feature_set_results", ""), "ranked miRNA-ID feature sets", path.parent),
+                link(row.get("smallrna_length_distribution", ""), "lengths", path.parent),
+                link(row.get("smallrna_arm_summary", ""), "arms", path.parent),
+                link(row.get("smallrna_isomir_length_summary", ""), "mapped length spectrum", path.parent),
+                link(row.get("residual_manifest", ""), "residual manifest", path.parent),
+                link(row.get("residual_biotype_counts", ""), "residual biotypes", path.parent),
+                link(row.get("residual_feature_counts", ""), "residual features", path.parent),
+                link(row.get("volcano_pdf", ""), "volcano", path.parent),
+                link(row.get("ma_pdf", ""), "MA", path.parent),
+                link(row.get("pca_pdf", ""), "PCA", path.parent),
+                link(row.get("pca_metrics_tsv", ""), "PCA metrics", path.parent),
+                link(row.get("sample_distance_pdf", ""), "sample distance", path.parent),
+                link(row.get("heatmap_pdf", ""), "heatmap", path.parent),
+                link(row.get("heatmap_panel_tsv", ""), "heatmap panels", path.parent),
+                link(row.get("vst_tsv", ""), "log2 counts", path.parent),
             ]
             if value
         )
@@ -316,7 +329,7 @@ def render_index(path: Path, rows: list[dict[str, str]], warnings_html: str = ""
             "resources",
         ]
     )
-    warnings_link = link(warnings_html, "biological warnings")
+    warnings_link = link(warnings_html, "biological warnings", path.parent)
     warnings_block = f"<p>{warnings_link}</p>" if warnings_link else ""
     content = f"""<!doctype html>
 <html lang="en">

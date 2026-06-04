@@ -65,6 +65,8 @@ EXECUTION_REPORT = PATHS.get("execution_report", "meta/execution_report.tsv")
 RUN_CONFIGFILE = os.environ.get("ASPIS_CONFIGFILE", "config/aspis.yaml")
 PREFLIGHT_REPORT = os.environ.get("ASPIS_PREFLIGHT_REPORT", "")
 BRANCH_DIR = PATHS.get("branch_dir", "results/branches")
+RUN_DASHBOARD = PATHS.get("run_dashboard", str(Path(BRANCH_DIR).parent / "index.html"))
+RUN_DASHBOARD_DONE = PATHS.get("run_dashboard_done", str(Path(RUN_DASHBOARD).with_suffix(".done")))
 SRA_CACHE_DIR = PATHS.get("sra_cache_dir", "cache/sra")
 SCRATCH_DIR = PATHS.get("scratch_dir", "work/tmp")
 DESEQ2_SMOKE_DIR = DESEQ2_SMOKE.get("outdir", "results/deseq2_smoke/gene_deseq2")
@@ -1541,22 +1543,56 @@ def deseq2_smoke_targets():
     return targets
 
 
+def run_dashboard_inputs(wildcards):
+    return [MANIFEST, ANALYSIS_PLAN, ENVIRONMENT_REPORT, EXECUTION_REPORT] + planned_branch_targets(wildcards)
+
+
 def workflow_targets(wildcards):
     targets = []
     if not DESEQ2_SMOKE.get("only", False):
         targets.extend(planned_branch_targets(wildcards))
         targets.append(ENVIRONMENT_REPORT)
         targets.append(EXECUTION_REPORT)
+        targets.append(RUN_DASHBOARD)
     targets.extend(deseq2_smoke_targets())
     return targets
 
 
-localrules: all, check_environment, check_execution_config, assay_branch_ready, build_branch_design, build_branch_provenance_bundle
+localrules: all, check_environment, check_execution_config, assay_branch_ready, build_branch_design, build_branch_provenance_bundle, render_run_dashboard
 
 
 rule all:
     input:
         workflow_targets
+
+
+rule render_run_dashboard:
+    input:
+        run_dashboard_inputs
+    output:
+        html=RUN_DASHBOARD,
+        done=RUN_DASHBOARD_DONE
+    params:
+        analysis_plan=ANALYSIS_PLAN,
+        manifest=MANIFEST,
+        environment_report=ENVIRONMENT_REPORT,
+        execution_report=EXECUTION_REPORT,
+        branch_dir=BRANCH_DIR
+    log:
+        "logs/run_dashboard.log"
+    shell:
+        r"""
+        mkdir -p logs
+        python3 workflow/scripts/render_run_dashboard.py \
+          --analysis-plan {params.analysis_plan:q} \
+          --manifest {params.manifest:q} \
+          --environment-report {params.environment_report:q} \
+          --execution-report {params.execution_report:q} \
+          --branch-dir {params.branch_dir:q} \
+          --output {output.html:q} \
+          --done {output.done:q} \
+          > {log:q} 2>&1
+        """
 
 
 rule check_environment:

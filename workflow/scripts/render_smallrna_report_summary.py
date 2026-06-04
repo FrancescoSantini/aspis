@@ -7,6 +7,7 @@ import argparse
 import csv
 import html
 import math
+import os
 from pathlib import Path
 
 
@@ -191,10 +192,22 @@ def sort_by_padj(rows: list[dict[str, str]]) -> list[dict[str, str]]:
     return sorted(rows, key=lambda row: (parse_float(row.get("padj", "")) or 1.0, row.get("Geneid", "")))
 
 
-def html_link(path_text: str, label: str) -> str:
+def local_href(path_text: str, base_dir: Path) -> str:
     if not path_text:
         return ""
-    escaped = html.escape(path_text)
+    if "://" in path_text or path_text.startswith("#"):
+        return path_text
+    path = Path(path_text)
+    if path.is_absolute():
+        return path.as_posix()
+    return os.path.relpath(path, start=base_dir).replace(os.sep, "/")
+
+
+def html_link(path_text: str, label: str, base_dir: Path) -> str:
+    href = local_href(path_text, base_dir)
+    if not href:
+        return ""
+    escaped = html.escape(href)
     return f'<a href="{escaped}">{html.escape(label)}</a>'
 
 
@@ -323,42 +336,42 @@ def render_html(
     _, pca_metric_rows = read_existing(plan_row.get("pca_metrics_tsv", ""))
     pca_metrics = pca_metric_rows[0] if pca_metric_rows else {}
     links = [
-        html_link(plan_row.get("results", ""), "DESeq2 results"),
-        html_link(plan_row.get("filtered", ""), "significant miRNAs"),
-        html_link(plan_row.get("normalized_counts", ""), "normalized counts"),
-        html_link(plan_row.get("deseq2_summary", ""), "DESeq2 summary"),
-        html_link(plan_row.get("residual_manifest", ""), "residual manifest"),
-        html_link(plan_row.get("residual_biotype_counts", ""), "residual biotypes"),
-        html_link(plan_row.get("residual_feature_counts", ""), "residual features"),
-        html_link(plan_row.get("mirna_targets", ""), "miRNA targets"),
-        html_link(plan_row.get("target_universe", ""), "target universe"),
-        html_link(plan_row.get("target_enrichment", ""), "target enrichment"),
-        html_link(plan_row.get("target_source_summary", ""), "target source summary"),
-        html_link(plan_row.get("mirna_mrna_pairs", ""), "miRNA-mRNA pairs"),
-        html_link(plan_row.get("mirna_mrna_summary", ""), "miRNA-mRNA summary"),
-        html_link(plan_row.get("mirna_mrna_target_modes", ""), "expressed/inverse target modes"),
-        html_link(plan_row.get("mirna_mrna_target_mode_summary", ""), "target-mode summary"),
-        html_link(plan_row.get("mirna_mrna_target_feature_set_universe", ""), "inverse target feature-set universe"),
-        html_link(plan_row.get("mirna_mrna_target_feature_set_results", ""), "inverse target feature sets"),
-        html_link(plan_row.get("mirna_mrna_target_ranked_feature_set_universe", ""), "ranked inverse target feature-set universe"),
-        html_link(plan_row.get("mirna_mrna_target_ranked_feature_set_results", ""), "ranked inverse target feature sets"),
-        html_link(plan_row.get("target_feature_set_universe", ""), "target feature-set universe"),
-        html_link(plan_row.get("target_feature_set_results", ""), "target feature sets"),
-        html_link(plan_row.get("mirna_feature_set_universe", ""), "miRNA-ID feature-set universe"),
-        html_link(plan_row.get("mirna_feature_set_results", ""), "miRNA-ID feature sets"),
-        html_link(plan_row.get("mirna_ranked_feature_set_universe", ""), "ranked miRNA-ID feature-set universe"),
-        html_link(plan_row.get("mirna_ranked_feature_set_results", ""), "ranked miRNA-ID feature sets"),
-        html_link(plan_row.get("smallrna_length_distribution", ""), "length distribution"),
-        html_link(plan_row.get("smallrna_arm_summary", ""), "arm summary"),
-        html_link(plan_row.get("smallrna_isomir_length_summary", ""), "mapped length spectrum"),
-        html_link(plan_row.get("volcano_pdf", ""), "volcano plot"),
-        html_link(plan_row.get("ma_pdf", ""), "MA plot"),
-        html_link(plan_row.get("pca_pdf", ""), "PCA plot"),
-        html_link(plan_row.get("pca_metrics_tsv", ""), "PCA metrics"),
-        html_link(plan_row.get("sample_distance_pdf", ""), "sample-distance heatmap"),
-        html_link(plan_row.get("heatmap_pdf", ""), "heatmap"),
-        html_link(plan_row.get("heatmap_panel_tsv", ""), "heatmap panels"),
-        html_link(plan_row.get("vst_tsv", ""), "log2 counts"),
+        html_link(plan_row.get("results", ""), "DESeq2 results", summary_path.parent),
+        html_link(plan_row.get("filtered", ""), "significant miRNAs", summary_path.parent),
+        html_link(plan_row.get("normalized_counts", ""), "normalized counts", summary_path.parent),
+        html_link(plan_row.get("deseq2_summary", ""), "DESeq2 summary", summary_path.parent),
+        html_link(plan_row.get("residual_manifest", ""), "residual manifest", summary_path.parent),
+        html_link(plan_row.get("residual_biotype_counts", ""), "residual biotypes", summary_path.parent),
+        html_link(plan_row.get("residual_feature_counts", ""), "residual features", summary_path.parent),
+        html_link(plan_row.get("mirna_targets", ""), "miRNA targets", summary_path.parent),
+        html_link(plan_row.get("target_universe", ""), "target universe", summary_path.parent),
+        html_link(plan_row.get("target_enrichment", ""), "target enrichment", summary_path.parent),
+        html_link(plan_row.get("target_source_summary", ""), "target source summary", summary_path.parent),
+        html_link(plan_row.get("mirna_mrna_pairs", ""), "miRNA-mRNA pairs", summary_path.parent),
+        html_link(plan_row.get("mirna_mrna_summary", ""), "miRNA-mRNA summary", summary_path.parent),
+        html_link(plan_row.get("mirna_mrna_target_modes", ""), "expressed/inverse target modes", summary_path.parent),
+        html_link(plan_row.get("mirna_mrna_target_mode_summary", ""), "target-mode summary", summary_path.parent),
+        html_link(plan_row.get("mirna_mrna_target_feature_set_universe", ""), "inverse target feature-set universe", summary_path.parent),
+        html_link(plan_row.get("mirna_mrna_target_feature_set_results", ""), "inverse target feature sets", summary_path.parent),
+        html_link(plan_row.get("mirna_mrna_target_ranked_feature_set_universe", ""), "ranked inverse target feature-set universe", summary_path.parent),
+        html_link(plan_row.get("mirna_mrna_target_ranked_feature_set_results", ""), "ranked inverse target feature sets", summary_path.parent),
+        html_link(plan_row.get("target_feature_set_universe", ""), "target feature-set universe", summary_path.parent),
+        html_link(plan_row.get("target_feature_set_results", ""), "target feature sets", summary_path.parent),
+        html_link(plan_row.get("mirna_feature_set_universe", ""), "miRNA-ID feature-set universe", summary_path.parent),
+        html_link(plan_row.get("mirna_feature_set_results", ""), "miRNA-ID feature sets", summary_path.parent),
+        html_link(plan_row.get("mirna_ranked_feature_set_universe", ""), "ranked miRNA-ID feature-set universe", summary_path.parent),
+        html_link(plan_row.get("mirna_ranked_feature_set_results", ""), "ranked miRNA-ID feature sets", summary_path.parent),
+        html_link(plan_row.get("smallrna_length_distribution", ""), "length distribution", summary_path.parent),
+        html_link(plan_row.get("smallrna_arm_summary", ""), "arm summary", summary_path.parent),
+        html_link(plan_row.get("smallrna_isomir_length_summary", ""), "mapped length spectrum", summary_path.parent),
+        html_link(plan_row.get("volcano_pdf", ""), "volcano plot", summary_path.parent),
+        html_link(plan_row.get("ma_pdf", ""), "MA plot", summary_path.parent),
+        html_link(plan_row.get("pca_pdf", ""), "PCA plot", summary_path.parent),
+        html_link(plan_row.get("pca_metrics_tsv", ""), "PCA metrics", summary_path.parent),
+        html_link(plan_row.get("sample_distance_pdf", ""), "sample-distance heatmap", summary_path.parent),
+        html_link(plan_row.get("heatmap_pdf", ""), "heatmap", summary_path.parent),
+        html_link(plan_row.get("heatmap_panel_tsv", ""), "heatmap panels", summary_path.parent),
+        html_link(plan_row.get("vst_tsv", ""), "log2 counts", summary_path.parent),
     ]
     links_html = " | ".join(link for link in links if link) or "No linked resources."
     n_up = sum(1 for row in filtered_rows if direction(row) == "up")
