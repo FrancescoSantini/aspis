@@ -7,9 +7,9 @@ here so that remaining work is tracked in one place.
 
 While the complete private FASTQ dataset is still uploading to G100, use
 `docs/work_while_uploading.md` to track useful work that does not require the
-full dataset. The highest-value tracks are report readability, documentation
-consistency, resource preparation, real config/intake review, and eventual
-Snakefile modularization.
+full dataset. Completed report-readability and usage-documentation work has
+been removed from that active list; the remaining tracks are resource
+preparation, real config/intake review, and eventual Snakefile modularization.
 
 ## Current Validation Status
 

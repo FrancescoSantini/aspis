@@ -4,59 +4,12 @@ This note records useful ASPIS work that can continue while the full private
 FASTQ dataset is still being uploaded to G100. These tasks improve the next
 real-data run, but they do not replace full real-data validation.
 
-## 1. Polish Report Text And Plot Layout
+Completed items have been removed from the active list. Report readability,
+plot/report layout safeguards, status wording, README usage cleanup, TODO
+consolidation, and operational-doc consistency are already implemented and
+tracked in the commit history.
 
-Purpose: make reports useful to biologists, not only to pipeline developers.
-
-Concrete work:
-
-- Add short explanations to run dashboards, branch reports, differential
-  reports, smallRNA reports, isoform-switch reports, enrichment reports, and
-  warning reports.
-- Explain what FastQC/MultiQC, alignment QC, featureCounts/StringTie counts,
-  DESeq2 contrasts, PCA, heatmaps, MA plots, volcano plots, sample-distance
-  plots, isoform-switch diagrams, and ORA/GSEA panels represent.
-- Fix report-preview layout so plot boxes, long titles, dense labels, and
-  sample names stay readable in HTML and PDF reports.
-- Keep full-resolution source plots downloadable even when report previews are
-  resized.
-- Make empty or missing optional sections explicit with statuses such as
-  `not_configured`, `blocked`, `resource_missing`, `no_significant_terms`, or
-  `disabled`.
-
-Success condition: a collaborator can start from the run index and understand
-what each report section is for without opening the code or reading a chat log.
-
-Implementation coverage: the run dashboard, branch report, RNA-seq and smallRNA
-differential report indexes, contrast summary pages, biological-warning pages,
-isoform-switch pages, enrichment SVG placeholders, and technical PDF renderer
-now include explanatory text or clearer status handling. Full validation still
-requires reading the regenerated reports from complete real data.
-
-## 2. Improve TODO And Usage Documentation Consistency
-
-Purpose: keep the repository self-explanatory while the real run is pending.
-
-Concrete work:
-
-- Keep `docs/todo.md` as the canonical backlog.
-- Keep `docs/real_data_readiness.md` as the operational checklist for real
-  projects.
-- Keep `README.md` focused on installation, intake/config structure, execution,
-  output navigation, and current stable entry points.
-- Keep G100 examples account-neutral and partition-neutral where possible.
-- Document the output tree clearly enough that `meta/`, `work/`, `results/`,
-  branch reports, technical PDFs, MultiQC reports, manifests, and logs are easy
-  to locate.
-
-Success condition: a future ASPIS run can be prepared from repository docs alone.
-
-Implementation coverage: README, `docs/todo.md`, `docs/real_data_readiness.md`,
-and this note now point to the same entry points and status vocabulary. The
-older parity/TODO-style notes remain as historical detail, but `docs/todo.md`
-is the canonical backlog.
-
-## 3. Prepare ORA/GSEA And SmallRNA Target Resources
+## 1. Prepare ORA/GSEA And SmallRNA Target Resources
 
 Purpose: avoid empty biological interpretation panels in the first full real run.
 
@@ -74,7 +27,7 @@ Concrete work:
 Success condition: enrichment and target reports can distinguish real null
 results from missing resources.
 
-## 4. Review Real Configs And Intake Sheets
+## 2. Review Real Configs And Intake Sheets
 
 Purpose: avoid wasting G100 allocation on avoidable path/design errors.
 
@@ -93,7 +46,7 @@ Concrete work:
 Success condition: the first G100 dry-run exposes only real missing inputs or
 scheduler constraints, not simple table/config mistakes.
 
-## 5. Make The Snakefile Easier To Maintain
+## 3. Make The Snakefile Easier To Maintain
 
 Purpose: reduce future fragility without changing the user entry point.
 
