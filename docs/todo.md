@@ -3,6 +3,14 @@
 This is the canonical backlog for ASPIS. Older TODO-style notes have been merged
 here so that remaining work is tracked in one place.
 
+## Upload-Waiting Work Plan
+
+While the complete private FASTQ dataset is still uploading to G100, use
+`docs/work_while_uploading.md` to track useful work that does not require the
+full dataset. The highest-value tracks are report readability, documentation
+consistency, resource preparation, real config/intake review, and eventual
+Snakefile modularization.
+
 ## Current Validation Status
 
 ASPIS has passed initial real-data smoke validation on local FASTQ subsets from

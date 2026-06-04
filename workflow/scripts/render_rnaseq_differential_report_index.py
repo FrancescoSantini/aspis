@@ -561,7 +561,10 @@ def render_html(
   <meta charset="utf-8">
   <title>{html.escape(title)}</title>
   <style>
-    body {{ font-family: system-ui, -apple-system, Segoe UI, sans-serif; margin: 24px; max-width: 1440px; }}
+    body {{ font-family: system-ui, -apple-system, Segoe UI, sans-serif; margin: 24px; max-width: 1440px; color: #24292f; }}
+    .note {{ background: #f6f8fa; border-left: 4px solid #57606a; margin: 12px 0 18px; padding: 10px 12px; }}
+    .guide {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 0.75rem; margin: 1rem 0 1.5rem; }}
+    .guide div {{ border: 1px solid #d0d7de; border-radius: 6px; padding: 0.75rem; }}
     h1 {{ font-size: 28px; margin-bottom: 8px; }}
     .counts {{ color: #57606a; margin-bottom: 20px; }}
     section {{ margin: 24px 0; }}
@@ -582,6 +585,12 @@ def render_html(
 </head>
 <body>
   <h1>{html.escape(title)}</h1>
+  <p class="note">This report index summarizes RNA-seq differential-expression contrasts for this project. Use it to find contrast-level summaries, DESeq2 tables, diagnostic plots, enrichment outputs, optional isoform-switch/DTU resources, warnings, and the printable technical PDF.</p>
+  <div class="guide">
+    <div><strong>Artifacts</strong><br>Complete DESeq2 results, filtered features, transformed counts, PCA metrics, novelty summaries, and manifest files.</div>
+    <div><strong>Plots</strong><br>Volcano, MA, PCA, sample-distance, and heatmap outputs. Open full source files for detailed inspection.</div>
+    <div><strong>Enrichment</strong><br>ORA/GSEA-style outputs appear only when feature-set resources are configured and enough features map.</div>
+  </div>
   <div class="counts">contrasts: {len(rows)}; ok: {ok}; blocked: {blocked}; failed: {failed}; <a href="technical_report.pdf">printable technical PDF</a></div>
   {project_resources}
   {dtu_summary}

@@ -58,11 +58,23 @@ def table_link(path: Path, label: str, base_dir: Path, expected: bool = True) ->
     return f"{file_link(path, label, base_dir, expected)}{html.escape(suffix)}"
 
 
-def section(title: str, items: list[str]) -> str:
+DEFAULT_SECTION_DESCRIPTIONS = {
+    "Branch Contract": "The branch contract lists the exact samples, design table, materialized audit rows, provenance bundle, and run-level dashboard for this assay/project.",
+    "Preprocessing And QC": "Raw, trimmed, and depleted QC reports show whether FASTQs are structurally usable before expensive downstream analysis.",
+    "Alignment": "Alignment outputs show whether reads mapped to the selected genome or index and whether strandness is compatible with counting.",
+    "Alignment And Quantification": "SmallRNA alignment and quantification outputs show miRBase mapping, optional residual-genome read fate, length profiles, and miRNA count matrices.",
+    "Quantification": "Quantification outputs are the gene/transcript count matrices and transcript annotations used by differential analysis and reporting.",
+    "Differential And Interpretation": "Differential and interpretation outputs summarize tested contrasts, biological warnings, optional enrichment, isoform-switch, DTU, target, and integration layers.",
+}
+
+
+def section(title: str, items: list[str], description: str = "") -> str:
     rows = "\n".join(f"<li>{item}</li>" for item in items if item)
     if not rows:
         rows = '<li><span class="status muted">no resources listed</span></li>'
-    return f"<section><h2>{html.escape(title)}</h2><ul>{rows}</ul></section>"
+    description = description or DEFAULT_SECTION_DESCRIPTIONS.get(title, "")
+    description_html = f'<p class="section-note">{html.escape(description)}</p>' if description else ""
+    return f"<section><h2>{html.escape(title)}</h2>{description_html}<ul>{rows}</ul></section>"
 
 
 def samples_metrics(samples: list[dict[str, str]]) -> str:
@@ -206,6 +218,8 @@ def render(args: argparse.Namespace) -> None:
     body {{ font-family: system-ui, -apple-system, Segoe UI, sans-serif; margin: 24px; max-width: 1200px; color: #24292f; }}
     h1 {{ margin-bottom: 0.25rem; }}
     h2 {{ margin-top: 1.5rem; border-bottom: 1px solid #d0d7de; padding-bottom: 0.25rem; }}
+    .intro, .section-note {{ color: #57606a; line-height: 1.45; }}
+    .intro {{ background: #f6f8fa; border-left: 4px solid #57606a; padding: 10px 12px; }}
     ul {{ line-height: 1.65; }}
     a {{ color: #0969da; text-decoration: none; }}
     a:hover {{ text-decoration: underline; }}
@@ -219,6 +233,7 @@ def render(args: argparse.Namespace) -> None:
 </head>
 <body>
   <h1>{html.escape(args.project)} {html.escape(assay_label)}</h1>
+  <p class=\"intro\">This branch page is the navigation hub for one assay/project. It links the compact downstream contracts, stage-specific QC reports, count matrices, differential reports, optional interpretation layers, warnings, and provenance files.</p>
   <div class=\"metrics\">{samples_metrics(samples)}</div>
   {''.join(sections)}
 </body>

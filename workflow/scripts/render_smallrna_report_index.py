@@ -337,14 +337,25 @@ def render_index(path: Path, rows: list[dict[str, str]], warnings_html: str = ""
   <meta charset="utf-8">
   <title>{html.escape(title_project)} smallRNA differential reports</title>
   <style>
-    body {{ font-family: Arial, sans-serif; margin: 2rem; color: #222; }}
+    body {{ font-family: system-ui, -apple-system, Segoe UI, sans-serif; margin: 24px; max-width: 1440px; color: #24292f; }}
+    .note {{ background: #f6f8fa; border-left: 4px solid #57606a; margin: 12px 0 18px; padding: 10px 12px; }}
+    .guide {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 0.75rem; margin: 1rem 0 1.5rem; }}
+    .guide div {{ border: 1px solid #d0d7de; border-radius: 6px; padding: 0.75rem; }}
     table {{ border-collapse: collapse; width: 100%; font-size: 0.92rem; }}
-    th, td {{ border: 1px solid #ddd; padding: 0.45rem; text-align: left; vertical-align: top; }}
-    th {{ background: #f2f2f2; }}
+    th, td {{ border: 1px solid #d0d7de; padding: 0.45rem; text-align: left; vertical-align: top; }}
+    th {{ background: #f6f8fa; }}
+    a {{ color: #0969da; text-decoration: none; }}
+    a:hover {{ text-decoration: underline; }}
   </style>
 </head>
 <body>
   <h1>{html.escape(title_project)} smallRNA differential reports</h1>
+  <p class="note">This report index summarizes miRNA differential-expression contrasts, target-resource outputs, smallRNA QC summaries, residual-genome checks, and optional matched miRNA-mRNA integration for this project.</p>
+  <div class="guide">
+    <div><strong>Differential results</strong><br>DESeq2 miRNA tables, significant miRNAs, transformed counts, PCA, MA, volcano, distance, and heatmap outputs.</div>
+    <div><strong>SmallRNA QC</strong><br>Length distributions, arm/isomiR summaries, contaminant depletion, and residual-genome read fate.</div>
+    <div><strong>Targets and integration</strong><br>Target enrichment and miRNA-mRNA outputs appear only when target resources and matched RNA-seq data are configured.</div>
+  </div>
   <p><a href="technical_report.pdf">printable technical PDF</a></p>
   {warnings_block}
   <table><thead><tr>{header}</tr></thead><tbody>{''.join(body_rows)}</tbody></table>

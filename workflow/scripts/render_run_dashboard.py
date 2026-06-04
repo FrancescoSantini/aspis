@@ -150,6 +150,9 @@ def render(args: argparse.Namespace) -> None:
   <title>ASPIS run dashboard</title>
   <style>
     body {{ font-family: system-ui, -apple-system, Segoe UI, sans-serif; margin: 24px; max-width: 1440px; color: #24292f; }}
+    .note {{ background: #f6f8fa; border-left: 4px solid #57606a; margin: 12px 0 18px; padding: 10px 12px; }}
+    .guide {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 0.75rem; margin: 1rem 0 1.5rem; }}
+    .guide div {{ border: 1px solid #d0d7de; border-radius: 6px; padding: 0.75rem; }}
     h1 {{ margin-bottom: 0.25rem; }}
     .metrics {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 0.75rem; margin: 1rem 0 1.5rem; }}
     .metric {{ border: 1px solid #d0d7de; border-radius: 6px; padding: 0.75rem; }}
@@ -170,6 +173,12 @@ def render(args: argparse.Namespace) -> None:
 </head>
 <body>
   <h1>ASPIS run dashboard</h1>
+  <p class="note">This page is the top-level navigation point for one ASPIS run. Start here to check which assay/project branches were planned, whether they are ready, and where the branch reports, QC summaries, provenance, and technical PDFs live.</p>
+  <div class="guide">
+    <div><strong>Manifests</strong><br>Audit what was materialized from local FASTQs or public accessions.</div>
+    <div><strong>Branch reports</strong><br>Open assay/project pages for QC, alignment, quantification, differential results, warnings, and reports.</div>
+    <div><strong>Environment</strong><br>Confirm required tools and optional advanced tools before trusting expensive outputs.</div>
+  </div>
   <div class=\"resources\">{manifest_link} | {plan_link} | {env_link} | {exec_link}</div>
   <section class=\"metrics\">
     <div class=\"metric\"><strong>planned branches</strong><span>{len(plan_rows)}</span></div>

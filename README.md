@@ -209,6 +209,14 @@ Feature-set ORA/GSEA resources are documented in
 `docs/feature_set_resources.md`. Without configured feature sets, enrichment
 tables and report panels will be empty or explicitly marked as not configured.
 
+Operational planning notes:
+
+- `docs/real_data_readiness.md` is the checklist for preparing a full real
+  project run.
+- `docs/todo.md` is the canonical backlog.
+- `docs/work_while_uploading.md` records useful work that can continue while
+  large private FASTQs are still uploading.
+
 ## Running Locally
 
 For full-workflow runs with no explicit target, this is enough:
@@ -310,6 +318,18 @@ Use the HTML reports for navigation and complete links. Use
 `technical_report.pdf` as a compact plot-and-small-table digest for meetings or
 biologist-facing review. The TSV files remain the source of truth for complete
 tables and downstream reuse.
+
+Common report statuses:
+
+- `ok`: the stage ran and produced usable outputs.
+- `blocked`: the stage was intentionally not run because inputs, design power,
+  or configuration were insufficient.
+- `not_configured` or `disabled`: an optional layer was not requested.
+- `resource_missing` or `invalid_resource`: a configured external resource is
+  absent or unusable.
+- `no_significant_terms` or `no_significant_features`: the analysis ran, but no
+  terms or features passed the configured thresholds.
+- `failed`: the stage attempted execution and failed.
 
 ## Running On CINECA G100
 
