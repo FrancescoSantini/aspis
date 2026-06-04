@@ -88,6 +88,15 @@ PCA_INTERPRETATION_NOTE = (
     "biological effect, small sample size, strong individual variation, batch or covariate "
     "structure, or limited design power."
 )
+PLOT_DESCRIPTIONS = {
+    "Volcano": "Each point is one tested feature. The x-axis shows effect size as log2 fold change, while the y-axis shows statistical support as adjusted p-value strength. Features far from zero and high on the plot are the clearest differential candidates.",
+    "MA": "Each point is one tested feature. The x-axis shows average normalized abundance, and the y-axis shows log2 fold change. This helps reveal abundance-dependent bias and whether strong changes occur only at very low counts.",
+    "PCA": "Principal component analysis summarizes broad sample-to-sample variation after count transformation. It is mainly a quality and design check, not a formal differential-expression result.",
+    "Sample Distance": "This heatmap compares whole-sample expression profiles. Similar samples cluster together; unexpected clustering can indicate batch effects, outliers, weak treatment signal, or mislabeled samples.",
+    "Heatmap": "This heatmap shows expression patterns for selected differential features across samples. It is useful for seeing whether the reported features separate the groups consistently.",
+    "Feature-Set Enrichment": "Over-representation analysis tests whether significant features overlap curated feature sets more than expected from the tested universe.",
+    "Ranked Feature-Set Enrichment": "Ranked feature-set enrichment uses the ordered differential-expression statistic across all tested features, so it can capture coordinated weak shifts even when few individual features pass significance.",
+}
 
 
 def parse_args() -> argparse.Namespace:
@@ -364,6 +373,7 @@ def transcript_novelty_section(level: str, novelty_rows: list[dict[str, str]]) -
         return ""
     if not novelty_rows:
         return """<h2>Transcript Novelty Summary</h2>
+  <p class="note">This table separates known transcripts from transcript models discovered or reclassified during assembly/comparison. It helps distinguish ordinary transcript-level differential expression from signal carried by novel isoforms or loci.</p>
   <p>No transcript novelty summary rows were available.</p>"""
     body = "\n".join(
         "<tr>"
@@ -380,6 +390,7 @@ def transcript_novelty_section(level: str, novelty_rows: list[dict[str, str]]) -
         for row in novelty_rows
     )
     return f"""<h2>Transcript Novelty Summary</h2>
+  <p class="note">This table separates known transcripts from transcript models discovered or reclassified during assembly/comparison. It helps distinguish ordinary transcript-level differential expression from signal carried by novel isoforms or loci.</p>
   <table>
     <tr><th>panel</th><th>novelty class</th><th>class codes</th><th>tested</th><th>tested fraction</th><th>significant</th><th>significant fraction</th><th>up</th><th>down</th></tr>
 {body}
@@ -400,20 +411,25 @@ def artifact_panel(
     <p class="plot-note">No plot file was recorded for this panel.</p>
   </section>"""
     link = html.escape(relative_link(path, html_path))
+    description = PLOT_DESCRIPTIONS.get(label, "")
+    description_html = f'<p class="plot-note">{html.escape(description)}</p>' if description else ""
     if preview_path:
         preview_link = html.escape(relative_link(preview_path, html_path))
         return f"""<section class="plot">
     <h3>{title}</h3>
+    {description_html}
     <a href="{link}"><img src="{preview_link}" alt="{title} preview"></a>
     <p class="plot-source"><a href="{link}">Open full source plot</a></p>
   </section>"""
     if mime_type.startswith("image/"):
         return f"""<section class="plot">
     <h3>{title}</h3>
+    {description_html}
     <a href="{link}"><img src="{link}" alt="{title}"></a>
   </section>"""
     return f"""<section class="plot">
     <h3>{title}</h3>
+    {description_html}
     <p class="plot-note">Preview could not be generated. Use the full source plot link.</p>
     <p class="plot-source"><a href="{link}">Open full source plot</a></p>
   </section>"""
@@ -560,20 +576,25 @@ def render_html(
 <body>
   <h1>{html.escape(title)}</h1>
   <h2>Metrics</h2>
+  <p class="note">These values summarize the contrast-level differential-expression run: how many features were tested, how many passed the configured significance filters, and how many changed upward or downward in the test group relative to the control group.</p>
   <table>
 {metric_rows}
   </table>
   {transcript_novelty_section(row['level'], novelty_rows)}
   <h2>Plots</h2>
+  <p class="note">These plots are diagnostic summaries of the same contrast from different angles: statistical signal, abundance behavior, sample structure, and selected-feature expression patterns.</p>
   <p class="note">{html.escape(PCA_INTERPRETATION_NOTE)}</p>
   <div class="plots">
 {plots}
   </div>
   <h2>Feature-Set Enrichment Status</h2>
+  <p class="note">This section records whether optional ORA/GSEA-style feature-set resources were configured, whether enough features mapped to them, and where the resulting tables or plots were written. If resources are not configured, no enrichment dotplot can be generated.</p>
   {enrichment_status_table(resources, output)}
   <h2>Top Significant Features</h2>
+  <p class="note">This table lists the strongest filtered features by adjusted p-value and fold change. It is a compact preview; the complete DESeq2 output remains in the linked files below.</p>
   {top_feature_table(filtered_rows, top_n)}
   <h2>Files</h2>
+  <p class="note">These links point to the machine-readable files used to build this page. Use them for downstream analysis, reproducibility checks, or manual inspection.</p>
   <ul>
 {artifact_rows}
   </ul>

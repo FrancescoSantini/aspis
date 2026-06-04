@@ -2378,6 +2378,7 @@ def render_event_html(
     th {{ background: #f6f8fa; }}
     pre {{ white-space: pre-wrap; word-break: break-word; background: #f6f8fa; padding: 12px; }}
     img {{ max-width: 100%; border: 1px solid #d0d7de; }}
+    .note {{ background: #f6f8fa; border-left: 4px solid #57606a; margin: 12px 0 18px; padding: 10px 12px; }}
   </style>
 </head>
 <body>
@@ -2388,16 +2389,22 @@ def render_event_html(
      interpretation: <strong>{html.escape(event.get('switch_interpretation_label', ''))}</strong>.</p>
   <p>Switch-in isoform: <strong>{html.escape(event['switch_in_isoform'])}</strong>;
      switch-out isoform: <strong>{html.escape(event['switch_out_isoform'])}</strong>.</p>
+  <p class="note">The exon diagram compares the switch-in and switch-out isoforms in genomic coordinates. It is a structural view of which transcript model gains relative usage and which loses usage in the test group.</p>
   <img src="{html.escape(relative(str(svg_path), out_path))}" alt="Isoform switch plot">
   <h2>Candidate Isoforms</h2>
+  <p class="note">Candidate isoforms are the transcripts selected from the IsoformSwitchAnalyzeR output for this event. dIF is the change in isoform fraction between groups; positive and negative roles identify switch-in and switch-out transcripts.</p>
   {table(['switch_rank', 'isoform_id', 'switch_role', 'gene_biotype', 'transcript_biotype', 'switch_biotype_class', 'dIF', 'padj_qvalue', 'isoform_fraction_control', 'isoform_fraction_test', 'switch_direction', 'novelty_group', 'reason_selected', 'consequence_summary'], event_candidates)}
   <h2>Coding Switch Prioritization</h2>
+  <p class="note">This table ranks coding switches by predicted consequence evidence such as NMD, coding-potential changes, ORF length changes, domains, signal peptides, transmembrane regions, or localization annotations when those resources are available.</p>
   {table(['coding_priority_rank', 'coding_priority_score', 'coding_priority_tier', 'coding_priority_reasons', 'nmd_change', 'coding_potential_change', 'orf_length_change_aa', 'gained_domain', 'lost_domain', 'gained_signal_peptide', 'lost_signal_peptide', 'gained_transmembrane_region', 'lost_transmembrane_region', 'localization_change'], event_coding_rows)}
   <h2>ncRNA Switch Interpretation</h2>
+  <p class="note">For noncoding or mixed coding-potential events, the report emphasizes transcript architecture: length, exon structure, junction changes, TSS/TES shifts, overlap context, host-smallRNA context, and coding-potential cautions.</p>
   {table(['isoform_id', 'paired_isoform_id', 'switch_role', 'gene_biotype', 'transcript_biotype', 'switch_biotype_class', 'transcript_length_change', 'exon_gain_loss', 'intron_retention_change', 'gained_splice_junctions', 'lost_splice_junctions', 'TSS_change', 'TES_change', 'promoter_context_change', 'isoform_proximal_gene_context', 'paired_isoform_proximal_gene_context', 'antisense_overlap', 'conserved_exon_change', 'motif_change', 'host_smallrna_change', 'resource_antisense_overlap', 'pseudogene_caution', 'coding_potential_change', 'interpretation_label'], event_ncrna_rows)}
   <h2>Functional Annotations</h2>
+  <p class="note">Functional annotations are optional external evidence imported from tools or tables such as domain, disorder, localization, signal-peptide, or transmembrane predictions. Empty rows mean the event lacks configured external annotation evidence, not necessarily that no function exists.</p>
   {table(['isoform_id', 'source', 'feature_type', 'feature_id', 'feature_name', 'start_aa', 'end_aa', 'score', 'feature_change', 'description'], event_annotations)}
   <h2>Sequences</h2>
+  <p class="note">Sequence blocks expose the nucleotide, amino-acid, and affected-region sequences used for manual inspection or external validation of the switch event.</p>
   {''.join(sequence_blocks) if sequence_blocks else '<p>No sequence rows available.</p>'}
 </body>
 </html>
@@ -2683,6 +2690,7 @@ def render_project_html(event_rows: list[dict[str, str]], coding_switch_rows: li
             f"""
   {f'''
   <h2>Coding Switch Priority Summary</h2>
+  <p class="note">This table is a compact ranking of coding-potential events by predicted functional impact. It is intended for prioritization before manual biological interpretation.</p>
   <table>
     <thead>
       <tr>
@@ -2698,6 +2706,7 @@ def render_project_html(event_rows: list[dict[str, str]], coding_switch_rows: li
   </table>
   ''' if title == 'Coding Switches' else ''}
   <h2>{html.escape(title)}</h2>
+  <p class="note">Each row is one isoform-switch event. The table gives the contrast, gene, switch class, leading switch-in/switch-out isoforms, effect size, annotation count, and links to event-level FASTA files when available.</p>
   <table>
     <thead>
       <tr>
@@ -2729,11 +2738,13 @@ def render_project_html(event_rows: list[dict[str, str]], coding_switch_rows: li
     th {{ background: #f6f8fa; }}
     a {{ color: #0969da; text-decoration: none; }}
     a:hover {{ text-decoration: underline; }}
+    .note {{ background: #f6f8fa; border-left: 4px solid #57606a; margin: 12px 0 18px; padding: 10px 12px; }}
   </style>
 </head>
 <body>
   <h1>Isoform-switch report</h1>
   <p>Events are ranked by absolute isoform fraction change and split into coding, noncoding/mixed, and ambiguous sections. Coding switches are additionally prioritized by predicted functional consequences. Noncoding switches are interpreted through transcript architecture rather than requiring ORF/domain evidence.</p>
+  <p class="note">Use this page as an index of candidate events. The event links open per-gene pages with exon diagrams, switch-in/switch-out isoforms, coding or noncoding interpretation tables, optional functional annotations, and sequence extracts.</p>
   {''.join(tables)}
 </body>
 </html>

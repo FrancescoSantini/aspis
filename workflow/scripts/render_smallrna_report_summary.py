@@ -119,6 +119,13 @@ PCA_INTERPRETATION_NOTE = (
     "biological effect, small sample size, strong individual variation, batch or covariate "
     "structure, or limited design power."
 )
+PLOT_DESCRIPTIONS = {
+    "Volcano": "Each point is one tested miRNA. The x-axis shows log2 fold change, while the y-axis shows adjusted p-value strength. miRNAs far from zero and high on the plot are the clearest differential candidates.",
+    "MA": "Each point is one tested miRNA. The x-axis shows average normalized abundance, and the y-axis shows log2 fold change. This helps reveal abundance-dependent bias and whether strong changes occur only at very low counts.",
+    "PCA": "Principal component analysis summarizes broad sample-to-sample variation after count transformation. It is mainly a quality and design check, not a formal differential-expression result.",
+    "Sample Distance": "This heatmap compares whole-sample miRNA profiles. Similar samples cluster together; unexpected clustering can indicate batch effects, outliers, weak treatment signal, or mislabeled samples.",
+    "Heatmap": "This heatmap shows expression patterns for selected differential miRNAs across samples. It is useful for seeing whether the reported miRNAs separate the groups consistently.",
+}
 
 
 def parse_args() -> argparse.Namespace:
@@ -270,15 +277,19 @@ def plot_panel(label: str, source_path: str, preview_path: str, summary_path: Pa
     <p class="plot-note">No plot file was recorded for this panel.</p>
   </section>"""
     source_href = html.escape(local_href(source_path, summary_path.parent))
+    description = PLOT_DESCRIPTIONS.get(label, "")
+    description_html = f'<p class="plot-note">{html.escape(description)}</p>' if description else ""
     if preview_path:
         preview_href = html.escape(local_href(preview_path, summary_path.parent))
         return f"""<section class="plot">
     <h3>{title}</h3>
+    {description_html}
     <a href="{source_href}"><img src="{preview_href}" alt="{title} preview"></a>
     <p class="plot-source"><a href="{source_href}">Open full source plot</a></p>
   </section>"""
     return f"""<section class="plot">
     <h3>{title}</h3>
+    {description_html}
     <p class="plot-note">Preview could not be generated. Use the full source plot link.</p>
     <p class="plot-source"><a href="{source_href}">Open full source plot</a></p>
   </section>"""
@@ -722,18 +733,23 @@ def render_html(
   <h1>{html.escape(title)}</h1>
   <p class="links">{links_html}</p>
   <section class="metrics">{metric_html}</section>
+  <p class="note">The metrics above summarize the miRNA differential run, target lookup, optional miRNA-mRNA integration, optional feature-set enrichment, and smallRNA-specific QC layers for this contrast.</p>
   <p class="note">{html.escape(PCA_INTERPRETATION_NOTE)}</p>
   <h2>Plots</h2>
+  <p class="note">These plots summarize statistical signal, abundance behavior, sample structure, and selected-miRNA expression patterns for the same contrast.</p>
   <div class="plots">
 {plot_panels}
   </div>
   <h2>Top significant miRNAs</h2>
+  <p class="note">This table previews the strongest filtered miRNAs. The full differential table should be used for complete ranking, filtering, and downstream analysis.</p>
   {html_table(significant, significant_columns)}
   <h2>Target summary</h2>
+  <p class="note">Target tables summarize database links from differential miRNAs to putative target genes. These are evidence resources, not proof of regulation by themselves.</p>
   {html_table(target_summary, summary_columns)}
   <h2>Target source summary</h2>
   {html_table(target_source_summary, source_summary_columns)}
   <h2>miRNA-mRNA integration</h2>
+  <p class="note">This section joins differential miRNAs to matched RNA-seq target-gene results when available. Inverse direction is biologically suggestive for canonical repression, but it should be interpreted with target-source confidence and sample design in mind.</p>
   {embedded_svg(plan_row.get("mirna_mrna_plot", ""))}
   {html_table(integration_summary, integration_summary_columns)}
   {html_table(integration_preview, integration_columns)}
@@ -748,6 +764,7 @@ def render_html(
   {embedded_svg(plan_row.get("mirna_mrna_target_ranked_feature_set_plot", ""))}
   {html_table(mirna_mrna_ranked_feature_set_preview, mirna_mrna_ranked_feature_set_columns)}
   <h2>Read-length and arm QC</h2>
+  <p class="note">These tables and plots summarize whether retained reads have expected smallRNA lengths and whether miRNA arm assignments look plausible after preprocessing, alignment, and quantification.</p>
   {embedded_svg(plan_row.get("smallrna_length_plot", ""))}
   {html_table(length_stage_summary, length_stage_columns)}
   {html_table(arm_summary, arm_columns)}
@@ -768,6 +785,7 @@ def render_html(
   {embedded_svg(plan_row.get("mirna_ranked_feature_set_plot", ""))}
   {html_table(mirna_ranked_feature_set_preview, mirna_ranked_feature_set_columns)}
   <h2>Residual genome read fate</h2>
+  <p class="note">Residual-read summaries describe genome-aligned reads that were not assigned to the main miRNA quantification layer. They help diagnose contamination, other smallRNA classes, degradation products, or annotation gaps.</p>
   {html_table(residual_biotype_preview, residual_biotype_columns)}
   <h2>Top residual annotated features</h2>
   {html_table(residual_feature_preview, residual_feature_columns)}
