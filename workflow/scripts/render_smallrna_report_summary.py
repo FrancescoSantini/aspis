@@ -8,6 +8,8 @@ import csv
 import html
 import math
 import os
+import shutil
+import subprocess
 from pathlib import Path
 
 
@@ -74,11 +76,16 @@ SUMMARY_COLUMNS = [
     "smallrna_isomir_length_summary",
     "smallrna_length_plot",
     "volcano_pdf",
+    "volcano_preview",
     "ma_pdf",
+    "ma_preview",
     "pca_pdf",
+    "pca_preview",
     "pca_metrics_tsv",
     "sample_distance_pdf",
+    "sample_distance_preview",
     "heatmap_pdf",
+    "heatmap_preview",
     "heatmap_panel_tsv",
     "vst_tsv",
     "n_features",
@@ -201,6 +208,101 @@ def local_href(path_text: str, base_dir: Path) -> str:
     if path.is_absolute():
         return path.as_posix()
     return os.path.relpath(path, start=base_dir).replace(os.sep, "/")
+
+
+def safe_preview_stem(label: str, source: Path) -> str:
+    safe_label = "".join(character if character.isalnum() else "_" for character in label.lower()).strip("_")
+    return safe_label or source.stem
+
+
+def render_pdf_preview(pdf_path_text: str, summary_path: Path, label: str) -> str:
+    if not pdf_path_text:
+        return ""
+    pdf_path = Path(pdf_path_text)
+    if not pdf_path.exists():
+        return ""
+    preview_dir = summary_path.parent / "plot_previews"
+    preview_dir.mkdir(parents=True, exist_ok=True)
+    preview_path = preview_dir / f"{safe_preview_stem(label, pdf_path)}.png"
+    if preview_path.exists() and preview_path.stat().st_mtime >= pdf_path.stat().st_mtime:
+        return str(preview_path)
+
+    pdftoppm = shutil.which("pdftoppm")
+    if pdftoppm:
+        prefix = preview_path.with_suffix("")
+        completed = subprocess.run(
+            [pdftoppm, "-singlefile", "-png", "-r", "160", str(pdf_path), str(prefix)],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        if completed.returncode == 0 and preview_path.exists():
+            return str(preview_path)
+
+    imagemagick = shutil.which("magick") or shutil.which("convert")
+    if imagemagick:
+        completed = subprocess.run(
+            [imagemagick, str(pdf_path) + "[0]", str(preview_path)],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        if completed.returncode == 0 and preview_path.exists():
+            return str(preview_path)
+    return ""
+
+
+def render_pdf_previews(row: dict[str, str], summary_path: Path) -> dict[str, str]:
+    return {
+        "volcano_preview": render_pdf_preview(row.get("volcano_pdf", ""), summary_path, "volcano"),
+        "ma_preview": render_pdf_preview(row.get("ma_pdf", ""), summary_path, "ma"),
+        "pca_preview": render_pdf_preview(row.get("pca_pdf", ""), summary_path, "pca"),
+        "sample_distance_preview": render_pdf_preview(row.get("sample_distance_pdf", ""), summary_path, "sample_distance"),
+        "heatmap_preview": render_pdf_preview(row.get("heatmap_pdf", ""), summary_path, "heatmap"),
+    }
+
+
+def plot_panel(label: str, source_path: str, preview_path: str, summary_path: Path) -> str:
+    title = html.escape(label)
+    if not source_path:
+        return f"""<section class="plot">
+    <h3>{title}</h3>
+    <p class="plot-note">No plot file was recorded for this panel.</p>
+  </section>"""
+    source_href = html.escape(local_href(source_path, summary_path.parent))
+    if preview_path:
+        preview_href = html.escape(local_href(preview_path, summary_path.parent))
+        return f"""<section class="plot">
+    <h3>{title}</h3>
+    <a href="{source_href}"><img src="{preview_href}" alt="{title} preview"></a>
+    <p class="plot-source"><a href="{source_href}">Open full source plot</a></p>
+  </section>"""
+    return f"""<section class="plot">
+    <h3>{title}</h3>
+    <p class="plot-note">Preview could not be generated. Use the full source plot link.</p>
+    <p class="plot-source"><a href="{source_href}">Open full source plot</a></p>
+  </section>"""
+
+
+def pdf_plot_section(plan_row: dict[str, str], summary_path: Path) -> tuple[str, dict[str, str]]:
+    preview_paths = render_pdf_previews(plan_row, summary_path)
+    panels = [
+        plot_panel("Volcano", plan_row.get("volcano_pdf", ""), preview_paths["volcano_preview"], summary_path),
+        plot_panel("MA", plan_row.get("ma_pdf", ""), preview_paths["ma_preview"], summary_path),
+        plot_panel("PCA", plan_row.get("pca_pdf", ""), preview_paths["pca_preview"], summary_path),
+    ]
+    if plan_row.get("sample_distance_pdf", ""):
+        panels.append(
+            plot_panel(
+                "Sample Distance",
+                plan_row.get("sample_distance_pdf", ""),
+                preview_paths["sample_distance_preview"],
+                summary_path,
+            )
+        )
+    if plan_row.get("heatmap_pdf", ""):
+        panels.append(plot_panel("Heatmap", plan_row.get("heatmap_pdf", ""), preview_paths["heatmap_preview"], summary_path))
+    return "\n".join(panels), preview_paths
 
 
 def html_link(path_text: str, label: str, base_dir: Path) -> str:
@@ -335,6 +437,7 @@ def render_html(
     )[:top_n]
     _, pca_metric_rows = read_existing(plan_row.get("pca_metrics_tsv", ""))
     pca_metrics = pca_metric_rows[0] if pca_metric_rows else {}
+    plot_panels, _ = pdf_plot_section(plan_row, summary_path)
     links = [
         html_link(plan_row.get("results", ""), "DESeq2 results", summary_path.parent),
         html_link(plan_row.get("filtered", ""), "significant miRNAs", summary_path.parent),
@@ -609,6 +712,9 @@ def render_html(
     th {{ background: #f2f2f2; }}
     .note {{ background: #f6f8fa; border-left: 4px solid #666; margin: 1rem 0; padding: 0.75rem; }}
     .links {{ margin: 1rem 0; }}
+    .plots {{ display: grid; gap: 28px; grid-template-columns: 1fr; }}
+    .plot img {{ border: 1px solid #ddd; display: block; height: auto; max-width: 100%; }}
+    .plot-source, .plot-note {{ color: #666; margin: 0.4rem 0 0; }}
     .svg-panel svg {{ max-width: 100%; height: auto; border: 1px solid #ddd; }}
   </style>
 </head>
@@ -617,6 +723,10 @@ def render_html(
   <p class="links">{links_html}</p>
   <section class="metrics">{metric_html}</section>
   <p class="note">{html.escape(PCA_INTERPRETATION_NOTE)}</p>
+  <h2>Plots</h2>
+  <div class="plots">
+{plot_panels}
+  </div>
   <h2>Top significant miRNAs</h2>
   {html_table(significant, significant_columns)}
   <h2>Target summary</h2>
@@ -719,11 +829,16 @@ def blocked_summary(row: dict[str, str]) -> dict[str, str]:
         "smallrna_isomir_length_summary": row.get("smallrna_isomir_length_summary", ""),
         "smallrna_length_plot": row.get("smallrna_length_plot", ""),
         "volcano_pdf": row.get("volcano_pdf", ""),
+        "volcano_preview": "",
         "ma_pdf": row.get("ma_pdf", ""),
+        "ma_preview": "",
         "pca_pdf": row.get("pca_pdf", ""),
+        "pca_preview": "",
         "pca_metrics_tsv": row.get("pca_metrics_tsv", ""),
         "sample_distance_pdf": row.get("sample_distance_pdf", ""),
+        "sample_distance_preview": "",
         "heatmap_pdf": row.get("heatmap_pdf", ""),
+        "heatmap_preview": "",
         "heatmap_panel_tsv": row.get("heatmap_panel_tsv", ""),
         "vst_tsv": row.get("vst_tsv", ""),
         "n_features": "0",
@@ -820,6 +935,7 @@ def render_row(row: dict[str, str], top_n: int) -> dict[str, str]:
             isomir_length_summary,
             top_n,
         )
+        preview_paths = render_pdf_previews(row, Path(row["summary_html"]))
         n_up = sum(1 for item in filtered_rows if direction(item) == "up")
         n_down = sum(1 for item in filtered_rows if direction(item) == "down")
         residual_input_reads = sum(int(item.get("input_reads", "0") or 0) for item in residual_manifest)
@@ -897,11 +1013,16 @@ def render_row(row: dict[str, str], top_n: int) -> dict[str, str]:
             "smallrna_isomir_length_summary": row.get("smallrna_isomir_length_summary", ""),
             "smallrna_length_plot": row.get("smallrna_length_plot", ""),
             "volcano_pdf": row.get("volcano_pdf", ""),
+            "volcano_preview": preview_paths.get("volcano_preview", ""),
             "ma_pdf": row.get("ma_pdf", ""),
+            "ma_preview": preview_paths.get("ma_preview", ""),
             "pca_pdf": row.get("pca_pdf", ""),
+            "pca_preview": preview_paths.get("pca_preview", ""),
             "pca_metrics_tsv": row.get("pca_metrics_tsv", ""),
             "sample_distance_pdf": row.get("sample_distance_pdf", ""),
+            "sample_distance_preview": preview_paths.get("sample_distance_preview", ""),
             "heatmap_pdf": row.get("heatmap_pdf", ""),
+            "heatmap_preview": preview_paths.get("heatmap_preview", ""),
             "heatmap_panel_tsv": row.get("heatmap_panel_tsv", ""),
             "vst_tsv": row.get("vst_tsv", ""),
             "n_features": str(len(result_rows)),
