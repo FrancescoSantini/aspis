@@ -67,16 +67,34 @@ ensure_parent <- function(path) {
   dir.create(dirname(path), recursive = TRUE, showWarnings = FALSE)
 }
 
+open_plot_pdf <- function(path) {
+  grDevices::pdf(path, width = 9, height = 8.5)
+}
+
+plot_title <- function(title, width = 58) {
+  paste(strwrap(title, width = width), collapse = "\n")
+}
+
+plot_title_cex <- function(title) {
+  if (nchar(title) > 100) {
+    return(0.62)
+  }
+  if (nchar(title) > 70) {
+    return(0.72)
+  }
+  0.82
+}
+
 blank_pdf <- function(path, title, message) {
   ensure_parent(path)
-  grDevices::pdf(path)
+  open_plot_pdf(path)
   blank_panel(title, message)
   grDevices::dev.off()
 }
 
 blank_panel <- function(title, message) {
   plot.new()
-  title(main = title)
+  title(main = plot_title(title), cex.main = plot_title_cex(title))
   text(0.5, 0.5, message)
 }
 
@@ -443,7 +461,8 @@ plot_volcano_panel <- function(results, title, padj_cutoff, log2fc_cutoff) {
     col = ifelse(significant, "#b2182b", "#4d4d4d"),
     xlab = "log2 fold change",
     ylab = "-log10 adjusted p-value",
-    main = title
+    main = plot_title(title),
+    cex.main = plot_title_cex(title)
   )
   abline(v = c(-log2fc_cutoff, log2fc_cutoff), col = "#737373", lty = 2)
   abline(h = -log10(padj_cutoff), col = "#737373", lty = 2)
@@ -465,7 +484,7 @@ plot_volcano_panel <- function(results, title, padj_cutoff, log2fc_cutoff) {
 
 plot_volcano <- function(groups, path, title, padj_cutoff, log2fc_cutoff) {
   ensure_parent(path)
-  grDevices::pdf(path)
+  open_plot_pdf(path)
   on.exit(grDevices::dev.off(), add = TRUE)
   for (group in groups) {
     plot_volcano_panel(group$results, paste(title, "-", group$label), padj_cutoff, log2fc_cutoff)
@@ -493,14 +512,15 @@ plot_ma_panel <- function(results, title, padj_cutoff, log2fc_cutoff) {
     col = ifelse(significant, "#2166ac", "#4d4d4d"),
     xlab = "log10 mean normalized count + 1",
     ylab = "log2 fold change",
-    main = title
+    main = plot_title(title),
+    cex.main = plot_title_cex(title)
   )
   abline(h = c(-log2fc_cutoff, 0, log2fc_cutoff), col = c("#737373", "#bdbdbd", "#737373"), lty = c(2, 1, 2))
 }
 
 plot_ma <- function(groups, path, title, padj_cutoff, log2fc_cutoff) {
   ensure_parent(path)
-  grDevices::pdf(path)
+  open_plot_pdf(path)
   on.exit(grDevices::dev.off(), add = TRUE)
   for (group in groups) {
     plot_ma_panel(group$results, paste(title, "-", group$label), padj_cutoff, log2fc_cutoff)
@@ -901,7 +921,8 @@ draw_pca_panel <- function(pca, variance, title, color_column = "", coldata = NU
     col = colors,
     xlab = paste0("PC1 (", variance[[1]], "%)"),
     ylab = paste0("PC2 (", variance[[2]], "%)"),
-    main = main
+    main = plot_title(main),
+    cex.main = plot_title_cex(main)
   )
   text(pca$x[, 1], pca$x[, 2], labels = rownames(pca$x), pos = 3, cex = 0.7)
   if (!is.null(values) && !is.numeric(values)) {
@@ -939,7 +960,7 @@ plot_pca <- function(transformed, path, title, coldata = NULL, color_columns = c
   variance <- round(100 * (pca$sdev^2 / sum(pca$sdev^2)), 1)
   pca_columns <- usable_pca_color_columns(coldata, color_columns)
   ensure_parent(path)
-  grDevices::pdf(path)
+  open_plot_pdf(path)
   on.exit(grDevices::dev.off(), add = TRUE)
   if (!length(pca_columns)) {
     draw_pca_panel(pca, variance, title)
@@ -961,12 +982,13 @@ plot_sample_distance <- function(transformed, path, title, coldata = NULL) {
     distances <- distances[order_index, order_index, drop = FALSE]
   }
   ensure_parent(path)
-  grDevices::pdf(path)
+  open_plot_pdf(path)
   stats::heatmap(
     distances,
     symm = TRUE,
     margins = c(8, 8),
-    main = title,
+    main = plot_title(title),
+    cex.main = plot_title_cex(title),
     xlab = "sample",
     ylab = "sample"
   )
@@ -983,7 +1005,7 @@ plot_heatmap_panel <- function(transformed, title, coldata = NULL) {
     order_index <- order(coldata[colnames(matrix), "condition"], colnames(matrix))
     matrix <- matrix[, order_index, drop = FALSE]
   }
-  stats::heatmap(matrix, scale = "row", margins = c(8, 8), main = title)
+  stats::heatmap(matrix, scale = "row", margins = c(8, 8), main = plot_title(title), cex.main = plot_title_cex(title))
 }
 
 plot_heatmap <- function(
@@ -1019,7 +1041,7 @@ plot_heatmap <- function(
   )
   write_heatmap_panel_manifest(heatmap_panel_tsv, panels)
   ensure_parent(path)
-  grDevices::pdf(path)
+  open_plot_pdf(path)
   on.exit(grDevices::dev.off(), add = TRUE)
   if (!length(panels)) {
     blank_panel(title, "No heatmap panels requested")
