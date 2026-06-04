@@ -47,21 +47,25 @@ configured.
 
 ## Installation
 
-Use the provided conda/mamba environment for the core workflow.
+ASPIS is expected to run from the repository root, with the repository root
+`Snakefile` as the workflow entry point.
+
+Create the workflow environment once:
 
 ```bash
 mamba env create -f envs/aspis-snakemake.yaml
 conda activate aspis-smk9
 ```
 
-To update an existing environment after the repository changes:
+Update the same environment after pulling repository changes:
 
 ```bash
 conda activate aspis-smk9
 mamba env update -f envs/aspis-snakemake.yaml
 ```
 
-Quickly verify the installed command-line tools:
+Check that the expected command-line tools are visible from the active
+environment:
 
 ```bash
 python3 workflow/scripts/check_environment.py \
@@ -69,12 +73,60 @@ python3 workflow/scripts/check_environment.py \
   --required-tools python3 snakemake fastqc multiqc fastp cutadapt bowtie bowtie-build STAR samtools featureCounts stringtie gffcompare Rscript
 ```
 
-For RNA-seq differential analysis, the R packages in `envs/aspis-snakemake.yaml`
-must also be available, including DESeq2 and IsoformSwitchAnalyzeR.
+For RNA-seq differential analysis, the R packages from
+`envs/aspis-snakemake.yaml` must also be available, including DESeq2 and
+IsoformSwitchAnalyzeR.
+
+## Project Setup
+
+An ASPIS run needs two user-edited files:
+
+1. an intake TSV describing the sequencing libraries;
+2. a YAML config describing output paths, references, tools, and analysis
+   options.
+
+Keep raw FASTQ files outside the repository. The intake table can point to
+absolute paths, relative paths, or public run accessions such as `SRR...`.
+
+For a real project, copy the closest template:
+
+```bash
+cp config/intake_rnaseq_project.example.tsv config/my_project_intake.tsv
+cp config/aspis_rnaseq_project.example.yaml config/my_project.yaml
+```
+
+or, for a smallRNA-only project:
+
+```bash
+cp config/intake_smallrna_project.example.tsv config/my_project_intake.tsv
+cp config/aspis_smallrna_project.example.yaml config/my_project.yaml
+```
+
+Then edit `config/my_project.yaml` so `intake` points to your edited TSV and
+the `paths` section uses a unique namespace, for example:
+
+```yaml
+intake: config/my_project_intake.tsv
+
+paths:
+  raw_dir: work/my_project/raw
+  metadata_dir: meta/my_project/materialized
+  manifest: meta/my_project/materialized_manifest.tsv
+  analysis_plan: meta/my_project/analysis_plan.tsv
+  environment_report: meta/my_project/environment_report.tsv
+  execution_report: meta/my_project/execution_report.tsv
+  sra_cache_dir: cache/my_project/sra
+  scratch_dir: work/my_project/tmp
+  branch_dir: results/my_project/branches
+```
+
+The output namespace is important. It lets you run multiple projects or smoke
+tests from the same checkout without mixing files.
 
 ## Input Table
 
-The intake table is a TSV file. The minimal required columns are:
+The intake table is a TSV file with one row per sequencing library, not one row
+per biological specimen. The minimal required columns are:
 
 ```text
 library_id    input_1
@@ -93,14 +145,24 @@ Column meaning:
   generated. Use the same value for matched RNA-seq and smallRNA libraries from
   the same specimen.
 - `project`: analysis cohort. It becomes part of the result path.
-- `assay`: `rnaseq` or `smallrna`. For public runs this can sometimes be
-  inferred from metadata, but explicit values are preferred for private FASTQs.
+- `assay`: `rnaseq` or `smallrna`. Public runs may be classified from archive
+  metadata, but explicit values are preferred for private FASTQs.
 - `input_1`: local FASTQ path or public run accession such as `SRR...`.
 - `input_2`: second FASTQ for local paired-end data. Leave empty for single-end
   data and for public run accessions.
 - `condition`: main biological condition used for differential contrasts.
 - `treatment`, `dose`, `dose_unit`, `time_h`, `replicate`, `batch`: optional
   metadata used in design tables, reports, and contrast stratification.
+
+Example with matched RNA-seq and smallRNA libraries from the same specimens:
+
+```text
+library_id          biospecimen_id  project  assay     input_1                         input_2                         condition  treatment  dose  dose_unit  time_h  replicate  batch
+beas_1_rnaseq       beas_1          BEAS_2B  rnaseq    /data/BEAS_2B_long/1A_1.fq.gz    /data/BEAS_2B_long/1A_2.fq.gz    control    vehicle    0     none       24      1          b1
+beas_1_smallrna     beas_1          BEAS_2B  smallrna  /data/BEAS_2B_short/1A.fq.gz                                    control    vehicle    0     none       24      1          b1
+beas_2_rnaseq       beas_2          BEAS_2B  rnaseq    /data/BEAS_2B_long/2A_1.fq.gz    /data/BEAS_2B_long/2A_2.fq.gz    treated    compound   10    uM         24      2          b1
+beas_2_smallrna     beas_2          BEAS_2B  smallrna  /data/BEAS_2B_short/2A.fq.gz                                    treated    compound   10    uM         24      2          b1
+```
 
 ASPIS does not infer `rnaseq` versus `smallrna` from filenames. Public archive
 metadata is used when available, but local private FASTQs need either `assay` or
@@ -114,44 +176,90 @@ Single-end versus paired-end is determined from materialized data:
 
 ## Configuration
 
-The default configuration is `config/aspis.yaml`. For a real project, copy one
-of the templates and edit the paths:
+The default configuration is `config/aspis.yaml`. For real analyses, use a copy
+of a project template instead of editing the default file directly.
 
-```bash
-cp config/aspis_rnaseq_project.example.yaml config/my_rnaseq_project.yaml
-cp config/aspis_smallrna_project.example.yaml config/my_smallrna_project.yaml
-```
-
-Important configuration concepts:
+Main settings to check before running:
 
 - `intake`: path to the intake TSV.
-- `run_id`: namespace for `work/`, `meta/`, and `results/` outputs.
-- `work_dir`, `meta_dir`, `results_dir`, `logs_dir`, `cache_dir`: output roots.
-- `allow_unclassified_assay`: whether unknown assay rows should continue.
-- `rnaseq_alignment`: aligner selection, reference index paths, and whether to
-  run alignment.
-- `rnaseq_quantification`: featureCounts/StringTie/gffcompare configuration.
-- `rnaseq_differential`: DESeq2 levels, contrasts, thresholds, and report
-  settings.
-- `smallrna`: smallRNA preprocessing, reference, quantification, target, and
-  report settings.
+- `paths`: output roots for `work/`, `meta/`, `results/`, logs, scratch, and
+  SRA cache files.
+- `materialization.local_link_mode`: use `symlink` when raw data stay available
+  in place; use `copy` only when the workflow must own its raw input copies.
+- `design.condition_col` and `design.control_label`: define the main DESeq2
+  comparison axis.
+- `design.model_formula` or per-assay `design_formula`: use these for batch,
+  patient, or paired designs. Leave empty for the default `~ condition`.
+- `design.covariates` and `rnaseq_differential.contrast_by` or
+  `smallrna.contrast_by`: define stratified contrasts such as one treated versus
+  control comparison per `time_h`.
+- `rnaseq_alignment`: STAR or HISAT2 selection, genome FASTA/index, annotation
+  GTF, strandedness, and thread counts.
+- `rnaseq_quantification`: featureCounts, StringTie, gffcompare, read length,
+  and reference annotation settings.
+- `rnaseq_differential`: enabled levels (`gene`, `transcript`, optional
+  `isoform_switch`), DESeq2 thresholds, report options, and optional feature-set
+  resources.
+- `smallrna`: adapter trimming, Bowtie references, miRNA SAF/FASTA, residual
+  genome mapping, target resources, and smallRNA report options.
+- `execution`: SLURM account, partitions, and default resources for cluster
+  runs.
 
 Feature-set ORA/GSEA resources are documented in
 `docs/feature_set_resources.md`. Without configured feature sets, enrichment
-tables and report panels will be empty or marked as not configured.
+tables and report panels will be empty or explicitly marked as not configured.
 
 ## Running Locally
 
-Dry-run first:
+For full-workflow runs with no explicit target, this is enough:
 
 ```bash
 snakemake --cores 4 --configfile config/my_project.yaml --dry-run
+snakemake --cores 8 --configfile config/my_project.yaml --rerun-incomplete
 ```
 
-Run:
+When requesting a specific target with Snakemake 9, put the target before
+`--configfile`. This avoids Snakemake interpreting the target as an additional
+config file.
+
+Suggested staged workflow:
 
 ```bash
-snakemake --cores 8 --configfile config/my_project.yaml --rerun-incomplete
+# 1. Materialize inputs and write the full audit manifest
+snakemake meta/<run_id>/materialized_manifest.tsv \
+  --cores 4 \
+  --configfile config/my_project.yaml \
+  --rerun-incomplete
+
+# 2. Build the assay/project branch plan
+snakemake meta/<run_id>/analysis_plan.tsv \
+  --cores 4 \
+  --configfile config/my_project.yaml \
+  --rerun-incomplete
+
+# 3. Run raw branch QC for one branch
+snakemake results/<run_id>/branches/rnaseq/<project>/multiqc/multiqc.done \
+  --cores 4 \
+  --configfile config/my_project.yaml \
+  --rerun-incomplete
+
+# 4. Run one RNA-seq differential report, including its technical PDF
+snakemake results/<run_id>/branches/rnaseq/<project>/differential/reports/technical_report.pdf \
+  --cores 8 \
+  --configfile config/my_project.yaml \
+  --rerun-incomplete
+
+# 5. Run one smallRNA differential report, including its technical PDF
+snakemake results/<run_id>/branches/smallrna/<project>/smallrna/differential/reports/technical_report.pdf \
+  --cores 8 \
+  --configfile config/my_project.yaml \
+  --rerun-incomplete
+
+# 6. Build the run-level dashboard
+snakemake results/<run_id>/index.html \
+  --cores 4 \
+  --configfile config/my_project.yaml \
+  --rerun-incomplete
 ```
 
 The repository also has a tiny default fixture:
@@ -161,35 +269,52 @@ snakemake --cores 2 --dry-run
 snakemake --cores 2
 ```
 
-Useful target examples:
+Useful rerun controls:
 
-```bash
-# Materialize inputs only
-snakemake --cores 4 --configfile config/my_project.yaml meta/<run_id>/materialized_manifest.tsv
+- `--rerun-incomplete`: resume after interrupted jobs and repair incomplete
+  outputs.
+- `--dry-run`: inspect the DAG without running jobs.
+- `--force <target>`: force one target when you intentionally want it rebuilt.
+- Avoid broad `--forceall` on real data unless you are intentionally restarting
+  a full analysis.
 
-# Build branch plan only
-snakemake --cores 4 --configfile config/my_project.yaml meta/<run_id>/analysis_plan.tsv
+## Reports And Navigation
 
-# Run raw branch QC for one project
-snakemake --cores 4 --configfile config/my_project.yaml results/<run_id>/branches/rnaseq/<project>/multiqc/multiqc.done
+The main human entry points are:
 
-# Run RNA-seq differential report for one project when upstream layers are enabled
-snakemake --cores 8 --configfile config/my_project.yaml results/<run_id>/branches/rnaseq/<project>/differential/reports/index.html
-
-# Run smallRNA report for one project when upstream layers are enabled
-snakemake --cores 8 --configfile config/my_project.yaml results/<run_id>/branches/smallrna/<project>/smallrna/differential/reports/index.html
-
-# Open the run-level dashboard
-snakemake --cores 4 --configfile config/my_project.yaml results/<run_id>/index.html
-
-# Open one assay/project branch landing page
-snakemake --cores 4 --configfile config/my_project.yaml results/<run_id>/branches/rnaseq/<project>/report/index.html
+```text
+results/<run_id>/index.html
+results/<run_id>/branches/<assay>/<project>/report/index.html
 ```
+
+The run dashboard links each ready assay/project branch. The branch landing page
+then links raw QC, preprocessing QC, alignment QC, quantification, differential
+reports, isoform-switch reports, warnings, provenance, and technical PDFs.
+
+RNA-seq report entry points:
+
+```text
+results/<run_id>/branches/rnaseq/<project>/differential/reports/index.html
+results/<run_id>/branches/rnaseq/<project>/differential/reports/technical_report.pdf
+results/<run_id>/branches/rnaseq/<project>/differential/isoform_switch/report/index.html
+```
+
+SmallRNA report entry points:
+
+```text
+results/<run_id>/branches/smallrna/<project>/smallrna/differential/reports/index.html
+results/<run_id>/branches/smallrna/<project>/smallrna/differential/reports/technical_report.pdf
+```
+
+Use the HTML reports for navigation and complete links. Use
+`technical_report.pdf` as a compact plot-and-small-table digest for meetings or
+biologist-facing review. The TSV files remain the source of truth for complete
+tables and downstream reuse.
 
 ## Running On CINECA G100
 
-The helper scripts wrap the Snakemake SLURM profile and keep account/partition
-settings outside the Snakefile.
+On G100, keep raw data outside the repository, for example under a project data
+directory in `$WORK`, and point the intake TSV to those paths.
 
 ```bash
 conda activate aspis-smk9
@@ -198,6 +323,10 @@ ACCOUNT=your_slurm_account
 export SLURM_PARTITION=g100_usr_prod
 export SLURM_DOWNLOAD_PARTITION=g100_all_serial
 ```
+
+`SLURM_PARTITION` is used for ordinary compute jobs. `SLURM_DOWNLOAD_PARTITION`
+is used for public SRA/ENA download and conversion jobs, so network-heavy
+materialization does not use the normal production partition.
 
 Smoke tests:
 
@@ -244,6 +373,9 @@ FORCE_MODE=plan MODE=run bash tests/run_g100_smoke.sh "$ACCOUNT"
 # Force everything only when a clean recomputation is intended
 FORCE_MODE=all MODE=run bash tests/run_g100_smoke.sh "$ACCOUNT"
 ```
+
+For real projects, prefer `FORCE_MODE=none` unless you have a specific reason
+to rebuild existing outputs.
 
 ## Result Folder Structure
 
