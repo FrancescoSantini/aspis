@@ -5,12 +5,11 @@ here so that remaining work is tracked in one place.
 
 ## Upload-Waiting Work Plan
 
-While the complete private FASTQ dataset is still uploading to G100, use
-`docs/work_while_uploading.md` to track useful work that does not require the
-full dataset. Completed report-readability, usage-documentation, resource
-inventory, and offline resource example work has been removed from that active
-list. Real-data-dependent preflight, final config review, and full validation
-items are tracked here instead.
+The temporary upload-waiting work list has been folded back into this canonical
+backlog. Completed report-readability, usage-documentation, resource inventory,
+recipe preflight, offline resource example, and provenance-documentation work
+is tracked in the commit history. Real-data-dependent preflight, final config
+review, and full validation items remain below.
 
 ## Current Validation Status
 
@@ -285,6 +284,8 @@ Tasks:
 - Group modules by materialization, branch planning, common QC, RNA-seq,
   smallRNA, differential/reporting, and helper smoke targets.
 - Keep module boundaries aligned with existing manifests and branch contracts.
+- Preserve current output paths, manifests, and config keys during any split.
+- Run smoke dry-runs after every mechanical module move.
 - Avoid refactors during real validation unless they directly reduce risk.
 
 Acceptance criteria:

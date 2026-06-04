@@ -222,9 +222,8 @@ Operational planning notes:
 
 - `docs/real_data_readiness.md` is the checklist for preparing a full real
   project run.
-- `docs/todo.md` is the canonical backlog.
-- `docs/work_while_uploading.md` records useful work that can continue while
-  large private FASTQs are still uploading.
+- `docs/todo.md` is the canonical backlog, including upload-waiting and
+  real-data validation work.
 
 ## Running Locally
 
