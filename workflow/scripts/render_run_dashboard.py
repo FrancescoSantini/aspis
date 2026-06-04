@@ -66,6 +66,7 @@ def count_rows(path: Path) -> int:
 def branch_resources(assay: str, project: str, branch_dir: Path, base_dir: Path) -> list[str]:
     base = branch_dir / assay / project
     resources = [
+        optional_link(base / "report/index.html", "branch report", base_dir),
         link_if_exists(base / "samples.tsv", "samples", base_dir),
         link_if_exists(base / "design.tsv", "design", base_dir),
         link_if_exists(base / "multiqc/multiqc_report.html", "raw MultiQC", base_dir),

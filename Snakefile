@@ -1504,6 +1504,12 @@ def planned_branch_targets(wildcards):
                     )
             if PROVENANCE_RUN:
                 targets.extend(branch_provenance_outputs(assay, project))
+            targets.extend(
+                [
+                    branch_report_html(assay, project),
+                    branch_report_done(assay, project),
+                ]
+            )
     return targets
 
 
@@ -1543,6 +1549,171 @@ def deseq2_smoke_targets():
     return targets
 
 
+def branch_report_html(assay, project):
+    return f"{BRANCH_DIR}/{assay}/{project}/report/index.html"
+
+
+def branch_report_done(assay, project):
+    return f"{BRANCH_DIR}/{assay}/{project}/report/index.done"
+
+
+def branch_report_inputs(wildcards):
+    assay = wildcards.assay
+    project = wildcards.project
+    base = f"{BRANCH_DIR}/{assay}/{project}"
+    inputs = [
+        f"{base}/samples.tsv",
+        f"{base}/materialized_manifest.tsv",
+        f"{base}/fastq_inspection.tsv",
+        f"{base}/fastqc/fastqc_manifest.tsv",
+        f"{base}/fastqc/fastqc.done",
+        f"{base}/multiqc/multiqc_report.html",
+        f"{base}/multiqc/multiqc.done",
+        f"{base}/design.tsv",
+    ]
+    if assay == "rnaseq":
+        inputs.extend(
+            [
+                f"{base}/preprocess/environment_report.tsv",
+                f"{base}/preprocess/preprocessed_samples.tsv",
+                f"{base}/preprocess/preprocess.done",
+                f"{base}/preprocess/fastq_inspection.tsv",
+                f"{base}/preprocess/fastqc/fastqc_manifest.tsv",
+                f"{base}/preprocess/fastqc/fastqc.done",
+                f"{base}/preprocess/multiqc/multiqc_report.html",
+                f"{base}/preprocess/multiqc/multiqc.done",
+                f"{base}/alignment/alignment_plan.tsv",
+            ]
+        )
+        if RNASEQ_ALIGNMENT.get("run", False):
+            inputs.extend(
+                [
+                    f"{base}/alignment/environment_report.tsv",
+                    f"{base}/alignment/aligned_samples.tsv",
+                    f"{base}/alignment/alignment.done",
+                    f"{base}/alignment/qc/alignment_qc_manifest.tsv",
+                    f"{base}/alignment/qc/alignment_qc.done",
+                    f"{base}/alignment/qc/multiqc/multiqc_report.html",
+                    f"{base}/alignment/qc/multiqc/multiqc.done",
+                ]
+            )
+            if RNASEQ_QUANTIFICATION.get("run", False):
+                inputs.extend(
+                    [
+                        f"{base}/quantification/environment_report.tsv",
+                        f"{base}/quantification/quantification_plan.tsv",
+                        f"{base}/quantification/counts/quantification.done",
+                    ]
+                )
+                if RNASEQ_BIOTYPE_SUMMARY_RUN:
+                    inputs.extend(
+                        [
+                            f"{base}/quantification/biotypes/biotype_summary.html",
+                            f"{base}/quantification/biotypes/biotype_summary.done",
+                        ]
+                    )
+                if RNASEQ_DTU_RUN:
+                    inputs.extend(
+                        [
+                            f"{base}/differential/dtu/dtu.done",
+                            f"{base}/differential/dtu/dtu_methods.done",
+                        ]
+                    )
+                if RNASEQ_SAMPLE_QC_RUN:
+                    inputs.append(f"{base}/quantification/sample_qc/sample_qc.done")
+                if RNASEQ_WARNINGS_RUN:
+                    warnings = rnaseq_biological_warnings_outputs(project)
+                    inputs.extend([warnings["html"], warnings["done"]])
+                if RNASEQ_DIFFERENTIAL.get("run", False):
+                    inputs.extend(
+                        [
+                            f"{base}/differential/environment_report.tsv",
+                            f"{base}/differential/differential_plan.tsv",
+                        ]
+                    )
+                    if "gene" in RNASEQ_DIFFERENTIAL_LEVELS:
+                        inputs.append(f"{base}/differential/gene_deseq2/deseq2.done")
+                    if "transcript" in RNASEQ_DIFFERENTIAL_LEVELS:
+                        inputs.append(f"{base}/differential/transcript_deseq2/deseq2.done")
+                    if "isoform_switch" in RNASEQ_DIFFERENTIAL_LEVELS:
+                        inputs.append(f"{base}/differential/isoform_switch/isoform_switch.done")
+                        if RNASEQ_ISOFORM_SWITCH_REPORTS_ENABLED:
+                            outputs = rnaseq_isoform_switch_report_outputs(project)
+                            inputs.extend([outputs["html"], outputs["done"]])
+                    if RNASEQ_DIFFERENTIAL_REPORTS_ENABLED:
+                        inputs.extend(
+                            [
+                                f"{base}/differential/reports/index.html",
+                                f"{base}/differential/reports/report_index.done",
+                            ]
+                        )
+    elif assay == "smallrna" and SMALLRNA.get("run", False):
+        small = f"{base}/smallrna"
+        inputs.extend([f"{small}/environment_report.tsv", f"{small}/smallrna_plan.tsv"])
+        inputs.extend(SMALLRNA_REFERENCE_TARGETS)
+        if SMALLRNA_BOWTIE_INDEX_DONE:
+            inputs.append(SMALLRNA_BOWTIE_INDEX_DONE)
+        if SMALLRNA_CONTAMINANT_INDEX_DONE:
+            inputs.append(SMALLRNA_CONTAMINANT_INDEX_DONE)
+        if SMALLRNA_RESIDUAL_GENOME_INDEX_DONE:
+            inputs.append(SMALLRNA_RESIDUAL_GENOME_INDEX_DONE)
+        if SMALLRNA_PREPROCESS_RUN:
+            inputs.extend(
+                [
+                    f"{small}/preprocess/trimmed_samples.tsv",
+                    f"{small}/preprocess/preprocess.done",
+                    f"{small}/preprocess/fastq_inspection.tsv",
+                    f"{small}/preprocess/fastqc/fastqc_manifest.tsv",
+                    f"{small}/preprocess/fastqc/fastqc.done",
+                    f"{small}/preprocess/multiqc/multiqc_report.html",
+                    f"{small}/preprocess/multiqc/multiqc.done",
+                ]
+            )
+        if SMALLRNA_DEPLETION_RUN:
+            inputs.append(f"{small}/depletion/depletion.done")
+        if SMALLRNA_ALIGNMENT_RUN:
+            inputs.append(f"{small}/alignment/alignment.done")
+        if SMALLRNA_RESIDUAL_RUN:
+            inputs.append(f"{small}/residual_genome/residual.done")
+        if SMALLRNA_QUANTIFICATION_RUN:
+            inputs.append(f"{small}/quantification/featurecounts.done")
+            if SMALLRNA_SAMPLE_QC_RUN:
+                inputs.append(f"{small}/quantification/sample_qc/sample_qc.done")
+            if SMALLRNA_LENGTH_QC_RUN:
+                length_qc = smallrna_length_qc_outputs(project)
+                inputs.extend([length_qc["manifest"], length_qc["length_plot"], length_qc["done"]])
+        if SMALLRNA_DIFFERENTIAL_RUN:
+            inputs.append(f"{small}/differential/mirna_deseq2/deseq2.done")
+        if SMALLRNA_MIRNA_FEATURE_SET_RUN:
+            inputs.extend([smallrna_mirna_feature_set_manifest(project), smallrna_mirna_feature_set_done(project)])
+        if SMALLRNA_TARGET_ENRICHMENT_RUN:
+            inputs.append(f"{small}/differential/target_enrichment/target_enrichment.done")
+        if SMALLRNA_TARGET_FEATURE_SET_RUN:
+            inputs.append(f"{small}/differential/target_feature_sets/target_feature_sets.done")
+        if MIRNA_MRNA_INTEGRATION_RUN:
+            inputs.append(f"{small}/differential/mirna_mrna_integration/mirna_mrna.done")
+        if MIRNA_MRNA_TARGET_FEATURE_SET_RUN:
+            inputs.extend(
+                [
+                    smallrna_mirna_mrna_target_feature_set_manifest(project),
+                    smallrna_mirna_mrna_target_feature_set_done(project),
+                ]
+            )
+        if SMALLRNA_WARNINGS_RUN:
+            warnings = smallrna_biological_warnings_outputs(project)
+            inputs.extend([warnings["html"], warnings["done"]])
+        if SMALLRNA_REPORTS_RUN:
+            inputs.extend(
+                [
+                    f"{small}/differential/reports/index.html",
+                    f"{small}/differential/reports/report_index.done",
+                ]
+            )
+    if PROVENANCE_RUN:
+        inputs.extend(branch_provenance_outputs(assay, project))
+    return inputs
+
+
 def run_dashboard_inputs(wildcards):
     return [MANIFEST, ANALYSIS_PLAN, ENVIRONMENT_REPORT, EXECUTION_REPORT] + planned_branch_targets(wildcards)
 
@@ -1558,7 +1729,7 @@ def workflow_targets(wildcards):
     return targets
 
 
-localrules: all, check_environment, check_execution_config, assay_branch_ready, build_branch_design, build_branch_provenance_bundle, render_run_dashboard
+localrules: all, check_environment, check_execution_config, assay_branch_ready, build_branch_design, build_branch_provenance_bundle, render_run_dashboard, render_branch_report_index
 
 
 rule all:
@@ -1588,6 +1759,29 @@ rule render_run_dashboard:
           --manifest {params.manifest:q} \
           --environment-report {params.environment_report:q} \
           --execution-report {params.execution_report:q} \
+          --branch-dir {params.branch_dir:q} \
+          --output {output.html:q} \
+          --done {output.done:q} \
+          > {log:q} 2>&1
+        """
+
+
+rule render_branch_report_index:
+    input:
+        branch_report_inputs
+    output:
+        html=f"{BRANCH_DIR}/{{assay}}/{{project}}/report/index.html",
+        done=f"{BRANCH_DIR}/{{assay}}/{{project}}/report/index.done"
+    params:
+        branch_dir=BRANCH_DIR
+    log:
+        "logs/branches/{assay}/{project}.report_index.log"
+    shell:
+        r"""
+        mkdir -p logs/branches/{wildcards.assay}
+        python3 workflow/scripts/render_branch_report_index.py \
+          --assay {wildcards.assay:q} \
+          --project {wildcards.project:q} \
           --branch-dir {params.branch_dir:q} \
           --output {output.html:q} \
           --done {output.done:q} \
