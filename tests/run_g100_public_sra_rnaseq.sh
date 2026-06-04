@@ -103,12 +103,16 @@ fi
     materialize_library:disk_mb=20000 \
     preprocess_rnaseq_branch:runtime=60 \
     preprocess_rnaseq_branch:mem_mb=4000 \
+    run_branch_fastqc_file:runtime=30 \
+    run_branch_fastqc_file:mem_mb=4000 \
     run_branch_fastqc:runtime=30 \
-    run_branch_fastqc:mem_mb=4000 \
+    run_branch_fastqc:mem_mb=1000 \
     run_branch_multiqc:runtime=30 \
     run_branch_multiqc:mem_mb=4000 \
+    run_preprocessed_rnaseq_fastqc_file:runtime=30 \
+    run_preprocessed_rnaseq_fastqc_file:mem_mb=4000 \
     run_preprocessed_rnaseq_fastqc:runtime=30 \
-    run_preprocessed_rnaseq_fastqc:mem_mb=4000 \
+    run_preprocessed_rnaseq_fastqc:mem_mb=1000 \
     run_preprocessed_rnaseq_multiqc:runtime=30 \
     run_preprocessed_rnaseq_multiqc:mem_mb=4000
 

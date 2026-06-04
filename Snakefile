@@ -560,6 +560,104 @@ def optional_shell_list_arg(flag, values):
     return " ".join([flag] + [shlex.quote(item) for item in items])
 
 
+def read_tsv_rows(path):
+    with open(path, newline="") as handle:
+        reader = csv.DictReader(handle, delimiter="\t")
+        if reader.fieldnames is None:
+            raise ValueError(f"TSV file is empty: {path}")
+        return [{key: (value or "").strip() for key, value in row.items()} for row in reader]
+
+
+def fastqc_read_rows(rows):
+    output = []
+    for row in rows:
+        library_id = row.get("library_id", "")
+        layout = row.get("layout", "")
+        if layout not in {"single", "paired"}:
+            raise ValueError(f"{library_id}: unsupported layout for FastQC: {layout!r}")
+        if not row.get("fastq_1", ""):
+            raise ValueError(f"{library_id}: fastq_1 is empty")
+        output.append({**row, "read": "R1", "fastq": row["fastq_1"]})
+        if layout == "paired":
+            if not row.get("fastq_2", ""):
+                raise ValueError(f"{library_id}: paired layout has empty fastq_2")
+            output.append({**row, "read": "R2", "fastq": row["fastq_2"]})
+    return output
+
+
+def materialized_rows_for_branch(assay, project):
+    checkpoints.build_analysis_plan.get()
+    rows = read_tsv_rows(MANIFEST)
+    return [
+        row
+        for row in rows
+        if row.get("assay", "") == assay and row.get("project", "") == project
+    ]
+
+
+def require_fastqc_row(rows, library_id, read):
+    for row in fastqc_read_rows(rows):
+        if row["library_id"] == library_id and row["read"] == read:
+            return row
+    raise ValueError(f"No FastQC input row found for {library_id} {read}")
+
+
+def fastqc_output_paths(outdir, rows):
+    outputs = []
+    for row in fastqc_read_rows(rows):
+        prefix = f"{row['library_id']}_{row['read']}_fastqc"
+        outputs.extend(
+            [
+                f"{outdir}/files/{prefix}.html",
+                f"{outdir}/files/{prefix}.zip",
+            ]
+        )
+    return outputs
+
+
+def raw_fastqc_outputs(wildcards):
+    rows = materialized_rows_for_branch(wildcards.assay, wildcards.project)
+    outdir = f"{BRANCH_DIR}/{wildcards.assay}/{wildcards.project}/fastqc"
+    return fastqc_output_paths(outdir, rows)
+
+
+def raw_fastqc_input(wildcards):
+    rows = materialized_rows_for_branch(wildcards.assay, wildcards.project)
+    return require_fastqc_row(rows, wildcards.library_id, wildcards.read)["fastq"]
+
+
+def raw_fastqc_rawdir(wildcards):
+    return f"{RAW_DIR}/{wildcards.library_id}"
+
+
+def rnaseq_preprocessed_fastqc_outputs(wildcards):
+    rows = materialized_rows_for_branch("rnaseq", wildcards.project)
+    outdir = f"{BRANCH_DIR}/rnaseq/{wildcards.project}/preprocess/fastqc"
+    return fastqc_output_paths(outdir, rows)
+
+
+def rnaseq_preprocessed_fastqc_input(wildcards):
+    rows = materialized_rows_for_branch("rnaseq", wildcards.project)
+    row = require_fastqc_row(rows, wildcards.library_id, wildcards.read)
+    filename = "R1.fastq.gz" if row["read"] == "R1" else "R2.fastq.gz"
+    return f"{BRANCH_DIR}/rnaseq/{wildcards.project}/preprocess/{wildcards.library_id}/{filename}"
+
+
+def smallrna_preprocessed_fastqc_outputs(wildcards):
+    rows = materialized_rows_for_branch("smallrna", wildcards.project)
+    outdir = f"{BRANCH_DIR}/smallrna/{wildcards.project}/smallrna/preprocess/fastqc"
+    return fastqc_output_paths(outdir, rows)
+
+
+def smallrna_preprocessed_fastqc_input(wildcards):
+    rows = materialized_rows_for_branch("smallrna", wildcards.project)
+    require_fastqc_row(rows, wildcards.library_id, wildcards.read)
+    return (
+        f"{BRANCH_DIR}/smallrna/{wildcards.project}/smallrna/preprocess/"
+        f"{wildcards.library_id}/trimmed.fastq.gz"
+    )
+
+
 def joined_config_values(value):
     if value is None:
         return ""
@@ -2158,15 +2256,17 @@ rule inspect_branch_fastqs:
         """
 
 
-rule run_branch_fastqc:
+rule run_branch_fastqc_file:
     input:
+        rawdir=raw_fastqc_rawdir,
         samples=f"{BRANCH_DIR}" + "/{assay}/{project}/samples.tsv",
         inspection=f"{BRANCH_DIR}" + "/{assay}/{project}/fastq_inspection.tsv",
         environment=ENVIRONMENT_REPORT
     output:
-        manifest=f"{BRANCH_DIR}" + "/{assay}/{project}/fastqc/fastqc_manifest.tsv",
-        done=f"{BRANCH_DIR}" + "/{assay}/{project}/fastqc/fastqc.done"
+        html=f"{BRANCH_DIR}" + "/{assay}/{project}/fastqc/files/{library_id}_{read}_fastqc.html",
+        zip=f"{BRANCH_DIR}" + "/{assay}/{project}/fastqc/files/{library_id}_{read}_fastqc.zip"
     params:
+        fastq=raw_fastqc_input,
         outdir=lambda wildcards: f"{BRANCH_DIR}/{wildcards.assay}/{wildcards.project}/fastqc",
         fastqc=FASTQC.get("command", "fastqc"),
         extra_args_flag=(
@@ -2177,18 +2277,47 @@ rule run_branch_fastqc:
     threads:
         FASTQC.get("threads", 2)
     log:
-        "logs/branches/{assay}/{project}.fastqc.log"
+        "logs/branches/{assay}/{project}.fastqc.{library_id}.{read}.log"
+    wildcard_constraints:
+        read="R[12]"
     shell:
         r"""
         mkdir -p logs/branches/{wildcards.assay}
-        python3 workflow/scripts/run_fastqc_branch.py \
+        python3 workflow/scripts/run_fastqc_file.py \
+          --fastq {params.fastq:q} \
+          --outdir {params.outdir:q} \
+          --library-id {wildcards.library_id:q} \
+          --read {wildcards.read:q} \
+          --html {output.html:q} \
+          --zip {output.zip:q} \
+          --threads {threads:q} \
+          --fastqc {params.fastqc:q} \
+          {params.extra_args_flag} \
+          > {log:q} 2>&1
+        """
+
+
+rule run_branch_fastqc:
+    input:
+        fastqc_outputs=raw_fastqc_outputs,
+        samples=f"{BRANCH_DIR}" + "/{assay}/{project}/samples.tsv",
+        inspection=f"{BRANCH_DIR}" + "/{assay}/{project}/fastq_inspection.tsv",
+        environment=ENVIRONMENT_REPORT
+    output:
+        manifest=f"{BRANCH_DIR}" + "/{assay}/{project}/fastqc/fastqc_manifest.tsv",
+        done=f"{BRANCH_DIR}" + "/{assay}/{project}/fastqc/fastqc.done"
+    params:
+        outdir=lambda wildcards: f"{BRANCH_DIR}/{wildcards.assay}/{wildcards.project}/fastqc"
+    log:
+        "logs/branches/{assay}/{project}.fastqc_manifest.log"
+    shell:
+        r"""
+        mkdir -p logs/branches/{wildcards.assay}
+        python3 workflow/scripts/build_fastqc_manifest.py \
           --samples {input.samples:q} \
           --outdir {params.outdir:q} \
           --manifest {output.manifest:q} \
           --done {output.done:q} \
-          --threads {threads:q} \
-          --fastqc {params.fastqc:q} \
-          {params.extra_args_flag} \
           > {log:q} 2>&1
         """
 
@@ -2550,15 +2679,17 @@ rule inspect_preprocessed_smallrna_fastqs:
         """
 
 
-rule run_preprocessed_smallrna_fastqc:
+rule run_preprocessed_smallrna_fastqc_file:
     input:
         samples=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/preprocess/trimmed_samples.tsv",
+        preprocess_done=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/preprocess/preprocess.done",
         inspection=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/preprocess/fastq_inspection.tsv",
         environment=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/environment_report.tsv"
     output:
-        manifest=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/preprocess/fastqc/fastqc_manifest.tsv",
-        done=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/preprocess/fastqc/fastqc.done"
+        html=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/preprocess/fastqc/files/{library_id}_{read}_fastqc.html",
+        zip=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/preprocess/fastqc/files/{library_id}_{read}_fastqc.zip"
     params:
+        fastq=smallrna_preprocessed_fastqc_input,
         outdir=lambda wildcards: f"{BRANCH_DIR}/smallrna/{wildcards.project}/smallrna/preprocess/fastqc",
         fastqc=FASTQC.get("command", "fastqc"),
         extra_args_flag=(
@@ -2569,18 +2700,47 @@ rule run_preprocessed_smallrna_fastqc:
     threads:
         FASTQC.get("threads", 2)
     log:
-        "logs/branches/smallrna/{project}.smallrna_preprocess.fastqc.log"
+        "logs/branches/smallrna/{project}.smallrna_preprocess.fastqc.{library_id}.{read}.log"
+    wildcard_constraints:
+        read="R[12]"
     shell:
         r"""
         mkdir -p logs/branches/smallrna
-        python3 workflow/scripts/run_fastqc_branch.py \
+        python3 workflow/scripts/run_fastqc_file.py \
+          --fastq {params.fastq:q} \
+          --outdir {params.outdir:q} \
+          --library-id {wildcards.library_id:q} \
+          --read {wildcards.read:q} \
+          --html {output.html:q} \
+          --zip {output.zip:q} \
+          --threads {threads:q} \
+          --fastqc {params.fastqc:q} \
+          {params.extra_args_flag} \
+          > {log:q} 2>&1
+        """
+
+
+rule run_preprocessed_smallrna_fastqc:
+    input:
+        fastqc_outputs=smallrna_preprocessed_fastqc_outputs,
+        samples=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/preprocess/trimmed_samples.tsv",
+        inspection=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/preprocess/fastq_inspection.tsv",
+        environment=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/environment_report.tsv"
+    output:
+        manifest=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/preprocess/fastqc/fastqc_manifest.tsv",
+        done=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/preprocess/fastqc/fastqc.done"
+    params:
+        outdir=lambda wildcards: f"{BRANCH_DIR}/smallrna/{wildcards.project}/smallrna/preprocess/fastqc"
+    log:
+        "logs/branches/smallrna/{project}.smallrna_preprocess.fastqc_manifest.log"
+    shell:
+        r"""
+        mkdir -p logs/branches/smallrna
+        python3 workflow/scripts/build_fastqc_manifest.py \
           --samples {input.samples:q} \
           --outdir {params.outdir:q} \
           --manifest {output.manifest:q} \
           --done {output.done:q} \
-          --threads {threads:q} \
-          --fastqc {params.fastqc:q} \
-          {params.extra_args_flag} \
           > {log:q} 2>&1
         """
 
@@ -3669,15 +3829,17 @@ rule inspect_preprocessed_rnaseq_fastqs:
         """
 
 
-rule run_preprocessed_rnaseq_fastqc:
+rule run_preprocessed_rnaseq_fastqc_file:
     input:
         samples=f"{BRANCH_DIR}" + "/rnaseq/{project}/preprocess/preprocessed_samples.tsv",
+        preprocess_done=f"{BRANCH_DIR}" + "/rnaseq/{project}/preprocess/preprocess.done",
         inspection=f"{BRANCH_DIR}" + "/rnaseq/{project}/preprocess/fastq_inspection.tsv",
         environment=ENVIRONMENT_REPORT
     output:
-        manifest=f"{BRANCH_DIR}" + "/rnaseq/{project}/preprocess/fastqc/fastqc_manifest.tsv",
-        done=f"{BRANCH_DIR}" + "/rnaseq/{project}/preprocess/fastqc/fastqc.done"
+        html=f"{BRANCH_DIR}" + "/rnaseq/{project}/preprocess/fastqc/files/{library_id}_{read}_fastqc.html",
+        zip=f"{BRANCH_DIR}" + "/rnaseq/{project}/preprocess/fastqc/files/{library_id}_{read}_fastqc.zip"
     params:
+        fastq=rnaseq_preprocessed_fastqc_input,
         outdir=lambda wildcards: f"{BRANCH_DIR}/rnaseq/{wildcards.project}/preprocess/fastqc",
         fastqc=FASTQC.get("command", "fastqc"),
         extra_args_flag=(
@@ -3688,18 +3850,47 @@ rule run_preprocessed_rnaseq_fastqc:
     threads:
         FASTQC.get("threads", 2)
     log:
-        "logs/branches/rnaseq/{project}.preprocess.fastqc.log"
+        "logs/branches/rnaseq/{project}.preprocess.fastqc.{library_id}.{read}.log"
+    wildcard_constraints:
+        read="R[12]"
     shell:
         r"""
         mkdir -p logs/branches/rnaseq
-        python3 workflow/scripts/run_fastqc_branch.py \
+        python3 workflow/scripts/run_fastqc_file.py \
+          --fastq {params.fastq:q} \
+          --outdir {params.outdir:q} \
+          --library-id {wildcards.library_id:q} \
+          --read {wildcards.read:q} \
+          --html {output.html:q} \
+          --zip {output.zip:q} \
+          --threads {threads:q} \
+          --fastqc {params.fastqc:q} \
+          {params.extra_args_flag} \
+          > {log:q} 2>&1
+        """
+
+
+rule run_preprocessed_rnaseq_fastqc:
+    input:
+        fastqc_outputs=rnaseq_preprocessed_fastqc_outputs,
+        samples=f"{BRANCH_DIR}" + "/rnaseq/{project}/preprocess/preprocessed_samples.tsv",
+        inspection=f"{BRANCH_DIR}" + "/rnaseq/{project}/preprocess/fastq_inspection.tsv",
+        environment=ENVIRONMENT_REPORT
+    output:
+        manifest=f"{BRANCH_DIR}" + "/rnaseq/{project}/preprocess/fastqc/fastqc_manifest.tsv",
+        done=f"{BRANCH_DIR}" + "/rnaseq/{project}/preprocess/fastqc/fastqc.done"
+    params:
+        outdir=lambda wildcards: f"{BRANCH_DIR}/rnaseq/{wildcards.project}/preprocess/fastqc"
+    log:
+        "logs/branches/rnaseq/{project}.preprocess.fastqc_manifest.log"
+    shell:
+        r"""
+        mkdir -p logs/branches/rnaseq
+        python3 workflow/scripts/build_fastqc_manifest.py \
           --samples {input.samples:q} \
           --outdir {params.outdir:q} \
           --manifest {output.manifest:q} \
           --done {output.done:q} \
-          --threads {threads:q} \
-          --fastqc {params.fastqc:q} \
-          {params.extra_args_flag} \
           > {log:q} 2>&1
         """
 

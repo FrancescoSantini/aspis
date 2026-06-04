@@ -48,12 +48,17 @@ default-resources:
 set-threads:
   materialize_library: 1
   build_materialized_manifest: 1
-  run_branch_fastqc: 2
+  run_branch_fastqc_file: 2
+  run_branch_fastqc: 1
   run_branch_multiqc: 1
   check_rnaseq_preprocess_environment: 1
   preprocess_rnaseq_branch: 2
-  run_preprocessed_rnaseq_fastqc: 2
+  run_preprocessed_rnaseq_fastqc_file: 2
+  run_preprocessed_rnaseq_fastqc: 1
   run_preprocessed_rnaseq_multiqc: 1
+  run_preprocessed_smallrna_fastqc_file: 2
+  run_preprocessed_smallrna_fastqc: 1
+  run_preprocessed_smallrna_multiqc: 1
   build_rnaseq_hisat2_index: 8
   build_rnaseq_star_index: 8
   plan_rnaseq_alignment: 1
@@ -88,6 +93,10 @@ set-resources:
     mem_mb: 1000
     disk_mb: 1000
   run_branch_fastqc:
+    runtime: 15
+    mem_mb: 1000
+    disk_mb: 1000
+  run_branch_fastqc_file:
     runtime: 60
     mem_mb: 4000
     disk_mb: 10000
@@ -104,10 +113,26 @@ set-resources:
     mem_mb: 8000
     disk_mb: 50000
   run_preprocessed_rnaseq_fastqc:
+    runtime: 15
+    mem_mb: 1000
+    disk_mb: 1000
+  run_preprocessed_rnaseq_fastqc_file:
     runtime: 60
     mem_mb: 4000
     disk_mb: 10000
   run_preprocessed_rnaseq_multiqc:
+    runtime: 15
+    mem_mb: 2000
+    disk_mb: 2000
+  run_preprocessed_smallrna_fastqc:
+    runtime: 15
+    mem_mb: 1000
+    disk_mb: 1000
+  run_preprocessed_smallrna_fastqc_file:
+    runtime: 60
+    mem_mb: 4000
+    disk_mb: 10000
+  run_preprocessed_smallrna_multiqc:
     runtime: 15
     mem_mb: 2000
     disk_mb: 2000
