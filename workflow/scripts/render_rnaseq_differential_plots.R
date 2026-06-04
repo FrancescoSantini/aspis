@@ -115,6 +115,10 @@ heatmap_margins <- function(row_labels, col_labels) {
   c(bottom, right)
 }
 
+legacy_heatmap_palette <- function(n = 100) {
+  grDevices::colorRampPalette(c("green", "black", "red"))(n)
+}
+
 draw_heatmap_title <- function(title) {
   graphics::mtext(
     plot_title(title, width = 66),
@@ -1029,6 +1033,7 @@ plot_sample_distance <- function(transformed, path, title, coldata = NULL) {
     distances,
     symm = TRUE,
     margins = heatmap_margins(labels, labels),
+    col = legacy_heatmap_palette(),
     main = "",
     labRow = labels,
     labCol = labels,
@@ -1058,6 +1063,7 @@ plot_heatmap_panel <- function(transformed, title, coldata = NULL) {
     matrix,
     scale = "row",
     margins = heatmap_margins(row_labels, col_labels),
+    col = legacy_heatmap_palette(),
     main = "",
     labRow = row_labels,
     labCol = col_labels,
