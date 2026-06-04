@@ -582,7 +582,7 @@ def render_html(
 </head>
 <body>
   <h1>{html.escape(title)}</h1>
-  <div class="counts">contrasts: {len(rows)}; ok: {ok}; blocked: {blocked}; failed: {failed}</div>
+  <div class="counts">contrasts: {len(rows)}; ok: {ok}; blocked: {blocked}; failed: {failed}; <a href="technical_report.pdf">printable technical PDF</a></div>
   {project_resources}
   {dtu_summary}
   <table>

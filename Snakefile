@@ -1003,6 +1003,8 @@ def branch_provenance_inputs(wildcards):
                                 f"{base}/differential/reports/summaries/summary_manifest.tsv",
                                 f"{base}/differential/reports/summaries/summary.done",
                                 f"{base}/differential/reports/asset_manifest.tsv",
+                                f"{base}/differential/reports/technical_report.pdf",
+                                f"{base}/differential/reports/technical_report.done",
                                 f"{base}/differential/reports/report_index.done",
                             ]
                         )
@@ -1151,6 +1153,8 @@ def branch_provenance_inputs(wildcards):
                     f"{small}/differential/reports/summaries/summary_manifest.tsv",
                     f"{small}/differential/reports/summaries/summary.done",
                     f"{small}/differential/reports/asset_manifest.tsv",
+                    f"{small}/differential/reports/technical_report.pdf",
+                    f"{small}/differential/reports/technical_report.done",
                     f"{small}/differential/reports/report_index.done",
                 ]
             )
@@ -1347,6 +1351,8 @@ def planned_branch_targets(wildcards):
                                         f"{BRANCH_DIR}/{assay}/{project}/differential/reports/summaries/summary.done",
                                         f"{BRANCH_DIR}/{assay}/{project}/differential/reports/index.html",
                                         f"{BRANCH_DIR}/{assay}/{project}/differential/reports/asset_manifest.tsv",
+                                        f"{BRANCH_DIR}/{assay}/{project}/differential/reports/technical_report.pdf",
+                                        f"{BRANCH_DIR}/{assay}/{project}/differential/reports/technical_report.done",
                                         f"{BRANCH_DIR}/{assay}/{project}/differential/reports/report_index.done",
                                     ]
                                 )
@@ -1499,6 +1505,8 @@ def planned_branch_targets(wildcards):
                             f"{BRANCH_DIR}/{assay}/{project}/smallrna/differential/reports/summaries/summary.done",
                             f"{BRANCH_DIR}/{assay}/{project}/smallrna/differential/reports/index.html",
                             f"{BRANCH_DIR}/{assay}/{project}/smallrna/differential/reports/asset_manifest.tsv",
+                            f"{BRANCH_DIR}/{assay}/{project}/smallrna/differential/reports/technical_report.pdf",
+                            f"{BRANCH_DIR}/{assay}/{project}/smallrna/differential/reports/technical_report.done",
                             f"{BRANCH_DIR}/{assay}/{project}/smallrna/differential/reports/report_index.done",
                         ]
                     )
@@ -1644,6 +1652,8 @@ def branch_report_inputs(wildcards):
                         inputs.extend(
                             [
                                 f"{base}/differential/reports/index.html",
+                                f"{base}/differential/reports/technical_report.pdf",
+                                f"{base}/differential/reports/technical_report.done",
                                 f"{base}/differential/reports/report_index.done",
                             ]
                         )
@@ -1706,6 +1716,8 @@ def branch_report_inputs(wildcards):
             inputs.extend(
                 [
                     f"{small}/differential/reports/index.html",
+                    f"{small}/differential/reports/technical_report.pdf",
+                    f"{small}/differential/reports/technical_report.done",
                     f"{small}/differential/reports/report_index.done",
                 ]
             )
@@ -3544,6 +3556,8 @@ rule render_smallrna_report_index:
     output:
         index=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/differential/reports/index.html",
         asset_manifest=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/differential/reports/asset_manifest.tsv",
+        technical_pdf=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/differential/reports/technical_report.pdf",
+        technical_done=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/differential/reports/technical_report.done",
         done=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/differential/reports/report_index.done"
     params:
         warnings_html=lambda wildcards: optional_shell_arg(
@@ -3564,6 +3578,13 @@ rule render_smallrna_report_index:
           --done {output.done:q} \
           {params.warnings_html} \
           > {log:q} 2>&1
+        python3 workflow/scripts/render_technical_pdf_report.py \
+          --assay smallrna \
+          --summary-manifest {input.manifest:q} \
+          --asset-manifest {output.asset_manifest:q} \
+          --output {output.technical_pdf:q} \
+          --done {output.technical_done:q} \
+          >> {log:q} 2>&1
         """
 
 
@@ -5250,6 +5271,8 @@ rule render_rnaseq_differential_report_index:
     output:
         html=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/reports/index.html",
         asset_manifest=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/reports/asset_manifest.tsv",
+        technical_pdf=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/reports/technical_report.pdf",
+        technical_done=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/reports/technical_report.done",
         done=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/reports/report_index.done"
     params:
         biotype_html=lambda wildcards: optional_shell_arg(
@@ -5328,6 +5351,13 @@ rule render_rnaseq_differential_report_index:
           {params.dtu_plan} \
           {params.dtu_method_manifest} \
           > {log:q} 2>&1
+        python3 workflow/scripts/render_technical_pdf_report.py \
+          --assay rnaseq \
+          --summary-manifest {input.summary_manifest:q} \
+          --asset-manifest {output.asset_manifest:q} \
+          --output {output.technical_pdf:q} \
+          --done {output.technical_done:q} \
+          >> {log:q} 2>&1
         """
 
 rule plan_deseq2_smoke:

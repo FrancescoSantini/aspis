@@ -345,6 +345,7 @@ def render_index(path: Path, rows: list[dict[str, str]], warnings_html: str = ""
 </head>
 <body>
   <h1>{html.escape(title_project)} smallRNA differential reports</h1>
+  <p><a href="technical_report.pdf">printable technical PDF</a></p>
   {warnings_block}
   <table><thead><tr>{header}</tr></thead><tbody>{''.join(body_rows)}</tbody></table>
 </body>

@@ -118,6 +118,7 @@ def rnaseq_sections(base: Path, base_dir: Path) -> list[str]:
                 table_link(base / "differential/gene_deseq2/contrast_plan.tsv", "gene contrast plan", base_dir, expected=False),
                 table_link(base / "differential/transcript_deseq2/contrast_plan.tsv", "transcript contrast plan", base_dir, expected=False),
                 file_link(base / "differential/reports/index.html", "RNA-seq differential report", base_dir, expected=False),
+                file_link(base / "differential/reports/technical_report.pdf", "RNA-seq technical PDF report", base_dir, expected=False),
                 file_link(base / "differential/isoform_switch/report/index.html", "isoform-switch report", base_dir, expected=False),
                 table_link(base / "differential/isoform_switch/isoform_switch_manifest.tsv", "isoform-switch manifest", base_dir, expected=False),
                 table_link(base / "differential/dtu/dtu_method_manifest.tsv", "DTU methods", base_dir, expected=False),
@@ -161,6 +162,7 @@ def smallrna_sections(base: Path, base_dir: Path) -> list[str]:
             [
                 table_link(small / "differential/mirna_deseq2/contrast_plan.tsv", "miRNA contrast plan", base_dir, expected=False),
                 file_link(small / "differential/reports/index.html", "smallRNA differential report", base_dir, expected=False),
+                file_link(small / "differential/reports/technical_report.pdf", "smallRNA technical PDF report", base_dir, expected=False),
                 table_link(small / "differential/target_enrichment/target_manifest.tsv", "target enrichment manifest", base_dir, expected=False),
                 table_link(small / "differential/target_feature_sets/target_feature_set_manifest.tsv", "target feature sets", base_dir, expected=False),
                 table_link(small / "differential/mirna_mrna_integration/mirna_mrna_manifest.tsv", "miRNA-mRNA integration", base_dir, expected=False),

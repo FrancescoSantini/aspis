@@ -371,7 +371,9 @@ differential/gene_deseq2/
 ```
 
 Report-level plots and enrichment live under `differential/reports/`. ORA/GSEA
-tables appear only when feature-set resources are configured.
+tables appear only when feature-set resources are configured. The same directory
+also contains `technical_report.pdf`, a printable plot-and-small-table digest for
+biologist-facing review.
 
 Isoform-switch outputs, when the layer is enabled and runnable, are expected
 under:
@@ -407,6 +409,7 @@ results/<run_id>/branches/smallrna/<project>/
     quantification/
     differential/
       reports/index.html
+      reports/technical_report.pdf
 ```
 
 The smallRNA report can include miRNA DESeq2 plots, target enrichment,

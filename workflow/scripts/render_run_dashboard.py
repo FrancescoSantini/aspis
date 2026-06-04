@@ -79,6 +79,7 @@ def branch_resources(assay: str, project: str, branch_dir: Path, base_dir: Path)
                 optional_link(base / "quantification/biotypes/biotype_summary.html", "biotypes", base_dir),
                 optional_link(base / "quantification/sample_qc/sample_qc_manifest.tsv", "sample QC", base_dir),
                 optional_link(base / "differential/reports/index.html", "differential report", base_dir),
+                optional_link(base / "differential/reports/technical_report.pdf", "technical PDF", base_dir),
                 optional_link(base / "differential/isoform_switch/report/index.html", "isoform switch", base_dir),
                 optional_link(base / "biological_warnings/warnings.html", "warnings", base_dir),
                 optional_link(base / "provenance/provenance_manifest.tsv", "provenance", base_dir),
@@ -91,6 +92,7 @@ def branch_resources(assay: str, project: str, branch_dir: Path, base_dir: Path)
                 optional_link(small / "preprocess/multiqc/multiqc_report.html", "post-trim MultiQC", base_dir),
                 optional_link(small / "length_qc/length_distribution.svg", "length QC", base_dir),
                 optional_link(small / "differential/reports/index.html", "differential report", base_dir),
+                optional_link(small / "differential/reports/technical_report.pdf", "technical PDF", base_dir),
                 optional_link(small / "biological_warnings/warnings.html", "warnings", base_dir),
                 optional_link(base / "provenance/provenance_manifest.tsv", "provenance", base_dir),
             ]

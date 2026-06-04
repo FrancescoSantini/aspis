@@ -12,6 +12,7 @@ dependencies:
   - sra-tools
   - fastqc
   - multiqc
+  - pillow
   - fastp
   - cutadapt
   - bowtie
