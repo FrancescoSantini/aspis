@@ -253,6 +253,107 @@ def render_dtu_summary(
 """
 
 
+def render_resource_row(
+    name: str,
+    status: str,
+    links: str,
+    detail: str,
+) -> str:
+    return (
+        "<tr>"
+        f"<td>{html.escape(name)}</td>"
+        f'<td class="status {status_class(status)}">{html.escape(status)}</td>'
+        f"<td>{links}</td>"
+        f"<td>{html.escape(detail)}</td>"
+        "</tr>"
+    )
+
+
+def resource_links_and_status(
+    items: list[tuple[str, str]],
+    output: Path,
+    not_requested_detail: str,
+    missing_detail: str,
+) -> tuple[str, str, str]:
+    provided = [(label, path) for label, path in items if path]
+    if not provided:
+        return "not_requested", "", not_requested_detail
+    existing = [(label, path) for label, path in provided if Path(path).exists()]
+    links = link_list(provided, output)
+    if len(existing) == len(provided):
+        return "ok", links, f"{len(existing)}/{len(provided)} expected files present"
+    return "missing", links, f"{missing_detail}; {len(existing)}/{len(provided)} expected files present"
+
+
+def render_project_resources(
+    output: Path,
+    biotype_html: str = "",
+    warnings_html: str = "",
+    isoform_switch_html: str = "",
+    isoform_switch_candidates: str = "",
+    isoform_switch_events: str = "",
+    isoform_switch_ncrna: str = "",
+    isoform_switch_plots: str = "",
+    isoform_switch_plots_pdf: str = "",
+    dtu_plan: str = "",
+    dtu_method_manifest: str = "",
+) -> str:
+    rows = []
+    for name, items, not_requested_detail, missing_detail in [
+        (
+            "Biotype Summary",
+            [("summary", biotype_html)],
+            "biotype summary is not enabled for this run",
+            "biotype summary was requested but its HTML output is missing",
+        ),
+        (
+            "Biological Warnings",
+            [("warnings", warnings_html)],
+            "biological warning report is not enabled for this run",
+            "biological warning report was requested but its HTML output is missing",
+        ),
+        (
+            "Isoform Switch",
+            [
+                ("isoform switch report", isoform_switch_html),
+                ("isoform switch candidates", isoform_switch_candidates),
+                ("isoform switch events", isoform_switch_events),
+                ("isoform switch ncRNA interpretation", isoform_switch_ncrna),
+                ("isoform switch plot manifest", isoform_switch_plots),
+                ("isoform switch PDF", isoform_switch_plots_pdf),
+            ],
+            "not requested; add isoform_switch to rnaseq_differential.levels and rebuild the report target",
+            "isoform-switch was requested but one or more report outputs are missing",
+        ),
+        (
+            "DTU / Splicing",
+            [("plan", dtu_plan), ("method manifest", dtu_method_manifest)],
+            "DTU/splicing methods are not configured for this run",
+            "DTU/splicing was requested but one or more report outputs are missing",
+        ),
+    ]:
+        status, links, detail = resource_links_and_status(
+            items,
+            output,
+            not_requested_detail,
+            missing_detail,
+        )
+        rows.append(render_resource_row(name, status, links, detail))
+    return "\n".join(
+        [
+            "<section>",
+            "  <h2>Project Resources</h2>",
+            '  <table class="resource-status">',
+            "    <thead><tr><th>resource</th><th>status</th><th>links</th><th>detail</th></tr></thead>",
+            "    <tbody>",
+            *rows,
+            "    </tbody>",
+            "  </table>",
+            "</section>",
+        ]
+    )
+
+
 def merged_rows(
     plan_rows: list[dict[str, str]],
     plots_by_key: dict[tuple[str, str, str], dict[str, str]],
@@ -440,22 +541,19 @@ def render_html(
     ok = sum(1 for row in rows if row["status"] == "ok")
     blocked = sum(1 for row in rows if row["status"] == "blocked")
     failed = sum(1 for row in rows if row["status"] == "failed")
-    project_links = link_list(
-        [
-            ("biotype summary", biotype_html),
-            ("biological warnings", warnings_html),
-            ("isoform switch report", isoform_switch_html),
-            ("isoform switch candidates", isoform_switch_candidates),
-            ("isoform switch events", isoform_switch_events),
-            ("isoform switch ncRNA interpretation", isoform_switch_ncrna),
-            ("isoform switch plots", isoform_switch_plots),
-            ("isoform switch PDF", isoform_switch_plots_pdf),
-            ("DTU plan", dtu_plan),
-            ("DTU method manifest", dtu_method_manifest),
-        ],
+    project_resources = render_project_resources(
         output,
+        biotype_html,
+        warnings_html,
+        isoform_switch_html,
+        isoform_switch_candidates,
+        isoform_switch_events,
+        isoform_switch_ncrna,
+        isoform_switch_plots,
+        isoform_switch_plots_pdf,
+        dtu_plan,
+        dtu_method_manifest,
     )
-    project_links_html = f'<div class="counts">project resources: {project_links}</div>' if project_links else ""
     dtu_summary = render_dtu_summary(dtu_plan_rows or [], dtu_method_rows or [], output)
     return f"""<!doctype html>
 <html lang="en">
@@ -466,8 +564,9 @@ def render_html(
     body {{ font-family: system-ui, -apple-system, Segoe UI, sans-serif; margin: 24px; max-width: 1440px; }}
     h1 {{ font-size: 28px; margin-bottom: 8px; }}
     .counts {{ color: #57606a; margin-bottom: 20px; }}
+    section {{ margin: 24px 0; }}
     table {{ border-collapse: collapse; width: 100%; }}
-    th, td {{ border: 1px solid #d0d7de; padding: 6px 8px; text-align: left; vertical-align: top; }}
+    th, td {{ border: 1px solid #d0d7de; padding: 7px 9px; text-align: left; vertical-align: top; }}
     th {{ background: #f6f8fa; position: sticky; top: 0; }}
     code {{ font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }}
     a {{ color: #0969da; text-decoration: none; }}
@@ -475,14 +574,16 @@ def render_html(
     .status {{ font-weight: 700; }}
     .status.ok {{ color: #1a7f37; }}
     .status.blocked {{ color: #9a6700; }}
+    .status.missing {{ color: #9a6700; }}
     .status.failed {{ color: #cf222e; }}
     .status.unknown {{ color: #57606a; }}
+    .resource-status td:nth-child(3) {{ min-width: 220px; }}
   </style>
 </head>
 <body>
   <h1>{html.escape(title)}</h1>
   <div class="counts">contrasts: {len(rows)}; ok: {ok}; blocked: {blocked}; failed: {failed}</div>
-  {project_links_html}
+  {project_resources}
   {dtu_summary}
   <table>
     <thead>

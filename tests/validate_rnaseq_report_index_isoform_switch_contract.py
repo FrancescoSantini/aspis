@@ -221,7 +221,35 @@ def main() -> int:
         assert "candidate_table" in asset_text
         assert "ncrna_switch_interpretation" in asset_text
         assert "plots_pdf" in asset_text
-    print("rnaseq_report_index_isoform_switch\tok\tlinks and assets present")
+
+        disabled_command = [
+            sys.executable,
+            str(script),
+            "--plan",
+            str(tmp / "plan.tsv"),
+            "--plots-manifest",
+            str(tmp / "plots.tsv"),
+            "--enrichment-manifest",
+            str(tmp / "enrichment.tsv"),
+            "--summary-manifest",
+            str(tmp / "summary.tsv"),
+            "--asset-manifest",
+            str(tmp / "asset_manifest_disabled.tsv"),
+            "--output",
+            str(tmp / "index_disabled.html"),
+            "--done",
+            str(tmp / "report_index_disabled.done"),
+        ]
+        completed = subprocess.run(disabled_command, check=False, capture_output=True, text=True)
+        if completed.returncode:
+            sys.stderr.write(completed.stdout)
+            sys.stderr.write(completed.stderr)
+            return completed.returncode
+        disabled_html = (tmp / "index_disabled.html").read_text(encoding="utf-8")
+        assert "Isoform Switch" in disabled_html
+        assert "not_requested" in disabled_html
+        assert "add isoform_switch to rnaseq_differential.levels" in disabled_html
+    print("rnaseq_report_index_isoform_switch\tok\tlinks, assets, and disabled status present")
     return 0
 
 

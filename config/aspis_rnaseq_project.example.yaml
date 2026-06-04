@@ -114,6 +114,8 @@ rnaseq_differential:
   levels:
     - gene
     - transcript
+    # Uncomment this to generate differential/isoform_switch/ reports and
+    # event-level exon-structure switch.svg diagrams.
     # - isoform_switch
   reports: true
   report_top_n: 50
