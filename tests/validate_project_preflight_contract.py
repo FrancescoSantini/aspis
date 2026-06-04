@@ -171,6 +171,24 @@ def main() -> int:
         assert_success(run_preflight(valid_rnaseq_config, "rnaseq", valid_report), "valid RNA-seq")
         assert_file_contains(valid_report, "preflight\tok", "valid RNA-seq")
 
+        bad_recipe_config = write(
+            tmp / "rnaseq_bad_recipe.yaml",
+            valid_rnaseq_config.read_text(encoding="utf-8")
+            + '''
+resource_recipes:
+  genome:
+    enabled: true
+    release: "110"
+    output_dir: resources/genome
+    fasta_url: https://example.invalid/genome.fa.gz
+''',
+        )
+        assert_failure_contains(
+            run_preflight(bad_recipe_config, "rnaseq"),
+            "enabled resource recipe without checksum",
+            "sha256/checksum",
+        )
+
         low_rep_rnaseq = rnaseq_intake(
             tmp,
             [

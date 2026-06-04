@@ -1,5 +1,18 @@
 # Real-Data Readiness Checklist
 
+## Reference Resource Policy
+
+Real analyses should consume explicit local reference files and indexes declared
+in the project config. Use the top-level `resources` inventory in the real
+config as the audit trail for genome FASTA/GTF, aligner indexes, miRNA
+references, contaminant references, target tables, and ORA/GSEA feature sets.
+The operational sections can reuse those values with YAML anchors.
+
+Automatic downloads/builds should stay disabled unless a `resource_recipes`
+entry pins the release/version, source URL, output directory, and checksum. This
+avoids breakage from upstream repository changes and makes real-data validation
+reproducible.
+
 Use this checklist before spending G100 time on a private project. It is meant
 to catch path, design, reference, and parity mistakes on the login node or in
 short scheduler jobs before launching full alignment and differential analyses.

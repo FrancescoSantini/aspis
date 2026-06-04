@@ -111,6 +111,99 @@ def clean_list(value: Any) -> list[str]:
     return [str(value).strip()] if str(value).strip() else []
 
 
+def flatten_recipe_values(value: Any) -> list[str]:
+    if value is None:
+        return []
+    if isinstance(value, dict):
+        values: list[str] = []
+        for nested in value.values():
+            values.extend(flatten_recipe_values(nested))
+        return values
+    if isinstance(value, (list, tuple)):
+        values: list[str] = []
+        for nested in value:
+            values.extend(flatten_recipe_values(nested))
+        return values
+    value_str = str(value).strip()
+    return [value_str] if value_str else []
+
+
+def collect_recipe_urls(recipe: dict[str, Any]) -> list[str]:
+    urls: list[str] = []
+    for key, value in recipe.items():
+        key_str = str(key)
+        if key_str == "url" or key_str == "urls" or key_str.endswith("_url") or key_str.endswith("_urls"):
+            urls.extend(flatten_recipe_values(value))
+    return urls
+
+
+def collect_recipe_checksums(recipe: dict[str, Any]) -> list[str]:
+    checksums: list[str] = []
+    for key, value in recipe.items():
+        key_str = str(key).lower()
+        if "sha256" in key_str or "checksum" in key_str:
+            checksums.extend(flatten_recipe_values(value))
+    return checksums
+
+
+def validate_one_resource_recipe(name: str, recipe: Any, parent_enabled: bool) -> list[str]:
+    label = f"resource_recipes.{name}"
+    if not isinstance(recipe, dict):
+        return [f"{label} must be a mapping"]
+    enabled = truthy(recipe.get("enabled"), parent_enabled)
+    if not enabled:
+        return []
+
+    errors: list[str] = []
+    if not str(recipe.get("output_dir", recipe.get("output", ""))).strip():
+        errors.append(f"{label}: enabled recipes must declare output_dir")
+    if not any(str(recipe.get(key, "")).strip() for key in ("release", "version")):
+        errors.append(f"{label}: enabled recipes must pin release or version")
+    if not collect_recipe_urls(recipe):
+        errors.append(f"{label}: enabled recipes must declare at least one source URL")
+    if not collect_recipe_checksums(recipe) and not truthy(recipe.get("allow_unchecked"), False):
+        errors.append(
+            f"{label}: enabled recipes must declare sha256/checksum values, "
+            "or set allow_unchecked: true explicitly"
+        )
+    return errors
+
+
+def validate_resource_recipes(config: dict[str, Any]) -> list[str]:
+    recipes = config.get("resource_recipes", {}) or {}
+    if not recipes:
+        return []
+    if not isinstance(recipes, dict):
+        return ["resource_recipes must be a mapping"]
+
+    errors: list[str] = []
+    parent_enabled = truthy(recipes.get("enabled"), False)
+    for name, recipe in recipes.items():
+        if name == "enabled":
+            continue
+        if name == "recipes" and isinstance(recipe, list):
+            for index, nested_recipe in enumerate(recipe, start=1):
+                nested_name = str(nested_recipe.get("name", index)) if isinstance(nested_recipe, dict) else str(index)
+                errors.extend(validate_one_resource_recipe(nested_name, nested_recipe, parent_enabled))
+            continue
+        errors.extend(validate_one_resource_recipe(str(name), recipe, parent_enabled))
+    return errors
+
+
+def validate_resource_inventory(config: dict[str, Any]) -> list[str]:
+    resources = config.get("resources", {}) or {}
+    if not resources:
+        return []
+    if not isinstance(resources, dict):
+        return ["resources must be a mapping"]
+
+    errors: list[str] = []
+    for name, block in resources.items():
+        if block is not None and block != "" and not isinstance(block, dict):
+            errors.append(f"resources.{name} must be a mapping")
+    return errors
+
+
 def resolve_path(value: Any) -> Path | None:
     text = str(value or "").strip()
     if not text:
@@ -596,6 +689,8 @@ def run_preflight(config_path: Path, assay: str) -> list[str]:
         return [str(exc)]
 
     errors.extend(validate_intake(columns, rows, assay))
+    errors.extend(validate_resource_inventory(config))
+    errors.extend(validate_resource_recipes(config))
     design = config.get("design", {}) or {}
     if assay == "rnaseq":
         errors.extend(validate_rnaseq_config(config))

@@ -9,42 +9,56 @@ plot/report layout safeguards, status wording, README usage cleanup, TODO
 consolidation, and operational-doc consistency are already implemented and
 tracked in the commit history.
 
-## 1. Prepare ORA/GSEA And SmallRNA Target Resources
+## 1. Finalize Reference Resource Declarations
 
-Purpose: avoid empty biological interpretation panels in the first full real run.
+Purpose: make real analyses reproducible without pretending that automatic
+resource download can safely guess the correct biological reference.
 
-Concrete work:
+Implemented now:
 
-- Prepare offline gene sets for RNA-seq, such as GO, Reactome, KEGG/MSigDB-style
-  resources, or custom toxicology/stress-response sets.
-- Confirm the identifier system used by each resource: Ensembl gene ID, gene
-  symbol, transcript ID, miRNA ID, or another stable key.
-- Prepare smallRNA target tables with miRNA, target gene, source database,
-  evidence type, species, and resource version.
-- Prepare target-gene feature sets for smallRNA target interpretation.
-- Keep resource version and provenance columns in resource files when possible.
+- Real project templates expose a top-level `resources` inventory for genome,
+  annotation, aligner indexes, miRNA references, contaminants, target tables,
+  and ORA/GSEA feature sets.
+- Operational rule sections reuse those values with YAML anchors. This lets a
+  user declare a path once while the current rules still receive explicit
+  section-level config values.
+- `resource_recipes` exists as a disabled-by-default preparation declaration for
+  future download/build targets.
+- Enabled recipes must be pinned by release/version, source URL, output
+  directory, and checksum unless `allow_unchecked: true` is written explicitly.
 
-Success condition: enrichment and target reports can distinguish real null
-results from missing resources.
+Still to do:
 
-## 2. Review Real Configs And Intake Sheets
+- Add actual `prepare_resources` Snakemake targets only after real-data
+  validation proves which resources are worth automating.
+- Add non-empty ORA/GSEA resource examples that are small enough to commit.
+- Keep downloaded FASTA/GTF/GMT/index files out of git and document only their
+  expected paths, release, checksums, and provenance.
 
-Purpose: avoid wasting G100 allocation on avoidable path/design errors.
+## 2. Harden Real Configs And Preflight Checks
 
-Concrete work:
+Purpose: fail before spending G100 allocation when a project has a path,
+resource, or design problem that can be detected on the login node.
 
-- Check every uploaded FASTQ path in the intake sheet.
-- Confirm `assay` values are `rnaseq` or `smallrna`.
-- Confirm paired RNA-seq rows have both `input_1` and `input_2`.
-- Confirm smallRNA rows are single-end unless there is a real exception.
-- Check `project`, `biospecimen_id`, `condition`, `treatment`, `dose`,
-  `dose_unit`, `time_h`, `replicate`, and `batch`.
-- Check contrast labels, time stratification, and any batch/design formula.
-- Check genome FASTA, GTF, STAR/HISAT2 indexes, miRBase FASTA, contaminant
-  FASTA, residual-genome references, and feature-set resources.
+Implemented now:
 
-Success condition: the first G100 dry-run exposes only real missing inputs or
-scheduler constraints, not simple table/config mistakes.
+- `validate_project_inputs.py` validates that `resources` is structured as an
+  inventory mapping.
+- `validate_project_inputs.py` validates enabled `resource_recipes` before the
+  analysis starts.
+- RNA-seq and smallRNA project templates show the intended resource structure
+  without requiring users to edit many repeated paths manually.
+
+Still to do:
+
+- Run preflight on the real HPC config after upload paths are final.
+- Confirm all real intake rows have stable `library_id`, `biospecimen_id`,
+  `project`, `assay`, `input_1`, `input_2`, and design columns.
+- Confirm real configs use HPC paths, not WSL paths.
+- Confirm SLURM partition settings:
+  - download/materialization work can use the download partition.
+  - normal analysis work can use the production partition.
+- Confirm real configs do not force synthetic smoke-test reference paths.
 
 ## 3. Make The Snakefile Easier To Maintain
 

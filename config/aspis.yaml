@@ -27,6 +27,11 @@ materialization:
 planning:
   allow_unclassified: false
 
+resources: {}
+
+resource_recipes:
+  enabled: false
+
 design:
   condition_col: condition
   control_label: control

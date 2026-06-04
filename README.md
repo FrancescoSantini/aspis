@@ -181,6 +181,14 @@ of a project template instead of editing the default file directly.
 
 Main settings to check before running:
 
+- `resources`: optional project-level inventory for genomes, annotations,
+  miRNA references, target tables, and feature-set resources. The real project
+  templates use YAML anchors so a path is declared once in `resources` and then
+  reused by the analysis sections.
+- `resource_recipes`: optional disabled-by-default declarations for future
+  download/build preparation. Enabled recipes must be pinned by release/version,
+  URL, output directory, and checksum; production analyses should normally point
+  to already validated local files.
 - `intake`: path to the intake TSV.
 - `paths`: output roots for `work/`, `meta/`, `results/`, logs, scratch, and
   SRA cache files.

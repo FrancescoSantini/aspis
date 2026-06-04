@@ -29,6 +29,43 @@ materialization:
 planning:
   allow_unclassified: false
 
+# Central inventory of reference resources used by the project.
+# The analysis sections below reference these values with YAML anchors so each
+# path is declared once but still reaches the rules that consume it.
+resources:
+  genome:
+    species: homo_sapiens
+    provider: ensembl
+    release: ""
+    fasta: &rnaseq_genome_fasta /path/to/genome.fa
+    gtf: &rnaseq_annotation_gtf /path/to/annotation.gtf
+    star_genome_dir: &rnaseq_star_genome_dir work/rnaseq_project/reference/star
+    hisat2_index_prefix: &rnaseq_hisat2_index_prefix ""
+  rnaseq_feature_sets:
+    gmt: &rnaseq_feature_set_gmt ""
+    tables: &rnaseq_feature_set_tables ""
+
+# Optional preparation recipes are intentionally disabled by default.
+# Enable only for a pinned resource release, with stable URLs and checksums.
+resource_recipes:
+  enabled: false
+  genome:
+    enabled: false
+    provider: ensembl
+    release: ""
+    output_dir: resources/genome
+    fasta_url: ""
+    fasta_sha256: ""
+    gtf_url: ""
+    gtf_sha256: ""
+  rnaseq_feature_sets:
+    enabled: false
+    provider: custom
+    version: ""
+    output_dir: resources/feature_sets/rnaseq
+    urls: []
+    sha256: []
+
 design:
   condition_col: condition
   control_label: control
@@ -66,10 +103,10 @@ rnaseq_alignment:
   star_command: STAR
   samtools_command: samtools
   # Set this empty when using a prebuilt STAR/HISAT2 index.
-  reference_fasta: /path/to/genome.fa
-  hisat2_index_prefix: ""
-  star_genome_dir: work/rnaseq_project/reference/star
-  annotation_gtf: /path/to/annotation.gtf
+  reference_fasta: *rnaseq_genome_fasta
+  hisat2_index_prefix: *rnaseq_hisat2_index_prefix
+  star_genome_dir: *rnaseq_star_genome_dir
+  annotation_gtf: *rnaseq_annotation_gtf
   strandness: ""
   infer_strandedness: true
   strandedness_inference_max_reads: 200000
@@ -90,8 +127,8 @@ rnaseq_quantification:
   featurecounts_command: featureCounts
   stringtie_command: stringtie
   gffcompare_command: gffcompare
-  reference_fasta: /path/to/genome.fa
-  annotation_gtf: /path/to/annotation.gtf
+  reference_fasta: *rnaseq_genome_fasta
+  annotation_gtf: *rnaseq_annotation_gtf
   read_length: 100
   threads: 8
   featurecounts_threads: 8
@@ -119,8 +156,8 @@ rnaseq_differential:
     # - isoform_switch
   reports: true
   report_top_n: 50
-  report_feature_sets: ""
-  report_feature_set_tables: ""
+  report_feature_sets: *rnaseq_feature_set_gmt
+  report_feature_set_tables: *rnaseq_feature_set_tables
   report_feature_set_min_overlap: 2
   report_feature_set_top_n: 20
   report_ranked_feature_set_permutations: 1000

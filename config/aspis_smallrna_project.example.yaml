@@ -29,6 +29,62 @@ materialization:
 planning:
   allow_unclassified: false
 
+# Central inventory of reference resources used by the project.
+# The analysis sections below reference these values with YAML anchors so each
+# path is declared once but still reaches the rules that consume it.
+resources:
+  mirbase:
+    provider: mirbase
+    release: "22.1"
+    species_prefix: &smallrna_mirbase_species hsa
+    mature_fasta: &smallrna_mirbase_fasta /path/to/mirbase/mature.fa
+    prepared_fasta: &smallrna_prepared_mirbase_fasta ""
+    saf: &smallrna_prepared_mirbase_saf ""
+    bowtie_index_prefix: &smallrna_bowtie_index_prefix ""
+  smallrna_contaminants:
+    fasta: &smallrna_contaminant_fasta /path/to/smallrna/contaminants.fa
+    bowtie_index_prefix: &smallrna_contaminant_index_prefix ""
+  residual_genome:
+    fasta: &smallrna_residual_genome_fasta /path/to/reference/genome.fa
+    gtf: &smallrna_residual_annotation_gtf /path/to/reference/annotation.gtf
+    bowtie_index_prefix: &smallrna_residual_genome_index_prefix ""
+  smallrna_targets:
+    target_table: &smallrna_target_table /path/to/smallrna/mirna_targets.tsv
+    target_tables: &smallrna_target_tables
+      - /path/to/smallrna/validated_targets.tsv
+      - /path/to/smallrna/predicted_targets.tsv
+    target_cache: &smallrna_target_cache /path/to/smallrna/multimir_cache.tsv
+    target_feature_sets: &smallrna_target_feature_sets ""
+    target_feature_set_tables: &smallrna_target_feature_set_tables /path/to/smallrna/target_feature_sets.tsv
+
+# Optional preparation recipes are intentionally disabled by default.
+# Enable only for a pinned resource release, with stable URLs and checksums.
+resource_recipes:
+  enabled: false
+  mirbase:
+    enabled: false
+    provider: mirbase
+    release: "22.1"
+    output_dir: resources/mirbase
+    mature_url: ""
+    mature_sha256: ""
+    hairpin_url: ""
+    hairpin_sha256: ""
+  smallrna_contaminants:
+    enabled: false
+    provider: custom
+    version: ""
+    output_dir: resources/smallrna_contaminants
+    urls: []
+    sha256: []
+  smallrna_targets:
+    enabled: false
+    provider: custom
+    version: ""
+    output_dir: resources/smallrna_targets
+    urls: []
+    sha256: []
+
 design:
   condition_col: condition
   control_label: control
@@ -72,11 +128,11 @@ smallrna:
 
   reference_run: true
   reference_dir: work/smallrna_project/reference
-  mirbase_fasta: /path/to/mirbase/mature.fa
-  mirbase_species_prefix: hsa
+  mirbase_fasta: *smallrna_mirbase_fasta
+  mirbase_species_prefix: *smallrna_mirbase_species
   mirbase_replace_u_with_t: true
-  prepared_mirbase_fasta: ""
-  prepared_mirbase_saf: ""
+  prepared_mirbase_fasta: *smallrna_prepared_mirbase_fasta
+  prepared_mirbase_saf: *smallrna_prepared_mirbase_saf
 
   build_bowtie_index: true
   build_contaminant_index: true
@@ -84,18 +140,18 @@ smallrna:
   bowtie_command: bowtie
   samtools_command: samtools
   index_threads: 4
-  bowtie_index_prefix: ""
-  contaminant_fasta: /path/to/smallrna/contaminants.fa
-  contaminant_index_prefix: ""
+  bowtie_index_prefix: *smallrna_bowtie_index_prefix
+  contaminant_fasta: *smallrna_contaminant_fasta
+  contaminant_index_prefix: *smallrna_contaminant_index_prefix
   contaminant_mismatches: 1
   alignment_mismatches: 2
   alignment_multi_alignments: 10
   alignment_extra_args: "--best --strata"
   residual_run: true
   build_residual_genome_index: true
-  residual_genome_fasta: /path/to/reference/genome.fa
-  residual_genome_index_prefix: ""
-  residual_annotation_gtf: /path/to/reference/annotation.gtf
+  residual_genome_fasta: *smallrna_residual_genome_fasta
+  residual_genome_index_prefix: *smallrna_residual_genome_index_prefix
+  residual_annotation_gtf: *smallrna_residual_annotation_gtf
   residual_mismatches: 1
   residual_multi_alignments: 10
   residual_extra_args: "--best --strata"
@@ -118,19 +174,17 @@ smallrna:
   log2fc: 1.0
 
   target_enrichment_mode: table
-  target_table: /path/to/smallrna/mirna_targets.tsv
-  target_tables:
-    # Optional additional target sources. Tables may expose source/source_type
-    # columns to label validated, predicted, conserved, or expressed targets.
-    - /path/to/smallrna/validated_targets.tsv
-    - /path/to/smallrna/predicted_targets.tsv
+  target_table: *smallrna_target_table
+  # Optional additional target sources. Tables may expose source/source_type
+  # columns to label validated, predicted, conserved, or expressed targets.
+  target_tables: *smallrna_target_tables
   # Optional cached database export, for example a local multiMiR TSV. This is
   # consumed offline and never triggers network retrieval on the cluster.
-  target_cache: /path/to/smallrna/multimir_cache.tsv
+  target_cache: *smallrna_target_cache
   target_min_overlap: 1
   target_top_n: 20
-  target_feature_sets: ""
-  target_feature_set_tables: /path/to/smallrna/target_feature_sets.tsv
+  target_feature_sets: *smallrna_target_feature_sets
+  target_feature_set_tables: *smallrna_target_feature_set_tables
   target_feature_set_min_overlap: 2
   target_feature_set_top_n: 20
 
