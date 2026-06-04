@@ -4,6 +4,10 @@
 # config such as config/aspis_rnaseq_project.example.yaml or
 # config/aspis_smallrna_project.example.yaml, then replace paths with local
 # files prepared for the project.
+#
+# Tiny non-biological examples are available under examples/resources/ when you
+# need to verify that report panels are wired correctly before preparing real
+# GO/Reactome/KEGG/MSigDB or target resources.
 
 rnaseq_differential:
   # GMT files: SET_ID, DESCRIPTION, FEATURE_ID...

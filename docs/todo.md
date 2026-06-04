@@ -7,10 +7,10 @@ here so that remaining work is tracked in one place.
 
 While the complete private FASTQ dataset is still uploading to G100, use
 `docs/work_while_uploading.md` to track useful work that does not require the
-full dataset. Completed report-readability, usage-documentation, and resource
-inventory work has been removed from that active list. Real-data-dependent
-preflight, final config review, and full validation items are tracked here
-instead.
+full dataset. Completed report-readability, usage-documentation, resource
+inventory, and offline resource example work has been removed from that active
+list. Real-data-dependent preflight, final config review, and full validation
+items are tracked here instead.
 
 ## Current Validation Status
 
@@ -126,9 +126,9 @@ resources.
 
 Tasks:
 
-- Provide practical offline examples for GO, Reactome, KEGG/MSigDB-style,
+- Replace the committed toy examples with real GO, Reactome, KEGG/MSigDB-style,
   custom gene sets, transcript-to-gene mappings, miRNA target tables, and
-  target-gene feature sets.
+  target-gene feature sets for production projects.
 - Propagate resource names, versions, evidence classes, and provenance columns
   to outputs.
 - Add explicit status rows for missing or unusable resources.
@@ -275,7 +275,8 @@ Acceptance criteria:
 ## P1 - Workflow Architecture
 
 The root `Snakefile` is intentionally the user entrypoint, but it is now large
-enough to be difficult to reason about.
+enough to be difficult to reason about. The current candidate split map is in
+`docs/snakefile_maintainability.md`.
 
 Tasks:
 

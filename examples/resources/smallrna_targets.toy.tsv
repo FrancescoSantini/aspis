@@ -1,0 +1,7 @@
+mirna_id	target_id	target_symbol	database	source	source_type	target_evidence_type	resource_version	evidence
+hsa-miR-1-3p	GENE_A	GENE_A	ASPIS_TOY	toy_validated	validated	validated	toy_2026_06	luciferase_fixture
+hsa-miR-1-3p	GENE_C	GENE_C	ASPIS_TOY	toy_validated	validated	validated	toy_2026_06	luciferase_fixture
+hsa-miR-2-3p	GENE_A	GENE_A	ASPIS_TOY	toy_predicted	predicted	predicted	toy_2026_06	seed_fixture
+hsa-miR-2-3p	GENE_D	GENE_D	ASPIS_TOY	toy_predicted	predicted	predicted	toy_2026_06	seed_fixture
+hsa-miR-3-5p	GENE_B	GENE_B	ASPIS_TOY	toy_curated	user_provided	user_provided	toy_2026_06	manual_fixture
+hsa-miR-4-5p	GENE_E	GENE_E	ASPIS_TOY	toy_curated	user_provided	user_provided	toy_2026_06	manual_fixture

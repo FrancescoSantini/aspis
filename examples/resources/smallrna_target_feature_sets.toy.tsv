@@ -1,0 +1,7 @@
+set_id	feature_id	source	collection	resource_version	description
+TOY_TARGET_STRESS	GENE_A	ASPIS_TOY	target_gene_set	toy_2026_06	Toy target stress genes
+TOY_TARGET_STRESS	GENE_C	ASPIS_TOY	target_gene_set	toy_2026_06	Toy target stress genes
+TOY_TARGET_STRESS	GENE_E	ASPIS_TOY	target_gene_set	toy_2026_06	Toy target stress genes
+TOY_TARGET_CELL_CYCLE	GENE_B	ASPIS_TOY	target_gene_set	toy_2026_06	Toy target cell-cycle genes
+TOY_TARGET_CELL_CYCLE	GENE_D	ASPIS_TOY	target_gene_set	toy_2026_06	Toy target cell-cycle genes
+TOY_TARGET_BACKGROUND	GENE_G	ASPIS_TOY	target_gene_set	toy_2026_06	Toy target background genes

@@ -6,38 +6,17 @@ real-data run, but they do not replace full real-data validation.
 
 Completed items have been removed from the active list. Report readability,
 plot/report layout safeguards, status wording, README usage cleanup, TODO
-consolidation, operational-doc consistency, resource inventory, and recipe
-preflight checks are already implemented and tracked in the commit history.
+consolidation, operational-doc consistency, resource inventory, recipe
+preflight checks, offline toy resource examples, and resource provenance
+documentation are already implemented and tracked in the commit history.
 
 Upload-dependent preflight and final real-config review items are tracked in
 `docs/todo.md`.
 
-## 1. Finish Offline Resource Examples And Provenance
-
-Purpose: make enrichment and target reports informative as soon as real data run.
-
-Implemented now:
-
-- Real project templates expose a top-level `resources` inventory for genome,
-  annotation, aligner indexes, miRNA references, contaminants, target tables,
-  and ORA/GSEA feature sets.
-- Operational rule sections reuse those values with YAML anchors. This lets a
-  user declare a path once while the current rules still receive explicit
-  section-level config values.
-- `resource_recipes` exists as a disabled-by-default preparation declaration for
-  future download/build targets.
-- Enabled recipes must be pinned by release/version, source URL, output
-  directory, and checksum unless `allow_unchecked: true` is written explicitly.
-
-Still useful before upload finishes:
-
-- Add non-empty ORA/GSEA resource examples that are small enough to commit.
-- Keep downloaded FASTA/GTF/GMT/index files out of git and document only their
-  expected paths, release, checksums, and provenance.
-
-## 2. Make The Snakefile Easier To Maintain
+## 1. Make The Snakefile Easier To Maintain
 
 Purpose: reduce future fragility without changing the user entry point.
+The current low-risk split evaluation is in `docs/snakefile_maintainability.md`.
 
 Concrete work:
 

@@ -214,7 +214,8 @@ Main settings to check before running:
   runs.
 
 Feature-set ORA/GSEA resources are documented in
-`docs/feature_set_resources.md`. Without configured feature sets, enrichment
+`docs/feature_set_resources.md`, with tiny parser/report examples under
+`examples/resources/`. Without configured feature sets, enrichment
 tables and report panels will be empty or explicitly marked as not configured.
 
 Operational planning notes:

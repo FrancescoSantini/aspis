@@ -1,0 +1,5 @@
+set_id	feature_id	source	collection	resource_version	description
+TOY_MIRNA_SEED_A	hsa-miR-1-3p	ASPIS_TOY	mirna_seed_family	toy_2026_06	Toy miRNA seed family A
+TOY_MIRNA_SEED_A	hsa-miR-2-3p	ASPIS_TOY	mirna_seed_family	toy_2026_06	Toy miRNA seed family A
+TOY_MIRNA_CLUSTER_A	hsa-miR-1-3p	ASPIS_TOY	mirna_cluster	toy_2026_06	Toy genomic miRNA cluster A
+TOY_MIRNA_CLUSTER_B	hsa-miR-3-5p	ASPIS_TOY	mirna_cluster	toy_2026_06	Toy genomic miRNA cluster B

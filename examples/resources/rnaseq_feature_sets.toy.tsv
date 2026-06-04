@@ -1,0 +1,10 @@
+set_id	feature_id	source	collection	resource_version	description
+TOY_STRESS_RESPONSE	GENE_A	ASPIS_TOY	custom_pathway	toy_2026_06	Toy stress response genes
+TOY_STRESS_RESPONSE	GENE_C	ASPIS_TOY	custom_pathway	toy_2026_06	Toy stress response genes
+TOY_STRESS_RESPONSE	GENE_E	ASPIS_TOY	custom_pathway	toy_2026_06	Toy stress response genes
+TOY_CELL_CYCLE	GENE_B	ASPIS_TOY	custom_pathway	toy_2026_06	Toy cell-cycle genes
+TOY_CELL_CYCLE	GENE_D	ASPIS_TOY	custom_pathway	toy_2026_06	Toy cell-cycle genes
+TOY_CELL_CYCLE	GENE_F	ASPIS_TOY	custom_pathway	toy_2026_06	Toy cell-cycle genes
+TOY_BACKGROUND	GENE_G	ASPIS_TOY	custom_pathway	toy_2026_06	Toy background set
+TOY_BACKGROUND	GENE_H	ASPIS_TOY	custom_pathway	toy_2026_06	Toy background set
+TOY_BACKGROUND	GENE_I	ASPIS_TOY	custom_pathway	toy_2026_06	Toy background set

@@ -8,6 +8,26 @@ the project config.
 This avoids hidden network/database state on clusters and makes the enrichment
 universe auditable.
 
+## Committed Toy Resource Bundle
+
+Tiny non-biological examples live under `examples/resources/`. They are useful
+for checking that ORA/GSEA and target-resource report panels are wired
+correctly, but they must not be used for biological interpretation.
+
+```yaml
+rnaseq_differential:
+  report_feature_sets: examples/resources/rnaseq_feature_sets.toy.gmt
+  report_feature_set_tables: examples/resources/rnaseq_feature_sets.toy.tsv
+
+smallrna:
+  target_table: examples/resources/smallrna_targets.toy.tsv
+  target_feature_set_tables: examples/resources/smallrna_target_feature_sets.toy.tsv
+  mirna_feature_set_tables: examples/resources/smallrna_mirna_feature_sets.toy.tsv
+```
+
+The accompanying provenance manifest is
+`examples/resources/resource_provenance.toy.tsv`.
+
 ## Where Resources Are Used
 
 RNA-seq differential reports use:
@@ -167,6 +187,22 @@ Matched RNA-seq integration uses additional controlled labels:
   testing.
 
 Aggregate rows spanning multiple evidence classes use `mixed`.
+
+## Provenance Manifest
+
+For real projects, keep a resource provenance table beside the prepared
+resources. ASPIS does not require this manifest yet, but it makes runs auditable
+and mirrors the checked toy bundle.
+
+Recommended columns:
+
+```text
+resource_id	resource_kind	path	provider	source	collection	release	resource_version	url	checksum_sha256	prepared_by	prepared_at	notes
+```
+
+Use `resource_kind` values such as `genome_fasta`, `annotation_gtf`,
+`rnaseq_feature_set_gmt`, `rnaseq_feature_set_table`, `smallrna_target_table`,
+`smallrna_target_feature_set_table`, and `smallrna_mirna_feature_set_table`.
 
 ## Recommended Resource Layout
 
