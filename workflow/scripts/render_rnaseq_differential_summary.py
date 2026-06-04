@@ -429,10 +429,54 @@ def enrichment_panel(resources: dict[str, dict[str, str]], html_path: Path) -> s
         ("Feature-Set Enrichment", "feature_set_plot"),
         ("Ranked Feature-Set Enrichment", "ranked_feature_set_plot"),
     ]:
-        path = resources.get(resource, {}).get("path", "")
-        if path:
+        row = resources.get(resource, {})
+        path = row.get("path", "")
+        if path and row.get("status") == "ok":
             panels.append(artifact_panel(label, path, html_path, "image/svg+xml"))
     return "\n" + "\n".join(panels) if panels else ""
+
+
+def enrichment_status_table(resources: dict[str, dict[str, str]], html_path: Path) -> str:
+    if not resources:
+        return "<p>No enrichment resources were recorded.</p>"
+    order = [
+        "feature_set_universe",
+        "feature_set_results",
+        "feature_set_plot",
+        "ranked_feature_set_results",
+        "ranked_feature_set_plot",
+        "ranked_features",
+        "significant_features",
+        "up_features",
+        "down_features",
+    ]
+    rows = []
+    for resource in order:
+        row = resources.get(resource)
+        if not row:
+            continue
+        status = row.get("status", "unknown") or "unknown"
+        path = row.get("path", "")
+        if path and Path(path).exists():
+            path_cell = f'<a href="{html.escape(relative_link(path, html_path))}">file</a>'
+        elif path:
+            path_cell = html.escape(path)
+        else:
+            path_cell = ""
+        rows.append(
+            "<tr>"
+            f"<td><code>{html.escape(resource)}</code></td>"
+            f'<td class="status {html.escape(status)}">{html.escape(status)}</td>'
+            f"<td>{html.escape(row.get('reason', ''))}</td>"
+            f"<td>{html.escape(row.get('n_features', ''))}</td>"
+            f"<td>{path_cell}</td>"
+            "</tr>"
+        )
+    body = "\n".join(rows) or '<tr><td colspan="5">No enrichment resources were recorded.</td></tr>'
+    return f"""<table>
+    <tr><th>resource</th><th>status</th><th>reason</th><th>features</th><th>file</th></tr>
+{body}
+  </table>"""
 
 
 def render_html(
@@ -508,6 +552,9 @@ def render_html(
     .plots {{ display: grid; gap: 28px; grid-template-columns: 1fr; }}
     .plot img {{ border: 1px solid #d0d7de; display: block; height: auto; max-width: 100%; }}
     .plot-source, .plot-note {{ color: #57606a; margin: 0.4rem 0 0; }}
+    .status.ok {{ color: #1a7f37; font-weight: 700; }}
+    .status.not_configured {{ color: #57606a; font-weight: 700; }}
+    .status.resource_missing, .status.invalid_resource, .status.insufficient_mapping {{ color: #9a6700; font-weight: 700; }}
   </style>
 </head>
 <body>
@@ -522,6 +569,8 @@ def render_html(
   <div class="plots">
 {plots}
   </div>
+  <h2>Feature-Set Enrichment Status</h2>
+  {enrichment_status_table(resources, output)}
   <h2>Top Significant Features</h2>
   {top_feature_table(filtered_rows, top_n)}
   <h2>Files</h2>
