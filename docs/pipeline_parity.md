@@ -1,10 +1,13 @@
 # ASPIS Pipeline Parity Map
 
 This document tracks feature parity between the legacy Snakemake files under
-`workflow/` and the refactored root `Snakefile`. Legacy removal is deliberately
-separate from this map; a legacy component should only be removed after its
-replacement is implemented and covered by a local smoke test, and where relevant
-one G100 smoke or milestone run.
+`workflow/` and the refactored root `Snakefile`. It is not the general TODO
+list. The consolidated backlog and validation priorities live in
+`docs/todo.md`.
+
+Legacy removal is deliberately separate from this map; a legacy component
+should only be removed after its replacement is implemented and covered by a
+local smoke test, and where relevant one G100 smoke or milestone run.
 
 ## Shared Infrastructure
 
@@ -63,10 +66,11 @@ one G100 smoke or milestone run.
 | miRNA summary report | Implemented in lightweight form | `plan_smallrna_report.py`, `render_smallrna_report_summary.py`, `render_smallrna_report_index.py`; includes MA/volcano/PCA/heatmap links, residual genome read fate when enabled, and `asset_manifest.tsv` inventories for parity review | Compare layout and plot set against preferred legacy outputs |
 | Real-project G100 entry point | Added | `tests/run_g100_smallrna_project.sh`, `docs/smallrna_real_project.md` | Use on first non-toy smallRNA dataset |
 
-## Immediate Implementation Order
+## Remaining Work
 
-1. Run the capped public-SRA RNA-seq and smallRNA G100 milestones in `docs/g100_public_sra_tests.md` whenever private real data are unavailable but public accession ingestion must be checked.
-2. Prepare one real RNA-seq or smallRNA project config from the relevant `config/aspis_*_project.example.yaml` template, follow `docs/real_data_readiness.md`, and dry-run it on G100 with the matching `tests/run_g100_*_project.sh` helper.
-3. For the first real smallRNA project, inspect residual-genome `biotype_counts.tsv` and `feature_counts.tsv` to decide whether the configured contaminant FASTA should be expanded or whether residual classes should be reported separately.
-4. Run one small, real project milestone on G100 and compare count matrices, DESeq2 contrasts, enrichment, residual-read fate, and reports against the legacy outputs you liked.
-5. Improve the smallRNA and RNA-seq report layer where real-output comparisons show missing labels, plot aesthetics, or summary fields.
+Detailed implementation priorities are maintained in `docs/todo.md`.
+
+Use this parity map only to answer whether a legacy component has a current
+replacement and what contract replaced it. Use the consolidated TODO for
+real-data validation, report usability, optional tool validation, legacy
+quarantine, and future automation work.

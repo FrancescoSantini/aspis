@@ -4,6 +4,10 @@ Use this checklist before spending G100 time on a private project. It is meant
 to catch path, design, reference, and parity mistakes on the login node or in
 short scheduler jobs before launching full alignment and differential analyses.
 
+ASPIS has passed initial local real-data smoke validation on subsets from the
+legacy project. Full production validation on complete real RNA-seq and
+smallRNA datasets is still tracked in `docs/todo.md`.
+
 ## 1. Start From A Project Template
 
 Copy the assay-specific config and intake templates:
@@ -260,7 +264,7 @@ For smallRNA, compare at least:
 - `smallrna/differential/target_enrichment/target_manifest.tsv` when target
   enrichment is enabled.
 
-## 7. Review Residual SmallRNA Reads
+## 8. Review Residual SmallRNA Reads
 
 The smallRNA workflow does not discard reads after miRBase alignment. When
 `smallrna.residual_run: true`, miRBase-unmapped reads are aligned to the
@@ -277,7 +281,7 @@ residual reads are snoRNA, snRNA, rRNA, tRNA, adapter-derived, or another known
 technical class, decide whether to expand the contaminant FASTA or keep that
 class as a reported biological/technical read fate.
 
-## 8. Check Environment Reports
+## 9. Check Environment Reports
 
 Every major workflow layer writes an environment report. Review the global
 report first:
@@ -297,7 +301,7 @@ or partial run has completed enough upstream outputs; it summarizes the
 design, configured biological references, sample-level QC, quantification
 layers, and differential/report manifests without duplicating large data files.
 
-## 9. Validate New Biological Layers On Real Data
+## 10. Validate New Biological Layers On Real Data
 
 These layers are implemented as workflow contracts, but their biological
 interpretation needs the real datasets and project metadata:
