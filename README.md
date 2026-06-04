@@ -2,480 +2,449 @@
 
 **Assay-aware Sequencing Pipeline for Integrative Studies**
 
-ASPIS is a Snakemake-based sequencing workflow under active refactor. The
-current repository contains legacy long RNA-seq and small RNA/miRNA workflows
-developed for toxicogenomic exposure experiments, plus the first pieces of a
-more general architecture for assay-aware sequencing analysis.
+ASPIS is a Snakemake 9 workflow for sequencing projects that may contain local
+FASTQ files, public INSDC/SRA run accessions, RNA-seq libraries, small RNA
+libraries, or a mixture of those assays. The current stable entry point is the
+repository root `Snakefile`.
 
-The long-term goal is a workflow that can accept public accessions or local
-FASTQ files, normalize them into a common manifest, identify technical layout
-and assay information where possible, and then run the appropriate analysis
-branch locally or on an HPC cluster.
+The pipeline is being refactored around a simple rule: downstream analysis must
+not guess from scattered filenames. Inputs are first materialized into canonical
+FASTQs, described in manifests, and only then routed into assay-specific
+analysis branches.
 
-ASPIS uses canonical assay codes in tables:
+ASPIS uses these canonical assay codes:
 
-- `rnaseq`: conventional short-read RNA-seq/mRNA-seq style analysis.
-- `smallrna`: small RNA/miRNA style analysis.
+- `rnaseq`: conventional short-read RNA-seq / mRNA-seq style analysis.
+- `smallrna`: small RNA / miRNA style analysis.
 
-The code avoids `longRNA-seq` terminology because it can be confused with
-long-read RNA sequencing.
+The project avoids `longRNA-seq` as a public term because it can be confused
+with long-read sequencing.
 
-## Current Status
+## Current Scope
 
-This codebase is not yet a polished general-purpose pipeline. It currently
-contains a new first-stage entry point plus three legacy workflow entry points:
+Implemented and actively used layers include:
 
-- `Snakefile`: materializes intake rows into canonical FASTQs, a manifest, an
-  assay-level analysis plan, and an environment report.
-- `workflow/prefetchSRA`: downloads SRA accessions listed in the sample sheet.
-- `workflow/Snakefile`: legacy long RNA-seq workflow.
-- `workflow/SmallRNA`: legacy small RNA/miRNA workflow.
+- local FASTQ and public `SRR` / `ERR` / `DRR` input materialization;
+- single-end and paired-end layout detection;
+- ENA metadata lookup for public runs before SRA download;
+- branch planning from a materialized manifest;
+- environment reporting;
+- raw FASTQ inspection, FastQC, and MultiQC;
+- RNA-seq preprocessing with fastp and post-preprocessing MultiQC;
+- RNA-seq alignment with STAR or HISAT2, with samtools QC and MultiQC;
+- RNA-seq gene counts with featureCounts;
+- RNA-seq transcript assembly, merge, annotation, and quantification with
+  StringTie and gffcompare;
+- RNA-seq gene and transcript DESeq2 reports;
+- optional RNA-seq isoform-switch planning/reporting layers;
+- smallRNA preprocessing, alignment, quantification, DESeq2, reporting, and
+  optional target/resource-backed interpretation.
 
-The current workflows assume a specific sample-sheet structure and several
-human-specific analysis choices. The planned refactor will replace this with a
-materialized manifest contract before extending the pipeline further.
+Some advanced biological interpretation depends on user-provided resources.
+Feature-set ORA/GSEA, miRNA target enrichment, and rich isoform-switch
+consequence annotation are only meaningful when the corresponding resources are
+configured.
 
-## What ASPIS Does Today
+## Installation
 
-The legacy long RNA-seq branch includes:
-
-- SRA conversion or local FASTQ discovery.
-- FastQC before and after trimming.
-- Trimmomatic trimming for paired-end and single-end reads.
-- HISAT2 alignment.
-- BAM sorting and alignment QC with samtools.
-- StringTie assembly and merged annotation.
-- Gene and transcript count matrix generation.
-- DESeq2 differential expression.
-- Isoform switch analysis.
-- GO, KEGG, and Reactome enrichment.
-- HTML summary reporting.
-
-The legacy small RNA branch includes:
-
-- miRBase reference preparation.
-- Adapter trimming with cutadapt.
-- Contaminant depletion with Bowtie.
-- miRNA alignment with Bowtie.
-- featureCounts quantification.
-- DESeq2 differential expression.
-- miRNA target lookup and enrichment.
-- HTML summary reporting.
-
-## Repository Layout
-
-```text
-config/
-  aspis.yaml               First-stage materialization settings
-  aspis_alignment_smoke.yaml
-                           Isolated local HISAT2 alignment smoke-test settings
-  aspis_star_alignment_smoke.yaml
-                           Isolated local STAR alignment smoke-test settings
-  aspis_quantification_smoke.yaml
-                           Isolated local quantification smoke-test settings
-  aspis_sra_smoke.yaml     Isolated partial public SRA smoke-test settings
-  intake.tsv               Minimal intake sheet for ASPIS materialization
-  intake_sra_smoke.tsv     Optional SRA smoke-test intake sheet
-  config.yaml              Workflow settings and thresholds
-  sample_sheet.csv         Current working sample sheet
-  sample_sheet_tests.csv   Small SRA/local test sample sheet
-
-schemas/
-  intake.schema.json
-  materialized_manifest.schema.json
-  analysis_plan.schema.json
-  branch_samples.schema.json
-  branch_design.schema.json
-  fastq_inspection.schema.json
-  fastqc_manifest.schema.json
-  rnaseq_preprocessed_samples.schema.json
-  rnaseq_alignment_plan.schema.json
-  rnaseq_aligned_samples.schema.json
-  rnaseq_alignment_qc_manifest.schema.json
-  rnaseq_quantification_plan.schema.json
-  rnaseq_featurecounts_manifest.schema.json
-  rnaseq_stringtie_manifest.schema.json
-
-envs/
-  aspis-snakemake.yaml     Snakemake 9 orchestration environment
-
-profiles/
-  slurm/                   Snakemake 8/9 SLURM executor profile skeleton
-
-docs/
-  g100_quickstart.md       CINECA Galileo100 testing notes
-  sra_smoke_test.md        Public SRA materialization smoke-test notes
-
-tests/
-  data/                    Tiny local FASTQ fixtures
-  reference/               Tiny synthetic reference for alignment smoke tests
-
-Snakefile                  New ASPIS materialization entry point
-
-workflow/
-  Snakefile                Legacy long RNA-seq workflow
-  SmallRNA                 Legacy small RNA/miRNA workflow
-  prefetchSRA              Legacy SRA prefetch workflow
-  scripts/                 R helper scripts used by the workflows
-  profiles/slurm/          Legacy cookiecutter-style SLURM profile
-```
-
-Generated outputs, downloaded references, raw samples, logs, Snakemake state,
-and DAG/rulegraph artifacts are intentionally ignored by Git.
-
-## Current Input Model
-
-The new first-stage workflow reads `config/intake.tsv`. The minimal required
-columns are:
-
-```text
-library_id,input_1
-```
-
-Recommended additional columns include:
-
-```text
-biospecimen_id,project,input_2,assay_hint,condition,treatment,dose,dose_unit,time_h,replicate,batch
-```
-
-`assay_hint` is an explicit user override. ASPIS also accepts an `assay`
-column with the same values for imported sheets that already use that name.
-
-The legacy analysis workflows still read `config/sample_sheet.csv`. It uses
-these legacy columns:
-
-```text
-sample_name,run,biosample,bioproject,condition,covariate1,covariate2
-```
-
-In the current dataset, `bioproject` also carries assay information through
-suffixes such as `_long` and `_short`. This is a legacy convention and should
-not be treated as the final data model.
-
-The planned intake model will separate these concepts:
-
-- `library_id`: unique analysis unit.
-- `biospecimen_id`: biological source material.
-- `project`: internal project or cohort.
-- `assay`: `rnaseq`, `smallrna`, or another supported assay.
-- `input_1` / `input_2`: accession or FASTQ path inputs.
-- named experimental metadata such as `condition`, `time_h`, `dose`,
-  `dose_unit`,
-  `replicate`, and `batch`.
-
-## Input Resolution
-
-ASPIS currently resolves each intake row as one library analysis unit:
-
-- if `input_1` is an existing FASTQ path, the row is treated as local data;
-- if `input_1` is an `SRR`, `ERR`, or `DRR` run accession, the row is treated
-  as a public INSDC/SRA-family run;
-- local rows are single-end when `input_2` is empty and paired-end when
-  `input_2` contains a second FASTQ path;
-- public run rows are classified as single-end or paired-end after conversion
-  by checking whether a second read file was produced.
-
-Source type and read layout are therefore materialized from the inputs. Assay
-routing is resolved in this order:
-
-1. explicit `assay_hint` or `assay`;
-2. recognized library metadata, currently `library_strategy=RNA-Seq`,
-   `library_strategy=mRNA-Seq`, `library_strategy=miRNA-Seq`, or strong
-   `library_selection` values such as `miRNA`;
-3. `unknown`, which blocks branch planning unless unclassified assays are
-   explicitly allowed.
-
-For public `SRR`, `ERR`, or `DRR` rows, ASPIS queries the ENA Portal
-`read_run` file report before materialization and merges missing archive fields
-such as `run_accession`, `experiment_accession`, `sample_accession`,
-`study_accession`, `library_layout`, `library_strategy`, `library_source`,
-`library_selection`, `instrument_platform`, and `instrument_model`.
-If a public run cannot be classified after this step, ASPIS stops before
-download/conversion.
-
-ASPIS does not infer `rnaseq` versus `smallrna` from filenames.
-
-`meta/materialized_manifest.tsv` is the full audit table. It can be wide because
-public accessions contribute archive-specific fields. Branch-local
-`samples.tsv` files are normalized to a smaller downstream contract, while
-branch-local `materialized_manifest.tsv` files keep the full selected audit rows.
-
-Each branch also writes `fastq_inspection.tsv`, a lightweight Python FASTQ
-inspection table. It checks canonical R1/R2 files, validates sampled FASTQ
-records, and reports read-length and GC summaries before heavier assay-specific
-tools are introduced.
-
-After structural inspection, each branch runs FastQC on the same canonical
-FASTQs and writes `fastqc/fastqc_manifest.tsv` plus `fastqc/fastqc.done`.
-ASPIS stages files with unique `{library_id}_{read}.fastq.gz` names before
-running FastQC, because every materialized library uses canonical `R1`/`R2`
-filenames and those would otherwise collide in one output directory.
-Each branch then runs MultiQC over the branch FastQC outputs and writes
-`multiqc/multiqc_report.html`.
-
-For `rnaseq` branches, ASPIS also runs a first preprocessing pass with fastp.
-The output `preprocess/preprocessed_samples.tsv` keeps the same sample metadata
-but points `fastq_1` / `fastq_2` at the preprocessed FASTQs and records the
-original paths as `raw_fastq_1` / `raw_fastq_2`.
-After preprocessing, ASPIS writes `alignment/alignment_plan.tsv`. This is a
-reference-readiness contract: it reports `blocked` until the selected aligner
-has a configured, present index. `rnaseq_alignment.aligner` can be `star` or
-`hisat2`; STAR is the recommended default for full RNA-seq runs, while HISAT2
-remains available as a lighter option and compatibility backend.
-Actual alignment is opt-in through `rnaseq_alignment.run: true`. When enabled
-and the plan is ready, ASPIS writes sorted BAMs plus
-`alignment/aligned_samples.tsv`.
-ASPIS then runs samtools `flagstat`, `stats`, and `idxstats` for each BAM and
-summarizes those alignment QC files with MultiQC.
-
-`config/aspis_alignment_smoke.yaml` and
-`config/aspis_star_alignment_smoke.yaml` enable those opt-in paths with a tiny
-synthetic FASTA/GTF under `tests/reference/`. They are technical tests that
-check the RNA-seq alignment rules run; they are not biological references.
-
-RNA-seq quantification is also opt-in through `rnaseq_quantification.run: true`.
-The current quantification path runs featureCounts for gene-level counts, then
-uses StringTie for reference-guided transcript assembly, StringTie merge,
-gffcompare annotation, StringTie re-quantification, and transcript matrix
-generation. This keeps gene-level DE inputs independent from transcript
-assembly while preserving a transcriptome contract for transcript-level and
-isoform-switch analysis.
-
-RNA-seq differential analysis is opt-in through
-`rnaseq_differential.run: true`. ASPIS first writes
-`differential/differential_plan.tsv`, which records the requested downstream
-levels and the quantification artifacts they consume. Gene-level DESeq2 is the
-implemented runner today: it consumes branch `samples.tsv` plus
-`quantification/featurecounts/gene_counts.tsv`, builds a contrast plan under
-`differential/gene_deseq2/contrast_plan.tsv`, and runs DESeq2 only for
-contrasts that satisfy `min_replicates_per_group`. Transcript-level DESeq2 and
-isoform-switch analysis are represented in the differential plan as planned
-layers until their runners are migrated onto the manifest contract. Blocked
-contrasts are kept in the manifest with explicit reasons instead of failing with
-an opaque R error.
-By default contrasts are built across all samples for each non-control
-condition. Set `contrast_by`, for example to `[time_h]`, only when contrasts
-should be stratified by a metadata column.
-`config/aspis_deseq2_smoke.yaml` is a differential-only smoke test that bypasses
-FASTQ, alignment, and quantification and exercises the DESeq2 layer from tiny
-synthetic TSV fixtures under `tests/differential/`.
-
-## Planned Architecture
-
-The next major refactor should make the first stage of ASPIS a raw-data
-materialization layer:
-
-```text
-intake sheet
-  -> input resolution
-  -> canonical FASTQ materialization
-  -> materialized manifest
-  -> analysis plan
-  -> assay-specific analysis branches
-  -> final reports
-```
-
-The first stable contract should be:
-
-```text
-work/raw/{library_id}/R1.fastq.gz
-work/raw/{library_id}/R2.fastq.gz        # optional
-meta/materialized/{library_id}.json
-meta/materialized_manifest.tsv
-meta/analysis_plan.tsv
-meta/environment_report.tsv
-results/branches/{assay}/{project}/branch.ready
-results/branches/{assay}/{project}/samples.tsv
-results/branches/{assay}/{project}/design.tsv
-results/branches/{assay}/{project}/fastq_inspection.tsv
-results/branches/{assay}/{project}/fastqc/fastqc_manifest.tsv
-results/branches/{assay}/{project}/fastqc/fastqc.done
-results/branches/{assay}/{project}/multiqc/multiqc_report.html
-results/branches/{assay}/{project}/multiqc/multiqc.done
-results/branches/rnaseq/{project}/preprocess/environment_report.tsv
-results/branches/rnaseq/{project}/preprocess/preprocessed_samples.tsv
-results/branches/rnaseq/{project}/preprocess/preprocess.done
-results/branches/rnaseq/{project}/preprocess/fastq_inspection.tsv
-results/branches/rnaseq/{project}/preprocess/fastqc/fastqc_manifest.tsv
-results/branches/rnaseq/{project}/preprocess/fastqc/fastqc.done
-results/branches/rnaseq/{project}/preprocess/multiqc/multiqc_report.html
-results/branches/rnaseq/{project}/preprocess/multiqc/multiqc.done
-results/branches/rnaseq/{project}/alignment/alignment_plan.tsv
-results/branches/rnaseq/{project}/alignment/environment_report.tsv      # if alignment is enabled
-results/branches/rnaseq/{project}/alignment/aligned_samples.tsv         # if alignment is enabled
-results/branches/rnaseq/{project}/alignment/alignment.done              # if alignment is enabled
-results/branches/rnaseq/{project}/alignment/qc/alignment_qc_manifest.tsv # if alignment is enabled
-results/branches/rnaseq/{project}/alignment/qc/alignment_qc.done         # if alignment is enabled
-results/branches/rnaseq/{project}/alignment/qc/multiqc/multiqc_report.html # if alignment is enabled
-results/branches/rnaseq/{project}/alignment/qc/multiqc/multiqc.done      # if alignment is enabled
-results/branches/rnaseq/{project}/quantification/quantification_plan.tsv # if quantification is enabled
-results/branches/rnaseq/{project}/quantification/featurecounts/gene_counts.tsv # if quantification is enabled
-results/branches/rnaseq/{project}/quantification/featurecounts/gene_metadata.tsv # if quantification is enabled
-results/branches/rnaseq/{project}/quantification/stringtie/merge/merged.gtf # if quantification is enabled
-results/branches/rnaseq/{project}/quantification/gffcompare/annotated.gtf # if quantification is enabled
-results/branches/rnaseq/{project}/quantification/gffcompare/merged.tmap # if quantification is enabled
-results/branches/rnaseq/{project}/quantification/counts/transcript_counts.tsv # if quantification is enabled
-results/branches/rnaseq/{project}/quantification/counts/transcript_metadata.tsv # if quantification is enabled
-results/branches/rnaseq/{project}/quantification/counts/quantification.done # if quantification is enabled
-results/branches/rnaseq/{project}/differential/gene_deseq2/contrast_plan.tsv # if differential is enabled
-results/branches/rnaseq/{project}/differential/gene_deseq2/deseq2_manifest.tsv # if differential is enabled
-results/branches/rnaseq/{project}/differential/gene_deseq2/deseq2.done # if differential is enabled
-```
-
-Downstream analysis rules should consume manifest-derived contracts rather than
-probing files or public accessions at Snakefile parse time.
-
-The manifest rule depends on both the per-library JSON files and the
-`work/raw/{library_id}` directories. This keeps ignored/generated FASTQs in the
-Snakemake dependency graph even when an old manifest file is already present.
-
-`meta/analysis_plan.tsv` is the first downstream planning layer. It groups
-materialized libraries by `project` and `assay`, checks that canonical FASTQ
-paths exist, and stops if a library still has an unknown assay. `rule all` reads
-this plan after it is built and requests one branch sentinel for each ready
-`project`/`assay` row. A project with only `rnaseq` inputs gets only the RNA-seq
-branch; a project with only `smallrna` inputs gets only the small RNA branch; a
-project with both assays gets both branch sentinels.
-
-Each branch directory also gets a `samples.tsv` filtered from
-`meta/materialized_manifest.tsv`. Future RNA-seq and small RNA rules should read
-that branch-local sample sheet instead of reparsing the global manifest.
-
-`design.tsv` summarizes the branch sample sheet by condition. It records whether
-there are enough condition groups for differential testing while still allowing
-single-condition branches to continue toward QC or quantification.
-
-`meta/environment_report.tsv` records command paths and versions for required
-and optional command-line tools. The conda environment YAML describes the
-intended software environment; this report records what was actually visible on
-`PATH` at runtime.
-
-## Running the Legacy Workflows
-
-From the repository root:
+Use the provided conda/mamba environment for the core workflow.
 
 ```bash
-# Materialize local FASTQ files or public run accessions into a manifest and plan
-snakemake --cores 1
-
-# Download SRA inputs from the current sample sheet
-snakemake -s workflow/prefetchSRA --cores 1
-
-# Run the legacy long RNA-seq workflow locally
-snakemake -s workflow/Snakefile --cores 8
-
-# Run the legacy small RNA/miRNA workflow locally
-snakemake -s workflow/SmallRNA --cores 8
-
-# Run with the legacy SLURM profile
-snakemake -s workflow/Snakefile --profile workflow/profiles/slurm
+mamba env create -f envs/aspis-snakemake.yaml
+conda activate aspis-smk9
 ```
 
-The SLURM profile currently uses an older custom submit-script style. A future
-cleanup should move toward a modern Snakemake workflow profile using the SLURM
-executor plugin, while keeping cluster policy out of the biological workflow
-configuration.
-
-The first-stage materialization workflow can also be run directly to build only
-the manifest, the downstream analysis plan, or a branch sentinel:
+To update an existing environment after the repository changes:
 
 ```bash
-snakemake --cores 1 meta/materialized_manifest.tsv
-snakemake --cores 1 meta/analysis_plan.tsv
-snakemake --cores 1 results/branches/rnaseq/ASPIS_TEST/branch.ready
-snakemake --cores 1 results/branches/rnaseq/ASPIS_TEST/fastqc/fastqc.done
-snakemake --cores 1 results/branches/rnaseq/ASPIS_TEST/multiqc/multiqc_report.html
-snakemake --cores 1 results/branches/rnaseq/ASPIS_TEST/preprocess/preprocessed_samples.tsv
-snakemake --cores 1 results/branches/rnaseq/ASPIS_TEST/preprocess/multiqc/multiqc_report.html
-snakemake --cores 1 results/branches/rnaseq/ASPIS_TEST/alignment/alignment_plan.tsv
-snakemake --cores 1 results/branches/rnaseq/ASPIS_TEST/alignment/qc/multiqc/multiqc_report.html
-snakemake --cores 1 results/branches/rnaseq/ASPIS_TEST/quantification/counts/quantification.done
-snakemake --cores 1 results/branches/rnaseq/ASPIS_TEST/differential/differential_plan.tsv
-snakemake --cores 1 results/branches/rnaseq/ASPIS_TEST/differential/transcript_deseq2/contrast_plan.tsv
-snakemake --cores 1 results/branches/rnaseq/ASPIS_TEST/differential/transcript_deseq2/deseq2.done
-snakemake --cores 1 results/branches/rnaseq/ASPIS_TEST/differential/isoform_switch/contrast_plan.tsv
-snakemake --cores 1 results/branches/rnaseq/ASPIS_TEST/design.tsv
-
-# Run the isolated local alignment smoke test
-snakemake --cores 1 --configfile config/aspis_alignment_smoke.yaml --printshellcmds
-snakemake --cores 1 --configfile config/aspis_star_alignment_smoke.yaml --printshellcmds
-snakemake --cores 1 --configfile config/aspis_quantification_smoke.yaml --printshellcmds
-snakemake --cores 1 --configfile config/aspis_differential_smoke.yaml --printshellcmds
-
-# Run the local smoke-test ladder before opening a PR
-MODE=dry-run bash tests/run_local_smokes.sh
-bash tests/run_local_smokes.sh
-
-# Run the fixture-based G100 SLURM smoke after the local ladder passes
-MODE=dry-run bash tests/run_g100_smoke.sh <SLURM_ACCOUNT>
-bash tests/run_g100_smoke.sh <SLURM_ACCOUNT>
+conda activate aspis-smk9
+mamba env update -f envs/aspis-snakemake.yaml
 ```
 
-See `docs/local_smoke_tests.md` for the local validation ladder used to limit
-G100 testing to deliberate milestone checks.
+Quickly verify the installed command-line tools:
 
-On CINECA G100, see `docs/g100_quickstart.md` for environment creation and
-SLURM profile testing. For opt-in public SRA materialization testing, see
-`docs/sra_smoke_test.md`.
+```bash
+python3 workflow/scripts/check_environment.py \
+  --output logs/manual_environment_check.tsv \
+  --required-tools python3 snakemake fastqc multiqc fastp cutadapt bowtie bowtie-build STAR samtools featureCounts stringtie gffcompare Rscript
+```
 
-## Legacy Files
+For RNA-seq differential analysis, the R packages in `envs/aspis-snakemake.yaml`
+must also be available, including DESeq2 and IsoformSwitchAnalyzeR.
 
-The new ASPIS entry point does not use these legacy workflow files:
+## Input Table
 
-- `workflow/prefetchSRA`
-- `workflow/Snakefile`
-- `workflow/SmallRNA`
-- `workflow/profiles/slurm/`
-- `config/config.yaml`
-- `config/sample_sheet.csv`
-- `config/sample_sheet_tests.csv`
+The intake table is a TSV file. The minimal required columns are:
 
-They are intentionally still present for reference while the refactor proceeds.
-Do not add new behavior to those files; new development should happen through
-the root `Snakefile`, `config/aspis.yaml`, `config/intake.tsv`, and scripts
-called by that Snakefile.
+```text
+library_id    input_1
+```
 
-## Major Dependencies
+Recommended columns for real projects are:
 
-The workflows currently expect several command-line tools to be available:
+```text
+library_id    biospecimen_id    project    assay    input_1    input_2    condition    treatment    dose    dose_unit    time_h    replicate    batch
+```
 
-- Snakemake
-- Python with pandas
-- SRA Toolkit (`prefetch`, `fastq-dump`, `fasterq-dump`)
-- FastQC
-- fastp
-- STAR
-- HISAT2
-- samtools
-- Trimmomatic
-- cutadapt
-- Bowtie
-- StringTie
-- gffcompare
-- Subread/featureCounts
-- Rscript with DESeq2
-- MultiQC
-- R and Bioconductor packages used by `workflow/scripts/`
+Column meaning:
 
-The R scripts currently use packages including DESeq2, IsoformSwitchAnalyzeR,
-DRIMSeq, BSgenome.Hsapiens.UCSC.hg38, clusterProfiler, ReactomePA,
-org.Hs.eg.db, multiMiR, and plotting/reporting packages.
+- `library_id`: unique sequencing library name used by ASPIS outputs.
+- `biospecimen_id`: biological specimen or sample from which the library was
+  generated. Use the same value for matched RNA-seq and smallRNA libraries from
+  the same specimen.
+- `project`: analysis cohort. It becomes part of the result path.
+- `assay`: `rnaseq` or `smallrna`. For public runs this can sometimes be
+  inferred from metadata, but explicit values are preferred for private FASTQs.
+- `input_1`: local FASTQ path or public run accession such as `SRR...`.
+- `input_2`: second FASTQ for local paired-end data. Leave empty for single-end
+  data and for public run accessions.
+- `condition`: main biological condition used for differential contrasts.
+- `treatment`, `dose`, `dose_unit`, `time_h`, `replicate`, `batch`: optional
+  metadata used in design tables, reports, and contrast stratification.
 
-## Refactor Roadmap
+ASPIS does not infer `rnaseq` versus `smallrna` from filenames. Public archive
+metadata is used when available, but local private FASTQs need either `assay` or
+`assay_hint` unless unclassified samples are explicitly allowed.
 
-1. Replace `workflow/prefetchSRA` with a materialization workflow that supports
-   local FASTQ files and public run accessions.
-2. Generate `meta/materialized_manifest.tsv` as the raw-data contract.
-3. Build `meta/analysis_plan.tsv` from the manifest to define assay/project
-   branch groups.
-4. Rewrite the main Snakefile around `library_id`, `project`, `assay`, and
-   named metadata columns instead of `bioproject` and generic covariates.
-5. Bring RNA-seq preprocessing, alignment, QC, and quantification onto the
-   manifest contract first.
-6. Add DESeq2 gene/transcript analysis and isoform-switch analysis on top of
-   the new quantification contract.
-7. Add the small RNA/miRNA branch second.
-8. Replace the legacy SLURM profile with a workflow profile based on the modern
-   Snakemake SLURM executor.
-9. Move human-specific assumptions into config before extending ASPIS to other
-   organisms or sequencing assays.
+Single-end versus paired-end is determined from materialized data:
+
+- local FASTQ with only `input_1`: single-end;
+- local FASTQ with `input_1` and `input_2`: paired-end;
+- public run accession: detected after conversion by checking whether R2 exists.
+
+## Configuration
+
+The default configuration is `config/aspis.yaml`. For a real project, copy one
+of the templates and edit the paths:
+
+```bash
+cp config/aspis_rnaseq_project.example.yaml config/my_rnaseq_project.yaml
+cp config/aspis_smallrna_project.example.yaml config/my_smallrna_project.yaml
+```
+
+Important configuration concepts:
+
+- `intake`: path to the intake TSV.
+- `run_id`: namespace for `work/`, `meta/`, and `results/` outputs.
+- `work_dir`, `meta_dir`, `results_dir`, `logs_dir`, `cache_dir`: output roots.
+- `allow_unclassified_assay`: whether unknown assay rows should continue.
+- `rnaseq_alignment`: aligner selection, reference index paths, and whether to
+  run alignment.
+- `rnaseq_quantification`: featureCounts/StringTie/gffcompare configuration.
+- `rnaseq_differential`: DESeq2 levels, contrasts, thresholds, and report
+  settings.
+- `smallrna`: smallRNA preprocessing, reference, quantification, target, and
+  report settings.
+
+Feature-set ORA/GSEA resources are documented in
+`docs/feature_set_resources.md`. Without configured feature sets, enrichment
+tables and report panels will be empty or marked as not configured.
+
+## Running Locally
+
+Dry-run first:
+
+```bash
+snakemake --cores 4 --configfile config/my_project.yaml --dry-run
+```
+
+Run:
+
+```bash
+snakemake --cores 8 --configfile config/my_project.yaml --rerun-incomplete
+```
+
+The repository also has a tiny default fixture:
+
+```bash
+snakemake --cores 2 --dry-run
+snakemake --cores 2
+```
+
+Useful target examples:
+
+```bash
+# Materialize inputs only
+snakemake --cores 4 --configfile config/my_project.yaml meta/<run_id>/materialized_manifest.tsv
+
+# Build branch plan only
+snakemake --cores 4 --configfile config/my_project.yaml meta/<run_id>/analysis_plan.tsv
+
+# Run raw branch QC for one project
+snakemake --cores 4 --configfile config/my_project.yaml results/<run_id>/branches/rnaseq/<project>/multiqc/multiqc.done
+
+# Run RNA-seq differential report for one project when upstream layers are enabled
+snakemake --cores 8 --configfile config/my_project.yaml results/<run_id>/branches/rnaseq/<project>/differential/reports/index.html
+
+# Run smallRNA report for one project when upstream layers are enabled
+snakemake --cores 8 --configfile config/my_project.yaml results/<run_id>/branches/smallrna/<project>/smallrna/differential/reports/index.html
+
+# Open the run-level dashboard
+snakemake --cores 4 --configfile config/my_project.yaml results/<run_id>/index.html
+
+# Open one assay/project branch landing page
+snakemake --cores 4 --configfile config/my_project.yaml results/<run_id>/branches/rnaseq/<project>/report/index.html
+```
+
+## Running On CINECA G100
+
+The helper scripts wrap the Snakemake SLURM profile and keep account/partition
+settings outside the Snakefile.
+
+```bash
+conda activate aspis-smk9
+
+ACCOUNT=your_slurm_account
+export SLURM_PARTITION=g100_usr_prod
+export SLURM_DOWNLOAD_PARTITION=g100_all_serial
+```
+
+Smoke tests:
+
+```bash
+MODE=dry-run bash tests/run_g100_smoke.sh "$ACCOUNT"
+MODE=run     bash tests/run_g100_smoke.sh "$ACCOUNT"
+
+MODE=dry-run bash tests/run_g100_deseq2_smoke.sh "$ACCOUNT"
+MODE=run     bash tests/run_g100_deseq2_smoke.sh "$ACCOUNT"
+
+MODE=dry-run bash tests/run_g100_smallrna_smoke.sh "$ACCOUNT"
+MODE=run     bash tests/run_g100_smallrna_smoke.sh "$ACCOUNT"
+```
+
+Public SRA light tests:
+
+```bash
+MODE=dry-run bash tests/run_g100_public_sra_rnaseq.sh "$ACCOUNT"
+MODE=run     bash tests/run_g100_public_sra_rnaseq.sh "$ACCOUNT"
+
+MODE=dry-run bash tests/run_g100_public_sra_smallrna.sh "$ACCOUNT"
+MODE=run     bash tests/run_g100_public_sra_smallrna.sh "$ACCOUNT"
+```
+
+Real project helpers:
+
+```bash
+MODE=dry-run bash tests/run_g100_rnaseq_project.sh "$ACCOUNT" config/my_rnaseq_project.yaml
+MODE=run     bash tests/run_g100_rnaseq_project.sh "$ACCOUNT" config/my_rnaseq_project.yaml
+
+MODE=dry-run bash tests/run_g100_smallrna_project.sh "$ACCOUNT" config/my_smallrna_project.yaml
+MODE=run     bash tests/run_g100_smallrna_project.sh "$ACCOUNT" config/my_smallrna_project.yaml
+```
+
+Rerun controls:
+
+```bash
+# Resume normally from existing outputs
+FORCE_MODE=none MODE=run bash tests/run_g100_smallrna_smoke.sh "$ACCOUNT"
+
+# Force planning layers only in smoke tests
+FORCE_MODE=plan MODE=run bash tests/run_g100_smoke.sh "$ACCOUNT"
+
+# Force everything only when a clean recomputation is intended
+FORCE_MODE=all MODE=run bash tests/run_g100_smoke.sh "$ACCOUNT"
+```
+
+## Result Folder Structure
+
+ASPIS writes three main output roots:
+
+```text
+work/<run_id>/       canonical FASTQs, temporary files, local references
+meta/<run_id>/       manifests, analysis plans, environment reports
+results/<run_id>/    assay/project analysis outputs and reports
+```
+
+Human entry points:
+
+```text
+results/<run_id>/index.html
+results/<run_id>/branches/<assay>/<project>/report/index.html
+```
+
+The run dashboard links global manifests, environment/execution reports, and
+all ready assay/project branches. Each branch landing page links the relevant
+raw QC, post-processing QC, alignment, quantification, differential reports,
+isoform-switch resources, warnings, and provenance files.
+
+Global metadata:
+
+```text
+meta/<run_id>/
+  materialized/<library_id>.json
+  materialized_manifest.tsv
+  analysis_plan.tsv
+  environment_report.tsv
+```
+
+`materialized_manifest.tsv` is the full audit table after local files or public
+accessions are resolved. It can be wide because public runs add archive fields.
+Branch-local `samples.tsv` files are smaller downstream contracts derived from
+this manifest.
+
+Canonical raw data:
+
+```text
+work/<run_id>/raw/<library_id>/
+  R1.fastq.gz
+  R2.fastq.gz        # only for paired-end libraries
+```
+
+Each assay/project branch follows the same top-level pattern:
+
+```text
+results/<run_id>/branches/<assay>/<project>/
+  samples.tsv
+  materialized_manifest.tsv
+  design.tsv
+  fastq_inspection.tsv
+  fastqc/
+  multiqc/
+  provenance/
+  biological_warnings/
+```
+
+The multiple MultiQC reports are intentional and stage-local:
+
+- `multiqc/`: raw canonical FASTQ FastQC summary for that branch.
+- `preprocess/multiqc/`: post-trimming/post-filtering FASTQ summary.
+- `alignment/qc/multiqc/`: samtools alignment QC summary.
+- smallRNA branches also have `smallrna/preprocess/multiqc/` for post-cutadapt
+  smallRNA FASTQs.
+
+This organization keeps stage-local QC reports close to the files they
+describe. Use the run dashboard or branch landing pages above for navigation
+instead of browsing the tree manually.
+
+RNA-seq branch:
+
+```text
+results/<run_id>/branches/rnaseq/<project>/
+  preprocess/
+    preprocessed_samples.tsv
+    <library_id>/R1.fastq.gz
+    <library_id>/R2.fastq.gz
+    multiqc/multiqc_report.html
+
+  alignment/
+    alignment_plan.tsv
+    aligned_samples.tsv
+    <library_id>/aligned.sorted.bam
+    <library_id>/aligned.sorted.bam.bai
+    qc/alignment_qc_manifest.tsv
+    qc/multiqc/multiqc_report.html
+
+  quantification/
+    quantification_plan.tsv
+    featurecounts/gene_counts.tsv
+    featurecounts/gene_metadata.tsv
+    stringtie/assembly_manifest.tsv
+    stringtie/merge/merged.gtf
+    gffcompare/annotated.gtf
+    counts/transcript_counts.tsv
+    counts/transcript_metadata.tsv
+
+  differential/
+    differential_plan.tsv
+    gene_deseq2/
+    transcript_deseq2/
+    isoform_switch/
+    reports/
+```
+
+RNA-seq DESeq2 reports:
+
+```text
+differential/gene_deseq2/
+  contrast_plan.tsv
+  deseq2_manifest.tsv
+  deseq2.done
+  contrasts/<contrast_id>/
+    counts.tsv
+    coldata.tsv
+    deseq2_results.tsv
+    deseq2_significant.tsv
+    normalized_counts.tsv
+    transformed_counts.tsv
+    summary.tsv
+    deseq2.log
+```
+
+Report-level plots and enrichment live under `differential/reports/`. ORA/GSEA
+tables appear only when feature-set resources are configured.
+
+Isoform-switch outputs, when the layer is enabled and runnable, are expected
+under:
+
+```text
+differential/isoform_switch/
+  contrast_plan.tsv
+  isoform_switch_manifest.tsv
+  isoform_switch.done
+  report/index.html
+  report/switch_candidates.tsv
+  report/switch_event_summary.tsv
+  report/switch_plot_manifest.tsv
+  report/switch_plots.pdf
+  report/events/<event_id>/index.html
+  report/events/<event_id>/switch.svg
+```
+
+The exon-box switch diagrams are the `switch.svg` event pages. If this folder
+does not exist, the isoform-switch layer was not enabled, was blocked, or found
+no runnable events.
+
+SmallRNA branch:
+
+```text
+results/<run_id>/branches/smallrna/<project>/
+  fastqc/
+  multiqc/
+  report/index.html
+  smallrna/
+    preprocess/
+    alignment/
+    quantification/
+    differential/
+      reports/index.html
+```
+
+The smallRNA report can include miRNA DESeq2 plots, target enrichment,
+target-gene feature-set enrichment, isomiR/length summaries, residual read fate,
+and matched miRNA-mRNA integration. Target and integration sections require
+configured target/resource tables.
+
+## Current Report Limitations
+
+The current reports are functional and now include run/branch landing pages plus
+PNG previews for the main RNA-seq and smallRNA PDF plots. Remaining usability
+work is more biological than structural:
+
+- ORA/GSEA and target sections must keep improving their explicit status
+  messages so `not_configured`, `resource_missing`, `insufficient_mapping`,
+  `no_significant_terms`, and `ok` cannot be mistaken for each other;
+- isoform-switch event pages and exon diagrams exist when the layer is enabled,
+  but gene-name, biotype, event-class, and optional consequence annotation still
+  need stronger real-data validation;
+- feature-set and miRNA-target resource setup examples need to be expanded for
+  offline human analyses;
+- old-vs-ASPIS comparison reports should be made more interpretive and less
+  table-dump oriented.
+
+## Development Priorities
+
+Near-term work should focus on:
+
+1. Enrichment clarity: keep replacing blank optional-layer panels with
+   explicit status messages, thresholds, resource names, mapping counts, and
+   provenance.
+2. Resource setup: provide practical human feature-set and miRNA target resource
+   preparation examples for real offline analyses.
+3. Isoform-switch annotation quality: improve gene-name propagation, biotype
+   classes, event classes, and optional consequence-tool status reporting.
+4. SmallRNA target and matched miRNA-mRNA validation: configure real target
+   resources and test matched branches by `biospecimen_id`.
+5. Summary hygiene: rename sampled inspection counts where needed and split
+   compact human summaries from wide machine manifests.
+6. Real project comparison: compare ASPIS outputs to the old project outputs as
+   a reference, not as an unquestioned source of truth.
