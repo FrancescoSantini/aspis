@@ -85,6 +85,46 @@ plot_title_cex <- function(title) {
   0.82
 }
 
+truncate_plot_labels <- function(labels, max_chars = 32) {
+  labels <- as.character(labels)
+  ifelse(
+    nchar(labels) > max_chars,
+    paste0(substr(labels, 1, max_chars - 3), "..."),
+    labels
+  )
+}
+
+heatmap_label_cex <- function(labels, max_cex = 0.75, min_cex = 0.30) {
+  labels <- labels[!is.na(labels) & labels != ""]
+  if (!length(labels)) {
+    return(max_cex)
+  }
+  longest <- max(nchar(labels))
+  count <- length(labels)
+  cex <- min(max_cex, 14 / max(longest, 1), 18 / max(count, 1))
+  max(min_cex, cex)
+}
+
+heatmap_margins <- function(row_labels, col_labels) {
+  row_labels <- row_labels[!is.na(row_labels) & row_labels != ""]
+  col_labels <- col_labels[!is.na(col_labels) & col_labels != ""]
+  longest_row <- ifelse(length(row_labels), max(nchar(row_labels)), 1)
+  longest_col <- ifelse(length(col_labels), max(nchar(col_labels)), 1)
+  bottom <- min(14, max(8, ceiling(longest_col * 0.34 + 4)))
+  right <- min(16, max(8, ceiling(longest_row * 0.34 + 4)))
+  c(bottom, right)
+}
+
+draw_heatmap_title <- function(title) {
+  graphics::mtext(
+    plot_title(title, width = 66),
+    side = 3,
+    outer = TRUE,
+    line = 1,
+    cex = plot_title_cex(title)
+  )
+}
+
 blank_pdf <- function(path, title, message) {
   ensure_parent(path)
   open_plot_pdf(path)
@@ -983,15 +1023,21 @@ plot_sample_distance <- function(transformed, path, title, coldata = NULL) {
   }
   ensure_parent(path)
   open_plot_pdf(path)
+  labels <- truncate_plot_labels(rownames(distances), max_chars = 30)
+  graphics::par(oma = c(0, 0, 4.5, 0))
   stats::heatmap(
     distances,
     symm = TRUE,
-    margins = c(8, 8),
-    main = plot_title(title),
-    cex.main = plot_title_cex(title),
-    xlab = "sample",
-    ylab = "sample"
+    margins = heatmap_margins(labels, labels),
+    main = "",
+    labRow = labels,
+    labCol = labels,
+    cexRow = heatmap_label_cex(labels, max_cex = 0.70),
+    cexCol = heatmap_label_cex(labels, max_cex = 0.70),
+    xlab = "",
+    ylab = ""
   )
+  draw_heatmap_title(title)
   grDevices::dev.off()
 }
 
@@ -1005,7 +1051,22 @@ plot_heatmap_panel <- function(transformed, title, coldata = NULL) {
     order_index <- order(coldata[colnames(matrix), "condition"], colnames(matrix))
     matrix <- matrix[, order_index, drop = FALSE]
   }
-  stats::heatmap(matrix, scale = "row", margins = c(8, 8), main = plot_title(title), cex.main = plot_title_cex(title))
+  row_labels <- truncate_plot_labels(rownames(matrix), max_chars = 32)
+  col_labels <- truncate_plot_labels(colnames(matrix), max_chars = 30)
+  graphics::par(oma = c(0, 0, 4.5, 0))
+  stats::heatmap(
+    matrix,
+    scale = "row",
+    margins = heatmap_margins(row_labels, col_labels),
+    main = "",
+    labRow = row_labels,
+    labCol = col_labels,
+    cexRow = heatmap_label_cex(row_labels, max_cex = 0.60, min_cex = 0.25),
+    cexCol = heatmap_label_cex(col_labels, max_cex = 0.70),
+    xlab = "",
+    ylab = ""
+  )
+  draw_heatmap_title(title)
 }
 
 plot_heatmap <- function(
