@@ -548,38 +548,3 @@ The smallRNA report can include miRNA DESeq2 plots, target enrichment,
 target-gene feature-set enrichment, isomiR/length summaries, residual read fate,
 and matched miRNA-mRNA integration. Target and integration sections require
 configured target/resource tables.
-
-## Current Report Limitations
-
-The current reports are functional and now include run/branch landing pages plus
-PNG previews for the main RNA-seq and smallRNA PDF plots. Remaining usability
-work is more biological than structural:
-
-- ORA/GSEA and target sections must keep improving their explicit status
-  messages so `not_configured`, `resource_missing`, `insufficient_mapping`,
-  `no_significant_terms`, and `ok` cannot be mistaken for each other;
-- isoform-switch event pages and exon diagrams exist when the layer is enabled,
-  but gene-name, biotype, event-class, and optional consequence annotation still
-  need stronger real-data validation;
-- feature-set and miRNA-target resource setup examples need to be expanded for
-  offline human analyses;
-- old-vs-ASPIS comparison reports should be made more interpretive and less
-  table-dump oriented.
-
-## Development Priorities
-
-Near-term work should focus on:
-
-1. Enrichment clarity: keep replacing blank optional-layer panels with
-   explicit status messages, thresholds, resource names, mapping counts, and
-   provenance.
-2. Resource setup: provide practical human feature-set and miRNA target resource
-   preparation examples for real offline analyses.
-3. Isoform-switch annotation quality: improve gene-name propagation, biotype
-   classes, event classes, and optional consequence-tool status reporting.
-4. SmallRNA target and matched miRNA-mRNA validation: configure real target
-   resources and test matched branches by `biospecimen_id`.
-5. Summary hygiene: rename sampled inspection counts where needed and split
-   compact human summaries from wide machine manifests.
-6. Real project comparison: compare ASPIS outputs to the old project outputs as
-   a reference, not as an unquestioned source of truth.

@@ -28,6 +28,11 @@ Core implementation status:
   and SVG exon-structure switch plots when `isoform_switch` is enabled.
 - RNA-seq report indexes now expose whether isoform-switch resources are
   present, missing, or not requested.
+- Run-level dashboards and branch/project report indexes are now implemented.
+- Technical PDF reports exist for RNA-seq and smallRNA differential reports.
+- Main differential plots are exposed through report manifests and previews, but
+  layout polish remains active work for long titles, dense heatmaps, and sample
+  distance labels.
 
 ## Real-Data Findings
 
@@ -59,28 +64,25 @@ The first useful real-data check was the local BEAS_2B 24h subset:
 - SmallRNA length summaries currently report capped inspection counts as
   `total_reads` in some tables. That naming is misleading and must be corrected
   to distinguish sampled/inspected reads from true library totals.
-- Report navigation remains fragmented. Correct outputs are present, but users
-  still have to know whether to enter through branch QC, differential reports,
-  isoform-switch reports, biotype summaries, biological warnings, or MultiQC.
-- Plot rendering remains rough. PDF plots are embedded into fixed browser
-  panels, producing small, awkward previews even when the underlying plots are
-  usable.
+- Report navigation is improved by run and branch indexes, but human-facing
+  summaries still need short descriptive text explaining what each plot, table,
+  warning, and optional section represents.
+- Plot rendering is improved by previews and technical PDFs, but heatmap and
+  sample-distance titles, axis labels, and dense sample names still need
+  better fit checks. The preferred legacy-style heatmap color palette should
+  be carried consistently into heatmap and sample-distance plots.
 - The old reports can be used as a comparison target, but they are not ground
   truth. Differences should be interpreted through ASPIS manifests, thresholds,
   reference files, and resource provenance.
 
 ## Required Corrections
 
-### 1. Top-Level Run And Branch Navigation
+### 1. Report Navigation And Explanatory Text
 
-Add a top-level run dashboard and one branch/project report index, for example:
+Run-level dashboards and branch/project report indexes exist. The remaining work
+is to make them more explanatory for non-developer users.
 
-```text
-results/<run_id>/index.html
-results/<run_id>/branches/<assay>/<project>/report/index.html
-```
-
-The indexes should link:
+Keep the indexes linking:
 
 - raw FastQC/MultiQC;
 - post-preprocessing FastQC/MultiQC;
@@ -92,33 +94,40 @@ The indexes should link:
 - smallRNA target/integration reports when present;
 - biological warnings;
 - provenance bundle;
-- environment report.
+- environment report;
+- technical PDF report when generated.
 
 Acceptance criteria:
 
 - A user can start from one HTML page and find every relevant output for one run.
 - A user can then open one branch page for one assay/project and find every
   relevant branch output.
+- Each human report section has one or two concise sentences explaining what the
+  linked plot, table, warning, or optional layer represents.
 - Machine-oriented manifests remain available, but human reports do not require
   reading wide manifest tables.
 - Missing optional layers are shown as statuses, not silent absences.
 
 ### 2. Plot Rendering
 
-Replace cramped embedded PDF viewers with report-friendly previews.
+Continue polishing report-friendly plot previews and technical PDFs.
 
 Required behavior:
 
-- Generate or expose PNG/SVG previews for volcano, MA, PCA, heatmap,
-  sample-distance, enrichment, and isoform-switch plots.
+- Keep PNG/SVG previews for volcano, MA, PCA, heatmap, sample-distance,
+  enrichment, and isoform-switch plots.
 - Keep links to the original PDF/TSV source files.
 - Record preview paths in plot manifests.
-- Avoid fixed-size boxes that make large plots unreadable.
+- Prevent long titles, sample labels, and x/y axes from overflowing plot frames,
+  especially for heatmaps and sample-distance plots.
+- Apply the preferred legacy-style heatmap palette consistently to heatmap and
+  sample-distance outputs.
 - Show a clear message when a plot cannot be generated.
 
 Acceptance criteria:
 
-- The report looks readable in a normal browser without manual PDF zooming.
+- Reports look readable in a normal browser without manual PDF zooming.
+- Technical PDFs are usable as compact biologist-facing digests.
 - Full-size plots remain downloadable.
 
 ### 3. ORA/GSEA And Optional-Layer Status Clarity
@@ -243,14 +252,22 @@ Acceptance criteria:
   technically suspect, or simply not powered.
 
 ## Implementation Priority
-
-1. Fix smallRNA report relative links.
-2. Add a top-level run dashboard and branch/project report landing pages.
-3. Replace PDF embeds with readable SVG/PNG previews and full-size links.
-4. Add explicit `disabled`/`not_configured`/`empty_success` status rendering.
-5. Improve isoform-switch gene-name and event-class annotation.
-6. Configure and test real ORA/GSEA resources.
-7. Configure and test smallRNA target/integration resources.
-8. Add concise human-readable old-vs-ASPIS comparison reports.
-9. Re-run BEAS_2B and HEP_G2 real subsets and compare against old reports as a
-   sanity check, not as ground truth.
+1. Fix plot fit issues for heatmap and sample-distance titles, axes, and dense
+   sample labels.
+2. Apply the preferred heatmap color palette consistently to heatmap and
+   sample-distance plots.
+3. Add concise explanatory text to run, branch, differential, isoform-switch,
+   and smallRNA reports so biologists can understand what each output type is.
+4. Keep improving enrichment and optional-layer statuses so `not_configured`,
+   `resource_missing`, `insufficient_mapping`, `no_significant_terms`, and `ok`
+   cannot be confused.
+5. Add practical offline feature-set and miRNA-target resource setup examples
+   for real human analyses.
+6. Improve isoform-switch gene-name propagation, biotype classes, event classes,
+   and optional consequence-tool status reporting.
+7. Validate smallRNA target and matched miRNA-mRNA reports with configured real
+   resources and matched `biospecimen_id` rows.
+8. Rename sampled inspection counts where needed and split compact human
+   summaries from wide machine manifests.
+9. Compare ASPIS outputs to old project outputs as a sanity check, not as an
+   unquestioned source of truth.
