@@ -1,0 +1,220 @@
+# G100 BEAS_2B smallRNA validation configuration.
+#
+# This config assumes BEAS_2B smallRNA FASTQs and legacy reference assets have
+# been uploaded under /g100_work. It rebuilds lightweight miRNA/contaminant
+# Bowtie indexes from the uploaded FASTA inputs for reproducibility.
+
+intake: config/intake_g100_beas_smallrna.tsv
+
+paths:
+  raw_dir: work/g100_beas_smallrna/raw
+  metadata_dir: meta/g100_beas_smallrna/materialized
+  manifest: meta/g100_beas_smallrna/materialized_manifest.tsv
+  analysis_plan: meta/g100_beas_smallrna/analysis_plan.tsv
+  environment_report: meta/g100_beas_smallrna/environment_report.tsv
+  execution_report: meta/g100_beas_smallrna/execution_report.tsv
+  sra_cache_dir: cache/g100_beas_smallrna/sra
+  scratch_dir: work/g100_beas_smallrna/tmp
+  branch_dir: results/g100_beas_smallrna/branches
+  run_dashboard: results/g100_beas_smallrna/index.html
+  run_dashboard_done: results/g100_beas_smallrna/index.done
+
+materialization:
+  local_link_mode: symlink
+  public_metadata_mode: "off"
+
+planning:
+  allow_unclassified: false
+
+resources:
+  mirbase:
+    provider: mirbase
+    release: "uploaded_legacy"
+    species_prefix: &smallrna_mirbase_species hsa
+    mature_fasta: &smallrna_mirbase_fasta /g100_work/ELIX6_santini/aspis_data/phdpipe/genome/mature_hsa.fa
+    prepared_fasta: &smallrna_prepared_mirbase_fasta ""
+    saf: &smallrna_prepared_mirbase_saf ""
+    bowtie_index_prefix: &smallrna_bowtie_index_prefix ""
+  smallrna_contaminants:
+    fasta: &smallrna_contaminant_fasta /g100_work/ELIX6_santini/aspis_data/phdpipe/genome/contaminants.fa
+    bowtie_index_prefix: &smallrna_contaminant_index_prefix ""
+  residual_genome:
+    fasta: &smallrna_residual_genome_fasta /g100_work/ELIX6_santini/aspis_data/phdpipe/genome/Homo_sapiens.GRCh38.dna.toplevel.fa
+    gtf: &smallrna_residual_annotation_gtf /g100_work/ELIX6_santini/aspis_data/phdpipe/genome/Homo_sapiens.GRCh38.112.chr.gtf
+    bowtie_index_prefix: &smallrna_residual_genome_index_prefix ""
+  smallrna_targets:
+    target_table: &smallrna_target_table ""
+    target_tables: &smallrna_target_tables []
+    target_cache: &smallrna_target_cache ""
+    target_feature_sets: &smallrna_target_feature_sets ""
+    target_feature_set_tables: &smallrna_target_feature_set_tables ""
+
+resource_recipes:
+  enabled: false
+
+design:
+  condition_col: condition
+  control_label: control
+  model_formula: ""
+  covariates:
+    - time_h
+  batch_factors: []
+  blocking_factors: []
+  interaction_terms: []
+  min_condition_groups: 2
+
+fastq_inspection:
+  max_records: 100000
+
+fastqc:
+  command: fastqc
+  threads: 2
+  extra_args: ""
+
+multiqc:
+  command: multiqc
+  extra_args: ""
+
+smallrna:
+  run: true
+  preprocess_run: true
+  depletion_run: true
+  alignment_run: true
+  quantification_run: true
+  differential_run: true
+
+  adapter: AGATCGGAAGAGCACACGTCTGAACTCC
+  min_length: 15
+  max_length: 30
+  quality_cutoff: 20
+  cutadapt_overlap: 5
+  cutadapt_command: cutadapt
+  cutadapt_extra_args: ""
+  threads: 4
+
+  reference_run: true
+  reference_dir: work/g100_beas_smallrna/reference
+  mirbase_fasta: *smallrna_mirbase_fasta
+  mirbase_species_prefix: *smallrna_mirbase_species
+  mirbase_replace_u_with_t: true
+  prepared_mirbase_fasta: *smallrna_prepared_mirbase_fasta
+  prepared_mirbase_saf: *smallrna_prepared_mirbase_saf
+
+  build_bowtie_index: true
+  build_contaminant_index: true
+  bowtie_build_command: bowtie-build
+  bowtie_command: bowtie
+  samtools_command: samtools
+  index_threads: 4
+  bowtie_index_prefix: *smallrna_bowtie_index_prefix
+  contaminant_fasta: *smallrna_contaminant_fasta
+  contaminant_index_prefix: *smallrna_contaminant_index_prefix
+  contaminant_mismatches: 1
+  alignment_mismatches: 2
+  alignment_multi_alignments: 10
+  alignment_extra_args: "--best --strata"
+
+  residual_run: false
+  build_residual_genome_index: false
+  residual_genome_fasta: *smallrna_residual_genome_fasta
+  residual_genome_index_prefix: *smallrna_residual_genome_index_prefix
+  residual_annotation_gtf: *smallrna_residual_annotation_gtf
+  residual_mismatches: 1
+  residual_multi_alignments: 10
+  residual_extra_args: "--best --strata"
+
+  featurecounts_command: featureCounts
+  featurecounts_threads: 4
+  featurecounts_extra_args: ""
+
+  rscript_command: Rscript
+  deseq2_script: workflow/scripts/run_deseq2_feature.R
+  condition_col: condition
+  control_label: control
+  design_formula: ""
+  contrast_by:
+    - time_h
+  min_replicates_per_group: 2
+  min_count: 10
+  padj: 0.1
+  log2fc: 1.0
+  lfc_shrinkage: none
+
+  target_enrichment_mode: disabled
+  target_table: *smallrna_target_table
+  target_tables: *smallrna_target_tables
+  target_cache: *smallrna_target_cache
+  target_min_overlap: 1
+  target_top_n: 20
+  target_feature_sets: *smallrna_target_feature_sets
+  target_feature_set_tables: *smallrna_target_feature_set_tables
+  target_feature_set_min_overlap: 2
+  target_feature_set_top_n: 20
+
+  reports: true
+  report_top_n: 25
+  report_heatmap_modes:
+    - significant
+    - variable
+  report_heatmap_feature_lists: ""
+  report_heatmap_significant_fallback: variable
+  report_mirna_plot_groups:
+    - all
+    - up
+    - down
+    - arm
+    - target_source
+    - target_source_type
+    - target_evidence_type
+
+rnaseq_alignment:
+  run: false
+
+rnaseq_quantification:
+  run: false
+
+rnaseq_differential:
+  run: false
+
+mirna_mrna_integration:
+  run: false
+
+execution:
+  slurm_account: ""
+  default_partition: g100_usr_prod
+  download_partition: g100_all_serial
+  default_resources:
+    runtime: 240
+    mem_mb: 8000
+    disk_mb: 50000
+
+provenance:
+  run: true
+
+biological_qc:
+  run: true
+  rnaseq_sample_qc: false
+  smallrna_sample_qc: true
+  smallrna_length_qc: true
+
+environment:
+  required_tools:
+    - python3
+    - snakemake
+    - fastqc
+    - multiqc
+  smallrna_required_tools:
+    - cutadapt
+    - bowtie
+    - bowtie-build
+    - samtools
+    - featureCounts
+    - Rscript
+    - R::DESeq2
+  sra_required_tools:
+    - prefetch
+    - fasterq-dump
+  sra_limited_required_tools:
+    - fastq-dump
+  optional_tools:
+    - vdb-validate
