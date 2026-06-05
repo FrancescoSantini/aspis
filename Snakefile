@@ -2258,6 +2258,7 @@ rule inspect_branch_fastqs:
 
 rule run_branch_fastqc_file:
     input:
+        analysis_plan=ANALYSIS_PLAN,
         rawdir=raw_fastqc_rawdir,
         samples=f"{BRANCH_DIR}" + "/{assay}/{project}/samples.tsv",
         inspection=f"{BRANCH_DIR}" + "/{assay}/{project}/fastq_inspection.tsv",
@@ -2299,6 +2300,7 @@ rule run_branch_fastqc_file:
 
 rule run_branch_fastqc:
     input:
+        analysis_plan=ANALYSIS_PLAN,
         fastqc_outputs=raw_fastqc_outputs,
         samples=f"{BRANCH_DIR}" + "/{assay}/{project}/samples.tsv",
         inspection=f"{BRANCH_DIR}" + "/{assay}/{project}/fastq_inspection.tsv",
@@ -2681,6 +2683,7 @@ rule inspect_preprocessed_smallrna_fastqs:
 
 rule run_preprocessed_smallrna_fastqc_file:
     input:
+        analysis_plan=ANALYSIS_PLAN,
         samples=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/preprocess/trimmed_samples.tsv",
         preprocess_done=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/preprocess/preprocess.done",
         inspection=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/preprocess/fastq_inspection.tsv",
@@ -2722,6 +2725,7 @@ rule run_preprocessed_smallrna_fastqc_file:
 
 rule run_preprocessed_smallrna_fastqc:
     input:
+        analysis_plan=ANALYSIS_PLAN,
         fastqc_outputs=smallrna_preprocessed_fastqc_outputs,
         samples=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/preprocess/trimmed_samples.tsv",
         inspection=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/preprocess/fastq_inspection.tsv",
@@ -3831,6 +3835,7 @@ rule inspect_preprocessed_rnaseq_fastqs:
 
 rule run_preprocessed_rnaseq_fastqc_file:
     input:
+        analysis_plan=ANALYSIS_PLAN,
         samples=f"{BRANCH_DIR}" + "/rnaseq/{project}/preprocess/preprocessed_samples.tsv",
         preprocess_done=f"{BRANCH_DIR}" + "/rnaseq/{project}/preprocess/preprocess.done",
         inspection=f"{BRANCH_DIR}" + "/rnaseq/{project}/preprocess/fastq_inspection.tsv",
@@ -3872,6 +3877,7 @@ rule run_preprocessed_rnaseq_fastqc_file:
 
 rule run_preprocessed_rnaseq_fastqc:
     input:
+        analysis_plan=ANALYSIS_PLAN,
         fastqc_outputs=rnaseq_preprocessed_fastqc_outputs,
         samples=f"{BRANCH_DIR}" + "/rnaseq/{project}/preprocess/preprocessed_samples.tsv",
         inspection=f"{BRANCH_DIR}" + "/rnaseq/{project}/preprocess/fastq_inspection.tsv",
