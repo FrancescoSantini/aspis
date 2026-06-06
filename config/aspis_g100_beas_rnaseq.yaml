@@ -67,7 +67,7 @@ multiqc:
 
 rnaseq_preprocess:
   command: fastp
-  threads: 4
+  threads: 8
   extra_args: ""
 
 rnaseq_alignment:

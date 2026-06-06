@@ -79,6 +79,17 @@ MODE=run bash tests/run_g100_rnaseq_project.sh "$ACCOUNT" config/aspis_g100_beas
 MODE=run bash tests/run_g100_smallrna_project.sh "$ACCOUNT" config/aspis_g100_beas_smallrna.yaml
 ```
 
+The RNA-seq preprocessing branch processes all BEAS_2B paired libraries and
+can legitimately take longer than four hours. The helper defaults that rule to
+24 hours, 32 GB RAM, and 300 GB disk. Override only if needed:
+
+```bash
+ASPIS_RNASEQ_PREPROCESS_RUNTIME=1800 \
+ASPIS_RNASEQ_PREPROCESS_MEM_MB=48000 \
+ASPIS_RNASEQ_PREPROCESS_DISK_MB=400000 \
+  MODE=run bash tests/run_g100_rnaseq_project.sh "$ACCOUNT" config/aspis_g100_beas_rnaseq.yaml
+```
+
 Useful summaries:
 
 ```bash
