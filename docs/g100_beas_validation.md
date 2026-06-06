@@ -79,11 +79,14 @@ MODE=run bash tests/run_g100_rnaseq_project.sh "$ACCOUNT" config/aspis_g100_beas
 MODE=run bash tests/run_g100_smallrna_project.sh "$ACCOUNT" config/aspis_g100_beas_smallrna.yaml
 ```
 
-RNA-seq preprocessing and alignment are split per library. Each BEAS_2B
-paired library gets its own fastp job and its own aligner job, followed by
-small manifest aggregation steps. The helper defaults each preprocessing job to
-12 hours, 24 GB RAM, and 150 GB disk; each alignment job uses the alignment
-resources configured in the helper. Override preprocessing only if needed:
+RNA-seq preprocessing, alignment, alignment QC, featureCounts, StringTie
+assembly, and StringTie quantification are split per library where the work is
+sample-local. smallRNA preprocessing, contaminant depletion, miRBase alignment,
+residual-genome alignment, and miRNA featureCounts are split the same way. The
+branch-level rules that remain are aggregation or true cross-sample steps. The
+helper defaults each RNA-seq preprocessing job to 12 hours, 24 GB RAM, and
+150 GB disk; alignment and quantification per-library resources are configured
+in the helper. Override preprocessing only if needed:
 
 ```bash
 ASPIS_RNASEQ_PREPROCESS_RUNTIME=1440 \

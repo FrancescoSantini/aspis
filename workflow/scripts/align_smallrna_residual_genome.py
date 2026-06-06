@@ -48,6 +48,7 @@ BIOTYPE_KEYS = ("gene_biotype", "gene_type", "transcript_biotype", "transcript_t
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--samples", required=True, help="miRBase-aligned smallRNA sample table TSV")
+    parser.add_argument("--library-id", default="", help="Optional single library to process")
     parser.add_argument("--outdir", required=True, help="Residual genome output directory")
     parser.add_argument("--output", required=True, help="Residual-aligned sample table TSV")
     parser.add_argument("--manifest", required=True, help="Residual alignment manifest TSV")
@@ -75,6 +76,15 @@ def read_tsv(path: Path, required: set[str]) -> tuple[list[str], list[dict[str, 
             raise ValueError(f"TSV {path} is missing columns: {sorted(missing)}")
         rows = [{key: (value or "").strip() for key, value in row.items()} for row in reader]
         return list(reader.fieldnames), rows
+
+
+def select_library(rows: list[dict[str, str]], library_id: str) -> list[dict[str, str]]:
+    if not library_id:
+        return rows
+    matches = [row for row in rows if row.get("library_id") == library_id]
+    if len(matches) != 1:
+        raise ValueError(f"Expected exactly one row for {library_id!r}, found {len(matches)}")
+    return matches
 
 
 def validate_args(args: argparse.Namespace) -> list[str]:
@@ -432,6 +442,7 @@ def main() -> int:
     args = parse_args()
     extra_args = validate_args(args)
     input_columns, rows = read_tsv(Path(args.samples), REQUIRED_COLUMNS)
+    rows = select_library(rows, args.library_id)
     validate_samples(rows)
     gtf_features = read_gtf(args.annotation_gtf)
 

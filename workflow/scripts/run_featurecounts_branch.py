@@ -22,6 +22,7 @@ ATTR_RE = re.compile(r'([A-Za-z0-9_.-]+) "([^"]*)"')
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--samples", required=True, help="Aligned RNA-seq samples TSV")
+    parser.add_argument("--library-id", default="", help="Optional single library to process")
     parser.add_argument("--plan", required=True, help="RNA-seq quantification plan TSV")
     parser.add_argument("--outdir", required=True, help="featureCounts per-sample output directory")
     parser.add_argument("--counts", required=True, help="Merged gene count matrix TSV")
@@ -60,6 +61,15 @@ def read_plan(path: Path) -> dict[str, str]:
     if not Path(row["annotation_gtf"]).exists():
         raise FileNotFoundError(f"annotation_gtf does not exist: {row['annotation_gtf']}")
     return row
+
+
+def select_library(rows: list[dict[str, str]], library_id: str) -> list[dict[str, str]]:
+    if not library_id:
+        return rows
+    matches = [row for row in rows if row.get("library_id") == library_id]
+    if len(matches) != 1:
+        raise ValueError(f"Expected exactly one row for {library_id!r}, found {len(matches)}")
+    return matches
 
 
 def validate_samples(rows: list[dict[str, str]], plan: dict[str, str]) -> None:
@@ -276,6 +286,7 @@ def main() -> int:
     args = parse_args()
     _, rows = read_table(Path(args.samples), REQUIRED_SAMPLE_COLUMNS)
     plan = read_plan(Path(args.plan))
+    rows = select_library(rows, args.library_id)
     validate_samples(rows, plan)
     featurecounts = executable_path(args.featurecounts)
 

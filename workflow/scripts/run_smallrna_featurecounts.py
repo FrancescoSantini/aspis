@@ -19,6 +19,7 @@ METADATA_COLUMNS = ["Geneid", "Chr", "Start", "End", "Strand", "Length"]
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--samples", required=True, help="Aligned smallRNA samples TSV")
+    parser.add_argument("--library-id", default="", help="Optional single library to process")
     parser.add_argument("--plan", required=True, help="SmallRNA parity plan TSV")
     parser.add_argument("--saf", required=True, help="miRBase SAF annotation")
     parser.add_argument("--outdir", required=True, help="featureCounts per-sample output directory")
@@ -52,6 +53,15 @@ def validate_plan(path: Path) -> None:
     row = matches[0]
     if row.get("status") != "ready":
         raise ValueError("featurecounts_mirna stage is not ready: " + row.get("reason", ""))
+
+
+def select_library(rows: list[dict[str, str]], library_id: str) -> list[dict[str, str]]:
+    if not library_id:
+        return rows
+    matches = [row for row in rows if row.get("library_id") == library_id]
+    if len(matches) != 1:
+        raise ValueError(f"Expected exactly one row for {library_id!r}, found {len(matches)}")
+    return matches
 
 
 def validate_samples(rows: list[dict[str, str]]) -> None:
@@ -220,6 +230,7 @@ def main() -> int:
         raise FileNotFoundError(f"miRBase SAF does not exist: {saf}")
     validate_plan(Path(args.plan))
     _, rows = read_table(Path(args.samples), REQUIRED_SAMPLE_COLUMNS)
+    rows = select_library(rows, args.library_id)
     validate_samples(rows)
     featurecounts = executable_path(args.featurecounts)
 

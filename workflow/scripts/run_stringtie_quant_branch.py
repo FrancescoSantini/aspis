@@ -18,6 +18,7 @@ REQUIRED_PLAN_COLUMNS = {"project", "assay", "status", "transcriptome_mode"}
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--samples", required=True, help="Aligned RNA-seq samples TSV")
+    parser.add_argument("--library-id", default="", help="Optional single library to process")
     parser.add_argument("--plan", required=True, help="RNA-seq quantification plan TSV")
     parser.add_argument("--merged-gtf", required=True, help="Merged StringTie GTF")
     parser.add_argument("--outdir", required=True, help="StringTie quantification output directory")
@@ -52,6 +53,15 @@ def read_plan(path: Path) -> dict[str, str]:
     if row.get("transcriptome_mode") != "reference_guided_novel":
         raise ValueError("StringTie quantification requires transcriptome_mode='reference_guided_novel'")
     return row
+
+
+def select_library(rows: list[dict[str, str]], library_id: str) -> list[dict[str, str]]:
+    if not library_id:
+        return rows
+    matches = [row for row in rows if row.get("library_id") == library_id]
+    if len(matches) != 1:
+        raise ValueError(f"Expected exactly one row for {library_id!r}, found {len(matches)}")
+    return matches
 
 
 def validate_samples(rows: list[dict[str, str]], plan: dict[str, str]) -> None:
@@ -191,6 +201,7 @@ def main() -> int:
     args = parse_args()
     _, rows = read_table(Path(args.samples), REQUIRED_SAMPLE_COLUMNS)
     plan = read_plan(Path(args.plan))
+    rows = select_library(rows, args.library_id)
     validate_samples(rows, plan)
     merged_gtf = Path(args.merged_gtf)
     if not merged_gtf.exists():

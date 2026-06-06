@@ -38,6 +38,7 @@ MANIFEST_COLUMNS = [
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--samples", required=True, help="Depleted smallRNA sample table TSV")
+    parser.add_argument("--library-id", default="", help="Optional single library to process")
     parser.add_argument("--outdir", required=True, help="Alignment output directory")
     parser.add_argument("--output", required=True, help="Aligned sample table TSV")
     parser.add_argument("--manifest", required=True, help="Alignment manifest TSV")
@@ -83,6 +84,15 @@ def validate_samples(rows: list[dict[str, str]]) -> None:
             errors.append(f"{library_id}: fastq_1 does not exist: {fastq_1}")
     if errors:
         raise ValueError("smallRNA miRBase alignment cannot start:\n- " + "\n- ".join(errors))
+
+
+def select_library(rows: list[dict[str, str]], library_id: str) -> list[dict[str, str]]:
+    if not library_id:
+        return rows
+    matches = [row for row in rows if row.get("library_id") == library_id]
+    if len(matches) != 1:
+        raise ValueError(f"Expected exactly one row for {library_id!r}, found {len(matches)}")
+    return matches
 
 
 def validate_args(args: argparse.Namespace) -> list[str]:
@@ -233,6 +243,7 @@ def main() -> int:
     args = parse_args()
     extra_args = validate_args(args)
     input_columns, rows = read_samples(Path(args.samples))
+    rows = select_library(rows, args.library_id)
     validate_samples(rows)
 
     outdir = Path(args.outdir)

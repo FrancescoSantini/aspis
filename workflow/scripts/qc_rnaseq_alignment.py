@@ -26,6 +26,7 @@ SAFE_NAME_RE = re.compile(r"^[A-Za-z0-9_.-]+$")
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--samples", required=True, help="Aligned samples TSV")
+    parser.add_argument("--library-id", default="", help="Optional single library to process")
     parser.add_argument("--outdir", required=True, help="Alignment QC output directory")
     parser.add_argument("--manifest", required=True, help="Output QC manifest TSV")
     parser.add_argument("--done", required=True, help="Output completion sentinel")
@@ -42,6 +43,15 @@ def read_samples(path: Path) -> list[dict[str, str]]:
         if missing:
             raise ValueError(f"Aligned sample table {path} is missing columns: {sorted(missing)}")
         return [{key: (value or "").strip() for key, value in row.items()} for row in reader]
+
+
+def select_library(rows: list[dict[str, str]], library_id: str) -> list[dict[str, str]]:
+    if not library_id:
+        return rows
+    matches = [row for row in rows if row.get("library_id") == library_id]
+    if len(matches) != 1:
+        raise ValueError(f"Expected exactly one row for {library_id!r}, found {len(matches)}")
+    return matches
 
 
 def validate_samples(rows: list[dict[str, str]]) -> None:
@@ -160,6 +170,7 @@ def write_done(path: Path, rows: list[dict[str, str]]) -> None:
 def main() -> int:
     args = parse_args()
     samples = read_samples(Path(args.samples))
+    rows = select_library(rows, args.library_id)
     validate_samples(samples)
     samtools = executable_path(args.samtools)
 

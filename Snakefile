@@ -659,6 +659,119 @@ def rnaseq_alignment_sample_tables(wildcards):
     ]
 
 
+def rnaseq_alignment_qc_manifests(wildcards):
+    rows = materialized_rows_for_branch("rnaseq", wildcards.project)
+    return [
+        f"{BRANCH_DIR}/rnaseq/{wildcards.project}/alignment/qc/files/{row['library_id']}.alignment_qc_manifest.tsv"
+        for row in rows
+    ]
+
+
+def rnaseq_featurecounts_manifests(wildcards):
+    rows = materialized_rows_for_branch("rnaseq", wildcards.project)
+    return [
+        f"{BRANCH_DIR}/rnaseq/{wildcards.project}/quantification/featurecounts/files/{row['library_id']}/featurecounts_manifest.tsv"
+        for row in rows
+    ]
+
+
+def rnaseq_stringtie_assembly_manifests(wildcards):
+    rows = materialized_rows_for_branch("rnaseq", wildcards.project)
+    return [
+        f"{BRANCH_DIR}/rnaseq/{wildcards.project}/quantification/stringtie/assembly/{row['library_id']}/assembly_manifest.tsv"
+        for row in rows
+    ]
+
+
+def rnaseq_stringtie_quant_manifests(wildcards):
+    rows = materialized_rows_for_branch("rnaseq", wildcards.project)
+    return [
+        f"{BRANCH_DIR}/rnaseq/{wildcards.project}/quantification/stringtie/quant/{row['library_id']}/quant_manifest.tsv"
+        for row in rows
+    ]
+
+
+def smallrna_library_rows(wildcards):
+    return materialized_rows_for_branch("smallrna", wildcards.project)
+
+
+def smallrna_preprocess_sample_tables(wildcards):
+    return [
+        f"{BRANCH_DIR}/smallrna/{wildcards.project}/smallrna/preprocess/{row['library_id']}/trimmed_sample.tsv"
+        for row in smallrna_library_rows(wildcards)
+    ]
+
+
+def smallrna_preprocess_manifests(wildcards):
+    return [
+        f"{BRANCH_DIR}/smallrna/{wildcards.project}/smallrna/preprocess/{row['library_id']}/cutadapt_manifest.tsv"
+        for row in smallrna_library_rows(wildcards)
+    ]
+
+
+def smallrna_depletion_sample_tables(wildcards):
+    return [
+        f"{BRANCH_DIR}/smallrna/{wildcards.project}/smallrna/depletion/{row['library_id']}/depleted_sample.tsv"
+        for row in smallrna_library_rows(wildcards)
+    ]
+
+
+def smallrna_depletion_manifests(wildcards):
+    return [
+        f"{BRANCH_DIR}/smallrna/{wildcards.project}/smallrna/depletion/{row['library_id']}/depletion_manifest.tsv"
+        for row in smallrna_library_rows(wildcards)
+    ]
+
+
+def smallrna_alignment_sample_tables(wildcards):
+    return [
+        f"{BRANCH_DIR}/smallrna/{wildcards.project}/smallrna/alignment/{row['library_id']}/aligned_sample.tsv"
+        for row in smallrna_library_rows(wildcards)
+    ]
+
+
+def smallrna_alignment_manifests(wildcards):
+    return [
+        f"{BRANCH_DIR}/smallrna/{wildcards.project}/smallrna/alignment/{row['library_id']}/alignment_manifest.tsv"
+        for row in smallrna_library_rows(wildcards)
+    ]
+
+
+def smallrna_residual_sample_tables(wildcards):
+    return [
+        f"{BRANCH_DIR}/smallrna/{wildcards.project}/smallrna/residual_genome/{row['library_id']}/residual_sample.tsv"
+        for row in smallrna_library_rows(wildcards)
+    ]
+
+
+def smallrna_residual_manifests(wildcards):
+    return [
+        f"{BRANCH_DIR}/smallrna/{wildcards.project}/smallrna/residual_genome/{row['library_id']}/residual_manifest.tsv"
+        for row in smallrna_library_rows(wildcards)
+    ]
+
+
+def smallrna_residual_biotype_tables(wildcards):
+    return [
+        f"{BRANCH_DIR}/smallrna/{wildcards.project}/smallrna/residual_genome/{row['library_id']}/biotype_counts.tsv"
+        for row in smallrna_library_rows(wildcards)
+    ]
+
+
+def smallrna_residual_feature_tables(wildcards):
+    return [
+        f"{BRANCH_DIR}/smallrna/{wildcards.project}/smallrna/residual_genome/{row['library_id']}/feature_counts.tsv"
+        for row in smallrna_library_rows(wildcards)
+    ]
+
+
+def smallrna_featurecounts_manifests(wildcards):
+    return [
+        f"{BRANCH_DIR}/smallrna/{wildcards.project}/smallrna/quantification/featurecounts/files/{row['library_id']}/featurecounts_manifest.tsv"
+        for row in smallrna_library_rows(wildcards)
+    ]
+
+
 def smallrna_preprocessed_fastqc_outputs(wildcards):
     rows = materialized_rows_for_branch("smallrna", wildcards.project)
     outdir = f"{BRANCH_DIR}/smallrna/{wildcards.project}/smallrna/preprocess/fastqc"
@@ -2630,15 +2743,16 @@ rule plan_smallrna:
         """
 
 
-rule preprocess_smallrna_branch:
+rule preprocess_smallrna_library:
     input:
+        analysis_plan=ANALYSIS_PLAN,
         samples=f"{BRANCH_DIR}" + "/smallrna/{project}/samples.tsv",
         plan=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/smallrna_plan.tsv",
         environment=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/environment_report.tsv"
     output:
-        samples=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/preprocess/trimmed_samples.tsv",
-        manifest=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/preprocess/cutadapt_manifest.tsv",
-        done=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/preprocess/preprocess.done"
+        samples=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/preprocess/{library_id}/trimmed_sample.tsv",
+        manifest=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/preprocess/{library_id}/cutadapt_manifest.tsv",
+        done=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/preprocess/{library_id}/preprocess.done"
     params:
         outdir=lambda wildcards: f"{BRANCH_DIR}/smallrna/{wildcards.project}/smallrna/preprocess",
         adapter=SMALLRNA.get("adapter", ""),
@@ -2655,12 +2769,13 @@ rule preprocess_smallrna_branch:
     threads:
         SMALLRNA.get("threads", 1)
     log:
-        "logs/branches/smallrna/{project}.smallrna_preprocess.log"
+        "logs/branches/smallrna/{project}.smallrna_preprocess.{library_id}.log"
     shell:
         r"""
         mkdir -p logs/branches/smallrna
         python3 workflow/scripts/preprocess_smallrna_branch.py \
           --samples {input.samples:q} \
+          --library-id {wildcards.library_id:q} \
           --outdir {params.outdir:q} \
           --output {output.samples:q} \
           --manifest {output.manifest:q} \
@@ -2676,6 +2791,34 @@ rule preprocess_smallrna_branch:
           > {log:q} 2>&1
         """
 
+
+rule preprocess_smallrna_branch:
+    input:
+        analysis_plan=ANALYSIS_PLAN,
+        samples=f"{BRANCH_DIR}" + "/smallrna/{project}/samples.tsv",
+        sample_tables=smallrna_preprocess_sample_tables,
+        manifests=smallrna_preprocess_manifests,
+        plan=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/smallrna_plan.tsv",
+        environment=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/environment_report.tsv"
+    output:
+        samples=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/preprocess/trimmed_samples.tsv",
+        manifest=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/preprocess/cutadapt_manifest.tsv",
+        done=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/preprocess/preprocess.done"
+    log:
+        "logs/branches/smallrna/{project}.smallrna_preprocess_manifest.log"
+    shell:
+        r"""
+        mkdir -p logs/branches/smallrna
+        python3 workflow/scripts/combine_library_tables.py \
+          --samples {input.samples:q} \
+          --output {output.samples:q} \
+          --tables {input.sample_tables:q} \
+          --manifest {output.manifest:q} \
+          --manifest-tables {input.manifests:q} \
+          --done {output.done:q} \
+          --path-columns fastq_1 cutadapt_json cutadapt_log \
+          > {log:q} 2>&1
+        """
 
 rule inspect_preprocessed_smallrna_fastqs:
     input:
@@ -2794,17 +2937,18 @@ rule run_preprocessed_smallrna_multiqc:
         """
 
 
-rule deplete_smallrna_contaminants:
+rule deplete_smallrna_contaminants_library:
     input:
+        analysis_plan=ANALYSIS_PLAN,
         samples=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/preprocess/trimmed_samples.tsv",
         preprocess_done=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/preprocess/preprocess.done",
         plan=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/smallrna_plan.tsv",
         contaminant_index=([SMALLRNA_CONTAMINANT_INDEX_DONE] if SMALLRNA_CONTAMINANT_INDEX_DONE else []),
         environment=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/environment_report.tsv"
     output:
-        samples=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/depletion/depleted_samples.tsv",
-        manifest=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/depletion/depletion_manifest.tsv",
-        done=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/depletion/depletion.done"
+        samples=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/depletion/{library_id}/depleted_sample.tsv",
+        manifest=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/depletion/{library_id}/depletion_manifest.tsv",
+        done=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/depletion/{library_id}/depletion.done"
     params:
         outdir=lambda wildcards: f"{BRANCH_DIR}/smallrna/{wildcards.project}/smallrna/depletion",
         index_prefix=SMALLRNA_EFFECTIVE_CONTAMINANT_INDEX_PREFIX,
@@ -2813,12 +2957,13 @@ rule deplete_smallrna_contaminants:
     threads:
         SMALLRNA.get("threads", 1)
     log:
-        "logs/branches/smallrna/{project}.smallrna_depletion.log"
+        "logs/branches/smallrna/{project}.smallrna_depletion.{library_id}.log"
     shell:
         r"""
         mkdir -p logs/branches/smallrna
         python3 workflow/scripts/deplete_smallrna_contaminants.py \
           --samples {input.samples:q} \
+          --library-id {wildcards.library_id:q} \
           --outdir {params.outdir:q} \
           --output {output.samples:q} \
           --manifest {output.manifest:q} \
@@ -2831,17 +2976,48 @@ rule deplete_smallrna_contaminants:
         """
 
 
-rule align_smallrna_mirbase:
+rule deplete_smallrna_contaminants:
     input:
+        analysis_plan=ANALYSIS_PLAN,
+        samples=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/preprocess/trimmed_samples.tsv",
+        preprocess_done=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/preprocess/preprocess.done",
+        sample_tables=smallrna_depletion_sample_tables,
+        manifests=smallrna_depletion_manifests,
+        plan=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/smallrna_plan.tsv",
+        contaminant_index=([SMALLRNA_CONTAMINANT_INDEX_DONE] if SMALLRNA_CONTAMINANT_INDEX_DONE else []),
+        environment=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/environment_report.tsv"
+    output:
+        samples=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/depletion/depleted_samples.tsv",
+        manifest=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/depletion/depletion_manifest.tsv",
+        done=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/depletion/depletion.done"
+    log:
+        "logs/branches/smallrna/{project}.smallrna_depletion_manifest.log"
+    shell:
+        r"""
+        mkdir -p logs/branches/smallrna
+        python3 workflow/scripts/combine_library_tables.py \
+          --samples {input.samples:q} \
+          --output {output.samples:q} \
+          --tables {input.sample_tables:q} \
+          --manifest {output.manifest:q} \
+          --manifest-tables {input.manifests:q} \
+          --done {output.done:q} \
+          --path-columns fastq_1 contaminant_sam contaminant_log depletion_stats \
+          > {log:q} 2>&1
+        """
+
+rule align_smallrna_mirbase_library:
+    input:
+        analysis_plan=ANALYSIS_PLAN,
         samples=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/depletion/depleted_samples.tsv",
         depletion_done=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/depletion/depletion.done",
         plan=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/smallrna_plan.tsv",
         mirbase_index=([SMALLRNA_BOWTIE_INDEX_DONE] if SMALLRNA_BOWTIE_INDEX_DONE else []),
         environment=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/environment_report.tsv"
     output:
-        samples=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/alignment/aligned_samples.tsv",
-        manifest=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/alignment/alignment_manifest.tsv",
-        done=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/alignment/alignment.done"
+        samples=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/alignment/{library_id}/aligned_sample.tsv",
+        manifest=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/alignment/{library_id}/alignment_manifest.tsv",
+        done=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/alignment/{library_id}/alignment.done"
     params:
         outdir=lambda wildcards: f"{BRANCH_DIR}/smallrna/{wildcards.project}/smallrna/alignment",
         index_prefix=SMALLRNA_EFFECTIVE_BOWTIE_INDEX_PREFIX,
@@ -2853,12 +3029,13 @@ rule align_smallrna_mirbase:
     threads:
         SMALLRNA.get("threads", 1)
     log:
-        "logs/branches/smallrna/{project}.smallrna_alignment.log"
+        "logs/branches/smallrna/{project}.smallrna_alignment.{library_id}.log"
     shell:
         r"""
         mkdir -p logs/branches/smallrna
         python3 workflow/scripts/align_smallrna_mirbase.py \
           --samples {input.samples:q} \
+          --library-id {wildcards.library_id:q} \
           --outdir {params.outdir:q} \
           --output {output.samples:q} \
           --manifest {output.manifest:q} \
@@ -2874,8 +3051,39 @@ rule align_smallrna_mirbase:
         """
 
 
-rule align_smallrna_residual_genome:
+rule align_smallrna_mirbase:
     input:
+        analysis_plan=ANALYSIS_PLAN,
+        samples=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/depletion/depleted_samples.tsv",
+        depletion_done=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/depletion/depletion.done",
+        sample_tables=smallrna_alignment_sample_tables,
+        manifests=smallrna_alignment_manifests,
+        plan=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/smallrna_plan.tsv",
+        mirbase_index=([SMALLRNA_BOWTIE_INDEX_DONE] if SMALLRNA_BOWTIE_INDEX_DONE else []),
+        environment=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/environment_report.tsv"
+    output:
+        samples=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/alignment/aligned_samples.tsv",
+        manifest=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/alignment/alignment_manifest.tsv",
+        done=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/alignment/alignment.done"
+    log:
+        "logs/branches/smallrna/{project}.smallrna_alignment_manifest.log"
+    shell:
+        r"""
+        mkdir -p logs/branches/smallrna
+        python3 workflow/scripts/combine_library_tables.py \
+          --samples {input.samples:q} \
+          --output {output.samples:q} \
+          --tables {input.sample_tables:q} \
+          --manifest {output.manifest:q} \
+          --manifest-tables {input.manifests:q} \
+          --done {output.done:q} \
+          --path-columns mirbase_unmapped_fastq_1 bam flagstat alignment_log \
+          > {log:q} 2>&1
+        """
+
+rule align_smallrna_residual_genome_library:
+    input:
+        analysis_plan=ANALYSIS_PLAN,
         samples=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/alignment/aligned_samples.tsv",
         alignment_done=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/alignment/alignment.done",
         plan=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/smallrna_plan.tsv",
@@ -2883,11 +3091,11 @@ rule align_smallrna_residual_genome:
         annotation=([SMALLRNA_CONFIGURED_RESIDUAL_ANNOTATION_GTF] if SMALLRNA_CONFIGURED_RESIDUAL_ANNOTATION_GTF else []),
         environment=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/environment_report.tsv"
     output:
-        samples=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/residual_genome/residual_samples.tsv",
-        manifest=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/residual_genome/residual_manifest.tsv",
-        biotype_counts=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/residual_genome/biotype_counts.tsv",
-        feature_counts=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/residual_genome/feature_counts.tsv",
-        done=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/residual_genome/residual.done"
+        samples=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/residual_genome/{library_id}/residual_sample.tsv",
+        manifest=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/residual_genome/{library_id}/residual_manifest.tsv",
+        biotype_counts=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/residual_genome/{library_id}/biotype_counts.tsv",
+        feature_counts=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/residual_genome/{library_id}/feature_counts.tsv",
+        done=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/residual_genome/{library_id}/residual.done"
     params:
         outdir=lambda wildcards: f"{BRANCH_DIR}/smallrna/{wildcards.project}/smallrna/residual_genome",
         index_prefix=SMALLRNA_EFFECTIVE_RESIDUAL_GENOME_INDEX_PREFIX,
@@ -2900,12 +3108,13 @@ rule align_smallrna_residual_genome:
     threads:
         SMALLRNA.get("threads", 1)
     log:
-        "logs/branches/smallrna/{project}.smallrna_residual_genome.log"
+        "logs/branches/smallrna/{project}.smallrna_residual_genome.{library_id}.log"
     shell:
         r"""
         mkdir -p logs/branches/smallrna
         python3 workflow/scripts/align_smallrna_residual_genome.py \
           --samples {input.samples:q} \
+          --library-id {wildcards.library_id:q} \
           --outdir {params.outdir:q} \
           --output {output.samples:q} \
           --manifest {output.manifest:q} \
@@ -2924,35 +3133,72 @@ rule align_smallrna_residual_genome:
         """
 
 
-rule featurecounts_smallrna_mirna:
+rule align_smallrna_residual_genome:
     input:
+        analysis_plan=ANALYSIS_PLAN,
+        samples=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/alignment/aligned_samples.tsv",
+        alignment_done=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/alignment/alignment.done",
+        sample_tables=smallrna_residual_sample_tables,
+        manifests=smallrna_residual_manifests,
+        biotype_tables=smallrna_residual_biotype_tables,
+        feature_tables=smallrna_residual_feature_tables,
+        plan=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/smallrna_plan.tsv",
+        residual_index=([SMALLRNA_RESIDUAL_GENOME_INDEX_DONE] if SMALLRNA_RESIDUAL_GENOME_INDEX_DONE else []),
+        annotation=([SMALLRNA_CONFIGURED_RESIDUAL_ANNOTATION_GTF] if SMALLRNA_CONFIGURED_RESIDUAL_ANNOTATION_GTF else []),
+        environment=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/environment_report.tsv"
+    output:
+        samples=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/residual_genome/residual_samples.tsv",
+        manifest=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/residual_genome/residual_manifest.tsv",
+        biotype_counts=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/residual_genome/biotype_counts.tsv",
+        feature_counts=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/residual_genome/feature_counts.tsv",
+        done=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/residual_genome/residual.done"
+    log:
+        "logs/branches/smallrna/{project}.smallrna_residual_genome_manifest.log"
+    shell:
+        r"""
+        mkdir -p logs/branches/smallrna
+        python3 workflow/scripts/build_smallrna_residual_manifest.py \
+          --samples {input.samples:q} \
+          --output {output.samples:q} \
+          --manifest {output.manifest:q} \
+          --biotype-counts {output.biotype_counts:q} \
+          --feature-counts {output.feature_counts:q} \
+          --done {output.done:q} \
+          --sample-tables {input.sample_tables:q} \
+          --manifest-tables {input.manifests:q} \
+          --biotype-tables {input.biotype_tables:q} \
+          --feature-tables {input.feature_tables:q} \
+          > {log:q} 2>&1
+        """
+
+rule featurecounts_smallrna_mirna_library:
+    input:
+        analysis_plan=ANALYSIS_PLAN,
         samples=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/alignment/aligned_samples.tsv",
         alignment_done=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/alignment/alignment.done",
         plan=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/smallrna_plan.tsv",
         saf=([SMALLRNA_EFFECTIVE_MIRBASE_SAF] if SMALLRNA_EFFECTIVE_MIRBASE_SAF else []),
         environment=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/environment_report.tsv"
     output:
-        counts=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/quantification/mirna_counts.tsv",
-        metadata=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/quantification/mirna_metadata.tsv",
-        manifest=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/quantification/featurecounts_manifest.tsv",
-        done=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/quantification/featurecounts.done"
+        counts=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/quantification/featurecounts/files/{library_id}/mirna_counts.tsv",
+        metadata=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/quantification/featurecounts/files/{library_id}/mirna_metadata.tsv",
+        manifest=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/quantification/featurecounts/files/{library_id}/featurecounts_manifest.tsv",
+        done=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/quantification/featurecounts/files/{library_id}/featurecounts.done"
     params:
         outdir=lambda wildcards: f"{BRANCH_DIR}/smallrna/{wildcards.project}/smallrna/quantification/featurecounts/files",
         saf=SMALLRNA_EFFECTIVE_MIRBASE_SAF,
         featurecounts=SMALLRNA.get("featurecounts_command", "featureCounts"),
-        extra_args_flag=shell_arg(
-            "--extra-args",
-            SMALLRNA.get("featurecounts_extra_args", ""),
-        )
+        extra_args_flag=shell_arg("--extra-args", SMALLRNA.get("featurecounts_extra_args", ""))
     threads:
         SMALLRNA.get("featurecounts_threads", SMALLRNA.get("threads", 1))
     log:
-        "logs/branches/smallrna/{project}.smallrna_featurecounts.log"
+        "logs/branches/smallrna/{project}.smallrna_featurecounts.{library_id}.log"
     shell:
         r"""
         mkdir -p logs/branches/smallrna
         python3 workflow/scripts/run_smallrna_featurecounts.py \
           --samples {input.samples:q} \
+          --library-id {wildcards.library_id:q} \
           --plan {input.plan:q} \
           --saf {params.saf:q} \
           --outdir {params.outdir:q} \
@@ -2966,6 +3212,35 @@ rule featurecounts_smallrna_mirna:
           > {log:q} 2>&1
         """
 
+
+rule featurecounts_smallrna_mirna:
+    input:
+        analysis_plan=ANALYSIS_PLAN,
+        samples=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/alignment/aligned_samples.tsv",
+        alignment_done=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/alignment/alignment.done",
+        manifests=smallrna_featurecounts_manifests,
+        plan=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/smallrna_plan.tsv",
+        saf=([SMALLRNA_EFFECTIVE_MIRBASE_SAF] if SMALLRNA_EFFECTIVE_MIRBASE_SAF else []),
+        environment=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/environment_report.tsv"
+    output:
+        counts=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/quantification/mirna_counts.tsv",
+        metadata=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/quantification/mirna_metadata.tsv",
+        manifest=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/quantification/featurecounts_manifest.tsv",
+        done=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/quantification/featurecounts.done"
+    log:
+        "logs/branches/smallrna/{project}.smallrna_featurecounts_manifest.log"
+    shell:
+        r"""
+        mkdir -p logs/branches/smallrna
+        python3 workflow/scripts/build_smallrna_featurecounts_matrix.py \
+          --samples {input.samples:q} \
+          --counts {output.counts:q} \
+          --metadata {output.metadata:q} \
+          --manifest {output.manifest:q} \
+          --done {output.done:q} \
+          {input.manifests:q} \
+          > {log:q} 2>&1
+        """
 
 rule render_smallrna_sample_qc:
     input:
@@ -4120,24 +4395,26 @@ rule align_rnaseq_branch:
         """
 
 
-rule qc_rnaseq_alignment:
+rule qc_rnaseq_alignment_library:
     input:
+        analysis_plan=ANALYSIS_PLAN,
         samples=f"{BRANCH_DIR}" + "/rnaseq/{project}/alignment/aligned_samples.tsv",
         done=f"{BRANCH_DIR}" + "/rnaseq/{project}/alignment/alignment.done",
         environment=f"{BRANCH_DIR}" + "/rnaseq/{project}/alignment/environment_report.tsv"
     output:
-        manifest=f"{BRANCH_DIR}" + "/rnaseq/{project}/alignment/qc/alignment_qc_manifest.tsv",
-        done=f"{BRANCH_DIR}" + "/rnaseq/{project}/alignment/qc/alignment_qc.done"
+        manifest=f"{BRANCH_DIR}" + "/rnaseq/{project}/alignment/qc/files/{library_id}.alignment_qc_manifest.tsv",
+        done=f"{BRANCH_DIR}" + "/rnaseq/{project}/alignment/qc/files/{library_id}.alignment_qc.done"
     params:
         outdir=lambda wildcards: f"{BRANCH_DIR}/rnaseq/{wildcards.project}/alignment/qc/files",
         samtools=RNASEQ_ALIGNMENT.get("samtools_command", "samtools")
     log:
-        "logs/branches/rnaseq/{project}.alignment.qc.log"
+        "logs/branches/rnaseq/{project}.alignment.qc.{library_id}.log"
     shell:
         r"""
         mkdir -p logs/branches/rnaseq
         python3 workflow/scripts/qc_rnaseq_alignment.py \
           --samples {input.samples:q} \
+          --library-id {wildcards.library_id:q} \
           --outdir {params.outdir:q} \
           --manifest {output.manifest:q} \
           --done {output.done:q} \
@@ -4145,6 +4422,29 @@ rule qc_rnaseq_alignment:
           > {log:q} 2>&1
         """
 
+
+rule qc_rnaseq_alignment:
+    input:
+        analysis_plan=ANALYSIS_PLAN,
+        samples=f"{BRANCH_DIR}" + "/rnaseq/{project}/alignment/aligned_samples.tsv",
+        done=f"{BRANCH_DIR}" + "/rnaseq/{project}/alignment/alignment.done",
+        manifests=rnaseq_alignment_qc_manifests,
+        environment=f"{BRANCH_DIR}" + "/rnaseq/{project}/alignment/environment_report.tsv"
+    output:
+        manifest=f"{BRANCH_DIR}" + "/rnaseq/{project}/alignment/qc/alignment_qc_manifest.tsv",
+        done=f"{BRANCH_DIR}" + "/rnaseq/{project}/alignment/qc/alignment_qc.done"
+    log:
+        "logs/branches/rnaseq/{project}.alignment.qc_manifest.log"
+    shell:
+        r"""
+        mkdir -p logs/branches/rnaseq
+        python3 workflow/scripts/combine_library_tables.py \
+          --samples {input.samples:q} \
+          --manifest {output.manifest:q} \
+          --done {output.done:q} \
+          --manifest-tables {input.manifests:q} \
+          > {log:q} 2>&1
+        """
 
 rule run_rnaseq_alignment_multiqc:
     input:
@@ -4287,16 +4587,17 @@ rule check_rnaseq_quantification_environment:
         """
 
 
-rule featurecounts_gene_counts:
+rule featurecounts_gene_counts_library:
     input:
+        analysis_plan=ANALYSIS_PLAN,
         samples=f"{BRANCH_DIR}" + "/rnaseq/{project}/alignment/aligned_samples.tsv",
         plan=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/quantification_plan.tsv",
         environment=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/environment_report.tsv"
     output:
-        counts=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/featurecounts/gene_counts.tsv",
-        metadata=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/featurecounts/gene_metadata.tsv",
-        manifest=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/featurecounts/featurecounts_manifest.tsv",
-        done=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/featurecounts/featurecounts.done"
+        counts=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/featurecounts/files/{library_id}/gene_counts.tsv",
+        metadata=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/featurecounts/files/{library_id}/gene_metadata.tsv",
+        manifest=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/featurecounts/files/{library_id}/featurecounts_manifest.tsv",
+        done=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/featurecounts/files/{library_id}/featurecounts.done"
     params:
         outdir=lambda wildcards: f"{BRANCH_DIR}/rnaseq/{wildcards.project}/quantification/featurecounts/files",
         featurecounts=RNASEQ_QUANTIFICATION.get("featurecounts_command", "featureCounts"),
@@ -4306,10 +4607,7 @@ rule featurecounts_gene_counts:
         ),
         paired_extra_args_flag=shell_arg(
             "--paired-extra-args",
-            RNASEQ_QUANTIFICATION.get(
-                "featurecounts_paired_extra_args",
-                "-p --countReadPairs",
-            ),
+            RNASEQ_QUANTIFICATION.get("featurecounts_paired_extra_args", "-p --countReadPairs"),
         ),
         extra_args_flag=shell_arg(
             "--extra-args",
@@ -4318,12 +4616,13 @@ rule featurecounts_gene_counts:
     threads:
         RNASEQ_QUANTIFICATION.get("featurecounts_threads", RNASEQ_QUANTIFICATION.get("threads", 4))
     log:
-        "logs/branches/rnaseq/{project}.featurecounts.log"
+        "logs/branches/rnaseq/{project}.featurecounts.{library_id}.log"
     shell:
         r"""
         mkdir -p logs/branches/rnaseq
         python3 workflow/scripts/run_featurecounts_branch.py \
           --samples {input.samples:q} \
+          --library-id {wildcards.library_id:q} \
           --plan {input.plan:q} \
           --outdir {params.outdir:q} \
           --counts {output.counts:q} \
@@ -4339,34 +4638,58 @@ rule featurecounts_gene_counts:
         """
 
 
-rule stringtie_assemble_branch:
+rule featurecounts_gene_counts:
     input:
+        analysis_plan=ANALYSIS_PLAN,
+        samples=f"{BRANCH_DIR}" + "/rnaseq/{project}/alignment/aligned_samples.tsv",
+        plan=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/quantification_plan.tsv",
+        manifests=rnaseq_featurecounts_manifests,
+        environment=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/environment_report.tsv"
+    output:
+        counts=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/featurecounts/gene_counts.tsv",
+        metadata=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/featurecounts/gene_metadata.tsv",
+        manifest=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/featurecounts/featurecounts_manifest.tsv",
+        done=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/featurecounts/featurecounts.done"
+    log:
+        "logs/branches/rnaseq/{project}.featurecounts_manifest.log"
+    shell:
+        r"""
+        mkdir -p logs/branches/rnaseq
+        python3 workflow/scripts/build_featurecounts_gene_matrix.py \
+          --samples {input.samples:q} \
+          --plan {input.plan:q} \
+          --counts {output.counts:q} \
+          --metadata {output.metadata:q} \
+          --manifest {output.manifest:q} \
+          --done {output.done:q} \
+          {input.manifests:q} \
+          > {log:q} 2>&1
+        """
+
+rule stringtie_assemble_library:
+    input:
+        analysis_plan=ANALYSIS_PLAN,
         samples=f"{BRANCH_DIR}" + "/rnaseq/{project}/alignment/aligned_samples.tsv",
         plan=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/quantification_plan.tsv",
         environment=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/environment_report.tsv"
     output:
-        manifest=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/stringtie/assembly_manifest.tsv",
-        done=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/stringtie/assembly.done"
+        manifest=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/stringtie/assembly/{library_id}/assembly_manifest.tsv",
+        done=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/stringtie/assembly/{library_id}/assembly.done"
     params:
         outdir=lambda wildcards: f"{BRANCH_DIR}/rnaseq/{wildcards.project}/quantification/stringtie/assembly",
         stringtie=RNASEQ_QUANTIFICATION.get("stringtie_command", "stringtie"),
-        strandness_flag=shell_arg(
-            "--strandness",
-            RNASEQ_QUANTIFICATION.get("stringtie_strandness", ""),
-        ),
-        extra_args_flag=shell_arg(
-            "--extra-args",
-            RNASEQ_QUANTIFICATION.get("stringtie_assembly_extra_args", ""),
-        )
+        strandness_flag=shell_arg("--strandness", RNASEQ_QUANTIFICATION.get("stringtie_strandness", "")),
+        extra_args_flag=shell_arg("--extra-args", RNASEQ_QUANTIFICATION.get("stringtie_assembly_extra_args", ""))
     threads:
         RNASEQ_QUANTIFICATION.get("stringtie_threads", RNASEQ_QUANTIFICATION.get("threads", 4))
     log:
-        "logs/branches/rnaseq/{project}.stringtie_assembly.log"
+        "logs/branches/rnaseq/{project}.stringtie_assembly.{library_id}.log"
     shell:
         r"""
         mkdir -p logs/branches/rnaseq
         python3 workflow/scripts/run_stringtie_assembly_branch.py \
           --samples {input.samples:q} \
+          --library-id {wildcards.library_id:q} \
           --plan {input.plan:q} \
           --outdir {params.outdir:q} \
           --manifest {output.manifest:q} \
@@ -4378,6 +4701,29 @@ rule stringtie_assemble_branch:
           > {log:q} 2>&1
         """
 
+
+rule stringtie_assemble_branch:
+    input:
+        analysis_plan=ANALYSIS_PLAN,
+        samples=f"{BRANCH_DIR}" + "/rnaseq/{project}/alignment/aligned_samples.tsv",
+        plan=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/quantification_plan.tsv",
+        manifests=rnaseq_stringtie_assembly_manifests,
+        environment=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/environment_report.tsv"
+    output:
+        manifest=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/stringtie/assembly_manifest.tsv",
+        done=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/stringtie/assembly.done"
+    log:
+        "logs/branches/rnaseq/{project}.stringtie_assembly_manifest.log"
+    shell:
+        r"""
+        mkdir -p logs/branches/rnaseq
+        python3 workflow/scripts/combine_library_tables.py \
+          --samples {input.samples:q} \
+          --manifest {output.manifest:q} \
+          --done {output.done:q} \
+          --manifest-tables {input.manifests:q} \
+          > {log:q} 2>&1
+        """
 
 rule merge_stringtie_assemblies:
     input:
@@ -4446,36 +4792,32 @@ rule gffcompare_stringtie_merge:
         """
 
 
-rule stringtie_quantify_branch:
+rule stringtie_quantify_library:
     input:
+        analysis_plan=ANALYSIS_PLAN,
         samples=f"{BRANCH_DIR}" + "/rnaseq/{project}/alignment/aligned_samples.tsv",
         plan=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/quantification_plan.tsv",
         merged=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/stringtie/merge/merged.gtf",
         gffcompare_done=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/gffcompare/gffcompare.done",
         environment=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/environment_report.tsv"
     output:
-        manifest=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/stringtie/quant_manifest.tsv",
-        done=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/stringtie/quantification.done"
+        manifest=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/stringtie/quant/{library_id}/quant_manifest.tsv",
+        done=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/stringtie/quant/{library_id}/quantification.done"
     params:
         outdir=lambda wildcards: f"{BRANCH_DIR}/rnaseq/{wildcards.project}/quantification/stringtie/quant",
         stringtie=RNASEQ_QUANTIFICATION.get("stringtie_command", "stringtie"),
-        strandness_flag=shell_arg(
-            "--strandness",
-            RNASEQ_QUANTIFICATION.get("stringtie_strandness", ""),
-        ),
-        extra_args_flag=shell_arg(
-            "--extra-args",
-            RNASEQ_QUANTIFICATION.get("stringtie_quant_extra_args", ""),
-        )
+        strandness_flag=shell_arg("--strandness", RNASEQ_QUANTIFICATION.get("stringtie_strandness", "")),
+        extra_args_flag=shell_arg("--extra-args", RNASEQ_QUANTIFICATION.get("stringtie_quant_extra_args", ""))
     threads:
         RNASEQ_QUANTIFICATION.get("stringtie_threads", RNASEQ_QUANTIFICATION.get("threads", 4))
     log:
-        "logs/branches/rnaseq/{project}.stringtie_quantification.log"
+        "logs/branches/rnaseq/{project}.stringtie_quantification.{library_id}.log"
     shell:
         r"""
         mkdir -p logs/branches/rnaseq
         python3 workflow/scripts/run_stringtie_quant_branch.py \
           --samples {input.samples:q} \
+          --library-id {wildcards.library_id:q} \
           --plan {input.plan:q} \
           --merged-gtf {input.merged:q} \
           --outdir {params.outdir:q} \
@@ -4488,6 +4830,31 @@ rule stringtie_quantify_branch:
           > {log:q} 2>&1
         """
 
+
+rule stringtie_quantify_branch:
+    input:
+        analysis_plan=ANALYSIS_PLAN,
+        samples=f"{BRANCH_DIR}" + "/rnaseq/{project}/alignment/aligned_samples.tsv",
+        plan=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/quantification_plan.tsv",
+        merged=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/stringtie/merge/merged.gtf",
+        gffcompare_done=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/gffcompare/gffcompare.done",
+        manifests=rnaseq_stringtie_quant_manifests,
+        environment=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/environment_report.tsv"
+    output:
+        manifest=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/stringtie/quant_manifest.tsv",
+        done=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/stringtie/quantification.done"
+    log:
+        "logs/branches/rnaseq/{project}.stringtie_quantification_manifest.log"
+    shell:
+        r"""
+        mkdir -p logs/branches/rnaseq
+        python3 workflow/scripts/combine_library_tables.py \
+          --samples {input.samples:q} \
+          --manifest {output.manifest:q} \
+          --done {output.done:q} \
+          --manifest-tables {input.manifests:q} \
+          > {log:q} 2>&1
+        """
 
 rule build_stringtie_transcript_matrix:
     input:
