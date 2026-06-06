@@ -308,14 +308,10 @@ RNASEQ_ALIGNMENT_REQUIRED_TOOLS = configured_tool_list(
 RNASEQ_QUANTIFICATION_REQUIRED_TOOLS = configured_tool_list(
     "rnaseq_quantification_required_tools", ["featureCounts", "stringtie", "gffcompare"]
 )
-DEFAULT_RNASEQ_DIFFERENTIAL_TOOLS = ["Rscript", "R::DESeq2"] + (
-    ["R::IsoformSwitchAnalyzeR"] if "isoform_switch" in RNASEQ_DIFFERENTIAL_LEVELS else []
-)
+DEFAULT_RNASEQ_DIFFERENTIAL_TOOLS = ["Rscript", "R::DESeq2"]
 RNASEQ_DIFFERENTIAL_REQUIRED_TOOLS = configured_tool_list(
     "rnaseq_differential_required_tools", DEFAULT_RNASEQ_DIFFERENTIAL_TOOLS
 )
-if "isoform_switch" in RNASEQ_DIFFERENTIAL_LEVELS and "R::IsoformSwitchAnalyzeR" not in RNASEQ_DIFFERENTIAL_REQUIRED_TOOLS:
-    RNASEQ_DIFFERENTIAL_REQUIRED_TOOLS.append("R::IsoformSwitchAnalyzeR")
 RNASEQ_ISOFORM_SWITCH_OPTIONAL_TOOLS = (
     configured_tool_list(
         "rnaseq_isoform_switch_optional_tools",

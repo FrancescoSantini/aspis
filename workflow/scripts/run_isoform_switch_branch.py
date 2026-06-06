@@ -111,6 +111,34 @@ def executable_path(command: str) -> str:
     return resolved
 
 
+def r_package_available(rscript: str, package: str) -> bool:
+    package_literal = package.replace("\\", "\\\\").replace("'", "\\'")
+    command = [
+        rscript,
+        "-e",
+        (
+            f"quit(status = ifelse(requireNamespace('{package_literal}', quietly = TRUE), "
+            "0L, 1L))"
+        ),
+    ]
+    completed = subprocess.run(command, check=False, capture_output=True, text=True)
+    return completed.returncode == 0
+
+
+def block_ready_rows(rows: list[dict[str, str]], reason: str) -> list[dict[str, str]]:
+    output_rows = []
+    for row in rows:
+        output_row = dict(row)
+        output_row["status"] = "blocked"
+        output_row["reason"] = reason
+        log_path = Path(output_row.get("log", ""))
+        if log_path:
+            log_path.parent.mkdir(parents=True, exist_ok=True)
+            log_path.write_text(reason + "\n", encoding="utf-8")
+        output_rows.append(output_row)
+    return output_rows
+
+
 def selected_samples(row: dict[str, str]) -> list[str]:
     samples = [sample for sample in row.get("samples", "").split(",") if sample]
     if not samples:
@@ -294,7 +322,15 @@ def main() -> int:
         rscript = executable_path(args.rscript)
         if not Path(args.isoform_switch_script).exists():
             raise FileNotFoundError(f"Isoform-switch R script does not exist: {args.isoform_switch_script}")
-        output_rows.extend(run_ready_contrast(row, sample_columns, sample_rows, args, rscript) for row in ready_rows)
+        if not r_package_available(rscript, "IsoformSwitchAnalyzeR"):
+            output_rows.extend(
+                block_ready_rows(
+                    ready_rows,
+                    "R package IsoformSwitchAnalyzeR is not installed; isoform-switch analysis was not run",
+                )
+            )
+        else:
+            output_rows.extend(run_ready_contrast(row, sample_columns, sample_rows, args, rscript) for row in ready_rows)
 
     output_rows.sort(key=lambda row: row.get("contrast_id", ""))
     write_manifest(Path(args.manifest), output_rows)
