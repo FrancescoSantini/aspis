@@ -252,6 +252,7 @@ environment:
   rnaseq_differential_required_tools:
     - Rscript
     - R::DESeq2
+    - R::IsoformSwitchAnalyzeR
   rnaseq_isoform_switch_optional_tools:
     - hmmscan
     - interproscan.sh
