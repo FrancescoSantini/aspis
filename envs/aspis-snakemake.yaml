@@ -24,5 +24,6 @@ dependencies:
   - gffcompare
   - r-base
   - r-optparse
+  - r-mass
   - bioconductor-deseq2
   - bioconductor-isoformswitchanalyzer
