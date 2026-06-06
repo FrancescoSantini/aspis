@@ -67,6 +67,7 @@ PREFLIGHT_REPORT = os.environ.get("ASPIS_PREFLIGHT_REPORT", "")
 BRANCH_DIR = PATHS.get("branch_dir", "results/branches")
 RUN_DASHBOARD = PATHS.get("run_dashboard", str(Path(BRANCH_DIR).parent / "index.html"))
 RUN_DASHBOARD_DONE = PATHS.get("run_dashboard_done", str(Path(RUN_DASHBOARD).with_suffix(".done")))
+PROJECT_REPORT_DIR = PATHS.get("project_report_dir", str(Path(BRANCH_DIR).parent / "projects"))
 SRA_CACHE_DIR = PATHS.get("sra_cache_dir", "cache/sra")
 SCRATCH_DIR = PATHS.get("scratch_dir", "work/tmp")
 DESEQ2_SMOKE_DIR = DESEQ2_SMOKE.get("outdir", "results/deseq2_smoke/gene_deseq2")
@@ -1913,6 +1914,52 @@ def branch_report_done(assay, project):
     return f"{BRANCH_DIR}/{assay}/{project}/report/index.done"
 
 
+def project_report_html(project):
+    return f"{PROJECT_REPORT_DIR}/{project}/index.html"
+
+
+def project_report_done(project):
+    return f"{PROJECT_REPORT_DIR}/{project}/index.done"
+
+
+def planned_ready_projects(wildcards):
+    plan_path = checkpoints.build_analysis_plan.get().output[0]
+    projects = set()
+    with open(plan_path, newline="") as handle:
+        reader = csv.DictReader(handle, delimiter="\t")
+        for row in reader:
+            if row.get("status", "") == "ready":
+                project = row.get("project", "")
+                if not PROJECT_ID_RE.match(project):
+                    raise ValueError(
+                        f"Project {project!r} is not path-safe; use letters, numbers, '.', '_', or '-'."
+                    )
+                projects.add(project)
+    return sorted(projects)
+
+
+def planned_project_report_targets(wildcards):
+    targets = []
+    for project in planned_ready_projects(wildcards):
+        targets.extend([project_report_html(project), project_report_done(project)])
+    return targets
+
+
+def project_report_inputs(wildcards):
+    plan_path = checkpoints.build_analysis_plan.get().output[0]
+    inputs = [plan_path]
+    with open(plan_path, newline="") as handle:
+        reader = csv.DictReader(handle, delimiter="\t")
+        for row in reader:
+            if row.get("status", "") != "ready" or row.get("project", "") != wildcards.project:
+                continue
+            assay = row.get("assay", "")
+            if assay not in {"rnaseq", "smallrna"}:
+                continue
+            inputs.extend([branch_report_html(assay, wildcards.project), branch_report_done(assay, wildcards.project)])
+    return inputs
+
+
 def branch_report_inputs(wildcards):
     assay = wildcards.assay
     project = wildcards.project
@@ -2075,13 +2122,18 @@ def branch_report_inputs(wildcards):
 
 
 def run_dashboard_inputs(wildcards):
-    return [MANIFEST, ANALYSIS_PLAN, ENVIRONMENT_REPORT, EXECUTION_REPORT] + planned_branch_targets(wildcards)
+    return (
+        [MANIFEST, ANALYSIS_PLAN, ENVIRONMENT_REPORT, EXECUTION_REPORT]
+        + planned_branch_targets(wildcards)
+        + planned_project_report_targets(wildcards)
+    )
 
 
 def workflow_targets(wildcards):
     targets = []
     if not DESEQ2_SMOKE.get("only", False):
         targets.extend(planned_branch_targets(wildcards))
+        targets.extend(planned_project_report_targets(wildcards))
         targets.append(ENVIRONMENT_REPORT)
         targets.append(EXECUTION_REPORT)
         targets.append(RUN_DASHBOARD)
@@ -2089,7 +2141,7 @@ def workflow_targets(wildcards):
     return targets
 
 
-localrules: all, check_environment, check_execution_config, assay_branch_ready, build_branch_design, build_branch_provenance_bundle, run_gene_deseq2, run_transcript_deseq2, run_isoform_switch, run_mirna_deseq2, render_rnaseq_differential_plots, render_rnaseq_differential_enrichment, render_rnaseq_differential_summaries, render_run_dashboard, render_branch_report_index
+localrules: all, check_environment, check_execution_config, assay_branch_ready, build_branch_design, build_branch_provenance_bundle, run_gene_deseq2, run_transcript_deseq2, run_isoform_switch, run_mirna_deseq2, render_rnaseq_differential_plots, render_rnaseq_differential_enrichment, render_rnaseq_differential_summaries, render_run_dashboard, render_branch_report_index, render_project_report_index
 
 
 rule all:
@@ -2119,6 +2171,30 @@ rule render_run_dashboard:
           --manifest {params.manifest:q} \
           --environment-report {params.environment_report:q} \
           --execution-report {params.execution_report:q} \
+          --branch-dir {params.branch_dir:q} \
+          --output {output.html:q} \
+          --done {output.done:q} \
+          > {log:q} 2>&1
+        """
+
+
+rule render_project_report_index:
+    input:
+        project_report_inputs
+    output:
+        html=f"{PROJECT_REPORT_DIR}/{{project}}/index.html",
+        done=f"{PROJECT_REPORT_DIR}/{{project}}/index.done"
+    params:
+        analysis_plan=ANALYSIS_PLAN,
+        branch_dir=BRANCH_DIR
+    log:
+        "logs/projects/{project}.report_index.log"
+    shell:
+        r"""
+        mkdir -p logs/projects
+        python3 workflow/scripts/render_project_report_index.py \
+          --project {wildcards.project:q} \
+          --analysis-plan {params.analysis_plan:q} \
           --branch-dir {params.branch_dir:q} \
           --output {output.html:q} \
           --done {output.done:q} \

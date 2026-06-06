@@ -136,6 +136,23 @@ def render(args: argparse.Namespace) -> None:
             "</tr>"
         )
 
+    projects = sorted({row.get("project", "") for row in plan_rows if row.get("project", "")})
+    project_table_rows = []
+    for project in projects:
+        project_rows = [row for row in plan_rows if row.get("project", "") == project]
+        project_ready = [row for row in project_rows if row.get("status", "") == "ready"]
+        assays = ", ".join(sorted(row.get("assay", "") for row in project_ready if row.get("assay", "")))
+        project_report = base_dir / "projects" / project / "index.html"
+        project_table_rows.append(
+            "<tr>"
+            f"<td>{link_if_exists(project_report, project, base_dir)}</td>"
+            f"<td>{html.escape(assays or 'none')}</td>"
+            f"<td>{len(project_rows)}</td>"
+            f"<td>{sum(1 for row in project_rows if row.get('status') == 'ready')}</td>"
+            f"<td>{html.escape('; '.join(row.get('reason', '') for row in project_rows if row.get('reason', '')))}</td>"
+            "</tr>"
+        )
+
     env_link = link_if_exists(Path(args.environment_report), "environment report", base_dir)
     exec_link = link_if_exists(Path(args.execution_report), "execution report", base_dir)
     manifest_link = link_if_exists(Path(args.manifest), "materialized manifest", base_dir)
@@ -188,6 +205,15 @@ def render(args: argparse.Namespace) -> None:
     <div class=\"metric\"><strong>environment issues</strong><span>{env_failed}</span></div>
     <div class=\"metric\"><strong>execution issues</strong><span>{execution_failed}</span></div>
   </section>
+  <h2>Projects</h2>
+  <p class="note">Project pages join assay branches that share a project identifier, so matched RNA-seq and smallRNA analyses can be reviewed together.</p>
+  <table>
+    <thead>
+      <tr><th>project report</th><th>ready assays</th><th>planned branches</th><th>ready branches</th><th>notes</th></tr>
+    </thead>
+    <tbody>{''.join(project_table_rows)}</tbody>
+  </table>
+  <h2>Assay Branches</h2>
   <table>
     <thead>
       <tr><th>assay</th><th>project</th><th>status</th><th>reason</th><th>libraries</th><th>samples</th><th>branch resources</th></tr>

@@ -1170,6 +1170,13 @@ def render_row(
             seed,
             min_ranked_mapped,
         )
+        if not feature_sets:
+            return {
+                **output,
+                **paths,
+                "status": "not_configured",
+                "reason": "No feature set GMT or table configured",
+            }
         return {**output, **paths, "status": "ok", "reason": ""}
     except Exception as exc:
         return {**output, "status": "failed", "reason": str(exc)}
@@ -1177,13 +1184,25 @@ def render_row(
 
 def write_done(path: Path, rows: list[dict[str, str]]) -> None:
     ok = sum(1 for row in rows if row["status"] == "ok")
+    not_configured = sum(1 for row in rows if row["status"] == "not_configured")
     blocked = sum(1 for row in rows if row["status"] == "blocked")
     failed = sum(1 for row in rows if row["status"] == "failed")
-    status = "failed" if failed else "ok" if ok and not blocked else "blocked"
+    status = (
+        "failed"
+        if failed
+        else "blocked"
+        if blocked
+        else "not_configured"
+        if not_configured and not ok
+        else "ok"
+    )
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", encoding="utf-8") as handle:
-        handle.write("status\tenrichment_ok\tenrichment_blocked\tenrichment_failed\tenrichment_total\n")
-        handle.write(f"{status}\t{ok}\t{blocked}\t{failed}\t{len(rows)}\n")
+        handle.write(
+            "status\tenrichment_ok\tenrichment_not_configured\t"
+            "enrichment_blocked\tenrichment_failed\tenrichment_total\n"
+        )
+        handle.write(f"{status}\t{ok}\t{not_configured}\t{blocked}\t{failed}\t{len(rows)}\n")
     if failed:
         failed_ids = ", ".join(row["contrast_id"] for row in rows if row["status"] == "failed")
         raise RuntimeError(f"Differential enrichment preparation failed for contrast(s): {failed_ids}")
