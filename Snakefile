@@ -643,6 +643,14 @@ def rnaseq_preprocessed_fastqc_input(wildcards):
     return f"{BRANCH_DIR}/rnaseq/{wildcards.project}/preprocess/{wildcards.library_id}/{filename}"
 
 
+def rnaseq_preprocess_sample_tables(wildcards):
+    rows = materialized_rows_for_branch("rnaseq", wildcards.project)
+    return [
+        f"{BRANCH_DIR}/rnaseq/{wildcards.project}/preprocess/{row['library_id']}/preprocessed_sample.tsv"
+        for row in rows
+    ]
+
+
 def smallrna_preprocessed_fastqc_outputs(wildcards):
     rows = materialized_rows_for_branch("smallrna", wildcards.project)
     outdir = f"{BRANCH_DIR}/smallrna/{wildcards.project}/smallrna/preprocess/fastqc"
@@ -3777,17 +3785,18 @@ rule check_rnaseq_preprocess_environment:
         """
 
 
-rule preprocess_rnaseq_branch:
+rule preprocess_rnaseq_library:
     input:
+        rawdir=f"{RAW_DIR}" + "/{library_id}",
         samples=f"{BRANCH_DIR}" + "/rnaseq/{project}/samples.tsv",
         design=f"{BRANCH_DIR}" + "/rnaseq/{project}/design.tsv",
         inspection=f"{BRANCH_DIR}" + "/rnaseq/{project}/fastq_inspection.tsv",
         environment=f"{BRANCH_DIR}" + "/rnaseq/{project}/preprocess/environment_report.tsv"
     output:
-        samples=f"{BRANCH_DIR}" + "/rnaseq/{project}/preprocess/preprocessed_samples.tsv",
-        done=f"{BRANCH_DIR}" + "/rnaseq/{project}/preprocess/preprocess.done"
+        sample=f"{BRANCH_DIR}" + "/rnaseq/{project}/preprocess/{library_id}/preprocessed_sample.tsv",
+        done=f"{BRANCH_DIR}" + "/rnaseq/{project}/preprocess/{library_id}/preprocess.done"
     params:
-        outdir=lambda wildcards: f"{BRANCH_DIR}/rnaseq/{wildcards.project}/preprocess",
+        outdir=lambda wildcards: f"{BRANCH_DIR}/rnaseq/{wildcards.project}/preprocess/{wildcards.library_id}",
         fastp=RNASEQ_PREPROCESS.get("command", "fastp"),
         extra_args_flag=(
             "--extra-args " + shlex.quote(RNASEQ_PREPROCESS.get("extra_args", ""))
@@ -3797,18 +3806,44 @@ rule preprocess_rnaseq_branch:
     threads:
         RNASEQ_PREPROCESS.get("threads", 2)
     log:
-        "logs/branches/rnaseq/{project}.preprocess.log"
+        "logs/branches/rnaseq/{project}.preprocess.{library_id}.log"
     shell:
         r"""
         mkdir -p logs/branches/rnaseq
-        python3 workflow/scripts/preprocess_rnaseq_branch.py \
+        python3 workflow/scripts/preprocess_rnaseq_library.py \
           --samples {input.samples:q} \
+          --library-id {wildcards.library_id:q} \
           --outdir {params.outdir:q} \
-          --output {output.samples:q} \
+          --output {output.sample:q} \
           --done {output.done:q} \
           --threads {threads:q} \
           --fastp {params.fastp:q} \
           {params.extra_args_flag} \
+          > {log:q} 2>&1
+        """
+
+
+rule preprocess_rnaseq_branch:
+    input:
+        analysis_plan=ANALYSIS_PLAN,
+        preprocessed_tables=rnaseq_preprocess_sample_tables,
+        samples=f"{BRANCH_DIR}" + "/rnaseq/{project}/samples.tsv",
+        design=f"{BRANCH_DIR}" + "/rnaseq/{project}/design.tsv",
+        inspection=f"{BRANCH_DIR}" + "/rnaseq/{project}/fastq_inspection.tsv",
+        environment=f"{BRANCH_DIR}" + "/rnaseq/{project}/preprocess/environment_report.tsv"
+    output:
+        samples=f"{BRANCH_DIR}" + "/rnaseq/{project}/preprocess/preprocessed_samples.tsv",
+        done=f"{BRANCH_DIR}" + "/rnaseq/{project}/preprocess/preprocess.done"
+    log:
+        "logs/branches/rnaseq/{project}.preprocess_manifest.log"
+    shell:
+        r"""
+        mkdir -p logs/branches/rnaseq
+        python3 workflow/scripts/build_preprocessed_rnaseq_manifest.py \
+          --samples {input.samples:q} \
+          --output {output.samples:q} \
+          --done {output.done:q} \
+          {input.preprocessed_tables:q} \
           > {log:q} 2>&1
         """
 
