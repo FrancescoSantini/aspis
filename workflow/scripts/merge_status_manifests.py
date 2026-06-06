@@ -5,6 +5,8 @@ from __future__ import annotations
 
 import argparse
 import csv
+import subprocess
+import sys
 from pathlib import Path
 
 DONE_COLUMNS = {
@@ -30,6 +32,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--manifest", required=True, help="Merged manifest TSV")
     parser.add_argument("--done", required=True, help="Merged done sentinel")
     parser.add_argument("inputs", nargs="+", help="Per-item manifest TSV files")
+    parser.add_argument("--summary-top-n", type=int, default=20, help="Top features for summary fallback rendering")
     return parser.parse_args()
 
 
@@ -54,7 +57,60 @@ def validate_columns(kind: str, path: Path, columns: list[str]) -> None:
         )
 
 
-def expand_plan_placeholder(kind: str, output_manifest: Path, input_paths: list[Path]) -> list[Path]:
+def write_single_plan_row(path: Path, done: Path, columns: list[str], row: dict[str, str]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=columns, delimiter="\t", lineterminator="\n")
+        writer.writeheader()
+        writer.writerow({column: row.get(column, "") for column in columns})
+    with done.open("w", encoding="utf-8") as handle:
+        handle.write("status\tlevel\tcontrast_id\n")
+        handle.write(f"ok\t{row.get('level', '')}\t{row.get('contrast_id', '')}\n")
+
+
+def render_missing_summary_items(
+    output_manifest: Path,
+    columns: list[str],
+    rows: list[dict[str, str]],
+    summary_top_n: int,
+) -> None:
+    reports_dir = output_manifest.parent.parent
+    summary_script = Path(__file__).with_name("render_rnaseq_differential_summary.py")
+    for row in rows:
+        level = row.get("level", "")
+        contrast_id = row.get("contrast_id", "")
+        if not level or not contrast_id:
+            continue
+        item_plan = reports_dir / "items" / level / contrast_id / "report_plan.tsv"
+        item_plan_done = reports_dir / "items" / level / contrast_id / "report_plan.done"
+        item_manifest = reports_dir / "summaries" / "items" / level / contrast_id / "summaries_manifest.tsv"
+        item_done = reports_dir / "summaries" / "items" / level / contrast_id / "summaries.done"
+        if item_manifest.exists() and item_done.exists():
+            continue
+        write_single_plan_row(item_plan, item_plan_done, columns, row)
+        subprocess.run(
+            [
+                sys.executable,
+                str(summary_script),
+                "--plan",
+                str(item_plan),
+                "--manifest",
+                str(item_manifest),
+                "--done",
+                str(item_done),
+                "--top-n",
+                str(summary_top_n),
+            ],
+            check=True,
+        )
+
+
+def expand_plan_placeholder(
+    kind: str,
+    output_manifest: Path,
+    input_paths: list[Path],
+    summary_top_n: int,
+) -> list[Path]:
     if len(input_paths) != 1:
         return input_paths
 
@@ -92,6 +148,9 @@ def expand_plan_placeholder(kind: str, output_manifest: Path, input_paths: list[
     if not expanded:
         return input_paths
     missing_paths = [path for path in expanded if not path.exists()]
+    if missing_paths and kind == "summaries":
+        render_missing_summary_items(output_manifest, columns, rows, summary_top_n)
+        missing_paths = [path for path in expanded if not path.exists()]
     if missing_paths:
         preview = ", ".join(str(path) for path in missing_paths[:5])
         if len(missing_paths) > 5:
@@ -146,7 +205,7 @@ def main() -> int:
     if not args.inputs:
         raise ValueError("At least one input manifest is required")
 
-    input_paths = expand_plan_placeholder(args.kind, Path(args.manifest), [Path(path) for path in args.inputs])
+    input_paths = expand_plan_placeholder(args.kind, Path(args.manifest), [Path(path) for path in args.inputs], args.summary_top_n)
 
     columns: list[str] | None = None
     rows: list[dict[str, str]] = []

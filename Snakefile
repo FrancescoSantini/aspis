@@ -6157,6 +6157,8 @@ rule render_rnaseq_differential_summaries:
     output:
         manifest=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/reports/summaries/summary_manifest.tsv",
         done=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/reports/summaries/summary.done"
+    params:
+        top_n=RNASEQ_DIFFERENTIAL_REPORT_TOP_N
     log:
         "logs/branches/rnaseq/{project}.differential_summaries.merge.log"
     shell:
@@ -6166,6 +6168,7 @@ rule render_rnaseq_differential_summaries:
           --kind summaries \
           --manifest {output.manifest:q} \
           --done {output.done:q} \
+          --summary-top-n {params.top_n:q} \
           {input:q} \
           > {log:q} 2>&1
         """
