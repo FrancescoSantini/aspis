@@ -36,6 +36,7 @@ ASSAY_ALIASES = {
     "mirna-seq": "smallrna",
 }
 VALID_RNASEQ_LEVELS = {"gene", "transcript", "isoform_switch"}
+SUPPORTED_ASSAYS = {"rnaseq", "smallrna"}
 IUPAC_BASES = set("ACGTURYSWKMBDHVNacgturyswkmbdhvn")
 FEATURE_SET_TABLE_REQUIRED_COLUMNS = {"set_id", "feature_id"}
 TARGET_MIRNA_COLUMNS = {"mirna_id", "mature_mirna_id", "miRNA", "mirna", "mature_id"}
@@ -387,11 +388,13 @@ def read_intake(path: Path) -> tuple[list[str], list[dict[str, str]]]:
     return list(reader.fieldnames), rows
 
 
-def summarize_intake(config: dict[str, Any]) -> tuple[int, list[str]]:
+def summarize_intake(config: dict[str, Any], assay: str | None = None) -> tuple[int, list[str]]:
     intake_path = resolve_path(config.get("intake"))
     if intake_path is None:
         return 0, []
     _, rows = read_intake(intake_path)
+    if assay:
+        rows = rows_for_assay(rows, assay)
     projects = sorted({row.get("project", "") or "default" for row in rows})
     return len(rows), projects
 
@@ -417,7 +420,7 @@ def write_report(path: Path, config_path: Path, assay: str, errors: list[str]) -
 
         try:
             config = load_config(config_path)
-            n_libraries, projects = summarize_intake(config)
+            n_libraries, projects = summarize_intake(config, assay)
             detail = (
                 f"{n_libraries} {assay} libraries across "
                 f"{len(projects)} project(s): {', '.join(projects)}"
@@ -430,6 +433,10 @@ def write_report(path: Path, config_path: Path, assay: str, errors: list[str]) -
 def normalized_assay(row: dict[str, str]) -> str:
     raw = (row.get("assay_hint") or row.get("assay") or "").strip().lower()
     return ASSAY_ALIASES.get(raw, raw)
+
+
+def rows_for_assay(rows: list[dict[str, str]], assay: str) -> list[dict[str, str]]:
+    return [row for row in rows if normalized_assay(row) == assay]
 
 
 def is_accession(value: str) -> bool:
@@ -464,8 +471,8 @@ def validate_intake(columns: list[str], rows: list[dict[str, str]], assay: str) 
             errors.append(f"{library_id}: project {project!r} is not path-safe; use letters, numbers, '.', '_', or '-'")
 
         row_assay = normalized_assay(row)
-        if row_assay != assay:
-            errors.append(f"{library_id}: assay {row_assay!r} does not match expected {assay!r}")
+        if row_assay not in SUPPORTED_ASSAYS:
+            errors.append(f"{library_id}: unsupported or missing assay {row_assay!r}")
 
         input_1 = row.get("input_1", "")
         input_2 = row.get("input_2", "")
@@ -475,7 +482,7 @@ def validate_intake(columns: list[str], rows: list[dict[str, str]], assay: str) 
             require_existing_file(errors, input_1, f"{library_id}: input_1")
         if input_2 and not is_accession(input_2):
             require_existing_file(errors, input_2, f"{library_id}: input_2")
-        if assay == "smallrna" and input_2:
+        if row_assay == "smallrna" and input_2:
             errors.append(f"{library_id}: smallRNA currently expects single-end libraries; input_2 must be empty")
     return errors
 
@@ -689,6 +696,9 @@ def run_preflight(config_path: Path, assay: str) -> list[str]:
         return [str(exc)]
 
     errors.extend(validate_intake(columns, rows, assay))
+    assay_rows = rows_for_assay(rows, assay)
+    if not assay_rows:
+        errors.append(f"intake contains no {assay} libraries")
     errors.extend(validate_resource_inventory(config))
     errors.extend(validate_resource_recipes(config))
     design = config.get("design", {}) or {}
@@ -696,12 +706,12 @@ def run_preflight(config_path: Path, assay: str) -> list[str]:
         errors.extend(validate_rnaseq_config(config))
         diff = config.get("rnaseq_differential", {}) or {}
         if truthy(diff.get("run"), False):
-            errors.extend(validate_differential_design(columns, rows, diff, design, "rnaseq_differential"))
+            errors.extend(validate_differential_design(columns, assay_rows, diff, design, "rnaseq_differential"))
     else:
         errors.extend(validate_smallrna_config(config))
         small = config.get("smallrna", {}) or {}
         if truthy(small.get("differential_run"), False):
-            errors.extend(validate_differential_design(columns, rows, small, design, "smallrna"))
+            errors.extend(validate_differential_design(columns, assay_rows, small, design, "smallrna"))
     return errors
 
 
@@ -723,7 +733,7 @@ def main() -> int:
         return 1
 
     config = load_config(config_path)
-    n_libraries, projects = summarize_intake(config)
+    n_libraries, projects = summarize_intake(config, args.assay)
     print(
         f"Preflight ok: {n_libraries} {args.assay} libraries across "
         f"{len(projects)} project(s): {', '.join(projects)}"

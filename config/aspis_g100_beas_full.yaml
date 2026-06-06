@@ -4,9 +4,9 @@
 # RNA FASTQs are uploaded.
 #
 # ORA/GSEA, smallRNA target enrichment, and isoform-switch consequence
-# annotation remain file-based. Set the resource paths below to real
-# GO/Reactome/KEGG/MSigDB, miRNA target, and optional functional-annotation
-# tables before interpreting those layers biologically.
+# annotation remain file-based. Set the resource paths below to open-license
+# GO/Reactome/open-GMT, miRNA target, and optional functional-annotation tables
+# before interpreting those layers biologically.
 
 intake: config/intake_g100_beas_full.tsv
 paths:
@@ -37,8 +37,9 @@ resources:
     hisat2_index_prefix: /g100_work/ELIX6_santini/aspis_data/phdpipe/genome/hisat2_index/genome
     star_genome_dir: ''
   rnaseq_feature_sets:
-    # Fill these with real GO/Reactome/KEGG/MSigDB or project-specific resources
-    # to enable RNA-seq ORA/GSEA. Empty values produce not_configured status.
+    # Fill these with open-license GO/Reactome/open-GMT or project-specific
+    # resources to enable RNA-seq ORA/GSEA. Empty values produce
+    # not_configured status.
     gmt: ''
     tables: ''
   mirbase:
@@ -366,11 +367,6 @@ environment:
   - interproscan.sh
   - cpat
   - CPC2.py
-  - signalp
-  - deeptmhmm
-  - tmhmm
-  - deeploc2
-  - iupred2a.py
   rnaseq_dtu_optional_tools:
   - R::DRIMSeq
   - R::DEXSeq
