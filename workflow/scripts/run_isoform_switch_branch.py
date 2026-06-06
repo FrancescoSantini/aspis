@@ -77,6 +77,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--annotated-gtf", required=True, help="Annotated transcriptome GTF")
     parser.add_argument("--manifest", required=True, help="Output manifest TSV")
     parser.add_argument("--done", required=True, help="Completion sentinel")
+    parser.add_argument("--contrast-id", default="", help="Run only this contrast_id from the plan")
     parser.add_argument("--rscript", default="Rscript", help="Rscript executable")
     parser.add_argument(
         "--isoform-switch-script",
@@ -309,9 +310,19 @@ def write_done(path: Path, rows: list[dict[str, str]]) -> None:
         raise RuntimeError(f"Isoform-switch analysis failed for contrast(s): {failed_ids}")
 
 
+def selected_plan_rows(plan_rows: list[dict[str, str]], contrast_id: str) -> list[dict[str, str]]:
+    if not contrast_id:
+        return plan_rows
+    selected = [row for row in plan_rows if row.get("contrast_id") == contrast_id]
+    if not selected:
+        raise ValueError(f"Contrast not found in isoform-switch plan: {contrast_id}")
+    return selected
+
+
 def main() -> int:
     args = parse_args()
     _, plan_rows = read_table(Path(args.plan), REQUIRED_PLAN_COLUMNS)
+    plan_rows = selected_plan_rows(plan_rows, args.contrast_id)
     sample_columns, sample_rows = read_table(Path(args.samples), REQUIRED_SAMPLE_COLUMNS)
     if not plan_rows:
         raise ValueError("Isoform-switch contrast plan has no rows")

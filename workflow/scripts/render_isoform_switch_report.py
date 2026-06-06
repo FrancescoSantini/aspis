@@ -2611,7 +2611,7 @@ def run_external_tool_commands(args: argparse.Namespace, nt_fasta: str, aa_fasta
     return rows
 
 
-def render_project_html(event_rows: list[dict[str, str]], coding_switch_rows: list[dict[str, str]], output: Path) -> None:
+def render_project_html(event_rows: list[dict[str, str]], coding_switch_rows: list[dict[str, str]], manifest_rows: list[dict[str, str]], output: Path) -> None:
     output.parent.mkdir(parents=True, exist_ok=True)
 
     def coding_priority_rows(rows: list[dict[str, str]]) -> str:
@@ -2725,7 +2725,27 @@ def render_project_html(event_rows: list[dict[str, str]], coding_switch_rows: li
 """
         )
     if not event_rows:
-        tables = ['<p>No significant isoform-switch events passed the configured thresholds.</p>']
+        blocked_rows = [row for row in manifest_rows if row.get("status") == "blocked"]
+        failed_rows = [row for row in manifest_rows if row.get("status") == "failed"]
+        if blocked_rows:
+            reasons = sorted({row.get("reason", "") for row in blocked_rows if row.get("reason", "")})
+            reason_items = "".join(f"<li>{html.escape(reason)}</li>" for reason in reasons) or "<li>No reason recorded.</li>"
+            tables = [
+                '<p class="note"><strong>Isoform-switch analysis was blocked.</strong> '
+                'No switch events were rendered because one or more planned contrasts did not run.</p>'
+                f'<ul>{reason_items}</ul>'
+                '<p>Install or configure the missing dependency/resource, then rerun the isoform-switch targets.</p>'
+            ]
+        elif failed_rows:
+            reasons = sorted({row.get("reason", "") for row in failed_rows if row.get("reason", "")})
+            reason_items = "".join(f"<li>{html.escape(reason)}</li>" for reason in reasons) or "<li>No reason recorded.</li>"
+            tables = [
+                '<p class="note"><strong>Isoform-switch analysis failed.</strong> '
+                'No switch events were rendered because one or more planned contrasts failed.</p>'
+                f'<ul>{reason_items}</ul>'
+            ]
+        else:
+            tables = ['<p>No significant isoform-switch events passed the configured thresholds.</p>']
     output.write_text(
         f"""<!doctype html>
 <html lang="en">
@@ -2867,7 +2887,7 @@ def main() -> int:
     write_table(Path(args.functional_annotation_table), ANNOTATION_COLUMNS, annotation_rows)
     write_table(Path(args.plot_manifest), PLOT_MANIFEST_COLUMNS, plot_rows)
     write_table(Path(args.external_tool_manifest), EXTERNAL_TOOL_COLUMNS, external_tool_rows)
-    render_project_html(event_rows, coding_switch_rows, Path(args.html))
+    render_project_html(event_rows, coding_switch_rows, manifest_rows, Path(args.html))
     write_done(Path(args.done), event_rows)
     return 0
 

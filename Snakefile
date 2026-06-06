@@ -312,6 +312,11 @@ DEFAULT_RNASEQ_DIFFERENTIAL_TOOLS = ["Rscript", "R::DESeq2"]
 RNASEQ_DIFFERENTIAL_REQUIRED_TOOLS = configured_tool_list(
     "rnaseq_differential_required_tools", DEFAULT_RNASEQ_DIFFERENTIAL_TOOLS
 )
+if RNASEQ_DIFFERENTIAL.get("run", False) and "isoform_switch" in RNASEQ_DIFFERENTIAL_LEVELS:
+    RNASEQ_DIFFERENTIAL_REQUIRED_TOOLS = unique_tool_list(
+        RNASEQ_DIFFERENTIAL_REQUIRED_TOOLS,
+        ["R::IsoformSwitchAnalyzeR"],
+    )
 RNASEQ_ISOFORM_SWITCH_OPTIONAL_TOOLS = (
     configured_tool_list(
         "rnaseq_isoform_switch_optional_tools",
@@ -564,6 +569,26 @@ def read_tsv_rows(path):
         return [{key: (value or "").strip() for key, value in row.items()} for row in reader]
 
 
+def contrast_ids_from_plan(plan_path):
+    rows = read_tsv_rows(plan_path)
+    contrast_ids = [row.get("contrast_id", "") for row in rows if row.get("contrast_id", "")]
+    if not contrast_ids:
+        raise ValueError(f"Contrast plan has no contrast_id rows: {plan_path}")
+    return contrast_ids
+
+
+def report_items_from_plan(plan_path):
+    rows = read_tsv_rows(plan_path)
+    items = [
+        (row.get("level", ""), row.get("contrast_id", ""))
+        for row in rows
+        if row.get("level", "") and row.get("contrast_id", "")
+    ]
+    if not items:
+        raise ValueError(f"Differential report plan has no level/contrast rows: {plan_path}")
+    return items
+
+
 def fastqc_read_rows(rows):
     output = []
     for row in rows:
@@ -783,6 +808,22 @@ def smallrna_preprocessed_fastqc_input(wildcards):
     )
 
 
+def smallrna_mirna_deseq2_contrast_manifest(project, contrast_id):
+    return f"{BRANCH_DIR}/smallrna/{project}/smallrna/differential/mirna_deseq2/contrast_manifests/{contrast_id}.manifest.tsv"
+
+
+def smallrna_mirna_deseq2_contrast_done(project, contrast_id):
+    return f"{BRANCH_DIR}/smallrna/{project}/smallrna/differential/mirna_deseq2/contrast_manifests/{contrast_id}.done"
+
+
+def smallrna_mirna_deseq2_contrast_manifests(wildcards):
+    plan_path = checkpoints.plan_mirna_differential.get(project=wildcards.project).output[0]
+    return [
+        smallrna_mirna_deseq2_contrast_manifest(wildcards.project, contrast_id)
+        for contrast_id in contrast_ids_from_plan(plan_path)
+    ]
+
+
 def joined_config_values(value):
     if value is None:
         return ""
@@ -808,6 +849,90 @@ def rnaseq_differential_report_manifest_arg(wildcards, level):
         return ""
     flag = "--gene-manifest" if level == "gene" else "--transcript-manifest"
     return optional_shell_arg(flag, rnaseq_differential_report_manifest(wildcards.project, level))
+
+
+def rnaseq_deseq2_contrast_manifest(project, level, contrast_id):
+    subdir = "gene_deseq2" if level == "gene" else "transcript_deseq2"
+    return f"{BRANCH_DIR}/rnaseq/{project}/differential/{subdir}/contrast_manifests/{contrast_id}.manifest.tsv"
+
+
+def rnaseq_deseq2_contrast_done(project, level, contrast_id):
+    subdir = "gene_deseq2" if level == "gene" else "transcript_deseq2"
+    return f"{BRANCH_DIR}/rnaseq/{project}/differential/{subdir}/contrast_manifests/{contrast_id}.done"
+
+
+def rnaseq_gene_deseq2_contrast_manifests(wildcards):
+    plan_path = checkpoints.plan_gene_differential.get(project=wildcards.project).output[0]
+    return [
+        rnaseq_deseq2_contrast_manifest(wildcards.project, "gene", contrast_id)
+        for contrast_id in contrast_ids_from_plan(plan_path)
+    ]
+
+
+def rnaseq_transcript_deseq2_contrast_manifests(wildcards):
+    plan_path = checkpoints.plan_transcript_differential.get(project=wildcards.project).output[0]
+    return [
+        rnaseq_deseq2_contrast_manifest(wildcards.project, "transcript", contrast_id)
+        for contrast_id in contrast_ids_from_plan(plan_path)
+    ]
+
+
+def rnaseq_isoform_switch_contrast_manifest(project, contrast_id):
+    return f"{BRANCH_DIR}/rnaseq/{project}/differential/isoform_switch/contrast_manifests/{contrast_id}.manifest.tsv"
+
+
+def rnaseq_isoform_switch_contrast_done(project, contrast_id):
+    return f"{BRANCH_DIR}/rnaseq/{project}/differential/isoform_switch/contrast_manifests/{contrast_id}.done"
+
+
+def rnaseq_isoform_switch_contrast_manifests(wildcards):
+    plan_path = checkpoints.plan_isoform_switch.get(project=wildcards.project).output[0]
+    return [
+        rnaseq_isoform_switch_contrast_manifest(wildcards.project, contrast_id)
+        for contrast_id in contrast_ids_from_plan(plan_path)
+    ]
+
+
+def rnaseq_report_item_plan(project, level, contrast_id):
+    return f"{BRANCH_DIR}/rnaseq/{project}/differential/reports/items/{level}/{contrast_id}/report_plan.tsv"
+
+
+def rnaseq_report_item_plan_done(project, level, contrast_id):
+    return f"{BRANCH_DIR}/rnaseq/{project}/differential/reports/items/{level}/{contrast_id}/report_plan.done"
+
+
+def rnaseq_report_item_manifest(project, section, level, contrast_id):
+    return f"{BRANCH_DIR}/rnaseq/{project}/differential/reports/{section}/items/{level}/{contrast_id}/{section}_manifest.tsv"
+
+
+def rnaseq_report_item_done(project, section, level, contrast_id):
+    return f"{BRANCH_DIR}/rnaseq/{project}/differential/reports/{section}/items/{level}/{contrast_id}/{section}.done"
+
+
+def rnaseq_report_items(wildcards):
+    plan_path = checkpoints.plan_rnaseq_differential_reports.get(project=wildcards.project).output.plan
+    return report_items_from_plan(plan_path)
+
+
+def rnaseq_report_plot_manifests(wildcards):
+    return [
+        rnaseq_report_item_manifest(wildcards.project, "plots", level, contrast_id)
+        for level, contrast_id in rnaseq_report_items(wildcards)
+    ]
+
+
+def rnaseq_report_enrichment_manifests(wildcards):
+    return [
+        rnaseq_report_item_manifest(wildcards.project, "enrichment", level, contrast_id)
+        for level, contrast_id in rnaseq_report_items(wildcards)
+    ]
+
+
+def rnaseq_report_summary_manifests(wildcards):
+    return [
+        rnaseq_report_item_manifest(wildcards.project, "summaries", level, contrast_id)
+        for level, contrast_id in rnaseq_report_items(wildcards)
+    ]
 
 
 def rnaseq_isoform_switch_report_outputs(project):
@@ -1964,7 +2089,7 @@ def workflow_targets(wildcards):
     return targets
 
 
-localrules: all, check_environment, check_execution_config, assay_branch_ready, build_branch_design, build_branch_provenance_bundle, render_run_dashboard, render_branch_report_index
+localrules: all, check_environment, check_execution_config, assay_branch_ready, build_branch_design, build_branch_provenance_bundle, run_gene_deseq2, run_transcript_deseq2, run_isoform_switch, run_mirna_deseq2, render_rnaseq_differential_plots, render_rnaseq_differential_enrichment, render_rnaseq_differential_summaries, render_run_dashboard, render_branch_report_index
 
 
 rule all:
@@ -3321,7 +3446,7 @@ rule render_smallrna_length_qc:
         """
 
 
-rule plan_mirna_differential:
+checkpoint plan_mirna_differential:
     input:
         samples=f"{BRANCH_DIR}" + "/smallrna/{project}/samples.tsv",
         mirna_counts=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/quantification/mirna_counts.tsv",
@@ -3364,7 +3489,7 @@ rule plan_mirna_differential:
         """
 
 
-rule run_mirna_deseq2:
+rule run_mirna_deseq2_contrast:
     input:
         plan=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/differential/mirna_deseq2/contrast_plan.tsv",
         samples=f"{BRANCH_DIR}" + "/smallrna/{project}/samples.tsv",
@@ -3373,8 +3498,8 @@ rule run_mirna_deseq2:
         featurecounts_done=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/quantification/featurecounts.done",
         environment=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/environment_report.tsv"
     output:
-        manifest=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/differential/mirna_deseq2/deseq2_manifest.tsv",
-        done=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/differential/mirna_deseq2/deseq2.done"
+        manifest=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/differential/mirna_deseq2/contrast_manifests/{contrast_id}.manifest.tsv",
+        done=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/differential/mirna_deseq2/contrast_manifests/{contrast_id}.done"
     params:
         rscript=SMALLRNA.get("rscript_command", "Rscript"),
         deseq2_script=SMALLRNA.get(
@@ -3386,7 +3511,7 @@ rule run_mirna_deseq2:
         lfc_shrinkage=SMALLRNA.get("lfc_shrinkage", "none"),
         min_count=SMALLRNA.get("min_count", 10)
     log:
-        "logs/branches/smallrna/{project}.mirna_deseq2.log"
+        "logs/branches/smallrna/{project}.mirna_deseq2.{contrast_id}.log"
     shell:
         r"""
         mkdir -p logs/branches/smallrna
@@ -3397,12 +3522,34 @@ rule run_mirna_deseq2:
           --mirna-metadata {input.mirna_metadata:q} \
           --manifest {output.manifest:q} \
           --done {output.done:q} \
+          --contrast-id {wildcards.contrast_id:q} \
           --rscript {params.rscript:q} \
           --deseq2-script {params.deseq2_script:q} \
           --padj {params.padj:q} \
           --log2fc {params.log2fc:q} \
           --lfc-shrinkage {params.lfc_shrinkage:q} \
           --min-count {params.min_count:q} \
+          > {log:q} 2>&1
+        """
+
+
+rule run_mirna_deseq2:
+    input:
+        plan=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/differential/mirna_deseq2/contrast_plan.tsv",
+        manifests=smallrna_mirna_deseq2_contrast_manifests
+    output:
+        manifest=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/differential/mirna_deseq2/deseq2_manifest.tsv",
+        done=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/differential/mirna_deseq2/deseq2.done"
+    log:
+        "logs/branches/smallrna/{project}.mirna_deseq2.merge.log"
+    shell:
+        r"""
+        mkdir -p logs/branches/smallrna
+        python3 workflow/scripts/merge_status_manifests.py \
+          --kind deseq2 \
+          --manifest {output.manifest:q} \
+          --done {output.done:q} \
+          {input.manifests:q} \
           > {log:q} 2>&1
         """
 
@@ -5008,7 +5155,7 @@ rule check_rnaseq_differential_environment:
         """
 
 
-rule plan_gene_differential:
+checkpoint plan_gene_differential:
     input:
         samples=f"{BRANCH_DIR}" + "/rnaseq/{project}/samples.tsv",
         gene_counts=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/featurecounts/gene_counts.tsv",
@@ -5057,7 +5204,7 @@ rule plan_gene_differential:
         """
 
 
-rule plan_transcript_differential:
+checkpoint plan_transcript_differential:
     input:
         samples=f"{BRANCH_DIR}" + "/rnaseq/{project}/samples.tsv",
         transcript_counts=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/counts/transcript_counts.tsv",
@@ -5106,7 +5253,8 @@ rule plan_transcript_differential:
         """
 
 
-rule run_transcript_deseq2:
+
+rule run_transcript_deseq2_contrast:
     input:
         plan=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/transcript_deseq2/contrast_plan.tsv",
         samples=f"{BRANCH_DIR}" + "/rnaseq/{project}/samples.tsv",
@@ -5114,8 +5262,8 @@ rule run_transcript_deseq2:
         transcript_metadata=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/counts/transcript_metadata.tsv",
         environment=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/environment_report.tsv"
     output:
-        manifest=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/transcript_deseq2/deseq2_manifest.tsv",
-        done=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/transcript_deseq2/deseq2.done"
+        manifest=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/transcript_deseq2/contrast_manifests/{contrast_id}.manifest.tsv",
+        done=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/transcript_deseq2/contrast_manifests/{contrast_id}.done"
     params:
         rscript=RNASEQ_DIFFERENTIAL.get("rscript_command", "Rscript"),
         deseq2_script=RNASEQ_DIFFERENTIAL.get(
@@ -5127,7 +5275,7 @@ rule run_transcript_deseq2:
         lfc_shrinkage=RNASEQ_DIFFERENTIAL.get("lfc_shrinkage", "none"),
         min_count=RNASEQ_DIFFERENTIAL.get("min_count", 10)
     log:
-        "logs/branches/rnaseq/{project}.transcript_deseq2.log"
+        "logs/branches/rnaseq/{project}.transcript_deseq2.{contrast_id}.log"
     shell:
         r"""
         mkdir -p logs/branches/rnaseq
@@ -5138,6 +5286,7 @@ rule run_transcript_deseq2:
           --transcript-metadata {input.transcript_metadata:q} \
           --manifest {output.manifest:q} \
           --done {output.done:q} \
+          --contrast-id {wildcards.contrast_id:q} \
           --rscript {params.rscript:q} \
           --deseq2-script {params.deseq2_script:q} \
           --padj {params.padj:q} \
@@ -5148,7 +5297,29 @@ rule run_transcript_deseq2:
         """
 
 
-rule plan_isoform_switch:
+rule run_transcript_deseq2:
+    input:
+        plan=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/transcript_deseq2/contrast_plan.tsv",
+        manifests=rnaseq_transcript_deseq2_contrast_manifests
+    output:
+        manifest=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/transcript_deseq2/deseq2_manifest.tsv",
+        done=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/transcript_deseq2/deseq2.done"
+    log:
+        "logs/branches/rnaseq/{project}.transcript_deseq2.merge.log"
+    shell:
+        r"""
+        mkdir -p logs/branches/rnaseq
+        python3 workflow/scripts/merge_status_manifests.py \
+          --kind deseq2 \
+          --manifest {output.manifest:q} \
+          --done {output.done:q} \
+          {input.manifests:q} \
+          > {log:q} 2>&1
+        """
+
+
+
+checkpoint plan_isoform_switch:
     input:
         samples=f"{BRANCH_DIR}" + "/rnaseq/{project}/samples.tsv",
         transcript_counts=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/counts/transcript_counts.tsv",
@@ -5192,7 +5363,8 @@ rule plan_isoform_switch:
         """
 
 
-rule run_isoform_switch:
+
+rule run_isoform_switch_contrast:
     input:
         plan=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/isoform_switch/contrast_plan.tsv",
         samples=f"{BRANCH_DIR}" + "/rnaseq/{project}/samples.tsv",
@@ -5201,8 +5373,8 @@ rule run_isoform_switch:
         annotated=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/gffcompare/annotated.gtf",
         environment=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/environment_report.tsv"
     output:
-        manifest=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/isoform_switch/isoform_switch_manifest.tsv",
-        done=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/isoform_switch/isoform_switch.done"
+        manifest=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/isoform_switch/contrast_manifests/{contrast_id}.manifest.tsv",
+        done=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/isoform_switch/contrast_manifests/{contrast_id}.done"
     params:
         rscript=RNASEQ_DIFFERENTIAL.get("rscript_command", "Rscript"),
         isoform_switch_script=RNASEQ_DIFFERENTIAL.get(
@@ -5219,7 +5391,7 @@ rule run_isoform_switch:
             RNASEQ_DIFFERENTIAL.get("isoform_switch_genome_object", ""),
         )
     log:
-        "logs/branches/rnaseq/{project}.isoform_switch.log"
+        "logs/branches/rnaseq/{project}.isoform_switch.{contrast_id}.log"
     shell:
         r"""
         mkdir -p logs/branches/rnaseq
@@ -5231,6 +5403,7 @@ rule run_isoform_switch:
           --annotated-gtf {input.annotated:q} \
           --manifest {output.manifest:q} \
           --done {output.done:q} \
+          --contrast-id {wildcards.contrast_id:q} \
           --rscript {params.rscript:q} \
           --isoform-switch-script {params.isoform_switch_script:q} \
           --gene-expr {params.gene_expr:q} \
@@ -5241,6 +5414,28 @@ rule run_isoform_switch:
           {params.genome_object} \
           > {log:q} 2>&1
         """
+
+
+rule run_isoform_switch:
+    input:
+        plan=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/isoform_switch/contrast_plan.tsv",
+        manifests=rnaseq_isoform_switch_contrast_manifests
+    output:
+        manifest=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/isoform_switch/isoform_switch_manifest.tsv",
+        done=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/isoform_switch/isoform_switch.done"
+    log:
+        "logs/branches/rnaseq/{project}.isoform_switch.merge.log"
+    shell:
+        r"""
+        mkdir -p logs/branches/rnaseq
+        python3 workflow/scripts/merge_status_manifests.py \
+          --kind isoform_switch \
+          --manifest {output.manifest:q} \
+          --done {output.done:q} \
+          {input.manifests:q} \
+          > {log:q} 2>&1
+        """
+
 
 
 rule render_isoform_switch_report:
@@ -5343,7 +5538,8 @@ rule render_isoform_switch_report:
         """
 
 
-rule run_gene_deseq2:
+
+rule run_gene_deseq2_contrast:
     input:
         plan=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/gene_deseq2/contrast_plan.tsv",
         samples=f"{BRANCH_DIR}" + "/rnaseq/{project}/samples.tsv",
@@ -5351,8 +5547,8 @@ rule run_gene_deseq2:
         gene_metadata=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/featurecounts/gene_metadata.tsv",
         environment=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/environment_report.tsv"
     output:
-        manifest=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/gene_deseq2/deseq2_manifest.tsv",
-        done=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/gene_deseq2/deseq2.done"
+        manifest=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/gene_deseq2/contrast_manifests/{contrast_id}.manifest.tsv",
+        done=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/gene_deseq2/contrast_manifests/{contrast_id}.done"
     params:
         rscript=RNASEQ_DIFFERENTIAL.get("rscript_command", "Rscript"),
         deseq2_script=RNASEQ_DIFFERENTIAL.get(
@@ -5364,7 +5560,7 @@ rule run_gene_deseq2:
         lfc_shrinkage=RNASEQ_DIFFERENTIAL.get("lfc_shrinkage", "none"),
         min_count=RNASEQ_DIFFERENTIAL.get("min_count", 10)
     log:
-        "logs/branches/rnaseq/{project}.gene_deseq2.log"
+        "logs/branches/rnaseq/{project}.gene_deseq2.{contrast_id}.log"
     shell:
         r"""
         mkdir -p logs/branches/rnaseq
@@ -5375,6 +5571,7 @@ rule run_gene_deseq2:
           --gene-metadata {input.gene_metadata:q} \
           --manifest {output.manifest:q} \
           --done {output.done:q} \
+          --contrast-id {wildcards.contrast_id:q} \
           --rscript {params.rscript:q} \
           --deseq2-script {params.deseq2_script:q} \
           --padj {params.padj:q} \
@@ -5383,6 +5580,28 @@ rule run_gene_deseq2:
           --min-count {params.min_count:q} \
           > {log:q} 2>&1
         """
+
+
+rule run_gene_deseq2:
+    input:
+        plan=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/gene_deseq2/contrast_plan.tsv",
+        manifests=rnaseq_gene_deseq2_contrast_manifests
+    output:
+        manifest=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/gene_deseq2/deseq2_manifest.tsv",
+        done=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/gene_deseq2/deseq2.done"
+    log:
+        "logs/branches/rnaseq/{project}.gene_deseq2.merge.log"
+    shell:
+        r"""
+        mkdir -p logs/branches/rnaseq
+        python3 workflow/scripts/merge_status_manifests.py \
+          --kind deseq2 \
+          --manifest {output.manifest:q} \
+          --done {output.done:q} \
+          {input.manifests:q} \
+          > {log:q} 2>&1
+        """
+
 
 
 rule render_rnaseq_biotype_summary:
@@ -5706,7 +5925,7 @@ rule run_rnaseq_dtu_methods:
 
 
 
-rule plan_rnaseq_differential_reports:
+checkpoint plan_rnaseq_differential_reports:
     input:
         manifests=rnaseq_differential_report_inputs
     output:
@@ -5734,13 +5953,36 @@ rule plan_rnaseq_differential_reports:
         """
 
 
-rule render_rnaseq_differential_plots:
+
+rule filter_rnaseq_differential_report_plan_item:
     input:
         plan=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/reports/report_plan.tsv",
         plan_done=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/reports/report_plan.done"
     output:
-        manifest=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/reports/plots/plots_manifest.tsv",
-        done=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/reports/plots/plots.done"
+        plan=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/reports/items/{level}/{contrast_id}/report_plan.tsv",
+        done=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/reports/items/{level}/{contrast_id}/report_plan.done"
+    log:
+        "logs/branches/rnaseq/{project}.differential_report_plan.{level}.{contrast_id}.log"
+    shell:
+        r"""
+        mkdir -p logs/branches/rnaseq
+        python3 workflow/scripts/filter_report_plan_row.py \
+          --input {input.plan:q} \
+          --output {output.plan:q} \
+          --done {output.done:q} \
+          --level {wildcards.level:q} \
+          --contrast-id {wildcards.contrast_id:q} \
+          > {log:q} 2>&1
+        """
+
+
+rule render_rnaseq_differential_plots_item:
+    input:
+        plan=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/reports/items/{level}/{contrast_id}/report_plan.tsv",
+        plan_done=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/reports/items/{level}/{contrast_id}/report_plan.done"
+    output:
+        manifest=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/reports/plots/items/{level}/{contrast_id}/plots_manifest.tsv",
+        done=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/reports/plots/items/{level}/{contrast_id}/plots.done"
     params:
         rscript=RNASEQ_DIFFERENTIAL.get("rscript_command", "Rscript"),
         top_n=RNASEQ_DIFFERENTIAL_REPORT_TOP_N,
@@ -5782,7 +6024,7 @@ rule render_rnaseq_differential_plots:
             )
         )
     log:
-        "logs/branches/rnaseq/{project}.differential_plots.log"
+        "logs/branches/rnaseq/{project}.differential_plots.{level}.{contrast_id}.log"
     shell:
         r"""
         mkdir -p logs/branches/rnaseq
@@ -5804,13 +6046,35 @@ rule render_rnaseq_differential_plots:
         """
 
 
-rule render_rnaseq_differential_enrichment:
+rule render_rnaseq_differential_plots:
     input:
         plan=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/reports/report_plan.tsv",
-        plan_done=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/reports/report_plan.done"
+        plan_done=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/reports/report_plan.done",
+        manifests=rnaseq_report_plot_manifests
     output:
-        manifest=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/reports/enrichment/enrichment_manifest.tsv",
-        done=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/reports/enrichment/enrichment.done"
+        manifest=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/reports/plots/plots_manifest.tsv",
+        done=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/reports/plots/plots.done"
+    log:
+        "logs/branches/rnaseq/{project}.differential_plots.merge.log"
+    shell:
+        r"""
+        mkdir -p logs/branches/rnaseq
+        python3 workflow/scripts/merge_status_manifests.py \
+          --kind plots \
+          --manifest {output.manifest:q} \
+          --done {output.done:q} \
+          {input.manifests:q} \
+          > {log:q} 2>&1
+        """
+
+
+rule render_rnaseq_differential_enrichment_item:
+    input:
+        plan=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/reports/items/{level}/{contrast_id}/report_plan.tsv",
+        plan_done=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/reports/items/{level}/{contrast_id}/report_plan.done"
+    output:
+        manifest=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/reports/enrichment/items/{level}/{contrast_id}/enrichment_manifest.tsv",
+        done=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/reports/enrichment/items/{level}/{contrast_id}/enrichment.done"
     params:
         feature_sets=lambda wildcards: optional_shell_arg(
             "--feature-sets",
@@ -5829,7 +6093,7 @@ rule render_rnaseq_differential_enrichment:
         ranked_seed=RNASEQ_DIFFERENTIAL.get("report_ranked_feature_set_seed", 1),
         ranked_min_mapped=RNASEQ_DIFFERENTIAL.get("report_ranked_feature_set_min_mapped", 100)
     log:
-        "logs/branches/rnaseq/{project}.differential_enrichment.log"
+        "logs/branches/rnaseq/{project}.differential_enrichment.{level}.{contrast_id}.log"
     shell:
         r"""
         mkdir -p logs/branches/rnaseq
@@ -5848,18 +6112,41 @@ rule render_rnaseq_differential_enrichment:
         """
 
 
-rule render_rnaseq_differential_summaries:
+rule render_rnaseq_differential_enrichment:
     input:
         plan=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/reports/report_plan.tsv",
-        plots_done=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/reports/plots/plots.done",
-        enrichment_done=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/reports/enrichment/enrichment.done"
+        plan_done=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/reports/report_plan.done",
+        manifests=rnaseq_report_enrichment_manifests
     output:
-        manifest=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/reports/summaries/summary_manifest.tsv",
-        done=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/reports/summaries/summary.done"
+        manifest=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/reports/enrichment/enrichment_manifest.tsv",
+        done=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/reports/enrichment/enrichment.done"
+    log:
+        "logs/branches/rnaseq/{project}.differential_enrichment.merge.log"
+    shell:
+        r"""
+        mkdir -p logs/branches/rnaseq
+        python3 workflow/scripts/merge_status_manifests.py \
+          --kind enrichment \
+          --manifest {output.manifest:q} \
+          --done {output.done:q} \
+          {input.manifests:q} \
+          > {log:q} 2>&1
+        """
+
+
+rule render_rnaseq_differential_summaries_item:
+    input:
+        plan=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/reports/items/{level}/{contrast_id}/report_plan.tsv",
+        plan_done=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/reports/items/{level}/{contrast_id}/report_plan.done",
+        plots_done=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/reports/plots/items/{level}/{contrast_id}/plots.done",
+        enrichment_done=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/reports/enrichment/items/{level}/{contrast_id}/enrichment.done"
+    output:
+        manifest=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/reports/summaries/items/{level}/{contrast_id}/summaries_manifest.tsv",
+        done=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/reports/summaries/items/{level}/{contrast_id}/summaries.done"
     params:
         top_n=RNASEQ_DIFFERENTIAL_REPORT_TOP_N
     log:
-        "logs/branches/rnaseq/{project}.differential_summaries.log"
+        "logs/branches/rnaseq/{project}.differential_summaries.{level}.{contrast_id}.log"
     shell:
         r"""
         mkdir -p logs/branches/rnaseq
@@ -5870,6 +6157,30 @@ rule render_rnaseq_differential_summaries:
           --top-n {params.top_n:q} \
           > {log:q} 2>&1
         """
+
+
+rule render_rnaseq_differential_summaries:
+    input:
+        plan=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/reports/report_plan.tsv",
+        plots_done=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/reports/plots/plots.done",
+        enrichment_done=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/reports/enrichment/enrichment.done",
+        manifests=rnaseq_report_summary_manifests
+    output:
+        manifest=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/reports/summaries/summary_manifest.tsv",
+        done=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/reports/summaries/summary.done"
+    log:
+        "logs/branches/rnaseq/{project}.differential_summaries.merge.log"
+    shell:
+        r"""
+        mkdir -p logs/branches/rnaseq
+        python3 workflow/scripts/merge_status_manifests.py \
+          --kind summaries \
+          --manifest {output.manifest:q} \
+          --done {output.done:q} \
+          {input.manifests:q} \
+          > {log:q} 2>&1
+        """
+
 
 
 rule render_rnaseq_differential_report_index:

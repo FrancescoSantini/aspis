@@ -59,6 +59,7 @@ class FeatureRunSpec:
 def add_common_arguments(parser: argparse.ArgumentParser, min_count_help: str) -> None:
     parser.add_argument("--manifest", required=True, help="Output manifest TSV")
     parser.add_argument("--done", required=True, help="Completion sentinel")
+    parser.add_argument("--contrast-id", default="", help="Run only this contrast_id from the plan")
     parser.add_argument("--rscript", default="Rscript", help="Rscript executable")
     parser.add_argument("--deseq2-script", required=True, help="R DESeq2 runner script")
     parser.add_argument(
@@ -328,8 +329,18 @@ def write_done(path: Path, rows: list[dict[str, str]], spec: FeatureRunSpec) -> 
         raise RuntimeError(f"{spec.failed_message}:\n- " + "\n- ".join(details))
 
 
+def selected_plan_rows(plan_rows: list[dict[str, str]], contrast_id: str) -> list[dict[str, str]]:
+    if not contrast_id:
+        return plan_rows
+    selected = [row for row in plan_rows if row.get("contrast_id") == contrast_id]
+    if not selected:
+        raise ValueError(f"Contrast not found in plan: {contrast_id}")
+    return selected
+
+
 def run(args: argparse.Namespace, spec: FeatureRunSpec) -> int:
     _, plan_rows = read_table(Path(args.plan), REQUIRED_PLAN_COLUMNS)
+    plan_rows = selected_plan_rows(plan_rows, args.contrast_id)
     sample_columns, sample_rows = read_table(Path(args.samples), REQUIRED_SAMPLE_COLUMNS)
     if not plan_rows:
         raise ValueError(spec.no_rows_message)
