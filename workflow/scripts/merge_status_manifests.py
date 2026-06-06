@@ -15,6 +15,14 @@ DONE_COLUMNS = {
     "summaries": ("summaries", []),
 }
 
+REQUIRED_INPUT_COLUMNS = {
+    "deseq2": {"contrast_id", "status", "reason", "n_significant"},
+    "isoform_switch": {"contrast_id", "status", "reason", "n_transcripts", "n_genes"},
+    "plots": {"project", "level", "contrast_id", "status", "n_features", "n_significant"},
+    "enrichment": {"project", "level", "contrast_id", "status", "n_ranked", "n_feature_sets"},
+    "summaries": {"project", "level", "contrast_id", "status", "n_features", "n_significant", "n_up", "n_down"},
+}
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
@@ -35,6 +43,64 @@ def read_manifest(path: Path) -> tuple[list[str], list[dict[str, str]]]:
 
 def sort_key(row: dict[str, str]) -> tuple[str, str, str]:
     return (row.get("level", ""), row.get("contrast_id", ""), row.get("resource", ""))
+
+
+def validate_columns(kind: str, path: Path, columns: list[str]) -> None:
+    missing = REQUIRED_INPUT_COLUMNS[kind] - set(columns)
+    if missing:
+        raise ValueError(
+            f"{kind} merge input {path} is missing columns: {sorted(missing)}. "
+            "Expected a per-item manifest, not a planning table."
+        )
+
+
+def expand_plan_placeholder(kind: str, output_manifest: Path, input_paths: list[Path]) -> list[Path]:
+    if len(input_paths) != 1:
+        return input_paths
+
+    input_path = input_paths[0]
+    columns, rows = read_manifest(input_path)
+    if not rows:
+        return input_paths
+    if input_path.name not in {"report_plan.tsv", "contrast_plan.tsv"}:
+        return input_paths
+    if not (REQUIRED_INPUT_COLUMNS[kind] - set(columns)):
+        return input_paths
+
+    if kind in {"plots", "enrichment", "summaries"}:
+        required = {"level", "contrast_id"}
+        if required - set(columns):
+            return input_paths
+        section_dir = output_manifest.parent
+        section = section_dir.name
+        expanded = [
+            section_dir / "items" / row.get("level", "") / row.get("contrast_id", "") / f"{section}_manifest.tsv"
+            for row in rows
+            if row.get("level", "") and row.get("contrast_id", "")
+        ]
+    elif kind in {"deseq2", "isoform_switch"}:
+        if "contrast_id" not in columns:
+            return input_paths
+        expanded = [
+            output_manifest.parent / "contrast_manifests" / f"{row.get('contrast_id', '')}.manifest.tsv"
+            for row in rows
+            if row.get("contrast_id", "")
+        ]
+    else:
+        return input_paths
+
+    if not expanded:
+        return input_paths
+    missing_paths = [path for path in expanded if not path.exists()]
+    if missing_paths:
+        preview = ", ".join(str(path) for path in missing_paths[:5])
+        if len(missing_paths) > 5:
+            preview += f", ... ({len(missing_paths)} missing total)"
+        raise FileNotFoundError(
+            f"{kind} merge received planning table {input_path}, but expected per-item manifest(s) "
+            f"are missing: {preview}"
+        )
+    return expanded
 
 
 def write_manifest(path: Path, columns: list[str], rows: list[dict[str, str]]) -> None:
@@ -80,10 +146,13 @@ def main() -> int:
     if not args.inputs:
         raise ValueError("At least one input manifest is required")
 
+    input_paths = expand_plan_placeholder(args.kind, Path(args.manifest), [Path(path) for path in args.inputs])
+
     columns: list[str] | None = None
     rows: list[dict[str, str]] = []
-    for input_path in args.inputs:
-        current_columns, current_rows = read_manifest(Path(input_path))
+    for input_path in input_paths:
+        current_columns, current_rows = read_manifest(input_path)
+        validate_columns(args.kind, input_path, current_columns)
         if columns is None:
             columns = current_columns
         elif current_columns != columns:

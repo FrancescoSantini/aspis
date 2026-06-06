@@ -3535,8 +3535,7 @@ rule run_mirna_deseq2_contrast:
 
 rule run_mirna_deseq2:
     input:
-        plan=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/differential/mirna_deseq2/contrast_plan.tsv",
-        manifests=smallrna_mirna_deseq2_contrast_manifests
+        smallrna_mirna_deseq2_contrast_manifests
     output:
         manifest=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/differential/mirna_deseq2/deseq2_manifest.tsv",
         done=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/differential/mirna_deseq2/deseq2.done"
@@ -3549,7 +3548,7 @@ rule run_mirna_deseq2:
           --kind deseq2 \
           --manifest {output.manifest:q} \
           --done {output.done:q} \
-          {input.manifests:q} \
+          {input:q} \
           > {log:q} 2>&1
         """
 
@@ -5299,8 +5298,7 @@ rule run_transcript_deseq2_contrast:
 
 rule run_transcript_deseq2:
     input:
-        plan=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/transcript_deseq2/contrast_plan.tsv",
-        manifests=rnaseq_transcript_deseq2_contrast_manifests
+        rnaseq_transcript_deseq2_contrast_manifests
     output:
         manifest=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/transcript_deseq2/deseq2_manifest.tsv",
         done=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/transcript_deseq2/deseq2.done"
@@ -5313,7 +5311,7 @@ rule run_transcript_deseq2:
           --kind deseq2 \
           --manifest {output.manifest:q} \
           --done {output.done:q} \
-          {input.manifests:q} \
+          {input:q} \
           > {log:q} 2>&1
         """
 
@@ -5418,8 +5416,7 @@ rule run_isoform_switch_contrast:
 
 rule run_isoform_switch:
     input:
-        plan=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/isoform_switch/contrast_plan.tsv",
-        manifests=rnaseq_isoform_switch_contrast_manifests
+        rnaseq_isoform_switch_contrast_manifests
     output:
         manifest=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/isoform_switch/isoform_switch_manifest.tsv",
         done=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/isoform_switch/isoform_switch.done"
@@ -5432,7 +5429,7 @@ rule run_isoform_switch:
           --kind isoform_switch \
           --manifest {output.manifest:q} \
           --done {output.done:q} \
-          {input.manifests:q} \
+          {input:q} \
           > {log:q} 2>&1
         """
 
@@ -5584,8 +5581,7 @@ rule run_gene_deseq2_contrast:
 
 rule run_gene_deseq2:
     input:
-        plan=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/gene_deseq2/contrast_plan.tsv",
-        manifests=rnaseq_gene_deseq2_contrast_manifests
+        rnaseq_gene_deseq2_contrast_manifests
     output:
         manifest=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/gene_deseq2/deseq2_manifest.tsv",
         done=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/gene_deseq2/deseq2.done"
@@ -5598,7 +5594,7 @@ rule run_gene_deseq2:
           --kind deseq2 \
           --manifest {output.manifest:q} \
           --done {output.done:q} \
-          {input.manifests:q} \
+          {input:q} \
           > {log:q} 2>&1
         """
 
@@ -6048,9 +6044,7 @@ rule render_rnaseq_differential_plots_item:
 
 rule render_rnaseq_differential_plots:
     input:
-        plan=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/reports/report_plan.tsv",
-        plan_done=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/reports/report_plan.done",
-        manifests=rnaseq_report_plot_manifests
+        rnaseq_report_plot_manifests
     output:
         manifest=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/reports/plots/plots_manifest.tsv",
         done=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/reports/plots/plots.done"
@@ -6063,7 +6057,7 @@ rule render_rnaseq_differential_plots:
           --kind plots \
           --manifest {output.manifest:q} \
           --done {output.done:q} \
-          {input.manifests:q} \
+          {input:q} \
           > {log:q} 2>&1
         """
 
@@ -6114,9 +6108,7 @@ rule render_rnaseq_differential_enrichment_item:
 
 rule render_rnaseq_differential_enrichment:
     input:
-        plan=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/reports/report_plan.tsv",
-        plan_done=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/reports/report_plan.done",
-        manifests=rnaseq_report_enrichment_manifests
+        rnaseq_report_enrichment_manifests
     output:
         manifest=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/reports/enrichment/enrichment_manifest.tsv",
         done=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/reports/enrichment/enrichment.done"
@@ -6129,7 +6121,7 @@ rule render_rnaseq_differential_enrichment:
           --kind enrichment \
           --manifest {output.manifest:q} \
           --done {output.done:q} \
-          {input.manifests:q} \
+          {input:q} \
           > {log:q} 2>&1
         """
 
@@ -6161,10 +6153,7 @@ rule render_rnaseq_differential_summaries_item:
 
 rule render_rnaseq_differential_summaries:
     input:
-        plan=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/reports/report_plan.tsv",
-        plots_done=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/reports/plots/plots.done",
-        enrichment_done=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/reports/enrichment/enrichment.done",
-        manifests=rnaseq_report_summary_manifests
+        rnaseq_report_summary_manifests
     output:
         manifest=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/reports/summaries/summary_manifest.tsv",
         done=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/reports/summaries/summary.done"
@@ -6177,7 +6166,7 @@ rule render_rnaseq_differential_summaries:
           --kind summaries \
           --manifest {output.manifest:q} \
           --done {output.done:q} \
-          {input.manifests:q} \
+          {input:q} \
           > {log:q} 2>&1
         """
 
