@@ -4489,7 +4489,7 @@ rule infer_rnaseq_strandedness:
         done=f"{BRANCH_DIR}" + "/rnaseq/{project}/alignment/strandedness/strandedness.done"
     params:
         samtools=RNASEQ_ALIGNMENT.get("samtools_command", "samtools"),
-        configured=RNASEQ_ALIGNMENT.get("strandness", ""),
+        configured_flag=optional_shell_arg("--configured-strandness", RNASEQ_ALIGNMENT.get("strandness", "")),
         max_reads=RNASEQ_ALIGNMENT.get("strandedness_inference_max_reads", 200000),
         min_reads=RNASEQ_ALIGNMENT.get("strandedness_min_informative_reads", 100),
         agreement=RNASEQ_ALIGNMENT.get("strandedness_agreement_threshold", 0.8)
@@ -4504,7 +4504,7 @@ rule infer_rnaseq_strandedness:
           --report {output.report:q} \
           --done {output.done:q} \
           --samtools {params.samtools:q} \
-          --configured-strandness {params.configured:q} \
+          {params.configured_flag} \
           --max-reads {params.max_reads:q} \
           --min-informative-reads {params.min_reads:q} \
           --agreement-threshold {params.agreement:q} \

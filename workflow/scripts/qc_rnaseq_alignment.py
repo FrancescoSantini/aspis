@@ -170,16 +170,16 @@ def write_done(path: Path, rows: list[dict[str, str]]) -> None:
 def main() -> int:
     args = parse_args()
     samples = read_samples(Path(args.samples))
-    rows = select_library(rows, args.library_id)
-    validate_samples(samples)
+    rows = select_library(samples, args.library_id)
+    validate_samples(rows)
     samtools = executable_path(args.samtools)
 
     outdir = Path(args.outdir)
     outdir.mkdir(parents=True, exist_ok=True)
-    qc_rows = [run_qc(row, outdir, samtools) for row in samples]
+    qc_rows = [run_qc(row, outdir, samtools) for row in rows]
 
-    write_manifest(Path(args.manifest), samples, qc_rows)
-    write_done(Path(args.done), samples)
+    write_manifest(Path(args.manifest), rows, qc_rows)
+    write_done(Path(args.done), rows)
     return 0
 
 
