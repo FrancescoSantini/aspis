@@ -18,9 +18,9 @@ except ImportError as exc:  # pragma: no cover - only reached in incomplete envs
     ) from exc
 
 
-PAGE_WIDTH = 1240
-PAGE_HEIGHT = 1754
-MARGIN = 70
+PAGE_WIDTH = 2480
+PAGE_HEIGHT = 3508
+MARGIN = 140
 TEXT = (36, 41, 47)
 MUTED = (87, 96, 106)
 BORDER = (208, 215, 222)
@@ -241,13 +241,13 @@ class PdfReport:
         self.draw: ImageDraw.ImageDraw
         self.y = MARGIN
         self.fonts = {
-            "title": load_font(38, bold=True),
-            "h1": load_font(30, bold=True),
-            "h2": load_font(23, bold=True),
-            "body": load_font(18),
-            "body_bold": load_font(18, bold=True),
-            "small": load_font(14),
-            "small_bold": load_font(14, bold=True),
+            "title": load_font(76, bold=True),
+            "h1": load_font(60, bold=True),
+            "h2": load_font(46, bold=True),
+            "body": load_font(36),
+            "body_bold": load_font(36, bold=True),
+            "small": load_font(28),
+            "small_bold": load_font(28, bold=True),
         }
         self.new_page()
 
@@ -270,7 +270,7 @@ class PdfReport:
         value: str,
         font_name: str = "body",
         fill: tuple[int, int, int] = TEXT,
-        space_after: int = 12,
+        space_after: int = 24,
         indent: int = 0,
     ) -> None:
         font = self.fonts[font_name]
@@ -287,35 +287,35 @@ class PdfReport:
 
     def heading(self, value: str, level: int = 1) -> None:
         if level == 1:
-            self.y += 8
+            self.y += 16
             self.text(value, "h1", TEXT, space_after=8)
             self.rule()
         else:
-            self.y += 4
+            self.y += 8
             self.text(value, "h2", TEXT, space_after=8)
 
     def rule(self) -> None:
-        self.ensure(14)
-        self.draw.line((MARGIN, self.y, PAGE_WIDTH - MARGIN, self.y), fill=BORDER, width=2)
-        self.y += 18
+        self.ensure(28)
+        self.draw.line((MARGIN, self.y, PAGE_WIDTH - MARGIN, self.y), fill=BORDER, width=4)
+        self.y += 36
 
     def key_values(self, pairs: list[tuple[str, str]], columns: int = 2) -> None:
         if not pairs:
             return
         col_width = self.content_width // columns
-        row_height = 54
+        row_height = 108
         for start in range(0, len(pairs), columns):
             chunk = pairs[start : start + columns]
             self.ensure(row_height)
             for idx, (key, value) in enumerate(chunk):
                 x = MARGIN + idx * col_width
                 self.draw.text((x, self.y), key, font=self.fonts["small_bold"], fill=MUTED)
-                wrapped = wrap_text(self.draw, value or "NA", self.fonts["small"], col_width - 24)
-                self.draw.text((x, self.y + 20), wrapped[0], font=self.fonts["small"], fill=TEXT)
+                wrapped = wrap_text(self.draw, value or "NA", self.fonts["small"], col_width - 48)
+                self.draw.text((x, self.y + 40), wrapped[0], font=self.fonts["small"], fill=TEXT)
             self.y += row_height
-        self.y += 8
+        self.y += 16
 
-    def image(self, path: Path, caption: str, max_height: int = 560) -> bool:
+    def image(self, path: Path, caption: str, max_height: int = 1120) -> bool:
         if not path.exists() or path.suffix.lower() not in {".png", ".jpg", ".jpeg"}:
             return False
         try:
@@ -333,16 +333,16 @@ class PdfReport:
         image.thumbnail((self.content_width, max_height), RESAMPLE)
         caption_lines = wrap_text(self.draw, caption, self.fonts["small_bold"], self.content_width)
         caption_line_height = font_height(self.fonts["small_bold"])
-        caption_height = caption_line_height * len(caption_lines) + 10
-        self.ensure(caption_height + image.height + 28)
+        caption_height = caption_line_height * len(caption_lines) + 20
+        self.ensure(caption_height + image.height + 56)
         for line in caption_lines:
             self.draw.text((MARGIN, self.y), line, font=self.fonts["small_bold"], fill=TEXT)
             self.y += caption_line_height
-        self.y += 10
+        self.y += 20
         x = MARGIN + (self.content_width - image.width) // 2
         self.draw.rectangle((x - 1, self.y - 1, x + image.width + 1, self.y + image.height + 1), outline=BORDER)
         self.pages[-1].paste(image, (x, self.y))
-        self.y += image.height + 28
+        self.y += image.height + 56
         return True
 
     def table(self, title: str, path: Path, max_rows: int) -> bool:
@@ -370,24 +370,24 @@ class PdfReport:
                 columns.append(column)
         columns = columns[:6]
         cell_width = self.content_width // len(columns)
-        row_height = 34
-        self.ensure(row_height * (len(rows) + 1) + 20)
+        row_height = 68
+        self.ensure(row_height * (len(rows) + 1) + 40)
         x = MARGIN
         for column in columns:
             self.draw.rectangle((x, self.y, x + cell_width, self.y + row_height), fill=HEADER_BG, outline=BORDER)
-            label = truncate_to_width(self.draw, column, self.fonts["small_bold"], cell_width - 10)
-            self.draw.text((x + 5, self.y + 8), label, font=self.fonts["small_bold"], fill=TEXT)
+            label = truncate_to_width(self.draw, column, self.fonts["small_bold"], cell_width - 20)
+            self.draw.text((x + 10, self.y + 16), label, font=self.fonts["small_bold"], fill=TEXT)
             x += cell_width
         self.y += row_height
         for row in rows:
             x = MARGIN
             for column in columns:
                 self.draw.rectangle((x, self.y, x + cell_width, self.y + row_height), outline=BORDER)
-                label = truncate_to_width(self.draw, row.get(column, ""), self.fonts["small"], cell_width - 10)
-                self.draw.text((x + 5, self.y + 8), label, font=self.fonts["small"], fill=TEXT)
+                label = truncate_to_width(self.draw, row.get(column, ""), self.fonts["small"], cell_width - 20)
+                self.draw.text((x + 10, self.y + 16), label, font=self.fonts["small"], fill=TEXT)
                 x += cell_width
             self.y += row_height
-        self.y += 18
+        self.y += 36
         return True
 
     def save(self, path: Path) -> int:
@@ -397,10 +397,10 @@ class PdfReport:
         for idx, page in enumerate(self.pages, start=1):
             draw = ImageDraw.Draw(page)
             footer = f"ASPIS technical report - page {idx}/{total}"
-            draw.line((MARGIN, PAGE_HEIGHT - MARGIN + 10, PAGE_WIDTH - MARGIN, PAGE_HEIGHT - MARGIN + 10), fill=BORDER)
-            draw.text((MARGIN, PAGE_HEIGHT - MARGIN + 22), footer, font=footer_font, fill=MUTED)
+            draw.line((MARGIN, PAGE_HEIGHT - MARGIN + 20, PAGE_WIDTH - MARGIN, PAGE_HEIGHT - MARGIN + 20), fill=BORDER)
+            draw.text((MARGIN, PAGE_HEIGHT - MARGIN + 44), footer, font=footer_font, fill=MUTED)
         first, *rest = self.pages
-        first.save(path, "PDF", save_all=True, append_images=rest, resolution=150.0)
+        first.save(path, "PDF", save_all=True, append_images=rest, resolution=300.0)
         return total
 
 
