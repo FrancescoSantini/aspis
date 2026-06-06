@@ -8,6 +8,10 @@ the project config.
 This avoids hidden network/database state on clusters and makes the enrichment
 universe auditable.
 
+For a practical preparation workflow, including GO GAF/OBO, Reactome
+Ensembl-to-pathway exports, KEGG REST exports, MSigDB GMTs, and miRNA target
+tables, see `docs/resource_preparation.md`.
+
 ## Committed Toy Resource Bundle
 
 Tiny non-biological examples live under `examples/resources/`. They are useful

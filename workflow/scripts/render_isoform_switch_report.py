@@ -2557,7 +2557,32 @@ def write_simple_pdf(path: Path, event_rows: list[dict[str, str]]) -> None:
     path.write_bytes(bytes(output))
 
 
-def run_external_tool_commands(args: argparse.Namespace, nt_fasta: str, aa_fasta: str, outdir: Path) -> list[dict[str, str]]:
+def external_annotation_candidates(external_dir: Path) -> list[Path]:
+    candidates = []
+    supported_suffixes = {
+        ".tsv",
+        ".txt",
+        ".domtblout",
+        ".out",
+        ".gff",
+        ".gff3",
+    }
+    for path in sorted(external_dir.iterdir()):
+        if not path.is_file():
+            continue
+        if path.name.endswith((".stdout.log", ".stderr.log", ".log")):
+            continue
+        if path.suffix.lower() in supported_suffixes:
+            candidates.append(path)
+    return candidates
+
+
+def run_external_tool_commands(
+    args: argparse.Namespace,
+    nt_fasta: str,
+    aa_fasta: str,
+    outdir: Path,
+) -> tuple[list[dict[str, str]], list[Path]]:
     external_dir = outdir / "external_annotations"
     external_dir.mkdir(parents=True, exist_ok=True)
     commands = [
@@ -2608,7 +2633,7 @@ def run_external_tool_commands(args: argparse.Namespace, nt_fasta: str, aa_fasta
                 "detail": "",
             }
         )
-    return rows
+    return rows, external_annotation_candidates(external_dir)
 
 
 def render_project_html(event_rows: list[dict[str, str]], coding_switch_rows: list[dict[str, str]], manifest_rows: list[dict[str, str]], output: Path) -> None:
@@ -2816,10 +2841,19 @@ def main() -> int:
         )
     outdir = Path(args.outdir)
     selected_nt_fasta, selected_aa_fasta = write_selected_fastas(outdir, sequence_rows)
-    external_tool_rows = run_external_tool_commands(args, selected_nt_fasta, selected_aa_fasta, outdir)
+    external_tool_rows, generated_annotation_paths = run_external_tool_commands(
+        args,
+        selected_nt_fasta,
+        selected_aa_fasta,
+        outdir,
+    )
+    annotation_path_text = ",".join(
+        [args.functional_annotation_tables]
+        + [str(path) for path in generated_annotation_paths]
+    )
 
     annotation_rows = normalized_annotations(
-        args.functional_annotation_tables,
+        annotation_path_text,
         {row["isoform_id"] for row in candidate_rows},
         event_by_isoform,
     )

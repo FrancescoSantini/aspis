@@ -213,10 +213,12 @@ Main settings to check before running:
 - `execution`: SLURM account, partitions, and default resources for cluster
   runs.
 
-Feature-set ORA/GSEA resources are documented in
-`docs/feature_set_resources.md`, with tiny parser/report examples under
-`examples/resources/`. Without configured feature sets, enrichment
-tables and report panels will be empty or explicitly marked as not configured.
+Feature-set ORA/GSEA resources and miRNA target resources are documented in
+`docs/feature_set_resources.md` and `docs/resource_preparation.md`, with tiny
+parser/report examples under `examples/resources/`. Real analyses should use
+the preparation scripts to convert frozen GO, Reactome, KEGG, MSigDB, and
+miRNA-target exports into ASPIS-ready TSVs. Without configured resources,
+enrichment and target panels are explicitly marked as not configured.
 
 Operational planning notes:
 

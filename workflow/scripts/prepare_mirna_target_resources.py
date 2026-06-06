@@ -1,0 +1,300 @@
+#!/usr/bin/env python3
+"""Prepare offline miRNA target resources for ASPIS smallRNA reports.
+
+The output target table is intentionally simple and auditable:
+
+    mirna_id  target_id  target_symbol  database  source  source_type
+    target_evidence_type  resource_version  evidence
+
+`target_id` is mapped through the same GTF gene map used by RNA-seq so matched
+miRNA-mRNA integration can compare miRNA targets directly against gene-level
+DESeq2 results.
+"""
+
+from __future__ import annotations
+
+import argparse
+import csv
+from datetime import datetime, timezone
+from pathlib import Path
+
+from prepare_feature_set_resources import (
+    GeneResolver,
+    add_id_map,
+    add_kegg_conv,
+    build_gene_resolver,
+    provenance_row,
+    sha256,
+    sniff_delimiter,
+)
+
+
+TARGET_COLUMNS = [
+    "mirna_id",
+    "target_id",
+    "target_symbol",
+    "database",
+    "source",
+    "source_type",
+    "target_evidence_type",
+    "resource_version",
+    "evidence",
+]
+UNMAPPED_COLUMNS = [
+    "mirna_id",
+    "raw_target_id",
+    "raw_target_symbol",
+    "mapping_status",
+    "evidence",
+]
+PROVENANCE_COLUMNS = [
+    "resource_id",
+    "resource_kind",
+    "path",
+    "provider",
+    "source",
+    "collection",
+    "release",
+    "resource_version",
+    "url",
+    "checksum_sha256",
+    "prepared_by",
+    "prepared_at",
+    "notes",
+]
+
+
+MIRNA_CANDIDATES = [
+    "mirna_id",
+    "miRNA",
+    "miRNA_ID",
+    "miRNA ID",
+    "miRNA name",
+    "mirbase_id",
+]
+TARGET_ID_CANDIDATES = [
+    "target_id",
+    "target_gene_id",
+    "Target Gene (Entrez ID)",
+    "Target Entrez Gene ID",
+    "Entrez Gene ID",
+    "Gene ID",
+    "gene_id",
+    "ensembl_gene_id",
+    "Ensembl Gene ID",
+]
+TARGET_SYMBOL_CANDIDATES = [
+    "target_symbol",
+    "target_gene_symbol",
+    "Target Gene",
+    "Target Gene Symbol",
+    "Gene Symbol",
+    "gene_name",
+    "symbol",
+]
+EVIDENCE_CANDIDATES = [
+    "evidence",
+    "Experiments",
+    "Support Type",
+    "support_type",
+    "method",
+    "Reference",
+    "References (PMID)",
+]
+SPECIES_CANDIDATES = [
+    "species",
+    "Species",
+    "Species (Target Gene)",
+    "target_species",
+]
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--gtf", required=True, help="Reference GTF used by RNA-seq quantification")
+    parser.add_argument("--input", required=True, help="Frozen target database export TSV/CSV")
+    parser.add_argument("--outdir", required=True, help="Output resource directory")
+    parser.add_argument("--database", required=True, help="Database label, e.g. miRTarBase, TargetScan, TarBase")
+    parser.add_argument(
+        "--evidence-type",
+        required=True,
+        choices=["validated", "predicted", "conserved", "user_provided", "unspecified"],
+        help="Controlled ASPIS target evidence label",
+    )
+    parser.add_argument("--resource-version", default="", help="Database/release label")
+    parser.add_argument("--prepared-by", default="", help="Provenance author label")
+    parser.add_argument("--mirna-column", default="", help="Override miRNA column")
+    parser.add_argument("--target-column", default="", help="Override target ID column")
+    parser.add_argument("--target-symbol-column", default="", help="Override target symbol column")
+    parser.add_argument("--evidence-column", default="", help="Override evidence/details column")
+    parser.add_argument("--species-column", default="", help="Optional species column")
+    parser.add_argument("--species", default="Homo sapiens", help="Species filter when a species column is available")
+    parser.add_argument("--id-map-table", action="append", default=[], help="Optional source_id/target_id ID map")
+    parser.add_argument("--kegg-conv-table", action="append", default=[], help="Optional two-column KEGG conv-style ID map")
+    parser.add_argument("--unmapped-action", choices=["drop", "keep"], default="drop")
+    parser.add_argument("--config-fragment", default="", help="Optional YAML fragment path to write")
+    return parser.parse_args()
+
+
+def choose_column(fieldnames: list[str], explicit: str, candidates: list[str], label: str, required: bool = True) -> str:
+    if explicit:
+        if explicit not in fieldnames:
+            raise ValueError(f"Configured {label} column is absent: {explicit}")
+        return explicit
+    lowered = {field.lower(): field for field in fieldnames}
+    for candidate in candidates:
+        if candidate in fieldnames:
+            return candidate
+        if candidate.lower() in lowered:
+            return lowered[candidate.lower()]
+    if required:
+        raise ValueError(f"Could not infer {label} column from: {fieldnames}")
+    return ""
+
+
+def read_rows(path: Path) -> tuple[list[str], list[dict[str, str]]]:
+    delimiter = sniff_delimiter(path)
+    with path.open("r", encoding="utf-8-sig", errors="replace", newline="") as handle:
+        reader = csv.DictReader(handle, delimiter=delimiter)
+        if reader.fieldnames is None:
+            raise ValueError(f"Target table is empty: {path}")
+        rows = [{key: (value or "").strip() for key, value in row.items()} for row in reader]
+        return list(reader.fieldnames), rows
+
+
+def resolve_target(resolver: GeneResolver, raw_id: str, raw_symbol: str) -> tuple[str, str]:
+    for value in [raw_id, raw_symbol]:
+        mapped, status = resolver.resolve(value)
+        if status == "mapped":
+            return mapped, "mapped"
+        if status == "ambiguous":
+            return "", "ambiguous"
+    return "", "unmapped"
+
+
+def write_table(path: Path, columns: list[str], rows: list[dict[str, str]]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=columns, delimiter="\t", lineterminator="\n")
+        writer.writeheader()
+        for row in rows:
+            writer.writerow({column: row.get(column, "") for column in columns})
+
+
+def write_config_fragment(path: Path, target_table: Path) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        "# Generated by workflow/scripts/prepare_mirna_target_resources.py\n"
+        "# Paste or merge these keys into a project config after reviewing paths.\n\n"
+        "resources:\n"
+        "  smallrna_targets:\n"
+        f"    target_table: {str(target_table)!r}\n"
+        f"    target_tables: [{str(target_table)!r}]\n"
+        "smallrna:\n"
+        "  target_enrichment_mode: table\n"
+        f"  target_table: {str(target_table)!r}\n"
+        "mirna_mrna_integration:\n"
+        "  run: true\n",
+        encoding="utf-8",
+    )
+
+
+def main() -> int:
+    args = parse_args()
+    input_path = Path(args.input)
+    outdir = Path(args.outdir)
+    outdir.mkdir(parents=True, exist_ok=True)
+    version = args.resource_version or "unknown"
+    prepared_at = datetime.now(timezone.utc).isoformat()
+
+    resolver = build_gene_resolver(Path(args.gtf))
+    for path in args.id_map_table:
+        add_id_map(Path(path), resolver)
+    for path in args.kegg_conv_table:
+        add_kegg_conv(Path(path), resolver)
+
+    fieldnames, raw_rows = read_rows(input_path)
+    mirna_col = choose_column(fieldnames, args.mirna_column, MIRNA_CANDIDATES, "miRNA")
+    target_col = choose_column(fieldnames, args.target_column, TARGET_ID_CANDIDATES, "target ID", required=False)
+    symbol_col = choose_column(fieldnames, args.target_symbol_column, TARGET_SYMBOL_CANDIDATES, "target symbol", required=False)
+    if not target_col and not symbol_col:
+        raise ValueError("Target resource needs either a target ID column or a target symbol column")
+    evidence_col = choose_column(fieldnames, args.evidence_column, EVIDENCE_CANDIDATES, "evidence", required=False)
+    species_col = choose_column(fieldnames, args.species_column, SPECIES_CANDIDATES, "species", required=False)
+
+    rows: list[dict[str, str]] = []
+    unmapped: list[dict[str, str]] = []
+    seen: set[tuple[str, str, str]] = set()
+    for raw in raw_rows:
+        if species_col and args.species:
+            species_value = raw.get(species_col, "")
+            if species_value and args.species.lower() not in species_value.lower():
+                continue
+        mirna = raw.get(mirna_col, "")
+        raw_target = raw.get(target_col, "") if target_col else ""
+        raw_symbol = raw.get(symbol_col, "") if symbol_col else ""
+        mapped, status = resolve_target(resolver, raw_target, raw_symbol)
+        evidence = raw.get(evidence_col, "") if evidence_col else ""
+        if status != "mapped":
+            unmapped.append(
+                {
+                    "mirna_id": mirna,
+                    "raw_target_id": raw_target,
+                    "raw_target_symbol": raw_symbol,
+                    "mapping_status": status,
+                    "evidence": evidence,
+                }
+            )
+            if args.unmapped_action == "drop":
+                continue
+            mapped = raw_target or raw_symbol
+        key = (mirna, mapped, args.database)
+        if not mirna or not mapped or key in seen:
+            continue
+        seen.add(key)
+        rows.append(
+            {
+                "mirna_id": mirna,
+                "target_id": mapped,
+                "target_symbol": raw_symbol,
+                "database": args.database,
+                "source": args.database,
+                "source_type": args.evidence_type,
+                "target_evidence_type": args.evidence_type,
+                "resource_version": version,
+                "evidence": evidence,
+            }
+        )
+    rows.sort(key=lambda row: (row["mirna_id"], row["target_id"], row["database"]))
+    target_table = outdir / f"{args.database.lower()}_targets.tsv"
+    unmapped_table = outdir / f"{args.database.lower()}_unmapped_targets.tsv"
+    provenance_table = outdir / f"{args.database.lower()}_target_provenance.tsv"
+    write_table(target_table, TARGET_COLUMNS, rows)
+    write_table(unmapped_table, UNMAPPED_COLUMNS, unmapped)
+    provenance = [
+        provenance_row(
+            f"{args.database.lower()}_targets",
+            "smallrna_target_table",
+            target_table,
+            args.database,
+            args.database,
+            args.evidence_type,
+            version,
+            args.prepared_by,
+            prepared_at,
+            f"{len(rows)} mapped miRNA-target pairs; {len(unmapped)} unmapped/ambiguous rows; source checksum {sha256(input_path)}",
+        )
+    ]
+    write_table(provenance_table, PROVENANCE_COLUMNS, provenance)
+    if args.config_fragment:
+        write_config_fragment(Path(args.config_fragment), target_table)
+    print(f"Prepared {len(rows)} miRNA-target pairs: {target_table}")
+    print(f"Unmapped/ambiguous target rows: {len(unmapped)}")
+    print(f"Provenance: {provenance_table}")
+    if args.config_fragment:
+        print(f"Config fragment: {args.config_fragment}")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

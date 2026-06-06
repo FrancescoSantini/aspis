@@ -120,14 +120,21 @@ Acceptance criteria:
 
 ## P0 - Enrichment And Resource Status Clarity
 
-ORA/GSEA infrastructure exists, but real biological value depends on configured
-resources.
+ORA/GSEA infrastructure exists, and ASPIS now includes offline preparation
+scripts for frozen GO, Reactome, KEGG, MSigDB, and custom feature-set exports.
+Real biological value still depends on preparing and validating project-specific
+resource bundles.
 
 Tasks:
 
-- Replace the committed toy examples with real GO, Reactome, KEGG/MSigDB-style,
-  custom gene sets, transcript-to-gene mappings, miRNA target tables, and
-  target-gene feature sets for production projects.
+- Prepare real GO, Reactome, KEGG/MSigDB-style, custom gene sets, transcript-to-
+  gene mappings, miRNA target tables, and target-gene feature sets for
+  production projects using `workflow/scripts/prepare_feature_set_resources.py`
+  and `workflow/scripts/prepare_mirna_target_resources.py`.
+- Review `unmapped_features.tsv` and `*_unmapped_targets.tsv` before trusting
+  ORA/GSEA or miRNA target enrichment.
+- Merge generated resource config fragments into production configs only after
+  resource paths and versions are confirmed.
 - Propagate resource names, versions, evidence classes, and provenance columns
   to outputs.
 - Add explicit status rows for missing or unusable resources.
@@ -146,7 +153,9 @@ Acceptance criteria:
 ## P1 - Isoform-Switch Hardening
 
 Isoform-switch execution and event SVG diagrams now work on the local BEAS_2B
-subset, but biological annotation quality is still weak.
+subset. Command-template outputs under `external_annotations/` are now parsed
+back into the report, but biological annotation quality still depends on
+sequence extraction and real external resources.
 
 Tasks:
 
@@ -158,6 +167,10 @@ Tasks:
 - Expose why optional consequence annotation is unavailable when tools such as
   InterProScan, Pfam/HMMER, SignalP, TMHMM/DeepTMHMM, CPAT/CPC2, or IUPred are
   not configured.
+- Validate genome-object or sequence-extraction setup so selected isoform FASTA
+  files are non-empty before running protein-domain/coding-potential tools.
+- Validate at least one conda-managed optional annotation path, such as CPAT or
+  HMMER/Pfam, and one precomputed-table path, such as InterProScan TSV.
 - Summarize events by gene biotype, switch class, event type, and optional
   consequence class.
 - Keep `events/<event_id>/index.html` and `switch.svg` links visible from the
