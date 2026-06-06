@@ -135,9 +135,12 @@ def relative_link(target: str | Path, html_path: Path) -> str:
     return os.path.relpath(target, start=html_path.parent).replace(os.sep, "/")
 
 
+PREVIEW_DPI = 300
+
+
 def safe_preview_stem(label: str, source: Path) -> str:
     safe_label = "".join(character if character.isalnum() else "_" for character in label.lower()).strip("_")
-    return safe_label or source.stem
+    return f"{safe_label or source.stem}_r{PREVIEW_DPI}"
 
 
 def render_pdf_preview(pdf_path_text: str, html_path: Path, label: str) -> str:
@@ -156,7 +159,7 @@ def render_pdf_preview(pdf_path_text: str, html_path: Path, label: str) -> str:
     if pdftoppm:
         prefix = preview_path.with_suffix("")
         completed = subprocess.run(
-            [pdftoppm, "-singlefile", "-png", "-r", "160", str(pdf_path), str(prefix)],
+            [pdftoppm, "-singlefile", "-png", "-r", str(PREVIEW_DPI), str(pdf_path), str(prefix)],
             check=False,
             capture_output=True,
             text=True,
