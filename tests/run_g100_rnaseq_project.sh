@@ -125,9 +125,12 @@ fi
     preprocess_rnaseq_branch:runtime=60 \
     preprocess_rnaseq_branch:mem_mb=8000 \
     preprocess_rnaseq_branch:disk_mb=50000 \
-    align_rnaseq_branch:runtime=720 \
-    align_rnaseq_branch:mem_mb=64000 \
-    align_rnaseq_branch:disk_mb=250000 \
+    align_rnaseq_library:runtime=720 \
+    align_rnaseq_library:mem_mb=64000 \
+    align_rnaseq_library:disk_mb=250000 \
+    align_rnaseq_branch:runtime=60 \
+    align_rnaseq_branch:mem_mb=8000 \
+    align_rnaseq_branch:disk_mb=50000 \
     featurecounts_gene_counts:runtime=240 \
     featurecounts_gene_counts:mem_mb=32000 \
     stringtie_assemble_branch:runtime=360 \

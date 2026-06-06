@@ -651,6 +651,14 @@ def rnaseq_preprocess_sample_tables(wildcards):
     ]
 
 
+def rnaseq_alignment_sample_tables(wildcards):
+    rows = materialized_rows_for_branch("rnaseq", wildcards.project)
+    return [
+        f"{BRANCH_DIR}/rnaseq/{wildcards.project}/alignment/{row['library_id']}/aligned_sample.tsv"
+        for row in rows
+    ]
+
+
 def smallrna_preprocessed_fastqc_outputs(wildcards):
     rows = materialized_rows_for_branch("smallrna", wildcards.project)
     outdir = f"{BRANCH_DIR}/smallrna/{wildcards.project}/smallrna/preprocess/fastqc"
@@ -4032,14 +4040,16 @@ rule check_rnaseq_alignment_environment:
         """
 
 
-rule align_rnaseq_branch:
+rule align_rnaseq_library:
     input:
+        analysis_plan=ANALYSIS_PLAN,
         samples=f"{BRANCH_DIR}" + "/rnaseq/{project}/preprocess/preprocessed_samples.tsv",
+        preprocess_done=f"{BRANCH_DIR}" + "/rnaseq/{project}/preprocess/preprocess.done",
         plan=f"{BRANCH_DIR}" + "/rnaseq/{project}/alignment/alignment_plan.tsv",
         environment=f"{BRANCH_DIR}" + "/rnaseq/{project}/alignment/environment_report.tsv"
     output:
-        samples=f"{BRANCH_DIR}" + "/rnaseq/{project}/alignment/aligned_samples.tsv",
-        done=f"{BRANCH_DIR}" + "/rnaseq/{project}/alignment/alignment.done"
+        sample=f"{BRANCH_DIR}" + "/rnaseq/{project}/alignment/{library_id}/aligned_sample.tsv",
+        done=f"{BRANCH_DIR}" + "/rnaseq/{project}/alignment/{library_id}/alignment.done"
     params:
         outdir=lambda wildcards: f"{BRANCH_DIR}/rnaseq/{wildcards.project}/alignment",
         hisat2=RNASEQ_ALIGNMENT.get("hisat2_command", "hisat2"),
@@ -4063,15 +4073,16 @@ rule align_rnaseq_branch:
     threads:
         RNASEQ_ALIGNMENT.get("threads", 4)
     log:
-        "logs/branches/rnaseq/{project}.alignment.log"
+        "logs/branches/rnaseq/{project}.alignment.{library_id}.log"
     shell:
         r"""
         mkdir -p logs/branches/rnaseq
         python3 workflow/scripts/align_rnaseq_branch.py \
           --samples {input.samples:q} \
+          --library-id {wildcards.library_id:q} \
           --plan {input.plan:q} \
           --outdir {params.outdir:q} \
-          --output {output.samples:q} \
+          --output {output.sample:q} \
           --done {output.done:q} \
           --threads {threads:q} \
           --hisat2 {params.hisat2:q} \
@@ -4080,6 +4091,31 @@ rule align_rnaseq_branch:
           {params.star_tmp_dir_flag} \
           {params.strandness_flag} \
           {params.extra_args_flag} \
+          > {log:q} 2>&1
+        """
+
+
+rule align_rnaseq_branch:
+    input:
+        analysis_plan=ANALYSIS_PLAN,
+        aligned_tables=rnaseq_alignment_sample_tables,
+        samples=f"{BRANCH_DIR}" + "/rnaseq/{project}/preprocess/preprocessed_samples.tsv",
+        preprocess_done=f"{BRANCH_DIR}" + "/rnaseq/{project}/preprocess/preprocess.done",
+        plan=f"{BRANCH_DIR}" + "/rnaseq/{project}/alignment/alignment_plan.tsv",
+        environment=f"{BRANCH_DIR}" + "/rnaseq/{project}/alignment/environment_report.tsv"
+    output:
+        samples=f"{BRANCH_DIR}" + "/rnaseq/{project}/alignment/aligned_samples.tsv",
+        done=f"{BRANCH_DIR}" + "/rnaseq/{project}/alignment/alignment.done"
+    log:
+        "logs/branches/rnaseq/{project}.alignment_manifest.log"
+    shell:
+        r"""
+        mkdir -p logs/branches/rnaseq
+        python3 workflow/scripts/build_aligned_rnaseq_manifest.py \
+          --samples {input.samples:q} \
+          --output {output.samples:q} \
+          --done {output.done:q} \
+          {input.aligned_tables:q} \
           > {log:q} 2>&1
         """
 
