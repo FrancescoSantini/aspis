@@ -9,6 +9,10 @@ The output target table is intentionally simple and auditable:
 `target_id` is mapped through the same GTF gene map used by RNA-seq so matched
 miRNA-mRNA integration can compare miRNA targets directly against gene-level
 DESeq2 results.
+
+Use open-license or project-owned target resources for the standard ASPIS
+validation path. Restricted identifier conversion resources require explicit
+opt-in after manual license review.
 """
 
 from __future__ import annotations
@@ -114,7 +118,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--gtf", required=True, help="Reference GTF used by RNA-seq quantification")
     parser.add_argument("--input", required=True, help="Frozen target database export TSV/CSV")
     parser.add_argument("--outdir", required=True, help="Output resource directory")
-    parser.add_argument("--database", required=True, help="Database label, e.g. miRTarBase, TargetScan, TarBase")
+    parser.add_argument("--database", required=True, help="Database/resource label for provenance")
     parser.add_argument(
         "--evidence-type",
         required=True,
@@ -130,7 +134,17 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--species-column", default="", help="Optional species column")
     parser.add_argument("--species", default="Homo sapiens", help="Species filter when a species column is available")
     parser.add_argument("--id-map-table", action="append", default=[], help="Optional source_id/target_id ID map")
-    parser.add_argument("--kegg-conv-table", action="append", default=[], help="Optional two-column KEGG conv-style ID map")
+    parser.add_argument(
+        "--kegg-conv-table",
+        action="append",
+        default=[],
+        help="Restricted/non-default two-column KEGG conv-style ID map. Requires --allow-restricted-resources.",
+    )
+    parser.add_argument(
+        "--allow-restricted-resources",
+        action="store_true",
+        help="Permit restricted ID-conversion inputs after the user has verified license terms.",
+    )
     parser.add_argument("--unmapped-action", choices=["drop", "keep"], default="drop")
     parser.add_argument("--config-fragment", default="", help="Optional YAML fragment path to write")
     return parser.parse_args()
@@ -206,6 +220,11 @@ def main() -> int:
     outdir.mkdir(parents=True, exist_ok=True)
     version = args.resource_version or "unknown"
     prepared_at = datetime.now(timezone.utc).isoformat()
+    if args.kegg_conv_table and not args.allow_restricted_resources:
+        raise ValueError(
+            "Restricted/non-open resource inputs require --allow-restricted-resources after "
+            "manual license review: --kegg-conv-table"
+        )
 
     resolver = build_gene_resolver(Path(args.gtf))
     for path in args.id_map_table:

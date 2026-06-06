@@ -121,16 +121,19 @@ Acceptance criteria:
 ## P0 - Enrichment And Resource Status Clarity
 
 ORA/GSEA infrastructure exists, and ASPIS now includes offline preparation
-scripts for frozen GO, Reactome, KEGG, MSigDB, and custom feature-set exports.
-Real biological value still depends on preparing and validating project-specific
-resource bundles.
+scripts for frozen open-license GO, Reactome, open GMT, and custom feature-set
+exports. Real biological value still depends on preparing and validating
+project-specific resource bundles.
 
 Tasks:
 
-- Prepare real GO, Reactome, KEGG/MSigDB-style, custom gene sets, transcript-to-
-  gene mappings, miRNA target tables, and target-gene feature sets for
+- Prepare real GO, Reactome, open-GMT/custom gene sets, transcript-to-gene
+  mappings, miRNA target tables, and target-gene feature sets for
   production projects using `workflow/scripts/prepare_feature_set_resources.py`
   and `workflow/scripts/prepare_mirna_target_resources.py`.
+- Keep the standard validation bundle open-license only. KEGG, MSigDB, SignalP,
+  TMHMM/DeepTMHMM, and similar restricted resources are not default ASPIS
+  resources.
 - Review `unmapped_features.tsv` and `*_unmapped_targets.tsv` before trusting
   ORA/GSEA or miRNA target enrichment.
 - Merge generated resource config fragments into production configs only after
@@ -164,9 +167,9 @@ Tasks:
   IDs, and biotypes where possible.
 - Classify known, novel-isoform, novel-locus, ambiguous, and likely-artifact
   events more clearly.
-- Expose why optional consequence annotation is unavailable when tools such as
-  InterProScan, Pfam/HMMER, SignalP, TMHMM/DeepTMHMM, CPAT/CPC2, or IUPred are
-  not configured.
+- Expose why optional consequence annotation is unavailable when open tools or
+  open prepared tables such as InterProScan, Pfam/HMMER, CPAT/CPC2, or another
+  explicitly open tool are not configured.
 - Validate genome-object or sequence-extraction setup so selected isoform FASTA
   files are non-empty before running protein-domain/coding-potential tools.
 - Validate at least one conda-managed optional annotation path, such as CPAT or

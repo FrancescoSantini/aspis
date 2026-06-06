@@ -1,7 +1,12 @@
 #!/usr/bin/env python3
 """Prepare offline feature-set resources for ASPIS ORA/GSEA reports.
 
-The workflow itself should not query GO, Reactome, KEGG, or MSigDB at run time.
+The workflow itself should not query external biological databases at run time.
+By default, this helper accepts open-license resources only, such as GO,
+Reactome, WikiPathways/GMT, and project-owned custom tables. KEGG and MSigDB
+inputs require an explicit opt-in because their redistribution/use terms are
+not equivalent to open data licenses.
+
 This helper converts frozen source exports into the ASPIS TSV contract:
 
     set_id  feature_id  source  collection  resource_version  description
@@ -73,7 +78,7 @@ def parse_args() -> argparse.Namespace:
         default=[],
         help=(
             "Optional TSV/CSV mapping table with source_id and target_id columns. "
-            "Use this for Entrez/UniProt/KEGG IDs that need to map to GTF gene_id."
+            "Use this for external identifiers that need to map to GTF gene_id."
         ),
     )
     parser.add_argument(
@@ -81,8 +86,8 @@ def parse_args() -> argparse.Namespace:
         action="append",
         default=[],
         help=(
-            "Optional two-column KEGG conv output. Aliases from both columns are mapped "
-            "when the opposite column resolves to a GTF gene_id."
+            "Restricted/non-default two-column KEGG conv output. Requires "
+            "--allow-restricted-resources."
         ),
     )
     parser.add_argument("--go-gaf", default="", help="GO annotation GAF/GAF.GZ export")
@@ -98,14 +103,30 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--kegg-link-table",
         default="",
-        help="Two-column KEGG REST link/pathway output, usually from /link/pathway/hsa",
+        help="Restricted/non-default KEGG REST link/pathway output. Requires --allow-restricted-resources.",
     )
     parser.add_argument(
         "--kegg-name-table",
         default="",
-        help="Optional two-column pathway-name table, usually from /list/pathway/hsa",
+        help="Restricted/non-default KEGG pathway-name table. Requires --allow-restricted-resources.",
     )
-    parser.add_argument("--msigdb-gmt", action="append", default=[], help="MSigDB or GMT-format gene-set file")
+    parser.add_argument(
+        "--gmt",
+        action="append",
+        default=[],
+        help="Open-license GMT-format gene-set file, e.g. WikiPathways",
+    )
+    parser.add_argument(
+        "--msigdb-gmt",
+        action="append",
+        default=[],
+        help="Restricted/non-default MSigDB GMT file. Requires --allow-restricted-resources.",
+    )
+    parser.add_argument(
+        "--allow-restricted-resources",
+        action="store_true",
+        help="Permit KEGG/MSigDB inputs after the user has verified license terms.",
+    )
     parser.add_argument(
         "--custom-table",
         action="append",
@@ -448,7 +469,7 @@ def kegg_memberships(path: Path, names_path: Path | None, version: str) -> list[
     return rows
 
 
-def gmt_memberships(path: Path, version: str) -> list[dict[str, str]]:
+def gmt_memberships(path: Path, version: str, source: str = "GMT") -> list[dict[str, str]]:
     rows = []
     collection = safe_stem(path)
     with open_text(path) as handle:
@@ -463,7 +484,7 @@ def gmt_memberships(path: Path, version: str) -> list[dict[str, str]]:
                         {
                             "set_id": set_id,
                             "feature_id": member,
-                            "source": "MSigDB" if "msig" in path.name.lower() or collection.startswith(("h.", "c")) else "GMT",
+                            "source": source,
                             "collection": collection,
                             "resource_version": version,
                             "description": description,
@@ -580,6 +601,20 @@ def main() -> int:
     outdir.mkdir(parents=True, exist_ok=True)
     version = args.resource_version or "unknown"
     prepared_at = datetime.now(timezone.utc).isoformat()
+    restricted_inputs = []
+    if args.kegg_link_table:
+        restricted_inputs.append("--kegg-link-table")
+    if args.kegg_name_table:
+        restricted_inputs.append("--kegg-name-table")
+    if args.kegg_conv_table:
+        restricted_inputs.append("--kegg-conv-table")
+    if args.msigdb_gmt:
+        restricted_inputs.append("--msigdb-gmt")
+    if restricted_inputs and not args.allow_restricted_resources:
+        raise ValueError(
+            "Restricted/non-open resource inputs require --allow-restricted-resources after "
+            f"manual license review: {', '.join(restricted_inputs)}"
+        )
     resolver = build_gene_resolver(Path(args.gtf))
     for path in args.id_map_table:
         add_id_map(Path(path), resolver)
@@ -651,9 +686,19 @@ def main() -> int:
             "KEGG",
             "KEGG",
         )
+    for gmt in args.gmt:
+        gmt_path = Path(gmt)
+        emit(
+            f"gmt_{safe_stem(gmt_path)}",
+            gmt_path,
+            "gmt_feature_set_table",
+            gmt_memberships(gmt_path, version),
+            "GMT",
+            safe_stem(gmt_path),
+        )
     for gmt in args.msigdb_gmt:
         gmt_path = Path(gmt)
-        emit(f"msigdb_{safe_stem(gmt_path)}", gmt_path, "msigdb_feature_set_table", gmt_memberships(gmt_path, version), "MSigDB", safe_stem(gmt_path))
+        emit(f"msigdb_{safe_stem(gmt_path)}", gmt_path, "msigdb_feature_set_table", gmt_memberships(gmt_path, version, "MSigDB"), "MSigDB", safe_stem(gmt_path))
     for table in args.custom_table:
         table_path = Path(table)
         emit(f"custom_{safe_stem(table_path)}", table_path, "custom_feature_set_table", custom_memberships(table_path, version), safe_stem(table_path), "custom")

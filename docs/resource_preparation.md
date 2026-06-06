@@ -1,15 +1,24 @@
 # Offline Resource Preparation
 
-ASPIS should not contact GO, Reactome, KEGG, MSigDB, miRNA-target databases, or
-protein-domain services during a production Snakemake run. Prepare resources
-once, keep the frozen files beside the project inputs, and point the project
-config to the prepared TSVs.
+ASPIS should not contact biological databases or protein-domain services during
+a production Snakemake run. Prepare open-license resources once, keep the frozen
+files beside the project inputs, and point the project config to the prepared
+TSVs.
 
 This gives two useful properties:
 
 - reports are reproducible because database versions are fixed;
+- the resource provenance table records what was used;
 - missing resources are reported as `not_configured`, not as silent biological
   zeros.
+
+ASPIS defaults to open-license resources. Do not use restricted, license-gated,
+or non-redistributable resources in the standard validation bundle. KEGG,
+MSigDB, SignalP, TMHMM/DeepTMHMM, and similar resources can be useful in some
+labs, but they are not part of the open ASPIS default because their terms are
+not equivalent to open data or open-source software licenses. If a local project
+uses them anyway, it must be an explicit project decision outside the default
+open-resource workflow.
 
 ## Recommended Layout
 
@@ -22,11 +31,8 @@ analysis:
     go-basic.obo
     goa_human.gaf.gz
     Ensembl2Reactome_All_Levels.txt
-    kegg_hsa_link_pathway.tsv
-    kegg_hsa_pathway_names.tsv
-    kegg_hsa_ensembl_conv.tsv
-    msigdb_hallmark.gmt
-    mirtarbase_hsa.csv
+    wikipathways_human.gmt
+    open_mirna_targets.tsv
   beas/
     feature_sets/
     smallrna_targets/
@@ -35,9 +41,9 @@ analysis:
 The `source/` files are frozen upstream exports. The `beas/` files are
 ASPIS-ready normalized resources.
 
-## RNA-seq ORA/GSEA Feature Sets
+## Open RNA-seq ORA/GSEA Feature Sets
 
-Download frozen source files once. Example source endpoints:
+Download frozen open source files once. Example source endpoints:
 
 ```bash
 mkdir -p /path/to/aspis_resources/source
@@ -51,23 +57,14 @@ curl -L -o goa_human.gaf.gz \
 
 curl -L -o Ensembl2Reactome_All_Levels.txt \
   https://reactome.org/download/current/Ensembl2Reactome_All_Levels.txt
-
-curl -L -o kegg_hsa_link_pathway.tsv \
-  https://rest.kegg.jp/link/pathway/hsa
-
-curl -L -o kegg_hsa_pathway_names.tsv \
-  https://rest.kegg.jp/list/pathway/hsa
-
-curl -L -o kegg_hsa_ensembl_conv.tsv \
-  https://rest.kegg.jp/conv/hsa/ensembl
 ```
 
-MSigDB requires accepting its license terms, so download GMT files manually from
-MSigDB and place them in `source/`, for example:
+Add open GMT files if desired. WikiPathways is the preferred pathway-like
+addition because pathway content is open; export or prepare it as GMT and place
+it in `source/`, for example:
 
 ```text
-msigdb_hallmark.gmt
-msigdb_c2_cp_reactome.gmt
+wikipathways_human.gmt
 ```
 
 Then prepare ASPIS TSVs. Use the same GTF used for featureCounts/StringTie so
@@ -79,16 +76,12 @@ cd /path/to/aspis
 python3 workflow/scripts/prepare_feature_set_resources.py \
   --gtf /path/to/reference/Homo_sapiens.GRCh38.112.chr.gtf \
   --outdir /path/to/aspis_resources/beas/feature_sets \
-  --resource-version "GO_current_Reactome_current_KEGG_2026-06_MSigDB_manual" \
+  --resource-version "GO_current_Reactome_current_WikiPathways_manual" \
   --go-gaf /path/to/aspis_resources/source/goa_human.gaf.gz \
   --go-obo /path/to/aspis_resources/source/go-basic.obo \
   --go-id-field symbol \
   --reactome /path/to/aspis_resources/source/Ensembl2Reactome_All_Levels.txt \
-  --kegg-link-table /path/to/aspis_resources/source/kegg_hsa_link_pathway.tsv \
-  --kegg-name-table /path/to/aspis_resources/source/kegg_hsa_pathway_names.tsv \
-  --kegg-conv-table /path/to/aspis_resources/source/kegg_hsa_ensembl_conv.tsv \
-  --msigdb-gmt /path/to/aspis_resources/source/msigdb_hallmark.gmt \
-  --msigdb-gmt /path/to/aspis_resources/source/msigdb_c2_cp_reactome.gmt \
+  --gmt /path/to/aspis_resources/source/wikipathways_human.gmt \
   --config-fragment /path/to/aspis_resources/beas/feature_sets/aspis_feature_sets.yaml
 ```
 
@@ -100,8 +93,7 @@ go_bp.tsv
 go_mf.tsv
 go_cc.tsv
 reactome.tsv
-kegg.tsv
-msigdb_*.tsv
+gmt_*.tsv
 unmapped_features.tsv
 resource_provenance.tsv
 aspis_feature_sets.yaml
@@ -127,37 +119,37 @@ enrichment after a miRNA target table has been configured.
 
 ## smallRNA Target Resources
 
-smallRNA target enrichment needs a miRNA-to-target table. GO/Reactome/KEGG are
-not target databases; they are used after targets have been mapped to genes.
+smallRNA target enrichment needs a miRNA-to-target table. GO, Reactome, and
+other feature-set resources are not target databases; they are used after
+targets have been mapped to genes.
 
-Prepare a frozen validated or predicted target export, for example miRTarBase,
-TarBase, TargetScan, or a project-curated target list. Then normalize it:
+Prepare a frozen open-license or project-owned target export. Then normalize it:
 
 ```bash
 python3 workflow/scripts/prepare_mirna_target_resources.py \
   --gtf /path/to/reference/Homo_sapiens.GRCh38.112.chr.gtf \
-  --input /path/to/aspis_resources/source/mirtarbase_hsa.csv \
+  --input /path/to/aspis_resources/source/open_mirna_targets.tsv \
   --outdir /path/to/aspis_resources/beas/smallrna_targets \
-  --database miRTarBase \
+  --database project_open_targets \
   --evidence-type validated \
   --resource-version "manual_release_label" \
   --config-fragment /path/to/aspis_resources/beas/smallrna_targets/aspis_targets.yaml
 ```
 
-If the target export uses Entrez/KEGG/UniProt identifiers, provide an
+If the target export uses Entrez, UniProt, or another external identifier
+namespace, provide an
 `--id-map-table` with `source_id` and `target_id` columns, where `target_id`
-resolves to the GTF gene ID. The script also accepts `--kegg-conv-table` for
-two-column KEGG-style conversion files.
+resolves to the GTF gene ID.
 
 Use the generated YAML fragment to set:
 
 ```yaml
 resources:
   smallrna_targets:
-    target_table: /path/to/aspis_resources/beas/smallrna_targets/mirtarbase_targets.tsv
+    target_table: /path/to/aspis_resources/beas/smallrna_targets/project_open_targets_targets.tsv
 smallrna:
   target_enrichment_mode: table
-  target_table: /path/to/aspis_resources/beas/smallrna_targets/mirtarbase_targets.tsv
+  target_table: /path/to/aspis_resources/beas/smallrna_targets/project_open_targets_targets.tsv
   target_feature_set_tables: /path/to/aspis_resources/beas/feature_sets/go_bp.tsv,/path/to/...
 mirna_mrna_integration:
   run: true
@@ -190,7 +182,6 @@ rnaseq_differential:
     - /path/to/aspis_resources/beas/isoform_annotations/interproscan.tsv
     - /path/to/aspis_resources/beas/isoform_annotations/pfam.domtblout
     - /path/to/aspis_resources/beas/isoform_annotations/cpat.tsv
-    - /path/to/aspis_resources/beas/isoform_annotations/signalp.tsv
 ```
 
 Alternatively, command templates can run site-installed tools from the report
@@ -209,10 +200,10 @@ rnaseq_differential:
     -g {nt_fasta} -o {outdir}/cpat
 ```
 
-InterProScan, Pfam HMM databases, SignalP, DeepTMHMM/TMHMM, DeepLoc2, and
-IUPred/NetSurfP are not bundled with ASPIS because their databases, licenses, or
-install procedures are site-specific. The stable ASPIS contract is the
-normalized annotation table or the command-template output.
+InterPro/InterProScan and Pfam are appropriate open defaults when installed from
+open channels and paired with their open downloadable data. Tools or databases
+with academic-only, non-commercial, registration-only, or otherwise restricted
+terms are not part of the ASPIS open-resource validation path.
 
 ## G100 BEAS Application
 

@@ -216,8 +216,8 @@ Main settings to check before running:
 Feature-set ORA/GSEA resources and miRNA target resources are documented in
 `docs/feature_set_resources.md` and `docs/resource_preparation.md`, with tiny
 parser/report examples under `examples/resources/`. Real analyses should use
-the preparation scripts to convert frozen GO, Reactome, KEGG, MSigDB, and
-miRNA-target exports into ASPIS-ready TSVs. Without configured resources,
+the preparation scripts to convert frozen open-license GO, Reactome, open GMT,
+and miRNA-target exports into ASPIS-ready TSVs. Without configured resources,
 enrichment and target panels are explicitly marked as not configured.
 
 Operational planning notes:
