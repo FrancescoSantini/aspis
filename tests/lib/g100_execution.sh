@@ -15,21 +15,24 @@ g100_report_execution_context() {
   if [[ -n "${PREFLIGHT_REPORT:-}" ]]; then
     export ASPIS_PREFLIGHT_REPORT="$PREFLIGHT_REPORT"
   fi
-  if [[ -n "$DOWNLOAD_PARTITION" ]]; then
-    export SLURM_DOWNLOAD_PARTITION="$DOWNLOAD_PARTITION"
+  local effective_download_partition="${DOWNLOAD_PARTITION:-${SLURM_DOWNLOAD_PARTITION:-}}"
+  local download_source="config"
+  if [[ -n "${DOWNLOAD_PARTITION:-}" ]]; then
+    download_source="helper"
+  elif [[ -n "${SLURM_DOWNLOAD_PARTITION:-}" ]]; then
+    download_source="environment"
+  fi
+  if [[ -n "$effective_download_partition" ]]; then
+    export SLURM_DOWNLOAD_PARTITION="$effective_download_partition"
   fi
 
   echo "==> default resources: runtime=${DEFAULT_RUNTIME} mem_mb=${DEFAULT_MEM_MB} disk_mb=${DEFAULT_DISK_MB}"
-  if [[ -n "$DOWNLOAD_PARTITION" ]]; then
-    echo "==> download partition override: $DOWNLOAD_PARTITION"
+  if [[ -n "$effective_download_partition" ]]; then
+    echo "==> download partition override: $effective_download_partition"
   fi
   echo "==> execution report: $EXECUTION_REPORT"
 
   mkdir -p "$(dirname "$EXECUTION_REPORT")"
-  local download_source="config"
-  if [[ -n "$DOWNLOAD_PARTITION" ]]; then
-    download_source="helper"
-  fi
   python3 workflow/scripts/write_execution_report.py \
     --output "$EXECUTION_REPORT" \
     --helper "$helper_name" \
@@ -40,7 +43,7 @@ g100_report_execution_context() {
     --slurm-account-source helper \
     --default-partition "$PARTITION" \
     --default-partition-source helper \
-    --download-partition "$DOWNLOAD_PARTITION" \
+    --download-partition "$effective_download_partition" \
     --download-partition-source "$download_source" \
     --runtime "$DEFAULT_RUNTIME" \
     --runtime-source helper \
