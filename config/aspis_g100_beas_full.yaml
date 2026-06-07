@@ -37,9 +37,11 @@ resources:
     hisat2_index_prefix: /g100_work/ELIX6_santini/aspis_data/phdpipe/genome/hisat2_index/genome
     star_genome_dir: ''
   rnaseq_feature_sets:
-    # Fill these with open-license GO/Reactome/open-GMT or project-specific
-    # resources to enable RNA-seq ORA/GSEA. Empty values produce
-    # not_configured status.
+    # Run docs/resource_preparation.md first, then fill these with the
+    # prepared open-license GO/Reactome/open-GMT or project-specific TSVs.
+    # Empty values intentionally produce not_configured ORA/GSEA status.
+    # Example:
+    # tables: /g100_work/ELIX6_santini/aspis_resources/beas/feature_sets/go_bp.tsv,/g100_work/ELIX6_santini/aspis_resources/beas/feature_sets/go_mf.tsv,/g100_work/ELIX6_santini/aspis_resources/beas/feature_sets/go_cc.tsv,/g100_work/ELIX6_santini/aspis_resources/beas/feature_sets/reactome.tsv
     gmt: ''
     tables: ''
   mirbase:
@@ -58,8 +60,9 @@ resources:
     gtf: /g100_work/ELIX6_santini/aspis_data/phdpipe/genome/Homo_sapiens.GRCh38.112.chr.gtf
     bowtie_index_prefix: ''
   smallrna_targets:
-    # Fill these with real miRNA target and target-gene feature-set resources
-    # to enable smallRNA target enrichment and matched miRNA-mRNA integration.
+    # Run docs/resource_preparation.md first, then fill these with a real
+    # open-license or project-owned miRNA-target table. GO/Reactome tables are
+    # target-gene feature sets; they do not replace a miRNA-target database.
     target_table: ''
     target_tables: &id001 []
     target_cache: ''
@@ -147,6 +150,8 @@ rnaseq_differential:
   reports: true
   report_top_n: 50
   report_feature_sets: ''
+  # Usually the same prepared open feature-set TSVs as
+  # resources.rnaseq_feature_sets.tables.
   report_feature_set_tables: ''
   report_feature_set_min_overlap: 2
   report_feature_set_top_n: 20
@@ -193,7 +198,9 @@ rnaseq_differential:
   isoform_switch_padj: 0.1
   isoform_switch_dif: 0.1
   isoform_switch_max_genes: 30
-  isoform_switch_genome_object: ''
+  # Required for NT/AA FASTA extraction and sequence-dependent consequence
+  # tools. This NCBI GRCh38 object matches Ensembl-style chromosome names.
+  isoform_switch_genome_object: "BSgenome.Hsapiens.NCBI.GRCh38::BSgenome.Hsapiens.NCBI.GRCh38"
   isoform_switch_reports: true
   isoform_switch_report_top_n: 30
   # Fill these with precomputed annotation tables or command templates if you
@@ -289,8 +296,9 @@ smallrna:
   padj: 0.1
   log2fc: 1.0
   lfc_shrinkage: none
-  # Enable target enrichment after providing a real miRNA target table below.
-  # "disabled" reports a clear not-configured status instead of running toy biology.
+  # Enable target enrichment only after providing a real miRNA target table
+  # above. "disabled" reports a clear not_configured status instead of running
+  # toy biology.
   target_enrichment_mode: disabled
   target_table: ''
   target_tables: *id001
@@ -298,6 +306,8 @@ smallrna:
   target_min_overlap: 1
   target_top_n: 20
   target_feature_sets: ''
+  # Usually the same prepared open feature-set TSVs as
+  # resources.rnaseq_feature_sets.tables, applied to target genes.
   target_feature_set_tables: ''
   target_feature_set_min_overlap: 2
   target_feature_set_top_n: 20

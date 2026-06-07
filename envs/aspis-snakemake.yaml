@@ -27,3 +27,4 @@ dependencies:
   - r-mass
   - bioconductor-deseq2
   - bioconductor-isoformswitchanalyzer
+  - bioconductor-bsgenome.hsapiens.ncbi.grch38

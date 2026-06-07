@@ -38,21 +38,26 @@ conda env create -f envs/aspis-functional-annotation.yaml
 conda activate aspis-functional-annotation
 ```
 
-First-pass conda-managed tools:
+Open, conda-managed tools:
 
 - `hmmscan`, for Pfam/HMMER domain scans when Pfam HMM databases are available;
 - `cpat`, for coding-potential scoring;
 - `seqkit` and `biopython`, for sequence handling around user-managed tools.
 
-Externally managed or site-managed tools:
+Open but externally managed or site-managed tools:
 
 - `interproscan.sh`, because InterProScan installation and databases are large;
-- `signalp`, because SignalP has license/registration constraints;
-- `deeptmhmm` or `tmhmm`, because deployment is often site-specific;
-- `deeploc2`, because deployment can require separate model assets;
-- `iupred2a.py` and `netsurfp`, depending on local packaging and model setup.
 
-Precomputed annotation TSVs remain the preferred stable interface for these
+Non-default tools that need license review or site policy review before use:
+
+- `signalp`, because SignalP has license/registration constraints;
+- `deeptmhmm` or `tmhmm`, because deployment and terms are often
+  site-specific;
+- `deeploc2`, because deployment can require separate model assets and terms;
+- `iupred2a.py` and `netsurfp`, depending on local packaging, model setup, and
+  usage terms.
+
+Precomputed annotation TSVs remain the preferred stable interface for all
 external tools. The isoform-switch report can import supported InterProScan,
 Pfam/HMMER, CPAT/CPC2, SignalP, DeepTMHMM/TMHMM, DeepLoc2, and IUPred2A-style
 tables through:
@@ -79,6 +84,10 @@ rnaseq_differential:
 ```
 
 Templates may use `{aa_fasta}`, `{nt_fasta}`, `{outdir}`, and `{tool_name}`.
+Sequence-dependent command templates are blocked with an explicit status when
+the selected NT/AA FASTA files are empty. Empty FASTAs usually mean
+`rnaseq_differential.isoform_switch_genome_object` is unset or does not match
+the annotation chromosome names.
 
 ## Splicing And DTU Environment
 

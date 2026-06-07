@@ -2185,9 +2185,21 @@ def relative(path: str, base: Path) -> str:
     return os.path.relpath(path, start=base.parent)
 
 
+def path_has_content(path_text: str) -> bool:
+    if not path_text:
+        return False
+    path = Path(path_text)
+    return path.is_file() and path.stat().st_size > 0
+
+
 def file_link(label: str, path_text: str, html_path: Path) -> str:
-    if not path_text or not Path(path_text).exists():
-        return ""
+    if not path_text:
+        return f'<span class="muted">{html.escape(label)} not generated</span>'
+    path = Path(path_text)
+    if not path.exists():
+        return f'<span class="muted">{html.escape(label)} missing</span>'
+    if path.is_file() and path.stat().st_size == 0:
+        return f'<span class="muted">{html.escape(label)} empty</span>'
     return f'<a href="{html.escape(relative(path_text, html_path))}">{html.escape(label)}</a>'
 
 
@@ -2364,6 +2376,20 @@ def render_event_html(
             f"<pre>{html.escape(row.get('affected_aa_sequence', '') or 'not available')}</pre>"
             "</details>"
         )
+    if not event_sequences:
+        sequence_note = "No sequence rows were produced for this event."
+    elif not any(row.get("nt_sequence", "") or row.get("aa_sequence", "") for row in event_sequences):
+        sequence_note = (
+            "Nucleotide and amino-acid sequences were not generated. Configure "
+            "rnaseq_differential.isoform_switch_genome_object with a BSgenome object "
+            "matching the reference annotation, then rerun the isoform-switch report "
+            "targets to enable sequence links and sequence-dependent consequence tools."
+        )
+    else:
+        sequence_note = (
+            "Sequence blocks expose the nucleotide, amino-acid, and affected-region "
+            "sequences used for manual inspection or external validation of the switch event."
+        )
     html_text = f"""<!doctype html>
 <html lang="en">
 <head>
@@ -2405,7 +2431,7 @@ def render_event_html(
   <p class="note">Functional annotations are optional external evidence imported from tools or tables such as domain, disorder, localization, signal-peptide, or transmembrane predictions. Empty rows mean the event lacks configured external annotation evidence, not necessarily that no function exists.</p>
   {table(['isoform_id', 'source', 'feature_type', 'feature_id', 'feature_name', 'start_aa', 'end_aa', 'score', 'feature_change', 'description'], event_annotations)}
   <h2>Sequences</h2>
-  <p class="note">Sequence blocks expose the nucleotide, amino-acid, and affected-region sequences used for manual inspection or external validation of the switch event.</p>
+  <p class="note">{html.escape(sequence_note)}</p>
   {''.join(sequence_blocks) if sequence_blocks else '<p>No sequence rows available.</p>'}
 </body>
 </html>
@@ -2413,8 +2439,9 @@ def render_event_html(
     out_path.write_text(html_text, encoding="utf-8")
 
 
-def write_fasta(path: Path, records: list[tuple[str, str]]) -> None:
+def write_fasta(path: Path, records: list[tuple[str, str]]) -> int:
     path.parent.mkdir(parents=True, exist_ok=True)
+    written = 0
     with path.open("w", encoding="utf-8") as handle:
         for name, sequence in records:
             if not sequence:
@@ -2422,6 +2449,8 @@ def write_fasta(path: Path, records: list[tuple[str, str]]) -> None:
             handle.write(f">{name}\n")
             for index in range(0, len(sequence), 80):
                 handle.write(sequence[index:index + 80] + "\n")
+            written += 1
+    return written
 
 
 def write_event_fastas(
@@ -2432,21 +2461,21 @@ def write_event_fastas(
     event_sequences = [row for row in sequence_rows if row["event_id"] == event["event_id"]]
     nt_path = event_dir / "switch_isoforms.nt.fa"
     aa_path = event_dir / "switch_isoforms.aa.fa"
-    write_fasta(
+    nt_records = write_fasta(
         nt_path,
         [
             (f"{row['isoform_id']}|{row['switch_role']}|{event['event_id']}", row["nt_sequence"])
             for row in event_sequences
         ],
     )
-    write_fasta(
+    aa_records = write_fasta(
         aa_path,
         [
             (f"{row['isoform_id']}|{row['switch_role']}|{event['event_id']}", row["aa_sequence"])
             for row in event_sequences
         ],
     )
-    return str(nt_path), str(aa_path)
+    return str(nt_path) if nt_records else "", str(aa_path) if aa_records else ""
 
 
 def write_selected_fastas(
@@ -2455,21 +2484,21 @@ def write_selected_fastas(
 ) -> tuple[str, str]:
     nt_path = outdir / "switch_selected.nt.fa"
     aa_path = outdir / "switch_selected.aa.fa"
-    write_fasta(
+    nt_records = write_fasta(
         nt_path,
         [
             (f"{row['isoform_id']}|{row['switch_role']}|{row['event_id']}", row["nt_sequence"])
             for row in sequence_rows
         ],
     )
-    write_fasta(
+    aa_records = write_fasta(
         aa_path,
         [
             (f"{row['isoform_id']}|{row['switch_role']}|{row['event_id']}", row["aa_sequence"])
             for row in sequence_rows
         ],
     )
-    return str(nt_path), str(aa_path)
+    return str(nt_path) if nt_records else "", str(aa_path) if aa_records else ""
 
 
 def pdf_escape(text: str) -> str:
@@ -2586,16 +2615,17 @@ def run_external_tool_commands(
     external_dir = outdir / "external_annotations"
     external_dir.mkdir(parents=True, exist_ok=True)
     commands = [
-        ("protein_domain", "interproscan", args.interproscan_command),
-        ("protein_domain", "pfam", args.pfam_command),
-        ("coding_potential", "coding_potential", args.coding_potential_command),
-        ("signal_peptide", "signalp", args.signalp_command),
-        ("transmembrane", "tm_topology", args.tm_command),
-        ("localization", "localization", args.localization_command),
-        ("disorder", "disorder", args.disorder_command),
+        ("protein_domain", "interproscan", args.interproscan_command, "aa"),
+        ("protein_domain", "pfam", args.pfam_command, "aa"),
+        ("coding_potential", "coding_potential", args.coding_potential_command, "nt"),
+        ("signal_peptide", "signalp", args.signalp_command, "aa"),
+        ("transmembrane", "tm_topology", args.tm_command, "aa"),
+        ("localization", "localization", args.localization_command, "aa"),
+        ("disorder", "disorder", args.disorder_command, "aa"),
     ]
     rows = []
-    for group, name, template in commands:
+    fasta_by_kind = {"nt": nt_fasta, "aa": aa_fasta}
+    for group, name, template, required_sequence in commands:
         if not template:
             rows.append(
                 {
@@ -2607,6 +2637,26 @@ def run_external_tool_commands(
                     "stdout_log": "",
                     "stderr_log": "",
                     "detail": "No command template configured",
+                }
+            )
+            continue
+        required_fasta = fasta_by_kind[required_sequence]
+        if not path_has_content(required_fasta):
+            rows.append(
+                {
+                    "tool_group": group,
+                    "tool_name": name,
+                    "status": "blocked",
+                    "returncode": "",
+                    "command": "",
+                    "stdout_log": "",
+                    "stderr_log": "",
+                    "detail": (
+                        f"Required {required_sequence.upper()} FASTA is empty or missing. "
+                        "Configure rnaseq_differential.isoform_switch_genome_object with "
+                        "a genome object matching the reference annotation, then rerun the "
+                        "isoform-switch report targets."
+                    ),
                 }
             )
             continue

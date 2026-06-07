@@ -13,12 +13,12 @@ This gives two useful properties:
   zeros.
 
 ASPIS defaults to open-license resources. Do not use restricted, license-gated,
-or non-redistributable resources in the standard validation bundle. KEGG,
-MSigDB, SignalP, TMHMM/DeepTMHMM, and similar resources can be useful in some
-labs, but they are not part of the open ASPIS default because their terms are
-not equivalent to open data or open-source software licenses. If a local project
-uses them anyway, it must be an explicit project decision outside the default
-open-resource workflow.
+academic-only, non-commercial-only, or non-redistributable resources in the
+standard validation bundle. KEGG, MSigDB, SignalP, TMHMM/DeepTMHMM, and similar
+resources can be useful in some labs, but they are not part of the open ASPIS
+default because their terms are not equivalent to open data or open-source
+software licenses. If a local project uses them anyway, it must be an explicit
+project decision outside the default open-resource workflow.
 
 ## Recommended Layout
 
@@ -32,14 +32,16 @@ analysis:
     goa_human.gaf.gz
     Ensembl2Reactome_All_Levels.txt
     wikipathways_human.gmt
-    open_mirna_targets.tsv
+    project_open_mirna_targets.tsv
   beas/
     feature_sets/
     smallrna_targets/
 ```
 
 The `source/` files are frozen upstream exports. The `beas/` files are
-ASPIS-ready normalized resources.
+ASPIS-ready normalized resources. The preparation scripts normalize files that
+you already downloaded or exported; they do not silently download biological
+databases during Snakemake execution.
 
 ## Open RNA-seq ORA/GSEA Feature Sets
 
@@ -128,13 +130,21 @@ Prepare a frozen open-license or project-owned target export. Then normalize it:
 ```bash
 python3 workflow/scripts/prepare_mirna_target_resources.py \
   --gtf /path/to/reference/Homo_sapiens.GRCh38.112.chr.gtf \
-  --input /path/to/aspis_resources/source/open_mirna_targets.tsv \
+  --input /path/to/aspis_resources/source/project_open_mirna_targets.tsv \
   --outdir /path/to/aspis_resources/beas/smallrna_targets \
   --database project_open_targets \
   --evidence-type validated \
   --resource-version "manual_release_label" \
   --config-fragment /path/to/aspis_resources/beas/smallrna_targets/aspis_targets.yaml
 ```
+
+ASPIS intentionally does not bundle a universal default miRNA-target database.
+miRBase is appropriate for miRNA sequences and names, but it is not a
+miRNA-target interaction resource. Many target databases are free web resources
+but have academic, non-commercial, citation, registration, or redistribution
+terms that need a project-level review before they can be used. For the open
+validation path, use a project-owned table or a target export whose license you
+have reviewed and can redistribute with the analysis.
 
 If the target export uses Entrez, UniProt, or another external identifier
 namespace, provide an
@@ -165,13 +175,14 @@ available:
 
 ```yaml
 rnaseq_differential:
-  isoform_switch_genome_object: "BSgenome.Hsapiens.UCSC.hg38::BSgenome.Hsapiens.UCSC.hg38"
+  isoform_switch_genome_object: "BSgenome.Hsapiens.NCBI.GRCh38::BSgenome.Hsapiens.NCBI.GRCh38"
 ```
 
 Use a genome object whose chromosome naming matches the GTF. If the GTF uses
 Ensembl-style chromosomes (`1`, `2`, `X`) and the genome object uses UCSC-style
 names (`chr1`, `chr2`, `chrX`), sequence extraction can fail or produce empty
-FASTA files.
+FASTA files. Use `BSgenome.Hsapiens.UCSC.hg38::BSgenome.Hsapiens.UCSC.hg38`
+only when the annotation uses UCSC-style `chr` sequence names.
 
 Second, provide precomputed annotation tables or command templates. Precomputed
 tables are the most reproducible interface:
@@ -200,10 +211,11 @@ rnaseq_differential:
     -g {nt_fasta} -o {outdir}/cpat
 ```
 
-InterPro/InterProScan and Pfam are appropriate open defaults when installed from
-open channels and paired with their open downloadable data. Tools or databases
-with academic-only, non-commercial, registration-only, or otherwise restricted
-terms are not part of the ASPIS open-resource validation path.
+InterPro/InterProScan and Pfam/HMMER are appropriate open defaults when
+installed from open channels and paired with their open downloadable data. CPAT
+is also suitable when its model files are kept under project provenance. Tools
+or databases with academic-only, non-commercial, registration-only, or otherwise
+restricted terms are not part of the ASPIS open-resource validation path.
 
 ## G100 BEAS Application
 
@@ -218,6 +230,11 @@ After running the preparation scripts, merge the generated YAML fragments into:
 ```text
 config/aspis_g100_beas_full.yaml
 ```
+
+The BEAS full config already enables the GRCh38 BSgenome object needed for
+isoform-switch NT/AA sequence extraction. ORA/GSEA and miRNA target enrichment
+remain disabled until the prepared open feature-set and target TSVs exist and
+their paths are pasted into the config.
 
 Then rerun:
 
