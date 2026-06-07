@@ -305,7 +305,67 @@ resource_recipes:
             + f"\nresources:\n  rnaseq_feature_sets:\n    provenance: {valid_provenance}\n    summary: {valid_summary}\n",
         )
         assert_success(run_preflight(resource_config, "rnaseq"), "valid resource metadata")
+        unmapped_feature_sets = write(
+            tmp / "unmapped_feature_sets.tsv",
+            "set_id\tfeature_id\tsource\tcollection\tresource_version\n"
+            "GO:BAD\tMISSING_GENE\tgo\tbiological_process\t2026-01\n",
+        )
+        unmapped_feature_config = write(
+            tmp / "rnaseq_unmapped_feature_sets.yaml",
+            valid_rnaseq_config.read_text(encoding="utf-8").replace(
+                "  min_replicates_per_group: 2\n",
+                f"  min_replicates_per_group: 2\n  report_feature_set_tables: {unmapped_feature_sets}\n",
+            ),
+        )
+        assert_failure_contains(
+            run_preflight(unmapped_feature_config, "rnaseq"),
+            "unmapped RNA-seq feature sets",
+            "insufficient mapping",
+        )
 
+        unsupported_namespace_summary = write(
+            tmp / "unsupported_namespace_resource_summary.tsv",
+            "resource_id\tresource_kind\tpath\tsource_file\tsource\tcollection\tresource_version\t"
+            "license_status\tidentifier_namespace\tn_memberships\tn_sets\tn_features\t"
+            "n_unmapped_or_ambiguous\tmapping_status\n"
+            f"go_bp\trnaseq_feature_set_table\t{valid_feature_sets}\t{valid_feature_sets}\tgo\t"
+            "biological_process\t2026-01\topen\tunsupported_namespace\t1\t1\t1\t0\tok\n",
+        )
+        unsupported_namespace_config = write(
+            tmp / "rnaseq_unsupported_resource_namespace.yaml",
+            valid_rnaseq_config.read_text(encoding="utf-8").replace(
+                "  min_replicates_per_group: 2\n",
+                f"  min_replicates_per_group: 2\n  report_feature_set_tables: {valid_feature_sets}\n",
+            )
+            + f"\nresources:\n  rnaseq_feature_sets:\n    provenance: {valid_provenance}\n    summary: {unsupported_namespace_summary}\n",
+        )
+        assert_failure_contains(
+            run_preflight(unsupported_namespace_config, "rnaseq"),
+            "unsupported resource namespace",
+            "unsupported identifier_namespace",
+        )
+
+        inconsistent_resource_summary = write(
+            tmp / "inconsistent_resource_summary.tsv",
+            "resource_id\tresource_kind\tpath\tsource_file\tsource\tcollection\tresource_version\t"
+            "license_status\tidentifier_namespace\tn_memberships\tn_sets\tn_features\t"
+            "n_unmapped_or_ambiguous\tmapping_status\n"
+            f"go_bp\trnaseq_feature_set_table\t{valid_feature_sets}\t{valid_feature_sets}\tgo\t"
+            "biological_process\t2026-01\tuser_provided\ttoy_gene_id\t1\t1\t1\t0\tok\n",
+        )
+        inconsistent_resource_config = write(
+            tmp / "rnaseq_inconsistent_resource_metadata.yaml",
+            valid_rnaseq_config.read_text(encoding="utf-8").replace(
+                "  min_replicates_per_group: 2\n",
+                f"  min_replicates_per_group: 2\n  report_feature_set_tables: {valid_feature_sets}\n",
+            )
+            + f"\nresources:\n  rnaseq_feature_sets:\n    provenance: {valid_provenance}\n    summary: {inconsistent_resource_summary}\n",
+        )
+        assert_failure_contains(
+            run_preflight(inconsistent_resource_config, "rnaseq"),
+            "inconsistent resource metadata",
+            "license_status mismatch",
+        )
         bad_provenance = write(
             tmp / "bad_resource_provenance.tsv",
             "resource_id\tresource_kind\tpath\tsource_path\tsource_checksum_sha256\tchecksum_sha256\t"
@@ -425,7 +485,30 @@ resource_recipes:
             "duplicate target table",
             "duplicate miRNA-target row",
         )
-
+        valid_target_table = write(
+            tmp / "valid_target_table.tsv",
+            "mirna_id\ttarget_id\tsource\ttarget_evidence_type\tresource_version\n"
+            "hsa-miR-1\tGENE1\ttoydb\tvalidated\t2026-01\n",
+        )
+        unmapped_target_feature_sets = write(
+            tmp / "unmapped_target_feature_sets.tsv",
+            "set_id\tfeature_id\tsource\tcollection\tresource_version\n"
+            "GO:BAD\tMISSING_GENE\tgo\tbiological_process\t2026-01\n",
+        )
+        unmapped_target_feature_config = write(
+            tmp / "smallrna_unmapped_target_feature_sets.yaml",
+            smallrna_config(
+                tmp, valid_smallrna, mirbase, contaminants, genome, annotation
+            ).read_text(encoding="utf-8").replace(
+                "  min_replicates_per_group: 2\n",
+                f"  min_replicates_per_group: 2\n  target_enrichment_mode: table\n  target_table: {valid_target_table}\n  target_feature_set_tables: {unmapped_target_feature_sets}\n",
+            ),
+        )
+        assert_failure_contains(
+            run_preflight(unmapped_target_feature_config, "smallrna"),
+            "unmapped smallRNA target feature sets",
+            "insufficient mapping",
+        )
     print("project preflight contract ok")
     return 0
 

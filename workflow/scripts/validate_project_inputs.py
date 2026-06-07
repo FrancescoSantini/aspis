@@ -41,6 +41,20 @@ SUPPORTED_ASSAYS = {"rnaseq", "smallrna"}
 IUPAC_BASES = set("ACGTURYSWKMBDHVNacgturyswkmbdhvn")
 FEATURE_SET_TABLE_REQUIRED_COLUMNS = {"set_id", "feature_id"}
 CONTROLLED_LICENSE_STATUSES = {"open", "user_provided", "restricted", "unknown"}
+SUPPORTED_RESOURCE_IDENTIFIER_NAMESPACES = {
+    "gtf_gene_id",
+    "gene_id",
+    "ensembl_gene_id",
+    "gene_symbol",
+    "entrez_gene_id",
+    "transcript_id",
+    "ensembl_transcript_id",
+    "target_id",
+    "mirna_id",
+    "mirbase_mature_id",
+    "toy_gene_id",
+    "toy_mirna_id",
+}
 RESOURCE_PROVENANCE_REQUIRED_COLUMNS = {
     "resource_id",
     "resource_kind",
@@ -245,8 +259,11 @@ def validate_resource_inventory(config: dict[str, Any]) -> list[str]:
         if not isinstance(block, dict):
             errors.append(f"{label} must be a mapping")
             continue
-        validate_resource_provenance(errors, block.get("provenance"), f"{label}.provenance")
-        validate_resource_summary(errors, block.get("summary"), f"{label}.summary")
+        provenance = block.get("provenance")
+        summary = block.get("summary")
+        validate_resource_provenance(errors, provenance, f"{label}.provenance")
+        validate_resource_summary(errors, summary, f"{label}.summary")
+        validate_resource_metadata_consistency(errors, provenance, summary, label)
     return errors
 
 
@@ -392,6 +409,23 @@ def require_metadata_file(errors: list[str], value: Any, label: str) -> Path | N
     return path
 
 
+def identifier_namespace_supported(namespace: str) -> bool:
+    if namespace in SUPPORTED_RESOURCE_IDENTIFIER_NAMESPACES:
+        return True
+    return namespace.startswith("custom:") or namespace.startswith("project:")
+
+
+def validate_identifier_namespace(errors: list[str], namespace: str, label: str, line_number: int) -> None:
+    if not namespace:
+        errors.append(f"{label} has blank identifier_namespace at line {line_number}")
+        return
+    if not identifier_namespace_supported(namespace):
+        errors.append(
+            f"{label} has unsupported identifier_namespace at line {line_number}: "
+            f"{namespace!r}; use a supported namespace or prefix project-specific namespaces with 'custom:'"
+        )
+
+
 def validate_metadata_checksum(
     errors: list[str], path_text: str, checksum: str, label: str, line_number: int, column: str
 ) -> None:
@@ -437,8 +471,7 @@ def validate_resource_provenance(errors: list[str], value: Any, label: str) -> N
             )
         if not row.get("license", ""):
             errors.append(f"{label} has blank license at line {line_number}")
-        if not row.get("identifier_namespace", ""):
-            errors.append(f"{label} has blank identifier_namespace at line {line_number}")
+        validate_identifier_namespace(errors, row.get("identifier_namespace", ""), label, line_number)
         validate_metadata_checksum(
             errors,
             row.get("path", ""),
@@ -481,8 +514,7 @@ def validate_resource_summary(errors: list[str], value: Any, label: str) -> None
                 f"{label} has uncontrolled license_status at line {line_number}: "
                 f"{license_status!r}; expected one of {sorted(CONTROLLED_LICENSE_STATUSES)}"
             )
-        if not row.get("identifier_namespace", ""):
-            errors.append(f"{label} has blank identifier_namespace at line {line_number}")
+        validate_identifier_namespace(errors, row.get("identifier_namespace", ""), label, line_number)
         if not row.get("mapping_status", ""):
             errors.append(f"{label} has blank mapping_status at line {line_number}")
         summary_path = row.get("path", "")
@@ -496,6 +528,131 @@ def validate_resource_summary(errors: list[str], value: Any, label: str) -> None
             parsed = integer_value(row.get(column, ""))
             if parsed is None or parsed < 0:
                 errors.append(f"{label} {column} must be a non-negative integer at line {line_number}")
+
+
+def resource_status_lookup(value: Any) -> dict[tuple[str, str], tuple[str, str]]:
+    path = existing_file(value)
+    if path is None:
+        return {}
+    local_errors: list[str] = []
+    loaded = read_tsv_dicts_for_validation(local_errors, path, "resource metadata")
+    if loaded is None:
+        return {}
+    _, rows = loaded
+    lookup: dict[tuple[str, str], tuple[str, str]] = {}
+    for row in rows:
+        key = (row.get("resource_id", ""), row.get("path", ""))
+        if key[0] and key[1]:
+            lookup[key] = (row.get("license_status", ""), row.get("identifier_namespace", ""))
+    return lookup
+
+
+def validate_resource_metadata_consistency(errors: list[str], provenance: Any, summary: Any, label: str) -> None:
+    provenance_status = resource_status_lookup(provenance)
+    summary_status = resource_status_lookup(summary)
+    for key, summary_values in summary_status.items():
+        if key not in provenance_status:
+            continue
+        provenance_values = provenance_status[key]
+        if summary_values[0] != provenance_values[0]:
+            errors.append(
+                f"{label} license_status mismatch for {key[0]}: "
+                f"summary={summary_values[0]!r}, provenance={provenance_values[0]!r}"
+            )
+        if summary_values[1] != provenance_values[1]:
+            errors.append(
+                f"{label} identifier_namespace mismatch for {key[0]}: "
+                f"summary={summary_values[1]!r}, provenance={provenance_values[1]!r}"
+            )
+
+
+def parse_gtf_attributes(text: str) -> dict[str, str]:
+    attrs: dict[str, str] = {}
+    for match in re.finditer(r'([A-Za-z0-9_.:-]+)\s+"([^"]*)"', text):
+        attrs[match.group(1)] = match.group(2)
+    return attrs
+
+
+def read_annotation_feature_ids(errors: list[str], value: Any, label: str) -> set[str]:
+    path = existing_file(value)
+    if path is None:
+        return set()
+    ids: set[str] = set()
+    try:
+        with path.open(encoding="utf-8") as handle:
+            for line in handle:
+                if not line.strip() or line.startswith("#"):
+                    continue
+                fields = line.rstrip("\n").split("\t")
+                if len(fields) < 9:
+                    continue
+                attrs = parse_gtf_attributes(fields[8])
+                for key in ("gene_id", "gene_name", "gene", "gene_symbol", "transcript_id", "transcript_name"):
+                    value = attrs.get(key, "")
+                    if value:
+                        ids.add(value)
+    except OSError as exc:
+        errors.append(f"{label} could not be read for resource mapping: {exc}")
+    return ids
+
+
+def read_feature_set_table_members(errors: list[str], value: Any, label: str) -> set[str]:
+    members: set[str] = set()
+    for item in clean_list(value):
+        loaded = read_tsv_dicts_for_validation(errors, item, label)
+        if loaded is None:
+            continue
+        columns, rows = loaded
+        if "feature_id" not in columns:
+            continue
+        members.update(row.get("feature_id", "") for row in rows if row.get("feature_id", ""))
+    return members
+
+
+def read_gmt_members(errors: list[str], value: Any, label: str) -> set[str]:
+    members: set[str] = set()
+    for item in clean_list(value):
+        path = existing_file(item)
+        if path is None:
+            continue
+        try:
+            with path.open(encoding="utf-8") as handle:
+                for line in handle:
+                    fields = line.rstrip("\n").split("\t")
+                    if len(fields) >= 3:
+                        members.update(feature for feature in fields[2:] if feature)
+        except OSError as exc:
+            errors.append(f"{label} could not be read for resource mapping: {exc}")
+    return members
+
+
+def validate_feature_resource_mapping(
+    errors: list[str], members: set[str], universe: set[str], label: str, universe_label: str
+) -> None:
+    if not members or not universe:
+        return
+    overlap = members & universe
+    if not overlap:
+        errors.append(
+            f"{label} has insufficient mapping against {universe_label}: "
+            f"0 of {len(members)} resource feature(s) overlap; check identifier_namespace and source IDs"
+        )
+
+
+def read_target_resource_ids(errors: list[str], values: list[Any], label: str) -> set[str]:
+    targets: set[str] = set()
+    for value in values:
+        for item in clean_list(value):
+            loaded = read_tsv_dicts_for_validation(errors, item, label)
+            if loaded is None:
+                continue
+            columns, rows = loaded
+            for row in rows:
+                for column in columns:
+                    if column in TARGET_GENE_COLUMNS and row.get(column, ""):
+                        targets.add(row[column])
+    return targets
+
 
 def validate_feature_set_table(errors: list[str], value: Any, label: str) -> None:
     loaded = read_tsv_dicts_for_validation(errors, value, label)
@@ -825,6 +982,25 @@ def validate_rnaseq_config(config: dict[str, Any]) -> list[str]:
         require_existing_files(errors, diff.get("report_feature_set_tables"), "rnaseq_differential.report_feature_set_tables")
         validate_gmt_files(errors, diff.get("report_feature_sets"), "rnaseq_differential.report_feature_sets")
         validate_feature_set_tables(errors, diff.get("report_feature_set_tables"), "rnaseq_differential.report_feature_set_tables")
+        annotation_for_mapping = quant.get("annotation_gtf") or alignment.get("annotation_gtf")
+        annotation_ids = read_annotation_feature_ids(
+            errors, annotation_for_mapping, "rnaseq_differential resource mapping annotation"
+        )
+        feature_members = read_gmt_members(errors, diff.get("report_feature_sets"), "rnaseq_differential.report_feature_sets")
+        feature_members.update(
+            read_feature_set_table_members(
+                errors,
+                diff.get("report_feature_set_tables"),
+                "rnaseq_differential.report_feature_set_tables",
+            )
+        )
+        validate_feature_resource_mapping(
+            errors,
+            feature_members,
+            annotation_ids,
+            "rnaseq_differential feature-set resources",
+            "rnaseq annotation gene/transcript universe",
+        )
     if truthy(dtu.get("run"), False) and not quant_run:
         errors.append("rnaseq_dtu.run=true requires rnaseq_quantification.run=true")
     return errors
@@ -912,6 +1088,22 @@ def validate_smallrna_config(config: dict[str, Any]) -> list[str]:
     validate_target_tables(errors, small.get("target_cache"), "smallrna.target_cache")
     validate_gmt_files(errors, small.get("target_feature_sets"), "smallrna.target_feature_sets")
     validate_feature_set_tables(errors, small.get("target_feature_set_tables"), "smallrna.target_feature_set_tables")
+    target_ids = read_target_resource_ids(
+        errors,
+        [small.get("target_table"), small.get("target_tables"), small.get("target_cache")],
+        "smallrna target resources",
+    )
+    target_feature_members = read_gmt_members(errors, small.get("target_feature_sets"), "smallrna.target_feature_sets")
+    target_feature_members.update(
+        read_feature_set_table_members(errors, small.get("target_feature_set_tables"), "smallrna.target_feature_set_tables")
+    )
+    validate_feature_resource_mapping(
+        errors,
+        target_feature_members,
+        target_ids,
+        "smallrna target feature-set resources",
+        "smallrna target_table target_id universe",
+    )
     return errors
 
 

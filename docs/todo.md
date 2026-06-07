@@ -70,6 +70,11 @@ Completed hardening slice:
   `resources.*.summary` metadata files for required columns, controlled license
   statuses, non-empty rows, local path existence, checksums, and numeric summary
   counts.
+- Real-project preflight now rejects unsupported resource identifier namespaces,
+  provenance/summary license or namespace mismatches, RNA-seq feature-set
+  resources with zero overlap against the configured annotation gene universe,
+  and smallRNA target feature sets with zero overlap against configured target
+  tables.
 
 Implementation tasks:
 
@@ -99,12 +104,11 @@ Implementation tasks:
   - species and identifier-namespace checks;
   - unmapped miRNA and target reports;
   - config fragment for `smallrna` and `mirna_mrna_integration`.
-- Extend preflight checks for resource bundles beyond the completed structural
-  checks:
-  - unsupported namespaces;
-  - insufficient mapping against the actual result tables;
-  - license/status metadata consistency across all configured resources.
 - Configure a real BEAS resource bundle using only open or user-owned content.
+- After real BEAS resources are configured, add configurable warnings or
+  failures for low-but-nonzero mapping rates. The current preflight blocks
+  zero-overlap resources and metadata inconsistencies, but it intentionally
+  waits for real resource distributions before deciding practical thresholds.
 - Run RNA-seq ORA/GSEA on BEAS gene and transcript DESeq2 results.
 - Run smallRNA miRNA target enrichment and target-gene feature-set enrichment
   once a valid target table is configured.
