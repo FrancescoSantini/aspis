@@ -93,6 +93,32 @@ resolve_genome_object <- function(spec) {
   get(parts[[2]], envir = asNamespace(parts[[1]]))
 }
 
+fasta_has_records <- function(path) {
+  file.exists(path) && isTRUE(file.info(path)$size > 0)
+}
+
+fasta_size <- function(path) {
+  if (fasta_has_records(path)) {
+    return(file.info(path)$size)
+  }
+  0
+}
+
+move_or_empty_fasta <- function(source, destination) {
+  ensure_parent(destination)
+  if (fasta_has_records(source)) {
+    if (file.exists(destination)) {
+      unlink(destination)
+    }
+    if (!file.rename(source, destination)) {
+      file.copy(source, destination, overwrite = TRUE)
+      unlink(source)
+    }
+  } else {
+    writeLines(character(), destination)
+  }
+}
+
 main <- function() {
   args <- parse_args(commandArgs(trailingOnly = TRUE))
   required <- c(
@@ -184,11 +210,24 @@ main <- function() {
   generated_nt <- ""
   generated_aa <- ""
   if (!is.null(genome)) {
-    sequence_prefix <- file.path(dirname(args[["nt_fasta"]]), "isoformSwitchAnalyzeR")
+    sequence_dir <- dirname(args[["nt_fasta"]])
+    sequence_prefix <- "isoformSwitchAnalyzeR"
+    dir.create(sequence_dir, recursive = TRUE, showWarnings = FALSE)
     switch_list <- isa$analyzeORF(switch_list, orfMethod = "longest", genomeObject = genome)
-    switch_list <- isa$extractSequence(switch_list, genomeObject = genome, outputPrefix = sequence_prefix)
-    generated_nt <- paste0(sequence_prefix, "_isoform_nt.fasta")
-    generated_aa <- paste0(sequence_prefix, "_isoform_AA.fasta")
+    switch_list <- isa$extractSequence(
+      switch_list,
+      genomeObject = genome,
+      alpha = padj_cutoff,
+      dIFcutoff = dif_cutoff,
+      alsoSplitFastaFile = FALSE,
+      addToSwitchAnalyzeRlist = TRUE,
+      writeToFile = TRUE,
+      pathToOutput = sequence_dir,
+      outputPrefix = sequence_prefix,
+      forceReExtraction = TRUE
+    )
+    generated_nt <- file.path(sequence_dir, paste0(sequence_prefix, "_nt.fasta"))
+    generated_aa <- file.path(sequence_dir, paste0(sequence_prefix, "_AA.fasta"))
     switch_list <- isa$analyzeIntronRetention(switch_list)
     switch_list <- isa$analyzeSwitchConsequences(
       switch_list,
@@ -229,6 +268,11 @@ main <- function() {
     }
     cat("gene_expr_cutoff\t", gene_expr, "\n", sep = "")
     cat("isoform_expr_cutoff\t", isoform_expr, "\n", sep = "")
+    cat("genome_object\t", args[["genome_object"]], "\n", sep = "")
+    cat("generated_nt_fasta\t", generated_nt, "\n", sep = "")
+    cat("generated_nt_fasta_bytes\t", fasta_size(generated_nt), "\n", sep = "")
+    cat("generated_aa_fasta\t", generated_aa, "\n", sep = "")
+    cat("generated_aa_fasta_bytes\t", fasta_size(generated_aa), "\n", sep = "")
   })
   ensure_parent(args[["expression_summary"]])
   writeLines(expression_summary, args[["expression_summary"]])
@@ -264,16 +308,8 @@ main <- function() {
 
   ensure_parent(args[["nt_fasta"]])
   ensure_parent(args[["aa_fasta"]])
-  if (generated_nt != "" && file.exists(generated_nt)) {
-    file.rename(generated_nt, args[["nt_fasta"]])
-  } else {
-    writeLines(character(), args[["nt_fasta"]])
-  }
-  if (generated_aa != "" && file.exists(generated_aa)) {
-    file.rename(generated_aa, args[["aa_fasta"]])
-  } else {
-    writeLines(character(), args[["aa_fasta"]])
-  }
+  move_or_empty_fasta(generated_nt, args[["nt_fasta"]])
+  move_or_empty_fasta(generated_aa, args[["aa_fasta"]])
 
   ensure_parent(args[["switch_rds"]])
   saveRDS(switch_list, file = args[["switch_rds"]])
