@@ -40,6 +40,25 @@ OUTPUT_COLUMNS = [
     "original_feature_id",
     "mapping_status",
 ]
+GENE_MAP_COLUMNS = ["gene_id", "gene_id_stripped", "gene_name", "gene_biotype", "source_gtf"]
+GENE_IDENTIFIER_MAP_COLUMNS = [
+    "alias_id",
+    "alias_type",
+    "gene_id",
+    "gene_name",
+    "gene_biotype",
+    "source",
+    "source_path",
+]
+TRANSCRIPT_MAP_COLUMNS = [
+    "transcript_id",
+    "transcript_id_stripped",
+    "transcript_name",
+    "gene_id",
+    "gene_name",
+    "gene_biotype",
+    "source_gtf",
+]
 UNMAPPED_COLUMNS = [
     "source_file",
     "resource_kind",
@@ -215,26 +234,93 @@ class GeneResolver:
     def __init__(self) -> None:
         self.alias_to_gene_ids: dict[str, set[str]] = defaultdict(set)
         self.gene_rows: dict[str, dict[str, str]] = {}
+        self.gene_identifier_rows: dict[tuple[str, str, str, str], dict[str, str]] = {}
+        self.transcript_rows: dict[str, dict[str, str]] = {}
+
+    def add_gene_identifier(
+        self, alias_id: str, alias_type: str, gene_id: str, source: str, source_path: str = ""
+    ) -> None:
+        alias_id = clean_id(alias_id)
+        gene_id = clean_id(gene_id)
+        if not alias_id or not gene_id:
+            return
+        gene_row = self.gene_rows.get(gene_id, {})
+        key = (alias_id, alias_type, gene_id, source_path)
+        self.gene_identifier_rows.setdefault(
+            key,
+            {
+                "alias_id": alias_id,
+                "alias_type": alias_type,
+                "gene_id": gene_id,
+                "gene_name": gene_row.get("gene_name", ""),
+                "gene_biotype": gene_row.get("gene_biotype", ""),
+                "source": source,
+                "source_path": source_path,
+            },
+        )
+
+    def add_resolvable_alias(
+        self, alias_id: str, alias_type: str, gene_id: str, source: str, source_path: str = ""
+    ) -> None:
+        alias_id = clean_id(alias_id)
+        gene_id = clean_id(gene_id)
+        if not alias_id or not gene_id:
+            return
+        self.alias_to_gene_ids[alias_id].add(gene_id)
+        stripped = split_gene_version(alias_id)
+        if stripped:
+            self.alias_to_gene_ids[stripped].add(gene_id)
+        self.add_gene_identifier(alias_id, alias_type, gene_id, source, source_path)
 
     def add_gene(self, gene_id: str, aliases: Iterable[str], row: dict[str, str]) -> None:
-        gene_id = gene_id.strip()
+        gene_id = clean_id(gene_id)
         if not gene_id:
             return
         self.gene_rows.setdefault(gene_id, row)
-        all_aliases = {gene_id, split_gene_version(gene_id), *[alias.strip() for alias in aliases if alias.strip()]}
-        for alias in all_aliases:
-            cleaned = clean_id(alias)
-            if cleaned:
-                self.alias_to_gene_ids[cleaned].add(gene_id)
-                self.alias_to_gene_ids[split_gene_version(cleaned)].add(gene_id)
+        source_path = row.get("source_gtf", "")
+        self.add_resolvable_alias(gene_id, "gtf_gene_id", gene_id, "gtf_gene", source_path)
+        stripped_gene = split_gene_version(gene_id)
+        if stripped_gene != gene_id:
+            self.add_resolvable_alias(stripped_gene, "gtf_gene_id_stripped", gene_id, "gtf_gene", source_path)
+        for index, alias in enumerate(alias.strip() for alias in aliases if alias.strip()):
+            alias_type = "gene_symbol" if index == 0 else "gene_synonym"
+            self.add_resolvable_alias(alias, alias_type, gene_id, "gtf_gene", source_path)
 
-    def add_alias(self, source_id: str, target_id: str) -> None:
+    def add_transcript(self, transcript_id: str, gene_id: str, row: dict[str, str]) -> None:
+        transcript_id = clean_id(transcript_id)
+        gene_id = clean_id(gene_id)
+        if not transcript_id or not gene_id:
+            return
+        source_path = row.get("source_gtf", "")
+        gene_row = self.gene_rows.get(gene_id, {})
+        self.transcript_rows.setdefault(
+            transcript_id,
+            {
+                "transcript_id": transcript_id,
+                "transcript_id_stripped": split_gene_version(transcript_id),
+                "transcript_name": row.get("transcript_name", ""),
+                "gene_id": gene_id,
+                "gene_name": row.get("gene_name", gene_row.get("gene_name", "")),
+                "gene_biotype": row.get("gene_biotype", gene_row.get("gene_biotype", "")),
+                "source_gtf": source_path,
+            },
+        )
+        self.add_resolvable_alias(transcript_id, "transcript_id", gene_id, "gtf_transcript", source_path)
+        stripped_transcript = split_gene_version(transcript_id)
+        if stripped_transcript != transcript_id:
+            self.add_resolvable_alias(
+                stripped_transcript, "transcript_id_stripped", gene_id, "gtf_transcript", source_path
+            )
+        transcript_name = row.get("transcript_name", "")
+        if transcript_name:
+            self.add_resolvable_alias(transcript_name, "transcript_name", gene_id, "gtf_transcript", source_path)
+
+    def add_alias(self, source_id: str, target_id: str, source: str = "id_map", source_path: str = "") -> None:
         source_id = clean_id(source_id)
         target_id = clean_id(target_id)
         resolved, status = self.resolve(target_id)
         if status == "mapped" and resolved:
-            self.alias_to_gene_ids[source_id].add(resolved)
-            self.alias_to_gene_ids[split_gene_version(source_id)].add(resolved)
+            self.add_resolvable_alias(source_id, "external_id", resolved, source, source_path)
 
     def resolve(self, value: str) -> tuple[str, str]:
         value = clean_id(value)
@@ -255,24 +341,38 @@ def build_gene_resolver(gtf: Path) -> GeneResolver:
             if not line or line.startswith("#"):
                 continue
             parts = line.rstrip("\n").split("\t")
-            if len(parts) < 9 or parts[2] != "gene":
+            if len(parts) < 9:
                 continue
             attrs = parse_gtf_attributes(parts[8])
             gene_id = attrs.get("gene_id", "")
             gene_name = attrs.get("gene_name", "")
             gene_biotype = attrs.get("gene_biotype", attrs.get("gene_type", ""))
-            synonyms = re.split(r"[,|]", attrs.get("gene_synonym", ""))
-            resolver.add_gene(
-                gene_id,
-                [gene_name, *synonyms],
-                {
-                    "gene_id": gene_id,
-                    "gene_id_stripped": split_gene_version(gene_id),
-                    "gene_name": gene_name,
-                    "gene_biotype": gene_biotype,
-                    "source_gtf": str(gtf),
-                },
-            )
+            if parts[2] == "gene":
+                synonyms = re.split(r"[,|]", attrs.get("gene_synonym", ""))
+                resolver.add_gene(
+                    gene_id,
+                    [gene_name, *synonyms],
+                    {
+                        "gene_id": gene_id,
+                        "gene_id_stripped": split_gene_version(gene_id),
+                        "gene_name": gene_name,
+                        "gene_biotype": gene_biotype,
+                        "source_gtf": str(gtf),
+                    },
+                )
+            elif parts[2] in {"transcript", "mRNA"}:
+                resolver.add_transcript(
+                    attrs.get("transcript_id", ""),
+                    gene_id,
+                    {
+                        "transcript_id": attrs.get("transcript_id", ""),
+                        "transcript_name": attrs.get("transcript_name", ""),
+                        "gene_id": gene_id,
+                        "gene_name": gene_name,
+                        "gene_biotype": gene_biotype,
+                        "source_gtf": str(gtf),
+                    },
+                )
     return resolver
 
 
@@ -289,14 +389,14 @@ def add_id_map(path: Path, resolver: GeneResolver) -> int:
         reader = csv.DictReader(handle, delimiter=delimiter)
         if reader.fieldnames and {"source_id", "target_id"} <= set(reader.fieldnames):
             for row in reader:
-                resolver.add_alias(row.get("source_id", ""), row.get("target_id", ""))
+                resolver.add_alias(row.get("source_id", ""), row.get("target_id", ""), "id_map", str(path))
                 added += 1
         else:
             handle.seek(0)
             for line in handle:
                 parts = line.rstrip("\n").split(delimiter)
                 if len(parts) >= 2:
-                    resolver.add_alias(parts[0], parts[1])
+                    resolver.add_alias(parts[0], parts[1], "id_map", str(path))
                     added += 1
     return added
 
@@ -308,8 +408,8 @@ def add_kegg_conv(path: Path, resolver: GeneResolver) -> int:
             parts = line.rstrip("\n").split("\t")
             if len(parts) < 2:
                 continue
-            resolver.add_alias(parts[0], parts[1])
-            resolver.add_alias(parts[1], parts[0])
+            resolver.add_alias(parts[0], parts[1], "kegg_conv", str(path))
+            resolver.add_alias(parts[1], parts[0], "kegg_conv", str(path))
             added += 1
     return added
 
@@ -317,11 +417,30 @@ def add_kegg_conv(path: Path, resolver: GeneResolver) -> int:
 def write_gene_map(path: Path, resolver: GeneResolver) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", newline="", encoding="utf-8") as handle:
-        columns = ["gene_id", "gene_id_stripped", "gene_name", "gene_biotype", "source_gtf"]
-        writer = csv.DictWriter(handle, fieldnames=columns, delimiter="\t", lineterminator="\n")
+        writer = csv.DictWriter(handle, fieldnames=GENE_MAP_COLUMNS, delimiter="\t", lineterminator="\n")
         writer.writeheader()
         for gene_id in sorted(resolver.gene_rows):
-            writer.writerow(resolver.gene_rows[gene_id])
+            writer.writerow({column: resolver.gene_rows[gene_id].get(column, "") for column in GENE_MAP_COLUMNS})
+
+
+def write_gene_identifier_map(path: Path, resolver: GeneResolver) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=GENE_IDENTIFIER_MAP_COLUMNS, delimiter="\t", lineterminator="\n")
+        writer.writeheader()
+        for key in sorted(resolver.gene_identifier_rows):
+            row = resolver.gene_identifier_rows[key]
+            writer.writerow({column: row.get(column, "") for column in GENE_IDENTIFIER_MAP_COLUMNS})
+
+
+def write_transcript_map(path: Path, resolver: GeneResolver) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=TRANSCRIPT_MAP_COLUMNS, delimiter="\t", lineterminator="\n")
+        writer.writeheader()
+        for transcript_id in sorted(resolver.transcript_rows):
+            row = resolver.transcript_rows[transcript_id]
+            writer.writerow({column: row.get(column, "") for column in TRANSCRIPT_MAP_COLUMNS})
 
 
 def write_rows(path: Path, rows: list[dict[str, str]]) -> None:
@@ -646,7 +765,8 @@ def write_config_fragment(path: Path, tables: list[Path], provenance: Path, summ
         "smallrna:\n"
         f"  target_feature_set_tables: {table_value!r}\n"
         f"# resource_provenance: {provenance}\n"
-        f"# resource_summary: {summary}\n",
+        f"# resource_summary: {summary}\n"
+        "# gene_identifier_map and transcript_to_gene_map are written next to the tables.\n",
         encoding="utf-8",
     )
 
@@ -678,7 +798,11 @@ def main() -> int:
         add_kegg_conv(Path(path), resolver)
 
     gene_map = outdir / "gene_id_map.tsv"
+    gene_identifier_map = outdir / "gene_identifier_map.tsv"
+    transcript_map = outdir / "transcript_to_gene_map.tsv"
     write_gene_map(gene_map, resolver)
+    write_gene_identifier_map(gene_identifier_map, resolver)
+    write_transcript_map(transcript_map, resolver)
     output_tables: list[Path] = []
     unmapped_rows: list[dict[str, str]] = []
     summary_rows: list[dict[str, str]] = []
@@ -698,7 +822,39 @@ def main() -> int:
             license_label=args.license,
             license_status=args.license_status,
             identifier_namespace=args.identifier_namespace,
-        )
+        ),
+        provenance_row(
+            "gene_identifier_map",
+            "gene_identifier_map",
+            gene_identifier_map,
+            "ASPIS",
+            "GTF",
+            "gene_identifier_map",
+            version,
+            args.prepared_by,
+            prepared_at,
+            f"Prepared from {args.gtf} plus optional ID maps",
+            source_path=Path(args.gtf),
+            license_label=args.license,
+            license_status=args.license_status,
+            identifier_namespace=args.identifier_namespace,
+        ),
+        provenance_row(
+            "transcript_to_gene_map",
+            "transcript_to_gene_map",
+            transcript_map,
+            "ASPIS",
+            "GTF",
+            "transcript_to_gene_map",
+            version,
+            args.prepared_by,
+            prepared_at,
+            f"Prepared from transcript records in {args.gtf}",
+            source_path=Path(args.gtf),
+            license_label=args.license,
+            license_status=args.license_status,
+            identifier_namespace="transcript_id",
+        ),
     ]
 
     def emit(name: str, source_path: Path, kind: str, memberships: list[dict[str, str]], source: str, collection: str) -> None:

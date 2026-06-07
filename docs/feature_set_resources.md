@@ -127,6 +127,9 @@ For transcript-level RNA-seq:
 - pathway resources are usually gene-level, not transcript-level;
 - ASPIS can map transcript result IDs back to parent genes when feature metadata
   contains `transcript_id` and `gene_id`;
+- `prepare_feature_set_resources.py` writes `transcript_to_gene_map.tsv` and
+  `gene_identifier_map.tsv` so transcript and symbol/external-ID mapping can be
+  audited before the run;
 - transcript-native feature sets are also allowed when `feature_id` matches
   transcript IDs directly.
 

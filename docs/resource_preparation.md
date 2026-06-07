@@ -91,6 +91,8 @@ Important outputs:
 
 ```text
 gene_id_map.tsv
+gene_identifier_map.tsv
+transcript_to_gene_map.tsv
 go_bp.tsv
 go_mf.tsv
 go_cc.tsv
@@ -101,6 +103,11 @@ resource_provenance.tsv
 resource_summary.tsv
 aspis_feature_sets.yaml
 ```
+
+Review `gene_id_map.tsv`, `gene_identifier_map.tsv`, and
+`transcript_to_gene_map.tsv` before trusting a resource bundle. These files show
+which GTF gene IDs, gene symbols/synonyms, transcript IDs, and optional external
+ID-map aliases were available for resource normalization.
 
 Review `unmapped_features.tsv`. Some unmapped rows are expected when a source
 database contains identifiers that are not present in the GTF, but a mostly
