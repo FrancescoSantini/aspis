@@ -14,6 +14,7 @@ INSDC_RUN_RE = re.compile(r"^[SED]RR\d+$")
 PROJECT_ID_RE = re.compile(r"^[A-Za-z0-9_.-]+$")
 INTAKE = config.get("intake", "config/intake.tsv")
 PATHS = config.get("paths", {})
+RESOURCES = config.get("resources", {})
 MATERIALIZATION = config.get("materialization", {})
 PLANNING = config.get("planning", {})
 DESIGN = config.get("design", {})
@@ -54,6 +55,19 @@ def config_value_list(value):
     if isinstance(value, str):
         return [item.strip() for item in value.split(",") if item.strip()]
     return [str(item).strip() for item in value if str(item).strip()]
+
+
+RNASEQ_FEATURE_SETS = RESOURCES.get("rnaseq_feature_sets", {}) or {}
+RNASEQ_REPORT_FEATURE_SET_FILES = (
+    RNASEQ_DIFFERENTIAL.get("report_feature_sets", "")
+    or RNASEQ_FEATURE_SETS.get("gmt", "")
+)
+RNASEQ_REPORT_FEATURE_SET_TABLES = (
+    RNASEQ_DIFFERENTIAL.get("report_feature_set_tables", "")
+    or RNASEQ_FEATURE_SETS.get("tables", "")
+)
+RNASEQ_REPORT_FEATURE_SET_FILE_INPUTS = config_value_list(RNASEQ_REPORT_FEATURE_SET_FILES)
+RNASEQ_REPORT_FEATURE_SET_TABLE_INPUTS = config_value_list(RNASEQ_REPORT_FEATURE_SET_TABLES)
 
 
 RAW_DIR = PATHS.get("raw_dir", "work/raw")
@@ -6141,18 +6155,20 @@ rule render_rnaseq_differential_plots:
 rule render_rnaseq_differential_enrichment_item:
     input:
         plan=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/reports/items/{level}/{contrast_id}/report_plan.tsv",
-        plan_done=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/reports/items/{level}/{contrast_id}/report_plan.done"
+        plan_done=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/reports/items/{level}/{contrast_id}/report_plan.done",
+        feature_sets=RNASEQ_REPORT_FEATURE_SET_FILE_INPUTS,
+        feature_set_tables=RNASEQ_REPORT_FEATURE_SET_TABLE_INPUTS
     output:
         manifest=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/reports/enrichment/items/{level}/{contrast_id}/enrichment_manifest.tsv",
         done=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/reports/enrichment/items/{level}/{contrast_id}/enrichment.done"
     params:
         feature_sets=lambda wildcards: optional_shell_arg(
             "--feature-sets",
-            joined_config_values(RNASEQ_DIFFERENTIAL.get("report_feature_sets", "")),
+            joined_config_values(RNASEQ_REPORT_FEATURE_SET_FILES),
         ),
         feature_set_tables=lambda wildcards: optional_shell_arg(
             "--feature-set-tables",
-            joined_config_values(RNASEQ_DIFFERENTIAL.get("report_feature_set_tables", "")),
+            joined_config_values(RNASEQ_REPORT_FEATURE_SET_TABLES),
         ),
         min_overlap=RNASEQ_DIFFERENTIAL.get("report_feature_set_min_overlap", 2),
         top_n=RNASEQ_DIFFERENTIAL.get(
