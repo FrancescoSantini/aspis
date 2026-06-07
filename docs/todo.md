@@ -119,21 +119,28 @@ Completed hardening slice:
   and `MODE=run`. The helper validates the open resource policy, checks frozen
   GO/Reactome source paths, writes the ASPIS config fragment, and leaves the
   generated resource payload outside Git.
+- smallRNA target preparation now has a matching reusable G100 helper,
+  `tests/prepare_g100_smallrna_targets.sh`, with `MODE=dry-run`, `MODE=check`,
+  and `MODE=run`. It wraps reviewed open or project-owned target exports,
+  optional local ID maps, controlled evidence/license metadata, unmapped-target
+  diagnostics, provenance, resource summaries, and the generated ASPIS config
+  fragment without downloading target databases during analysis.
+- RNA-seq feature-set ORA, ranked feature-set enrichment, smallRNA target
+  enrichment, and smallRNA target-gene feature-set enrichment already emit
+  compact SVG panels and explicit status rows for `not_configured`,
+  `insufficient_mapping`, `no_significant_features`, `no_significant_terms`,
+  and `ok` outcomes. Missing resources therefore remain visible as status
+  panels instead of being confused with successful null biological results.
 
 Remaining code tasks:
 
-- Add a smallRNA target-resource preparation helper equivalent to
-  `tests/prepare_g100_beas_feature_sets.sh`, but parameterized so it can be used
-  with any reviewed open or project-owned miRNA-target export.
-- Add compact ORA/GSEA dotplots or ranked-term panels for successful enrichment
-  resources.
-- Preserve explicit `not_configured`, `resource_missing`, `invalid_resource`,
-  `insufficient_mapping`, `no_significant_features`, `no_significant_terms`,
-  and `ok` statuses consistently in TSV, HTML, and PDF outputs.
 - After at least one real resource bundle is prepared, add configurable warnings
   or failures for low-but-nonzero mapping rates. The current preflight blocks
   zero-overlap resources and metadata inconsistencies, but practical warning
   thresholds should be based on observed real resource distributions.
+- Audit the technical PDF aggregation after a real resource-backed run to confirm
+  these enrichment status panels and resource summaries are rendered with the
+  same clarity already present in the TSV/HTML report layers.
 
 Operator/data validation tasks:
 
@@ -143,9 +150,9 @@ Operator/data validation tasks:
   chosen validation config. Do not commit large prepared payloads unless they
   are intentionally tiny and redistributable.
 - Freeze a reviewed open or project-owned miRNA-target export, run
-  `workflow/scripts/prepare_mirna_target_resources.py` or its future helper,
-  inspect unmapped target and miRNA diagnostics, then paste the generated config
-  fragment into the chosen validation config.
+  `tests/prepare_g100_smallrna_targets.sh`, inspect unmapped target and miRNA
+  diagnostics, then paste the generated config fragment into the chosen
+  validation config.
 - Run RNA-seq ORA/GSEA on a real validation cohort with gene and transcript
   DESeq2 results.
 - Run smallRNA miRNA target enrichment and target-gene feature-set enrichment on

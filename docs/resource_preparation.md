@@ -163,6 +163,15 @@ python3 workflow/scripts/prepare_mirna_target_resources.py \
   --config-fragment /path/to/aspis_resources/beas/smallrna_targets/aspis_targets.yaml
 ```
 
+On G100, the same preparation step is wrapped by a helper that mirrors the
+RNA-seq feature-set helper:
+
+```bash
+MODE=dry-run bash tests/prepare_g100_smallrna_targets.sh "$ACCOUNT"
+MODE=check bash tests/prepare_g100_smallrna_targets.sh "$ACCOUNT"
+MODE=run bash tests/prepare_g100_smallrna_targets.sh "$ACCOUNT"
+```
+
 ASPIS intentionally does not bundle a universal default miRNA-target database.
 miRBase is appropriate for miRNA sequences and names, but it is not a
 miRNA-target interaction resource. Many target databases are free web resources
@@ -175,6 +184,14 @@ If the target export uses Entrez, UniProt, or another external identifier
 namespace, provide an
 `--id-map-table` with `source_id` and `target_id` columns, where `target_id`
 resolves to the GTF gene ID.
+
+The helper expects `project_open_mirna_targets.tsv` under
+`/g100_work/$ACCOUNT/aspis_resources/source` by default. Override paths and
+metadata with `ASPIS_MIRNA_TARGET_INPUT`, `ASPIS_MIRNA_TARGET_DATABASE`,
+`ASPIS_MIRNA_TARGET_EVIDENCE_TYPE`, `ASPIS_MIRNA_TARGET_VERSION`,
+`ASPIS_MIRNA_TARGET_LICENSE`, `ASPIS_MIRNA_TARGET_LICENSE_STATUS`,
+`ASPIS_MIRNA_TARGET_ID_MAP_TABLES`, and column-specific overrides such as
+`ASPIS_MIRNA_TARGET_MIRNA_COLUMN` or `ASPIS_MIRNA_TARGET_TARGET_COLUMN`.
 
 Important outputs:
 
@@ -303,7 +320,24 @@ isoform-switch NT/AA sequence extraction. The default open-resource decision is
 recorded in `config/aspis_open_resource_sources.example.yaml`: prepare GO
 GAF/OBO and Reactome for RNA-seq enrichment, add only reviewed open/user-owned
 GMTs when needed, and configure miRNA targets only from reviewed open or
-project-owned local exports. ORA/GSEA and miRNA target enrichment remain
+project-owned local exports.
+
+For BEAS smallRNA target enrichment resources, put the frozen reviewed target
+export under `/g100_work/$ACCOUNT/aspis_resources/source` or point the helper at
+the export explicitly:
+
+```bash
+export ASPIS_MIRNA_TARGET_INPUT=/g100_work/$ACCOUNT/aspis_resources/source/project_open_mirna_targets.tsv
+export ASPIS_MIRNA_TARGET_DATABASE=project_open_targets
+export ASPIS_MIRNA_TARGET_EVIDENCE_TYPE=user_provided
+export ASPIS_MIRNA_TARGET_VERSION=manual_release_label
+MODE=dry-run bash tests/prepare_g100_smallrna_targets.sh "$ACCOUNT"
+
+MODE=check bash tests/prepare_g100_smallrna_targets.sh "$ACCOUNT"
+MODE=run bash tests/prepare_g100_smallrna_targets.sh "$ACCOUNT"
+```
+
+ORA/GSEA and miRNA target enrichment remain
 disabled until the prepared feature-set and target TSVs exist and their paths
 are pasted into the config.
 

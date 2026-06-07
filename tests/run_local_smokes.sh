@@ -65,6 +65,8 @@ if [[ "$MODE" == "run" ]]; then
   python3 tests/validate_open_resource_policy.py
   echo "==> G100 BEAS feature-set helper contract"
   python3 tests/validate_g100_beas_resource_helper.py
+  echo "==> G100 smallRNA target helper contract"
+  python3 tests/validate_g100_smallrna_target_helper.py
   echo "==> core smoke output contracts"
   python3 tests/validate_smoke_contract_outputs.py
   echo "==> isoform-switch ready contract smoke"
