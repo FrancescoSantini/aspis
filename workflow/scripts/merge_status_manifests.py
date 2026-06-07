@@ -13,7 +13,7 @@ DONE_COLUMNS = {
     "deseq2": ("contrasts", ["ready"]),
     "isoform_switch": ("contrasts", []),
     "plots": ("plots", []),
-    "enrichment": ("enrichment", []),
+    "enrichment": ("enrichment", ["not_configured"]),
     "summaries": ("summaries", []),
 }
 

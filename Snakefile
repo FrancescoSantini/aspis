@@ -6152,10 +6152,44 @@ rule render_rnaseq_differential_plots:
         """
 
 
+rule write_rnaseq_report_feature_resources:
+    input:
+        feature_sets=RNASEQ_REPORT_FEATURE_SET_FILE_INPUTS,
+        feature_set_tables=RNASEQ_REPORT_FEATURE_SET_TABLE_INPUTS
+    output:
+        manifest=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/reports/feature_set_resources.tsv"
+    params:
+        feature_sets=joined_config_values(RNASEQ_REPORT_FEATURE_SET_FILES),
+        feature_set_tables=joined_config_values(RNASEQ_REPORT_FEATURE_SET_TABLES)
+    run:
+        Path(output.manifest).parent.mkdir(parents=True, exist_ok=True)
+        with open(output.manifest, "w", newline="") as handle:
+            writer = csv.DictWriter(
+                handle,
+                fieldnames=["resource_kind", "path", "exists"],
+                delimiter="\t",
+                lineterminator="\n",
+            )
+            writer.writeheader()
+            for resource_kind, values in (
+                ("gmt", config_value_list(params.feature_sets)),
+                ("table", config_value_list(params.feature_set_tables)),
+            ):
+                for value in values:
+                    writer.writerow(
+                        {
+                            "resource_kind": resource_kind,
+                            "path": value,
+                            "exists": str(Path(value).exists()).lower(),
+                        }
+                    )
+
+
 rule render_rnaseq_differential_enrichment_item:
     input:
         plan=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/reports/items/{level}/{contrast_id}/report_plan.tsv",
         plan_done=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/reports/items/{level}/{contrast_id}/report_plan.done",
+        resources=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/reports/feature_set_resources.tsv",
         feature_sets=RNASEQ_REPORT_FEATURE_SET_FILE_INPUTS,
         feature_set_tables=RNASEQ_REPORT_FEATURE_SET_TABLE_INPUTS
     output:
