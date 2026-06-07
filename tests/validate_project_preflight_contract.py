@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import subprocess
 import sys
 import tempfile
@@ -21,6 +22,10 @@ def write(path: Path, text: str) -> Path:
 
 def touch(path: Path, text: str = "placeholder\n") -> Path:
     return write(path, text)
+
+
+def digest(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
 def make_fasta(path: Path) -> Path:
@@ -267,6 +272,82 @@ resource_recipes:
             ],
         )
         valid_rnaseq_config = rnaseq_config(tmp, valid_rnaseq, genome, annotation)
+
+        valid_feature_sets = write(
+            tmp / "valid_feature_sets.tsv",
+            "set_id\tfeature_id\tsource\tcollection\tresource_version\n"
+            "GO:1\tGENE1\tgo\tbiological_process\t2026-01\n",
+        )
+        feature_checksum = digest(valid_feature_sets)
+        valid_provenance = write(
+            tmp / "valid_resource_provenance.tsv",
+            "resource_id\tresource_kind\tpath\tprovider\tsource\tcollection\trelease\tresource_version\turl\t"
+            "source_path\tsource_checksum_sha256\tchecksum_sha256\tlicense\tlicense_status\t"
+            "identifier_namespace\tprepared_by\tprepared_at\tnotes\n"
+            f"go_bp\trnaseq_feature_set_table\t{valid_feature_sets}\tGO\tgo\tbiological_process\t2026-01\t"
+            f"2026-01\t\t{valid_feature_sets}\t{feature_checksum}\t{feature_checksum}\tCC-BY-4.0\topen\t"
+            "toy_gene_id\ttest\t2026-06-07\tvalid fixture\n",
+        )
+        valid_summary = write(
+            tmp / "valid_resource_summary.tsv",
+            "resource_id\tresource_kind\tpath\tsource_file\tsource\tcollection\tresource_version\t"
+            "license_status\tidentifier_namespace\tn_memberships\tn_sets\tn_features\t"
+            "n_unmapped_or_ambiguous\tmapping_status\n"
+            f"go_bp\trnaseq_feature_set_table\t{valid_feature_sets}\t{valid_feature_sets}\tgo\t"
+            "biological_process\t2026-01\topen\ttoy_gene_id\t1\t1\t1\t0\tok\n",
+        )
+        resource_config = write(
+            tmp / "rnaseq_valid_resources.yaml",
+            valid_rnaseq_config.read_text(encoding="utf-8").replace(
+                "  min_replicates_per_group: 2\n",
+                f"  min_replicates_per_group: 2\n  report_feature_set_tables: {valid_feature_sets}\n",
+            )
+            + f"\nresources:\n  rnaseq_feature_sets:\n    provenance: {valid_provenance}\n    summary: {valid_summary}\n",
+        )
+        assert_success(run_preflight(resource_config, "rnaseq"), "valid resource metadata")
+
+        bad_provenance = write(
+            tmp / "bad_resource_provenance.tsv",
+            "resource_id\tresource_kind\tpath\tsource_path\tsource_checksum_sha256\tchecksum_sha256\t"
+            "license\tidentifier_namespace\tprepared_at\n"
+            f"go_bp\trnaseq_feature_set_table\t{valid_feature_sets}\t{valid_feature_sets}\t"
+            f"{feature_checksum}\t{feature_checksum}\tCC-BY-4.0\ttoy_gene_id\t2026-06-07\n",
+        )
+        bad_provenance_config = write(
+            tmp / "rnaseq_bad_resource_provenance.yaml",
+            valid_rnaseq_config.read_text(encoding="utf-8").replace(
+                "  min_replicates_per_group: 2\n",
+                f"  min_replicates_per_group: 2\n  report_feature_set_tables: {valid_feature_sets}\n",
+            )
+            + f"\nresources:\n  rnaseq_feature_sets:\n    provenance: {bad_provenance}\n    summary: {valid_summary}\n",
+        )
+        assert_failure_contains(
+            run_preflight(bad_provenance_config, "rnaseq"),
+            "bad resource provenance",
+            "missing required provenance column",
+        )
+
+        bad_summary = write(
+            tmp / "bad_resource_summary.tsv",
+            "resource_id\tresource_kind\tpath\tsource_file\tsource\tcollection\tresource_version\t"
+            "license_status\tidentifier_namespace\tn_memberships\tn_sets\tn_features\t"
+            "n_unmapped_or_ambiguous\tmapping_status\n"
+            f"go_bp\trnaseq_feature_set_table\t{valid_feature_sets}\t{valid_feature_sets}\tgo\t"
+            "biological_process\t2026-01\topen\ttoy_gene_id\tnot_an_int\t1\t1\t0\tok\n",
+        )
+        bad_summary_config = write(
+            tmp / "rnaseq_bad_resource_summary.yaml",
+            valid_rnaseq_config.read_text(encoding="utf-8").replace(
+                "  min_replicates_per_group: 2\n",
+                f"  min_replicates_per_group: 2\n  report_feature_set_tables: {valid_feature_sets}\n",
+            )
+            + f"\nresources:\n  rnaseq_feature_sets:\n    provenance: {valid_provenance}\n    summary: {bad_summary}\n",
+        )
+        assert_failure_contains(
+            run_preflight(bad_summary_config, "rnaseq"),
+            "bad resource summary",
+            "n_memberships must be a non-negative integer",
+        )
 
         empty_feature_sets = write(
             tmp / "empty_feature_sets.tsv",

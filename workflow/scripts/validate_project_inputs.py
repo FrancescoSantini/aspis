@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import hashlib
 import re
 import sys
 from collections import Counter, defaultdict
@@ -39,6 +40,34 @@ VALID_RNASEQ_LEVELS = {"gene", "transcript", "isoform_switch"}
 SUPPORTED_ASSAYS = {"rnaseq", "smallrna"}
 IUPAC_BASES = set("ACGTURYSWKMBDHVNacgturyswkmbdhvn")
 FEATURE_SET_TABLE_REQUIRED_COLUMNS = {"set_id", "feature_id"}
+CONTROLLED_LICENSE_STATUSES = {"open", "user_provided", "restricted", "unknown"}
+RESOURCE_PROVENANCE_REQUIRED_COLUMNS = {
+    "resource_id",
+    "resource_kind",
+    "path",
+    "source_path",
+    "source_checksum_sha256",
+    "checksum_sha256",
+    "license",
+    "license_status",
+    "identifier_namespace",
+    "prepared_at",
+}
+RESOURCE_SUMMARY_REQUIRED_COLUMNS = {
+    "resource_id",
+    "resource_kind",
+    "path",
+    "source_file",
+    "resource_version",
+    "license_status",
+    "identifier_namespace",
+    "n_memberships",
+    "n_sets",
+    "n_features",
+    "n_unmapped_or_ambiguous",
+    "mapping_status",
+}
+RESOURCE_SUMMARY_INTEGER_COLUMNS = {"n_memberships", "n_sets", "n_features", "n_unmapped_or_ambiguous"}
 CONTROLLED_TARGET_EVIDENCE_TYPES = {
     "validated",
     "predicted",
@@ -210,8 +239,14 @@ def validate_resource_inventory(config: dict[str, Any]) -> list[str]:
 
     errors: list[str] = []
     for name, block in resources.items():
-        if block is not None and block != "" and not isinstance(block, dict):
-            errors.append(f"resources.{name} must be a mapping")
+        label = f"resources.{name}"
+        if block is None or block == "":
+            continue
+        if not isinstance(block, dict):
+            errors.append(f"{label} must be a mapping")
+            continue
+        validate_resource_provenance(errors, block.get("provenance"), f"{label}.provenance")
+        validate_resource_summary(errors, block.get("summary"), f"{label}.summary")
     return errors
 
 
@@ -338,6 +373,129 @@ def read_tsv_dicts_for_validation(errors: list[str], value: Any, label: str) -> 
         errors.append(f"{label} could not be read: {exc}")
         return None
 
+
+def sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def require_metadata_file(errors: list[str], value: Any, label: str) -> Path | None:
+    path = resolve_path(value)
+    if path is None:
+        return None
+    if not path.is_file():
+        errors.append(f"{label} does not exist or is not a file: {path}")
+        return None
+    return path
+
+
+def validate_metadata_checksum(
+    errors: list[str], path_text: str, checksum: str, label: str, line_number: int, column: str
+) -> None:
+    if not path_text:
+        errors.append(f"{label} has blank {column} at line {line_number}")
+        return
+    path = resolve_path(path_text)
+    if path is None or not path.is_file():
+        errors.append(f"{label} {column} does not exist or is not a file at line {line_number}: {path_text}")
+        return
+    if not checksum:
+        errors.append(f"{label} has blank checksum for {column} at line {line_number}: {path_text}")
+        return
+    observed = sha256_file(path)
+    if observed != checksum:
+        errors.append(
+            f"{label} checksum mismatch for {column} at line {line_number}: "
+            f"expected {checksum}, observed {observed}"
+        )
+
+
+def validate_resource_provenance(errors: list[str], value: Any, label: str) -> None:
+    path = require_metadata_file(errors, value, label)
+    if path is None:
+        return
+    loaded = read_tsv_dicts_for_validation(errors, path, label)
+    if loaded is None:
+        return
+    columns, rows = loaded
+    missing = sorted(RESOURCE_PROVENANCE_REQUIRED_COLUMNS - set(columns))
+    if missing:
+        errors.append(f"{label} is missing required provenance column(s): {missing}")
+        return
+    if not rows:
+        errors.append(f"{label} has no provenance rows: {path}")
+        return
+    for line_number, row in enumerate(rows, start=2):
+        license_status = row.get("license_status", "")
+        if license_status not in CONTROLLED_LICENSE_STATUSES:
+            errors.append(
+                f"{label} has uncontrolled license_status at line {line_number}: "
+                f"{license_status!r}; expected one of {sorted(CONTROLLED_LICENSE_STATUSES)}"
+            )
+        if not row.get("license", ""):
+            errors.append(f"{label} has blank license at line {line_number}")
+        if not row.get("identifier_namespace", ""):
+            errors.append(f"{label} has blank identifier_namespace at line {line_number}")
+        validate_metadata_checksum(
+            errors,
+            row.get("path", ""),
+            row.get("checksum_sha256", ""),
+            label,
+            line_number,
+            "path",
+        )
+        source_path = row.get("source_path", "")
+        if source_path:
+            validate_metadata_checksum(
+                errors,
+                source_path,
+                row.get("source_checksum_sha256", ""),
+                label,
+                line_number,
+                "source_path",
+            )
+
+
+def validate_resource_summary(errors: list[str], value: Any, label: str) -> None:
+    path = require_metadata_file(errors, value, label)
+    if path is None:
+        return
+    loaded = read_tsv_dicts_for_validation(errors, path, label)
+    if loaded is None:
+        return
+    columns, rows = loaded
+    missing = sorted(RESOURCE_SUMMARY_REQUIRED_COLUMNS - set(columns))
+    if missing:
+        errors.append(f"{label} is missing required summary column(s): {missing}")
+        return
+    if not rows:
+        errors.append(f"{label} has no summary rows: {path}")
+        return
+    for line_number, row in enumerate(rows, start=2):
+        license_status = row.get("license_status", "")
+        if license_status not in CONTROLLED_LICENSE_STATUSES:
+            errors.append(
+                f"{label} has uncontrolled license_status at line {line_number}: "
+                f"{license_status!r}; expected one of {sorted(CONTROLLED_LICENSE_STATUSES)}"
+            )
+        if not row.get("identifier_namespace", ""):
+            errors.append(f"{label} has blank identifier_namespace at line {line_number}")
+        if not row.get("mapping_status", ""):
+            errors.append(f"{label} has blank mapping_status at line {line_number}")
+        summary_path = row.get("path", "")
+        if not summary_path:
+            errors.append(f"{label} has blank path at line {line_number}")
+        else:
+            resolved_summary_path = resolve_path(summary_path)
+            if resolved_summary_path is None or not resolved_summary_path.is_file():
+                errors.append(f"{label} path does not exist or is not a file at line {line_number}: {summary_path}")
+        for column in RESOURCE_SUMMARY_INTEGER_COLUMNS:
+            parsed = integer_value(row.get(column, ""))
+            if parsed is None or parsed < 0:
+                errors.append(f"{label} {column} must be a non-negative integer at line {line_number}")
 
 def validate_feature_set_table(errors: list[str], value: Any, label: str) -> None:
     loaded = read_tsv_dicts_for_validation(errors, value, label)

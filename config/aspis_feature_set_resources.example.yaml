@@ -7,24 +7,31 @@
 #
 # Tiny non-biological examples are available under examples/resources/ when you
 # need to verify that report panels are wired correctly before preparing real
-# GO/Reactome/KEGG/MSigDB or target resources.
+# GO/Reactome/WikiPathways/custom or target resources.
+
+resources:
+  rnaseq_feature_sets:
+    provenance: resources/feature_sets/resource_provenance.tsv
+    summary: resources/feature_sets/resource_summary.tsv
+  smallrna_targets:
+    provenance: resources/smallrna_targets/project_open_targets_target_provenance.tsv
+    summary: resources/smallrna_targets/project_open_targets_target_summary.tsv
 
 rnaseq_differential:
   # GMT files: SET_ID, DESCRIPTION, FEATURE_ID...
-  # Good for MSigDB-style collections.
+  # Good for WikiPathways-style or project-owned GMT collections.
   report_feature_sets: >-
-    resources/feature_sets/msigdb_hallmark.gmt,
-    resources/feature_sets/msigdb_c2_cp_reactome.gmt
+    resources/feature_sets/wikipathways_human.gmt,
+    resources/feature_sets/project_open_sets.gmt
 
   # TSV files: set_id, feature_id, optional source, collection, description,
   # and resource_version/version/source_version/database_version/release.
-  # Good for GO BP/MF/CC, Reactome, KEGG, and custom exported resources.
+  # Good for GO BP/MF/CC, Reactome, WikiPathways, and custom exported resources.
   report_feature_set_tables: >-
     resources/feature_sets/go_bp.tsv,
     resources/feature_sets/go_mf.tsv,
     resources/feature_sets/go_cc.tsv,
-    resources/feature_sets/reactome.tsv,
-    resources/feature_sets/kegg.tsv
+    resources/feature_sets/reactome.tsv
 
   report_feature_set_min_overlap: 5
   report_feature_set_top_n: 30
@@ -42,11 +49,10 @@ smallrna:
   # validated, predicted, conserved, or user_provided. Matched RNA-seq
   # integration adds matched_expressed and inverse_integrated target evidence
   # labels in the derived target-mode outputs.
-  target_feature_sets: resources/feature_sets/msigdb_hallmark.gmt
+  target_feature_sets: resources/feature_sets/wikipathways_human.gmt
   target_feature_set_tables: >-
     resources/feature_sets/go_bp.tsv,
-    resources/feature_sets/reactome.tsv,
-    resources/feature_sets/kegg.tsv
+    resources/feature_sets/reactome.tsv
 
   target_feature_set_min_overlap: 5
   target_feature_set_top_n: 30

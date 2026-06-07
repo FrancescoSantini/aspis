@@ -66,6 +66,10 @@ Completed hardening slice:
   set-feature memberships, empty target tables, duplicate miRNA-target rows,
   blank target identifiers, and uncontrolled target evidence labels before
   Snakemake submission.
+- Real-project preflight now validates declared `resources.*.provenance` and
+  `resources.*.summary` metadata files for required columns, controlled license
+  statuses, non-empty rows, local path existence, checksums, and numeric summary
+  counts.
 
 Implementation tasks:
 
@@ -99,7 +103,6 @@ Implementation tasks:
   checks:
   - unsupported namespaces;
   - insufficient mapping against the actual result tables;
-  - required resource provenance/status metadata in real project configs;
   - license/status metadata consistency across all configured resources.
 - Configure a real BEAS resource bundle using only open or user-owned content.
 - Run RNA-seq ORA/GSEA on BEAS gene and transcript DESeq2 results.

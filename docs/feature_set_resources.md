@@ -19,6 +19,12 @@ for checking that ORA/GSEA and target-resource report panels are wired
 correctly, but they must not be used for biological interpretation.
 
 ```yaml
+resources:
+  rnaseq_feature_sets:
+    provenance: examples/resources/resource_provenance.toy.tsv
+  smallrna_targets:
+    provenance: examples/resources/resource_provenance.toy.tsv
+
 rnaseq_differential:
   report_feature_sets: examples/resources/rnaseq_feature_sets.toy.gmt
   report_feature_set_tables: examples/resources/rnaseq_feature_sets.toy.tsv
@@ -30,7 +36,9 @@ smallrna:
 ```
 
 The accompanying provenance manifest is
-`examples/resources/resource_provenance.toy.tsv`.
+`examples/resources/resource_provenance.toy.tsv`. Real prepared bundles also
+write a `resource_summary.tsv` or `*_target_summary.tsv`; declare those under
+the matching `resources.*.summary` key so preflight can validate them.
 
 ## Where Resources Are Used
 

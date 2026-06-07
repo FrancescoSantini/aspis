@@ -44,6 +44,8 @@ resources:
   rnaseq_feature_sets:
     gmt: &rnaseq_feature_set_gmt ""
     tables: &rnaseq_feature_set_tables ""
+    provenance: &rnaseq_feature_set_provenance ""
+    summary: &rnaseq_feature_set_summary ""
 
 # Optional preparation recipes are intentionally disabled by default.
 # Enable only for a pinned resource release, with stable URLs and checksums.

@@ -56,6 +56,8 @@ resources:
     target_cache: &smallrna_target_cache /path/to/smallrna/multimir_cache.tsv
     target_feature_sets: &smallrna_target_feature_sets ""
     target_feature_set_tables: &smallrna_target_feature_set_tables /path/to/smallrna/target_feature_sets.tsv
+    provenance: &smallrna_target_provenance ""
+    summary: &smallrna_target_summary ""
 
 # Optional preparation recipes are intentionally disabled by default.
 # Enable only for a pinned resource release, with stable URLs and checksums.

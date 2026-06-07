@@ -98,6 +98,7 @@ reactome.tsv
 gmt_*.tsv
 unmapped_features.tsv
 resource_provenance.tsv
+resource_summary.tsv
 aspis_feature_sets.yaml
 ```
 
@@ -105,12 +106,20 @@ Review `unmapped_features.tsv`. Some unmapped rows are expected when a source
 database contains identifiers that are not present in the GTF, but a mostly
 unmapped resource usually means the source ID namespace is wrong.
 
+Review `resource_provenance.tsv` and `resource_summary.tsv` before submitting a
+real run. If these files are declared under `resources.*.provenance` or
+`resources.*.summary`, `validate_project_inputs.py` checks that they exist, are
+non-empty, use controlled license status values, and still match the recorded
+checksums for local source/output files.
+
 Use the generated YAML fragment to set:
 
 ```yaml
 resources:
   rnaseq_feature_sets:
     tables: /path/to/aspis_resources/beas/feature_sets/go_bp.tsv,/path/to/...
+    provenance: /path/to/aspis_resources/beas/feature_sets/resource_provenance.tsv
+    summary: /path/to/aspis_resources/beas/feature_sets/resource_summary.tsv
 
 rnaseq_differential:
   report_feature_set_tables: /path/to/aspis_resources/beas/feature_sets/go_bp.tsv,/path/to/...
@@ -157,6 +166,8 @@ Use the generated YAML fragment to set:
 resources:
   smallrna_targets:
     target_table: /path/to/aspis_resources/beas/smallrna_targets/project_open_targets_targets.tsv
+    provenance: /path/to/aspis_resources/beas/smallrna_targets/project_open_targets_target_provenance.tsv
+    summary: /path/to/aspis_resources/beas/smallrna_targets/project_open_targets_target_summary.tsv
 smallrna:
   target_enrichment_mode: table
   target_table: /path/to/aspis_resources/beas/smallrna_targets/project_open_targets_targets.tsv
