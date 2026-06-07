@@ -58,10 +58,31 @@ PROVENANCE_COLUMNS = [
     "release",
     "resource_version",
     "url",
+    "source_path",
+    "source_checksum_sha256",
     "checksum_sha256",
+    "license",
+    "license_status",
+    "identifier_namespace",
     "prepared_by",
     "prepared_at",
     "notes",
+]
+RESOURCE_SUMMARY_COLUMNS = [
+    "resource_id",
+    "resource_kind",
+    "path",
+    "source_file",
+    "source",
+    "collection",
+    "resource_version",
+    "license_status",
+    "identifier_namespace",
+    "n_memberships",
+    "n_sets",
+    "n_features",
+    "n_unmapped_or_ambiguous",
+    "mapping_status",
 ]
 
 
@@ -71,6 +92,18 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--outdir", required=True, help="Directory for ASPIS-ready resource outputs")
     parser.add_argument("--resource-version", default="", help="Version label to attach when source-specific versions are absent")
     parser.add_argument("--prepared-by", default=os.environ.get("USER", ""), help="Provenance author label")
+    parser.add_argument("--license", default="open_resource", help="License or usage label recorded in provenance")
+    parser.add_argument(
+        "--license-status",
+        choices=["open", "user_provided", "restricted", "unknown"],
+        default="open",
+        help="Controlled license status recorded in provenance",
+    )
+    parser.add_argument(
+        "--identifier-namespace",
+        default="gtf_gene_id",
+        help="Identifier namespace used in normalized feature_id values",
+    )
     parser.add_argument("--unmapped-action", choices=["drop", "keep"], default="drop")
     parser.add_argument(
         "--id-map-table",
@@ -535,7 +568,13 @@ def provenance_row(
     prepared_by: str,
     prepared_at: str,
     notes: str = "",
+    source_path: Path | None = None,
+    source_url: str = "",
+    license_label: str = "not_specified",
+    license_status: str = "unknown",
+    identifier_namespace: str = "gtf_gene_id",
 ) -> dict[str, str]:
+    source_path_text = str(source_path) if source_path else ""
     return {
         "resource_id": resource_id,
         "resource_kind": kind,
@@ -545,8 +584,13 @@ def provenance_row(
         "collection": collection,
         "release": version,
         "resource_version": version,
-        "url": "",
+        "url": source_url,
+        "source_path": source_path_text,
+        "source_checksum_sha256": sha256(source_path) if source_path and source_path.exists() and source_path.is_file() else "",
         "checksum_sha256": sha256(path) if path.exists() and path.is_file() else "",
+        "license": license_label,
+        "license_status": license_status,
+        "identifier_namespace": identifier_namespace,
         "prepared_by": prepared_by,
         "prepared_at": prepared_at,
         "notes": notes,
@@ -571,11 +615,20 @@ def write_provenance(path: Path, rows: list[dict[str, str]]) -> None:
             writer.writerow({column: row.get(column, "") for column in PROVENANCE_COLUMNS})
 
 
+def write_resource_summary(path: Path, rows: list[dict[str, str]]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=RESOURCE_SUMMARY_COLUMNS, delimiter="\t", lineterminator="\n")
+        writer.writeheader()
+        for row in rows:
+            writer.writerow({column: row.get(column, "") for column in RESOURCE_SUMMARY_COLUMNS})
+
+
 def yaml_list_value(paths: list[Path]) -> str:
     return ",".join(str(path) for path in paths)
 
 
-def write_config_fragment(path: Path, tables: list[Path], provenance: Path) -> None:
+def write_config_fragment(path: Path, tables: list[Path], provenance: Path, summary: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     table_value = yaml_list_value(tables)
     path.write_text(
@@ -585,12 +638,15 @@ def write_config_fragment(path: Path, tables: list[Path], provenance: Path) -> N
         "  rnaseq_feature_sets:\n"
         "    gmt: ''\n"
         f"    tables: {table_value!r}\n"
+        f"    provenance: {str(provenance)!r}\n"
+        f"    summary: {str(summary)!r}\n"
         "rnaseq_differential:\n"
         "  report_feature_sets: ''\n"
         f"  report_feature_set_tables: {table_value!r}\n"
         "smallrna:\n"
         f"  target_feature_set_tables: {table_value!r}\n"
-        f"# resource_provenance: {provenance}\n",
+        f"# resource_provenance: {provenance}\n"
+        f"# resource_summary: {summary}\n",
         encoding="utf-8",
     )
 
@@ -625,6 +681,7 @@ def main() -> int:
     write_gene_map(gene_map, resolver)
     output_tables: list[Path] = []
     unmapped_rows: list[dict[str, str]] = []
+    summary_rows: list[dict[str, str]] = []
     provenance_rows = [
         provenance_row(
             "gene_id_map",
@@ -637,6 +694,10 @@ def main() -> int:
             args.prepared_by,
             prepared_at,
             f"Prepared from {args.gtf}",
+            source_path=Path(args.gtf),
+            license_label=args.license,
+            license_status=args.license_status,
+            identifier_namespace=args.identifier_namespace,
         )
     ]
 
@@ -658,7 +719,31 @@ def main() -> int:
                 args.prepared_by,
                 prepared_at,
                 f"{len(rows)} mapped memberships; {len(unmapped)} unmapped/ambiguous memberships from {source_path}",
+                source_path=source_path,
+                license_label=args.license,
+                license_status=args.license_status,
+                identifier_namespace=args.identifier_namespace,
             )
+        )
+        n_sets = len({row.get("set_id", "") for row in rows if row.get("set_id", "")})
+        n_features = len({row.get("feature_id", "") for row in rows if row.get("feature_id", "")})
+        summary_rows.append(
+            {
+                "resource_id": name,
+                "resource_kind": kind,
+                "path": str(output),
+                "source_file": str(source_path),
+                "source": source,
+                "collection": collection,
+                "resource_version": version,
+                "license_status": args.license_status,
+                "identifier_namespace": args.identifier_namespace,
+                "n_memberships": str(len(rows)),
+                "n_sets": str(n_sets),
+                "n_features": str(n_features),
+                "n_unmapped_or_ambiguous": str(len(unmapped)),
+                "mapping_status": "empty" if not rows else "ok",
+            }
         )
 
     if args.go_gaf:
@@ -705,14 +790,17 @@ def main() -> int:
 
     unmapped_path = outdir / "unmapped_features.tsv"
     provenance_path = outdir / "resource_provenance.tsv"
+    summary_path = outdir / "resource_summary.tsv"
     write_unmapped(unmapped_path, unmapped_rows)
     write_provenance(provenance_path, provenance_rows)
+    write_resource_summary(summary_path, summary_rows)
     if args.config_fragment:
-        write_config_fragment(Path(args.config_fragment), output_tables, provenance_path)
+        write_config_fragment(Path(args.config_fragment), output_tables, provenance_path, summary_path)
 
     print(f"Prepared {len(output_tables)} feature-set table(s) in {outdir}")
     print(f"Unmapped/ambiguous memberships: {len(unmapped_rows)}")
     print(f"Provenance: {provenance_path}")
+    print(f"Resource summary: {summary_path}")
     if args.config_fragment:
         print(f"Config fragment: {args.config_fragment}")
     return 0

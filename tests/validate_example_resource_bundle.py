@@ -27,6 +27,19 @@ CONTROLLED_EVIDENCE = {
     "unspecified",
     "mixed",
 }
+PROVENANCE_REQUIRED_COLUMNS = {
+    "resource_id",
+    "resource_kind",
+    "path",
+    "source_path",
+    "source_checksum_sha256",
+    "checksum_sha256",
+    "license",
+    "license_status",
+    "identifier_namespace",
+    "prepared_at",
+}
+CONTROLLED_LICENSE_STATUS = {"open", "user_provided", "restricted", "unknown"}
 
 
 def read_tsv(path: Path) -> list[dict[str, str]]:
@@ -56,6 +69,9 @@ def validate_gmt(path: Path) -> None:
 
 def main() -> int:
     provenance_rows = read_tsv(PROVENANCE)
+    missing_provenance = PROVENANCE_REQUIRED_COLUMNS - set(provenance_rows[0])
+    if missing_provenance:
+        raise ValueError(f"{PROVENANCE} is missing provenance columns: {sorted(missing_provenance)}")
     seen_paths = set()
     for row in provenance_rows:
         relpath = row["path"]
@@ -65,6 +81,15 @@ def main() -> int:
             raise FileNotFoundError(f"Provenance path does not exist: {path}")
         if row["checksum_sha256"] != digest(path):
             raise ValueError(f"Checksum mismatch for {path}")
+        source_path = Path(row["source_path"])
+        if not source_path.is_file():
+            raise FileNotFoundError(f"Provenance source path does not exist: {source_path}")
+        if row["source_checksum_sha256"] != digest(source_path):
+            raise ValueError(f"Source checksum mismatch for {source_path}")
+        if row["license_status"] not in CONTROLLED_LICENSE_STATUS:
+            raise ValueError(f"Unexpected license_status for {path}: {row['license_status']!r}")
+        if not row["license"] or not row["identifier_namespace"]:
+            raise ValueError(f"{PROVENANCE} lacks license or identifier namespace for {path}")
         if relpath in seen_paths:
             raise ValueError(f"Duplicate provenance path: {relpath}")
         seen_paths.add(relpath)

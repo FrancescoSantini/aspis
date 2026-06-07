@@ -248,6 +248,103 @@ resource_recipes:
             "single-end",
         )
 
+        valid_rnaseq = rnaseq_intake(
+            tmp,
+            [
+                ("control_1", "control", str(r1[0]), str(r2[0])),
+                ("control_2", "control", str(r1[1]), str(r2[1])),
+                ("treated_1", "treated", str(r1[2]), str(r2[2])),
+                ("treated_2", "treated", str(r1[3]), str(r2[3])),
+            ],
+        )
+        valid_smallrna = smallrna_intake(
+            tmp,
+            [
+                ("control_1", "control", str(r1[0]), ""),
+                ("control_2", "control", str(r1[1]), ""),
+                ("treated_1", "treated", str(r1[2]), ""),
+                ("treated_2", "treated", str(r1[3]), ""),
+            ],
+        )
+        valid_rnaseq_config = rnaseq_config(tmp, valid_rnaseq, genome, annotation)
+
+        empty_feature_sets = write(
+            tmp / "empty_feature_sets.tsv",
+            "set_id\tfeature_id\tsource\tcollection\tresource_version\n",
+        )
+        empty_feature_config = write(
+            tmp / "rnaseq_empty_feature_sets.yaml",
+            valid_rnaseq_config.read_text(encoding="utf-8").replace(
+                "  min_replicates_per_group: 2\n",
+                f"  min_replicates_per_group: 2\n  report_feature_set_tables: {empty_feature_sets}\n",
+            ),
+        )
+        assert_failure_contains(
+            run_preflight(empty_feature_config, "rnaseq"),
+            "empty feature-set table",
+            "has no feature-set membership rows",
+        )
+
+        duplicate_feature_sets = write(
+            tmp / "duplicate_feature_sets.tsv",
+            "set_id\tfeature_id\tsource\tcollection\tresource_version\n"
+            "GO:1\tGENE1\tgo\tbiological_process\t2026-01\n"
+            "GO:1\tGENE1\tgo\tbiological_process\t2026-01\n",
+        )
+        duplicate_feature_config = write(
+            tmp / "rnaseq_duplicate_feature_sets.yaml",
+            valid_rnaseq_config.read_text(encoding="utf-8").replace(
+                "  min_replicates_per_group: 2\n",
+                f"  min_replicates_per_group: 2\n  report_feature_set_tables: {duplicate_feature_sets}\n",
+            ),
+        )
+        assert_failure_contains(
+            run_preflight(duplicate_feature_config, "rnaseq"),
+            "duplicate feature-set table",
+            "duplicate set/feature membership",
+        )
+
+        bad_target_table = write(
+            tmp / "bad_target_table.tsv",
+            "mirna_id\ttarget_id\tsource\ttarget_evidence_type\tresource_version\n"
+            "hsa-miR-1\tGENE1\ttoydb\tunsupported_evidence\t2026-01\n",
+        )
+        bad_target_config = write(
+            tmp / "smallrna_bad_target.yaml",
+            smallrna_config(
+                tmp, valid_smallrna, mirbase, contaminants, genome, annotation
+            ).read_text(encoding="utf-8").replace(
+                "  min_replicates_per_group: 2\n",
+                f"  min_replicates_per_group: 2\n  target_enrichment_mode: table\n  target_table: {bad_target_table}\n",
+            ),
+        )
+        assert_failure_contains(
+            run_preflight(bad_target_config, "smallrna"),
+            "uncontrolled target evidence",
+            "uncontrolled target evidence label",
+        )
+
+        duplicate_target_table = write(
+            tmp / "duplicate_target_table.tsv",
+            "mirna_id\ttarget_id\tsource\ttarget_evidence_type\tresource_version\n"
+            "hsa-miR-1\tGENE1\ttoydb\tvalidated\t2026-01\n"
+            "hsa-miR-1\tGENE1\ttoydb\tvalidated\t2026-01\n",
+        )
+        duplicate_target_config = write(
+            tmp / "smallrna_duplicate_target.yaml",
+            smallrna_config(
+                tmp, valid_smallrna, mirbase, contaminants, genome, annotation
+            ).read_text(encoding="utf-8").replace(
+                "  min_replicates_per_group: 2\n",
+                f"  min_replicates_per_group: 2\n  target_enrichment_mode: table\n  target_table: {duplicate_target_table}\n",
+            ),
+        )
+        assert_failure_contains(
+            run_preflight(duplicate_target_config, "smallrna"),
+            "duplicate target table",
+            "duplicate miRNA-target row",
+        )
+
     print("project preflight contract ok")
     return 0
 

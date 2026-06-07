@@ -39,6 +39,16 @@ VALID_RNASEQ_LEVELS = {"gene", "transcript", "isoform_switch"}
 SUPPORTED_ASSAYS = {"rnaseq", "smallrna"}
 IUPAC_BASES = set("ACGTURYSWKMBDHVNacgturyswkmbdhvn")
 FEATURE_SET_TABLE_REQUIRED_COLUMNS = {"set_id", "feature_id"}
+CONTROLLED_TARGET_EVIDENCE_TYPES = {
+    "validated",
+    "predicted",
+    "conserved",
+    "user_provided",
+    "matched_expressed",
+    "inverse_integrated",
+    "unspecified",
+    "mixed",
+}
 TARGET_MIRNA_COLUMNS = {"mirna_id", "mature_mirna_id", "miRNA", "mirna", "mature_id"}
 TARGET_GENE_COLUMNS = {
     "target_id",
@@ -312,9 +322,53 @@ def validate_tsv_header(errors: list[str], value: Any, label: str, required: set
         errors.append(f"{label} is missing required column(s): {missing}")
 
 
+def read_tsv_dicts_for_validation(errors: list[str], value: Any, label: str) -> tuple[list[str], list[dict[str, str]]] | None:
+    path = existing_file(value)
+    if path is None:
+        return None
+    try:
+        with path.open(newline="", encoding="utf-8") as handle:
+            reader = csv.DictReader(handle, delimiter="\t")
+            if reader.fieldnames is None:
+                errors.append(f"{label} is empty or lacks a header: {path}")
+                return None
+            rows = [{key: (item or "").strip() for key, item in row.items()} for row in reader]
+            return list(reader.fieldnames), rows
+    except OSError as exc:
+        errors.append(f"{label} could not be read: {exc}")
+        return None
+
+
+def validate_feature_set_table(errors: list[str], value: Any, label: str) -> None:
+    loaded = read_tsv_dicts_for_validation(errors, value, label)
+    if loaded is None:
+        return
+    columns, rows = loaded
+    missing = sorted(FEATURE_SET_TABLE_REQUIRED_COLUMNS - set(columns))
+    if missing:
+        errors.append(f"{label} is missing required column(s): {missing}")
+        return
+    path = existing_file(value)
+    if not rows:
+        errors.append(f"{label} has no feature-set membership rows: {path}")
+        return
+    seen: set[tuple[str, str, str, str]] = set()
+    for index, row in enumerate(rows, start=2):
+        set_id = row.get("set_id", "")
+        feature_id = row.get("feature_id", "")
+        if not set_id or not feature_id:
+            errors.append(f"{label} has blank set_id or feature_id at line {index}: {path}")
+            continue
+        key = (set_id, feature_id, row.get("source", ""), row.get("collection", ""))
+        if key in seen:
+            errors.append(f"{label} has duplicate set/feature membership at line {index}: {set_id}/{feature_id}")
+            continue
+        seen.add(key)
+
+
 def validate_feature_set_tables(errors: list[str], value: Any, label: str) -> None:
     for item in clean_list(value):
-        validate_tsv_header(errors, item, label, FEATURE_SET_TABLE_REQUIRED_COLUMNS)
+        validate_feature_set_table(errors, item, label)
 
 
 def validate_gmt_files(errors: list[str], value: Any, label: str) -> None:
@@ -328,21 +382,41 @@ def validate_gmt_files(errors: list[str], value: Any, label: str) -> None:
 
 
 def validate_target_table(errors: list[str], value: Any, label: str) -> None:
-    path = existing_file(value)
-    if path is None:
+    loaded = read_tsv_dicts_for_validation(errors, value, label)
+    if loaded is None:
         return
-    try:
-        with path.open(newline="", encoding="utf-8") as handle:
-            reader = csv.reader(handle, delimiter="\t")
-            header = next(reader, [])
-    except OSError as exc:
-        errors.append(f"{label} could not be read: {exc}")
-        return
-    fields = set(header)
+    columns, rows = loaded
+    fields = set(columns)
     if not fields & TARGET_MIRNA_COLUMNS:
         errors.append(f"{label} is missing a miRNA column; accepted names: {sorted(TARGET_MIRNA_COLUMNS)}")
     if not fields & TARGET_GENE_COLUMNS:
         errors.append(f"{label} is missing a target-gene column; accepted names: {sorted(TARGET_GENE_COLUMNS)}")
+    if not rows:
+        errors.append(f"{label} has no miRNA-target rows: {existing_file(value)}")
+        return
+    mirna_col = next((column for column in columns if column in TARGET_MIRNA_COLUMNS), "")
+    target_col = next((column for column in columns if column in TARGET_GENE_COLUMNS), "")
+    database_col = "database" if "database" in fields else "source" if "source" in fields else ""
+    evidence_col = "target_evidence_type" if "target_evidence_type" in fields else "source_type" if "source_type" in fields else ""
+    seen: set[tuple[str, str, str]] = set()
+    for index, row in enumerate(rows, start=2):
+        mirna_id = row.get(mirna_col, "") if mirna_col else ""
+        target_id = row.get(target_col, "") if target_col else ""
+        if not mirna_id or not target_id:
+            errors.append(f"{label} has blank miRNA or target identifier at line {index}: {existing_file(value)}")
+            continue
+        key = (mirna_id, target_id, row.get(database_col, "") if database_col else "")
+        if key in seen:
+            errors.append(f"{label} has duplicate miRNA-target row at line {index}: {mirna_id}/{target_id}")
+            continue
+        seen.add(key)
+        if evidence_col:
+            evidence = row.get(evidence_col, "")
+            if evidence and evidence not in CONTROLLED_TARGET_EVIDENCE_TYPES:
+                errors.append(
+                    f"{label} has uncontrolled target evidence label at line {index}: "
+                    f"{evidence!r}; expected one of {sorted(CONTROLLED_TARGET_EVIDENCE_TYPES)}"
+                )
 
 
 def validate_target_tables(errors: list[str], value: Any, label: str) -> None:
