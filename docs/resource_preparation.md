@@ -280,6 +280,24 @@ After running the preparation scripts, merge the generated YAML fragments into:
 config/aspis_g100_beas_full.yaml
 ```
 
+For BEAS RNA-seq ORA/GSEA resources, the G100 helper wraps the approved GO and
+Reactome preparation command and fails early when frozen source files are
+missing:
+
+```bash
+MODE=dry-run bash tests/prepare_g100_beas_feature_sets.sh "$ACCOUNT"
+MODE=check bash tests/prepare_g100_beas_feature_sets.sh "$ACCOUNT"
+MODE=run bash tests/prepare_g100_beas_feature_sets.sh "$ACCOUNT"
+```
+
+The helper expects frozen source files under
+`/g100_work/$ACCOUNT/aspis_resources/source` by default. Override paths with
+`ASPIS_RESOURCE_SOURCE_DIR`, `ASPIS_RESOURCE_ROOT`, `ASPIS_RESOURCE_GTF`,
+`ASPIS_GO_GAF`, `ASPIS_GO_OBO`, `ASPIS_REACTOME`, and optional
+`ASPIS_OPEN_GMT` when needed. Inspect the generated `unmapped_features.tsv`,
+`resource_summary.tsv`, and `aspis_feature_sets.yaml` before copying paths into
+the real BEAS config.
+
 The BEAS full config already enables the GRCh38 BSgenome object needed for
 isoform-switch NT/AA sequence extraction. The default open-resource decision is
 recorded in `config/aspis_open_resource_sources.example.yaml`: prepare GO

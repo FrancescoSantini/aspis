@@ -92,17 +92,22 @@ Completed hardening slice:
   isoform consequence annotation tables must be reviewed open or user-provided
   local resources. KEGG, MSigDB, SignalP, TMHMM, and DeepTMHMM are documented as
   restricted/manual-only, never default downloads.
+- BEAS RNA-seq feature-set preparation now has a G100 helper,
+  `tests/prepare_g100_beas_feature_sets.sh`, with `MODE=dry-run`, `MODE=check`,
+  and `MODE=run`. The helper validates the open resource policy, checks frozen
+  GO/Reactome source paths, writes the ASPIS config fragment, and leaves the
+  generated resource payload outside Git.
 
 Implementation tasks:
 
 - Use `config/aspis_open_resource_sources.example.yaml` as the source-policy
   gate for public examples and BEAS validation, and keep the validator in the
   test suite whenever the policy changes.
-- Run `workflow/scripts/prepare_feature_set_resources.py` on the selected BEAS
-  open-source inputs, inspect `unmapped_features.tsv` and the identifier maps,
-  and use the generated config fragment in the BEAS validation config. Do not
-  commit the large prepared resource payload unless it is intentionally tiny and
-  redistributable.
+- On G100, download/freeze the selected BEAS open-source inputs, run
+  `tests/prepare_g100_beas_feature_sets.sh`, inspect `unmapped_features.tsv`,
+  `resource_summary.tsv`, and the identifier maps, then use the generated config
+  fragment in the BEAS validation config. Do not commit the large prepared
+  resource payload unless it is intentionally tiny and redistributable.
 - Run `workflow/scripts/prepare_mirna_target_resources.py` on the selected BEAS
   open or project-owned target export, inspect the unmapped target and miRNA
   diagnostics, and use the generated config fragment in the BEAS validation
