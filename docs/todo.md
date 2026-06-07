@@ -80,6 +80,11 @@ Completed hardening slice:
   `gene_identifier_map.tsv`, `transcript_to_gene_map.tsv`,
   `unmapped_features.tsv`, provenance, resource summary, and a pasteable config
   fragment.
+- miRNA target resource preparation now emits normalized target tables,
+  per-miRNA target-gene feature-set tables, unmapped target reports, blank or
+  filtered miRNA diagnostics, provenance, resource summary, identifier-namespace
+  validation, species filtering diagnostics, and a config fragment for `smallrna`
+  plus `mirna_mrna_integration`.
 
 Implementation tasks:
 
@@ -98,14 +103,10 @@ Implementation tasks:
   and use the generated config fragment in the BEAS validation config. Do not
   commit the large prepared resource payload unless it is intentionally tiny and
   redistributable.
-- Finish `workflow/scripts/prepare_mirna_target_resources.py` as a complete
-  target bundle:
-  - normalized miRNA-target TSV;
-  - target-gene feature-set tables;
-  - evidence/source columns;
-  - species and identifier-namespace checks;
-  - unmapped miRNA and target reports;
-  - config fragment for `smallrna` and `mirna_mrna_integration`.
+- Run `workflow/scripts/prepare_mirna_target_resources.py` on the selected BEAS
+  open or project-owned target export, inspect the unmapped target and miRNA
+  diagnostics, and use the generated config fragment in the BEAS validation
+  config.
 - Configure a real BEAS resource bundle using only open or user-owned content.
 - After real BEAS resources are configured, add configurable warnings or
   failures for low-but-nonzero mapping rates. The current preflight blocks

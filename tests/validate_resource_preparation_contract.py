@@ -12,6 +12,7 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
 FEATURE_SCRIPT = REPO / "workflow/scripts/prepare_feature_set_resources.py"
+TARGET_SCRIPT = REPO / "workflow/scripts/prepare_mirna_target_resources.py"
 
 
 def write(path: Path, text: str) -> Path:
@@ -100,7 +101,93 @@ def main() -> int:
         fragment_text = fragment.read_text(encoding="utf-8")
         if "report_feature_set_tables" not in fragment_text or "gene_identifier_map" not in fragment_text:
             raise AssertionError(f"config fragment misses expected entries:\n{fragment_text}")
+        target_source = write(
+            tmp / "targets.tsv",
+            "miRNA\tGene Symbol\tSpecies\tExperiments\n"
+            "hsa-miR-1\tBRCA1\tHomo sapiens\treporter assay\n"
+            "hsa-miR-2\tMISSING\tHomo sapiens\tunmapped target\n"
+            "\tBRCA1\tHomo sapiens\tblank mirna\n"
+            "hsa-miR-3\tBRCA1\tMus musculus\twrong species\n",
+        )
+        target_outdir = tmp / "target_bundle"
+        target_fragment = target_outdir / "aspis_targets.yaml"
+        target_command = [
+            sys.executable,
+            str(TARGET_SCRIPT),
+            "--gtf",
+            str(gtf),
+            "--input",
+            str(target_source),
+            "--outdir",
+            str(target_outdir),
+            "--database",
+            "toy_targets",
+            "--evidence-type",
+            "validated",
+            "--resource-version",
+            "toy-target-release",
+            "--config-fragment",
+            str(target_fragment),
+        ]
+        target_result = subprocess.run(
+            target_command, cwd=REPO, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False
+        )
+        if target_result.returncode != 0:
+            raise AssertionError(
+                f"target resource preparation failed\nSTDOUT:\n{target_result.stdout}\nSTDERR:\n{target_result.stderr}"
+            )
 
+        target_rows = read_tsv(target_outdir / "toy_targets_targets.tsv")
+        assert_contains_row(target_rows, "target table", mirna_id="hsa-miR-1", target_id="GENE1")
+        if any(row.get("mirna_id") == "hsa-miR-2" for row in target_rows):
+            raise AssertionError("unmapped target should have been dropped from normalized target table")
+
+        target_feature_sets = read_tsv(target_outdir / "toy_targets_target_feature_sets.tsv")
+        assert_contains_row(
+            target_feature_sets,
+            "target feature-set table",
+            set_id="hsa-miR-1",
+            feature_id="GENE1",
+            collection="validated_mirna_targets",
+        )
+
+        unmapped_targets = read_tsv(target_outdir / "toy_targets_unmapped_targets.tsv")
+        assert_contains_row(unmapped_targets, "unmapped targets", mirna_id="hsa-miR-2", raw_target_symbol="MISSING")
+
+        unmapped_mirnas = read_tsv(target_outdir / "toy_targets_unmapped_mirnas.tsv")
+        assert_contains_row(unmapped_mirnas, "unmapped miRNAs", mapping_status="blank_mirna_id")
+        assert_contains_row(unmapped_mirnas, "unmapped miRNAs", mirna_id="hsa-miR-3", mapping_status="filtered_species")
+
+        target_provenance = read_tsv(target_outdir / "toy_targets_target_provenance.tsv")
+        assert_contains_row(target_provenance, "target provenance", resource_id="toy_targets_targets")
+        assert_contains_row(target_provenance, "target provenance", resource_id="toy_targets_target_feature_sets")
+
+        target_summary = read_tsv(target_outdir / "toy_targets_target_summary.tsv")
+        assert_contains_row(target_summary, "target summary", resource_id="toy_targets_targets", n_unmapped_or_ambiguous="3")
+        assert_contains_row(
+            target_summary,
+            "target summary",
+            resource_id="toy_targets_target_feature_sets",
+            n_unmapped_or_ambiguous="3",
+        )
+
+        target_fragment_text = target_fragment.read_text(encoding="utf-8")
+        if "target_feature_set_tables" not in target_fragment_text or "mirna_mrna_integration" not in target_fragment_text:
+            raise AssertionError(f"target config fragment misses expected entries:\n{target_fragment_text}")
+
+        bad_namespace = subprocess.run(
+            [*target_command, "--identifier-namespace", "unsupported_namespace"],
+            cwd=REPO,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=False,
+        )
+        if bad_namespace.returncode == 0 or "Unsupported identifier namespace" not in (bad_namespace.stdout + bad_namespace.stderr):
+            raise AssertionError(
+                "unsupported target identifier namespace should fail\n"
+                f"STDOUT:\n{bad_namespace.stdout}\nSTDERR:\n{bad_namespace.stderr}"
+            )
     print("resource preparation contract ok")
     return 0
 

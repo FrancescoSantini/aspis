@@ -167,18 +167,40 @@ namespace, provide an
 `--id-map-table` with `source_id` and `target_id` columns, where `target_id`
 resolves to the GTF gene ID.
 
+Important outputs:
+
+```text
+<database>_targets.tsv
+<database>_target_feature_sets.tsv
+<database>_unmapped_targets.tsv
+<database>_unmapped_mirnas.tsv
+<database>_target_provenance.tsv
+<database>_target_summary.tsv
+aspis_targets.yaml
+```
+
+Review `<database>_unmapped_targets.tsv` for target IDs or symbols that could
+not be resolved to the GTF gene namespace. Review
+`<database>_unmapped_mirnas.tsv` for blank miRNA IDs and rows filtered by the
+configured species. The generated `<database>_target_feature_sets.tsv` represents
+each miRNA as a feature set of normalized target genes and can be used by the
+smallRNA target-feature-set and miRNA-mRNA target-feature-set report layers.
+
 Use the generated YAML fragment to set:
 
 ```yaml
 resources:
   smallrna_targets:
     target_table: /path/to/aspis_resources/beas/smallrna_targets/project_open_targets_targets.tsv
+    target_tables: [/path/to/aspis_resources/beas/smallrna_targets/project_open_targets_targets.tsv]
+    target_feature_set_tables: [/path/to/aspis_resources/beas/smallrna_targets/project_open_targets_target_feature_sets.tsv]
     provenance: /path/to/aspis_resources/beas/smallrna_targets/project_open_targets_target_provenance.tsv
     summary: /path/to/aspis_resources/beas/smallrna_targets/project_open_targets_target_summary.tsv
 smallrna:
   target_enrichment_mode: table
   target_table: /path/to/aspis_resources/beas/smallrna_targets/project_open_targets_targets.tsv
-  target_feature_set_tables: /path/to/aspis_resources/beas/feature_sets/go_bp.tsv,/path/to/...
+  target_tables: [/path/to/aspis_resources/beas/smallrna_targets/project_open_targets_targets.tsv]
+  target_feature_set_tables: [/path/to/aspis_resources/beas/smallrna_targets/project_open_targets_target_feature_sets.tsv]
 mirna_mrna_integration:
   run: true
 ```

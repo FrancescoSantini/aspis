@@ -135,6 +135,10 @@ For transcript-level RNA-seq:
 
 For smallRNA target-gene enrichment:
 
+- `prepare_mirna_target_resources.py` writes `<database>_target_feature_sets.tsv`,
+  where each miRNA is represented as a feature set of normalized target genes;
+- GO/Reactome/custom gene-set tables can also be supplied when the goal is
+  target-gene pathway enrichment rather than per-miRNA target-set enrichment;
 - `feature_id` must match `target_id` after target-table normalization;
 - use the same namespace as the miRNA target table, preferably stable gene IDs;
 - target-symbol-only resources are fragile unless the target table also uses
