@@ -6194,6 +6194,7 @@ rule render_rnaseq_differential_enrichment_item:
         feature_set_tables=RNASEQ_REPORT_FEATURE_SET_TABLE_INPUTS
     output:
         manifest=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/reports/enrichment/items/{level}/{contrast_id}/enrichment_manifest.tsv",
+        contrast_manifest=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/reports/{level}/{contrast_id}/enrichment/enrichment_manifest.tsv",
         done=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/reports/enrichment/items/{level}/{contrast_id}/enrichment.done"
     params:
         feature_sets=lambda wildcards: optional_shell_arg(
@@ -6257,6 +6258,7 @@ rule render_rnaseq_differential_summaries_item:
         plan=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/reports/items/{level}/{contrast_id}/report_plan.tsv",
         plan_done=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/reports/items/{level}/{contrast_id}/report_plan.done",
         plots_done=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/reports/plots/items/{level}/{contrast_id}/plots.done",
+        enrichment_manifest=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/reports/{level}/{contrast_id}/enrichment/enrichment_manifest.tsv",
         enrichment_done=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/reports/enrichment/items/{level}/{contrast_id}/enrichment.done"
     output:
         manifest=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/reports/summaries/items/{level}/{contrast_id}/summaries_manifest.tsv",
