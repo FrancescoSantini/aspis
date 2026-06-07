@@ -15,6 +15,7 @@ import html
 import math
 import os
 import re
+import shutil
 import subprocess
 from collections import defaultdict
 from dataclasses import dataclass
@@ -2858,10 +2859,18 @@ def write_done(path: Path, events: list[dict[str, str]]) -> None:
         handle.write(f"ok\t{len(events)}\t{sum(1 for row in events if row.get('status') == 'ok')}\n")
 
 
+def clean_stale_report_outputs(outdir: Path) -> None:
+    events_dir = outdir / "events"
+    if events_dir.exists():
+        shutil.rmtree(events_dir)
+
+
 def main() -> int:
     args = parse_args()
     if args.top_n < 1:
         raise ValueError("--top-n must be >= 1")
+    outdir = Path(args.outdir)
+    clean_stale_report_outputs(outdir)
     _, manifest_rows = read_table(Path(args.manifest), MANIFEST_REQUIRED)
     metadata = metadata_by_transcript(Path(args.transcript_metadata))
     gtf_models = parse_gtf(Path(args.annotated_gtf))
@@ -2889,7 +2898,6 @@ def main() -> int:
                 "gene_name": row["gene_name"],
             }
         )
-    outdir = Path(args.outdir)
     selected_nt_fasta, selected_aa_fasta = write_selected_fastas(outdir, sequence_rows)
     external_tool_rows, generated_annotation_paths = run_external_tool_commands(
         args,

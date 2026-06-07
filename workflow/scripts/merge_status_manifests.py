@@ -120,8 +120,6 @@ def expand_plan_placeholder(
         return input_paths
     if input_path.name not in {"report_plan.tsv", "contrast_plan.tsv"}:
         return input_paths
-    if not (REQUIRED_INPUT_COLUMNS[kind] - set(columns)):
-        return input_paths
 
     if kind in {"plots", "enrichment", "summaries"}:
         required = {"level", "contrast_id"}
