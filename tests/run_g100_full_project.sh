@@ -59,6 +59,9 @@ case "$FORCE_MODE" in
   reports)
     FORCE_ARGS+=(
       --forcerun
+      render_rnaseq_differential_plots_item
+      render_rnaseq_differential_enrichment_item
+      render_rnaseq_differential_summaries_item
       run_isoform_switch
       render_isoform_switch_report
       render_rnaseq_biotype_summary
@@ -67,6 +70,11 @@ case "$FORCE_MODE" in
       render_rnaseq_differential_enrichment
       render_rnaseq_differential_summaries
       render_rnaseq_differential_report_index
+      render_smallrna_mirna_featuresets
+      render_smallrna_target_enrichment
+      render_smallrna_target_featuresets
+      render_mirna_mrna_integration
+      render_mirna_mrna_target_featuresets
       render_smallrna_report_plots
       render_smallrna_report_summaries
       render_smallrna_report_index
