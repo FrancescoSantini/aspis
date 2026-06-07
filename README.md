@@ -60,7 +60,6 @@ conda activate aspis-smk9
 Update the same environment after pulling repository changes:
 
 ```bash
-conda activate aspis-smk9
 mamba env update -f envs/aspis-snakemake.yaml
 ```
 
@@ -340,11 +339,12 @@ What the main report families are for:
   PDFs/SVGs and complete TSV tables.
 - Warning reports: triage pages for design, sample QC, strandedness, biotype,
   residual-genome, length-profile, and DESeq2 warning checks.
-- Technical PDFs: compact meeting/review documents; they are not the complete
+- Technical PDFs: readable meeting/review documents with vector text, large
+  plot pages, and short table excerpts; they are not the complete
   machine-readable result record.
 
 Use the HTML reports for navigation and complete links. Use
-`technical_report.pdf` as a compact plot-and-small-table digest for meetings or
+`technical_report.pdf` as a readable plot-and-small-table digest for meetings or
 biologist-facing review. The TSV files remain the source of truth for complete
 tables and downstream reuse.
 
@@ -409,6 +409,23 @@ MODE=run     bash tests/run_g100_rnaseq_project.sh "$ACCOUNT" config/my_rnaseq_p
 MODE=dry-run bash tests/run_g100_smallrna_project.sh "$ACCOUNT" config/my_smallrna_project.yaml
 MODE=run     bash tests/run_g100_smallrna_project.sh "$ACCOUNT" config/my_smallrna_project.yaml
 ```
+
+Combined RNA-seq plus smallRNA projects can use:
+
+```bash
+MODE=dry-run bash tests/run_g100_full_project.sh "$ACCOUNT" config/my_full_project.yaml
+MODE=run     bash tests/run_g100_full_project.sh "$ACCOUNT" config/my_full_project.yaml
+```
+
+Package a lightweight review bundle after a G100 run:
+
+```bash
+bash tests/package_g100_review_bundle.sh <run_id> <project>
+```
+
+The helper prints a local `rsync` and extraction example. That example removes
+the stale unpacked `results/<run_id>` and `meta/<run_id>` folders before
+extracting, while preserving older tarballs for comparison.
 
 Rerun controls:
 

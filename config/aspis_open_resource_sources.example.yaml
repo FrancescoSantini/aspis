@@ -67,7 +67,7 @@ open_resource_sources:
       normalized_identifier_namespace: gtf_gene_id
       notes: Use for WikiPathways exports or project-owned GMT only after license review.
   smallrna_targets:
-    - resource_id: project_open_mirna_targets
+    - resource_id: project_reviewed_mirna_targets
       source: project_owned_or_open_reviewed
       provider: user
       collection: mirna_target_interactions
@@ -80,7 +80,7 @@ open_resource_sources:
       preparation_argument: --input
       identifier_namespace_before_mapping: gene_symbol_or_gtf_gene_id
       normalized_identifier_namespace: gtf_gene_id
-      notes: ASPIS has no universal bundled miRNA-target database; provide a reviewed local export.
+      notes: ASPIS has no universal bundled miRNA-target database; provide a reviewed local export and record its license status.
   isoform_consequence_annotations:
     - resource_id: interproscan_user_output
       source: InterProScan

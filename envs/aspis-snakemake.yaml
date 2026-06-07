@@ -13,6 +13,7 @@ dependencies:
   - fastqc
   - multiqc
   - pillow
+  - reportlab
   - fastp
   - cutadapt
   - bowtie

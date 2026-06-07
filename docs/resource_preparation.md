@@ -39,7 +39,7 @@ analysis:
     goa_human.gaf.gz
     Ensembl2Reactome_All_Levels.txt
     wikipathways_human.gmt
-    project_open_mirna_targets.tsv
+    project_reviewed_mirna_targets.tsv
   beas/
     feature_sets/
     smallrna_targets/
@@ -155,9 +155,9 @@ Prepare a frozen open-license or project-owned target export. Then normalize it:
 ```bash
 python3 workflow/scripts/prepare_mirna_target_resources.py \
   --gtf /path/to/reference/Homo_sapiens.GRCh38.112.chr.gtf \
-  --input /path/to/aspis_resources/source/project_open_mirna_targets.tsv \
+  --input /path/to/aspis_resources/source/project_reviewed_mirna_targets.tsv \
   --outdir /path/to/aspis_resources/beas/smallrna_targets \
-  --database project_open_targets \
+  --database project_reviewed_targets \
   --evidence-type validated \
   --resource-version "manual_release_label" \
   --config-fragment /path/to/aspis_resources/beas/smallrna_targets/aspis_targets.yaml
@@ -185,9 +185,12 @@ namespace, provide an
 `--id-map-table` with `source_id` and `target_id` columns, where `target_id`
 resolves to the GTF gene ID.
 
-The helper expects `project_open_mirna_targets.tsv` under
-`/g100_work/$ACCOUNT/aspis_resources/source` by default. Override paths and
-metadata with `ASPIS_MIRNA_TARGET_INPUT`, `ASPIS_MIRNA_TARGET_DATABASE`,
+The helper expects `project_reviewed_mirna_targets.tsv` under
+`/g100_work/$ACCOUNT/aspis_resources/source` by default. It also accepts the
+older local filename `project_open_mirna_targets.tsv` when present, but the
+prepared resource label defaults to `project_reviewed_targets` to avoid making
+unverified license claims. Override paths and metadata with
+`ASPIS_MIRNA_TARGET_INPUT`, `ASPIS_MIRNA_TARGET_DATABASE`,
 `ASPIS_MIRNA_TARGET_EVIDENCE_TYPE`, `ASPIS_MIRNA_TARGET_VERSION`,
 `ASPIS_MIRNA_TARGET_LICENSE`, `ASPIS_MIRNA_TARGET_LICENSE_STATUS`,
 `ASPIS_MIRNA_TARGET_ID_MAP_TABLES`, and column-specific overrides such as
@@ -217,16 +220,16 @@ Use the generated YAML fragment to set:
 ```yaml
 resources:
   smallrna_targets:
-    target_table: /path/to/aspis_resources/beas/smallrna_targets/project_open_targets_targets.tsv
-    target_tables: [/path/to/aspis_resources/beas/smallrna_targets/project_open_targets_targets.tsv]
-    target_feature_set_tables: [/path/to/aspis_resources/beas/smallrna_targets/project_open_targets_target_feature_sets.tsv]
-    provenance: /path/to/aspis_resources/beas/smallrna_targets/project_open_targets_target_provenance.tsv
-    summary: /path/to/aspis_resources/beas/smallrna_targets/project_open_targets_target_summary.tsv
+    target_table: /path/to/aspis_resources/beas/smallrna_targets/project_reviewed_targets_targets.tsv
+    target_tables: [/path/to/aspis_resources/beas/smallrna_targets/project_reviewed_targets_targets.tsv]
+    target_feature_set_tables: [/path/to/aspis_resources/beas/smallrna_targets/project_reviewed_targets_target_feature_sets.tsv]
+    provenance: /path/to/aspis_resources/beas/smallrna_targets/project_reviewed_targets_target_provenance.tsv
+    summary: /path/to/aspis_resources/beas/smallrna_targets/project_reviewed_targets_target_summary.tsv
 smallrna:
   target_enrichment_mode: table
-  target_table: /path/to/aspis_resources/beas/smallrna_targets/project_open_targets_targets.tsv
-  target_tables: [/path/to/aspis_resources/beas/smallrna_targets/project_open_targets_targets.tsv]
-  target_feature_set_tables: [/path/to/aspis_resources/beas/smallrna_targets/project_open_targets_target_feature_sets.tsv]
+  target_table: /path/to/aspis_resources/beas/smallrna_targets/project_reviewed_targets_targets.tsv
+  target_tables: [/path/to/aspis_resources/beas/smallrna_targets/project_reviewed_targets_targets.tsv]
+  target_feature_set_tables: [/path/to/aspis_resources/beas/smallrna_targets/project_reviewed_targets_target_feature_sets.tsv]
 mirna_mrna_integration:
   run: true
 ```
@@ -327,8 +330,8 @@ export under `/g100_work/$ACCOUNT/aspis_resources/source` or point the helper at
 the export explicitly:
 
 ```bash
-export ASPIS_MIRNA_TARGET_INPUT=/g100_work/$ACCOUNT/aspis_resources/source/project_open_mirna_targets.tsv
-export ASPIS_MIRNA_TARGET_DATABASE=project_open_targets
+export ASPIS_MIRNA_TARGET_INPUT=/g100_work/$ACCOUNT/aspis_resources/source/project_reviewed_mirna_targets.tsv
+export ASPIS_MIRNA_TARGET_DATABASE=project_reviewed_targets
 export ASPIS_MIRNA_TARGET_EVIDENCE_TYPE=user_provided
 export ASPIS_MIRNA_TARGET_VERSION=manual_release_label
 MODE=dry-run bash tests/prepare_g100_smallrna_targets.sh "$ACCOUNT"

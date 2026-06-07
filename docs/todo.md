@@ -4,7 +4,7 @@ This is the canonical ASPIS backlog. Older TODO-style notes have been merged
 here so that implementation priorities, validation blockers, and cleanup work
 are tracked in one place.
 
-Last updated: 2026-06-07.
+Last updated: 2026-06-08.
 
 ## How To Read This Backlog
 
@@ -39,14 +39,16 @@ where configured, and top-level run dashboards.
 This is not yet a production-complete release. The real runs exposed the next
 blockers:
 
-- ORA/GSEA and miRNA target enrichment need real open-license resource bundles,
-  not just placeholder "not configured" states.
+- ORA/GSEA and miRNA target enrichment now have open/reviewed resource
+  preparation helpers, but at least one resource-backed validation run still
+  needs final biological review.
 - The report graph is too nested: run index, branch reports, differential
   reports, isoform-switch pages, smallRNA pages, and tables are all reachable,
   but the navigation is not yet biologist-friendly.
 - RNA-seq and smallRNA branches for the same project are not yet summarized
   together in a biologically useful miRNA-mRNA comparison layer.
-- Technical PDF reports are too low-resolution for biological review.
+- Technical PDF reports now use a vector-text ReportLab renderer, but the
+  regenerated real-run PDFs still need visual QA after the environment update.
 - DTU methods are still not configured or validated.
 - At least one additional appropriate real validation cohort, or one repeated
   full validation with configured resources and documented review, remains
@@ -124,7 +126,9 @@ Completed hardening slice:
   and `MODE=run`. It wraps reviewed open or project-owned target exports,
   optional local ID maps, controlled evidence/license metadata, unmapped-target
   diagnostics, provenance, resource summaries, and the generated ASPIS config
-  fragment without downloading target databases during analysis.
+  fragment without downloading target databases during analysis. Its default
+  prepared-resource label is now `project_reviewed_targets` so ASPIS does not
+  imply that a target database is open unless that has been explicitly reviewed.
 - RNA-seq feature-set ORA, ranked feature-set enrichment, smallRNA target
   enrichment, and smallRNA target-gene feature-set enrichment already emit
   compact SVG panels and explicit status rows for `not_configured`,
@@ -174,6 +178,15 @@ Acceptance criteria:
 Reason for priority: the pipeline now produces many correct files, but the
 reader experience is too fragmented. A single entry point exists, but users can
 quickly fall into nested pages without knowing which report is authoritative.
+
+Completed hardening slice:
+
+- `tests/package_g100_review_bundle.sh` now creates a lightweight G100 review
+  tarball with run dashboards, branch reports, differential reports, manifests,
+  execution/preflight logs, and linked small files while excluding raw FASTQs,
+  BAM/SAM files, Bowtie/HISAT indexes, and transient files. The helper prints a
+  local download/extraction recipe that removes stale unpacked `results/<run_id>`
+  and `meta/<run_id>` folders before extraction.
 
 Remaining code tasks:
 
@@ -285,36 +298,46 @@ Acceptance criteria:
 - Every integrated table can be traced back to both assays, both contrasts, and
   the target-resource version.
 
-## P0 - Technical PDF Quality
+## P0 - Technical PDF QA And Source Fidelity
 
-Reason for priority: the technical PDFs are intended for biologist review, but
-current output is too low-resolution and visually compressed.
+Reason for priority: the technical PDFs are intended for biologist review. The
+old implementation rasterized entire pages and compressed dense plots into tiny
+boxes. The renderer has been replaced, but the new output still needs
+real-report QA.
+
+Completed hardening slice:
+
+- `render_technical_pdf_report.py` now uses ReportLab instead of Pillow page
+  screenshots, so headings, captions, tables, and footers are vector PDF text.
+- Dense plot thumbnails are no longer placed in small grid boxes. Each major
+  plot preview is promoted to its own page with a short explanation and source
+  path caption.
+- Short table excerpts are rendered as vector text tables with wrapped cells,
+  while complete TSVs remain linked from the HTML report.
+- The renderer now has explicit section/context pages and writes page counts in
+  `technical_report.done`.
+- `reportlab` is declared in `envs/aspis-snakemake.yaml`.
 
 Remaining code tasks:
 
-- Audit `render_technical_pdf_report.py` and all report inputs to identify where
-  plots are rasterized, downsampled, or embedded as unreadable thumbnails.
-- Prefer vector SVG/PDF source plots in technical PDFs when available.
-- When rasterization is required, use explicit high DPI and page-size-aware
-  scaling.
-- Stop placing dense plots into small boxes. Use one plot per page or per
-  half-page when labels require space.
-- Add section pages with short descriptions:
-  - QC;
-  - differential plots;
-  - enrichment;
-  - isoform switches;
-  - smallRNA;
-  - miRNA-mRNA integration;
-  - warnings.
-- Use readable font sizes, wrapped titles, shortened contrast labels, and
-  captions that point to full TSV/PDF/SVG sources.
-- Preserve original plot files as linked artifacts.
 - Add a PDF rendering QA smoke test that checks:
   - file exists;
   - page count is nonzero;
-  - embedded images are not tiny;
+  - embedded images are not tiny relative to A4 page size;
+  - the output contains text objects, not only one full-page raster image;
   - obvious placeholder-only reports are flagged.
+- Consider direct native PDF/SVG embedding for source plots if the current PNG
+  previews still lose too much plot-axis detail after real-run review.
+- Preserve original plot files as linked artifacts.
+
+Operator/data validation tasks:
+
+- Update the active ASPIS environment on G100 after pulling the ReportLab
+  dependency.
+- Force-regenerate RNA-seq and smallRNA `technical_report.pdf` outputs on a
+  real run.
+- Visually inspect the regenerated PDFs at normal zoom for plot labels, table
+  readability, page count, and section order.
 
 Acceptance criteria:
 

@@ -29,12 +29,16 @@ SOURCE_DIR="${ASPIS_RESOURCE_SOURCE_DIR:-/g100_work/${ACCOUNT}/aspis_resources/s
 RESOURCE_ROOT="${ASPIS_RESOURCE_ROOT:-/g100_work/${ACCOUNT}/aspis_resources/beas}"
 OUTDIR="${ASPIS_SMALLRNA_TARGET_OUTDIR:-${RESOURCE_ROOT}/smallrna_targets}"
 GTF="${ASPIS_RESOURCE_GTF:-/g100_work/${ACCOUNT}/aspis_data/phdpipe/genome/Homo_sapiens.GRCh38.112.chr.gtf}"
-TARGET_INPUT="${ASPIS_MIRNA_TARGET_INPUT:-${SOURCE_DIR}/project_open_mirna_targets.tsv}"
-DATABASE="${ASPIS_MIRNA_TARGET_DATABASE:-project_open_targets}"
+DEFAULT_TARGET_INPUT="${SOURCE_DIR}/project_reviewed_mirna_targets.tsv"
+if [[ ! -e "$DEFAULT_TARGET_INPUT" && -e "${SOURCE_DIR}/project_open_mirna_targets.tsv" ]]; then
+  DEFAULT_TARGET_INPUT="${SOURCE_DIR}/project_open_mirna_targets.tsv"
+fi
+TARGET_INPUT="${ASPIS_MIRNA_TARGET_INPUT:-${DEFAULT_TARGET_INPUT}}"
+DATABASE="${ASPIS_MIRNA_TARGET_DATABASE:-project_reviewed_targets}"
 EVIDENCE_TYPE="${ASPIS_MIRNA_TARGET_EVIDENCE_TYPE:-user_provided}"
 RESOURCE_VERSION="${ASPIS_MIRNA_TARGET_VERSION:-manual_release_label}"
 PREPARED_BY="${ASPIS_RESOURCE_PREPARED_BY:-${USER:-aspis_user}}"
-LICENSE="${ASPIS_MIRNA_TARGET_LICENSE:-user_provided}"
+LICENSE="${ASPIS_MIRNA_TARGET_LICENSE:-reviewed_local_export}"
 LICENSE_STATUS="${ASPIS_MIRNA_TARGET_LICENSE_STATUS:-user_provided}"
 IDENTIFIER_NAMESPACE="${ASPIS_MIRNA_TARGET_IDENTIFIER_NAMESPACE:-gtf_gene_id}"
 SPECIES="${ASPIS_MIRNA_TARGET_SPECIES:-Homo sapiens}"
@@ -116,9 +120,16 @@ echo "==> target input: $TARGET_INPUT"
 echo "==> output dir: $OUTDIR"
 echo "==> database: $DATABASE"
 echo "==> evidence type: $EVIDENCE_TYPE"
+echo "==> license: $LICENSE"
 echo "==> license status: $LICENSE_STATUS"
 echo "==> config fragment: $CONFIG_FRAGMENT"
 echo "==> policy: $POLICY"
+
+database_label="$(printf '%s' "$DATABASE" | tr '[:upper:]' '[:lower:]')"
+target_label="$(printf '%s' "$TARGET_INPUT" | tr '[:upper:]' '[:lower:]')"
+if [[ "$database_label" == *commercial* || "$target_label" == *commercial* ]]; then
+  echo "WARNING: target resource label/path contains 'commercial'. Continue only if this is an intentional, reviewed local project resource." >&2
+fi
 
 python3 tests/validate_open_resource_policy.py
 
