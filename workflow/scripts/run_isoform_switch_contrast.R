@@ -107,6 +107,9 @@ fasta_size <- function(path) {
 move_or_empty_fasta <- function(source, destination) {
   ensure_parent(destination)
   if (fasta_has_records(source)) {
+    if (normalizePath(source, mustWork = TRUE) == normalizePath(destination, mustWork = FALSE)) {
+      return(invisible(TRUE))
+    }
     if (file.exists(destination)) {
       unlink(destination)
     }
@@ -211,7 +214,7 @@ main <- function() {
   generated_aa <- ""
   if (!is.null(genome)) {
     sequence_dir <- dirname(args[["nt_fasta"]])
-    sequence_prefix <- "isoformSwitchAnalyzeR"
+    sequence_prefix <- "isoformSwitchAnalyzeR_export"
     dir.create(sequence_dir, recursive = TRUE, showWarnings = FALSE)
     switch_list <- isa$analyzeORF(switch_list, orfMethod = "longest", genomeObject = genome)
     switch_list <- isa$extractSequence(
