@@ -6,18 +6,38 @@ are tracked in one place.
 
 Last updated: 2026-06-07.
 
+## How To Read This Backlog
+
+`Completed hardening slice` means code, tests, docs, or helper scripts that are
+already implemented and should not remain in the active work list.
+
+`Remaining code tasks` means work Codex can usually implement in the repository
+without needing a new data upload or a long cluster run.
+
+`Operator/data validation tasks` means work that needs frozen external resources,
+raw FASTQs, G100 execution, or review of generated biological outputs. These are
+not necessarily tasks the user must do alone, but they cannot be honestly closed
+by code changes only. Codex can prepare commands, configs, and validators; a
+real run still has to happen somewhere.
+
+Validation cohorts do not have to be BEAS_2B or HEP_G2. Those are the available
+experiment lines in the current development context. Any appropriately complex
+real dataset can close a validation item if it exercises the relevant pipeline
+surface, uses real references/resources, and records config, commit,
+environment, inputs, and outputs.
+
 ## Current Validation Baseline
 
-ASPIS now has substantial real-data validation on the BEAS_2B G100 full run and
-earlier local subset runs. The validated path includes materialization, branch
-planning, staged FastQC/MultiQC, RNA-seq preprocessing, RNA-seq alignment,
-alignment QC, StringTie/gffcompare quantification, gene/transcript DESeq2,
-isoform-switch execution, isoform-switch FASTA export, smallRNA preprocessing,
-smallRNA alignment/quantification/differential reporting where configured, and
-top-level run dashboards.
+ASPIS has substantial real-data validation from a BEAS_2B G100 full run and
+earlier local subset runs. This proves a meaningful path through
+materialization, branch planning, staged FastQC/MultiQC, RNA-seq preprocessing,
+RNA-seq alignment, alignment QC, StringTie/gffcompare quantification,
+gene/transcript DESeq2, isoform-switch execution, isoform-switch FASTA export,
+smallRNA preprocessing, smallRNA alignment/quantification/differential reporting
+where configured, and top-level run dashboards.
 
-This is not yet a production-complete release. The real BEAS_2B run exposed the
-next blockers:
+This is not yet a production-complete release. The real runs exposed the next
+blockers:
 
 - ORA/GSEA and miRNA target enrichment need real open-license resource bundles,
   not just placeholder "not configured" states.
@@ -28,7 +48,9 @@ next blockers:
   together in a biologically useful miRNA-mRNA comparison layer.
 - Technical PDF reports are too low-resolution for biological review.
 - DTU methods are still not configured or validated.
-- HEP_G2 full validation and legacy-vs-new comparison remain incomplete.
+- At least one additional appropriate real validation cohort, or one repeated
+  full validation with configured resources and documented review, remains
+  incomplete.
 
 The sections below are ordered by implementation dependency and practical
 validation value. Earlier sections should be completed before later polish work.
@@ -98,32 +120,38 @@ Completed hardening slice:
   GO/Reactome source paths, writes the ASPIS config fragment, and leaves the
   generated resource payload outside Git.
 
-Implementation tasks:
+Remaining code tasks:
 
-- Use `config/aspis_open_resource_sources.example.yaml` as the source-policy
-  gate for public examples and BEAS validation, and keep the validator in the
-  test suite whenever the policy changes.
-- On G100, download/freeze the selected BEAS open-source inputs, run
-  `tests/prepare_g100_beas_feature_sets.sh`, inspect `unmapped_features.tsv`,
-  `resource_summary.tsv`, and the identifier maps, then use the generated config
-  fragment in the BEAS validation config. Do not commit the large prepared
-  resource payload unless it is intentionally tiny and redistributable.
-- Run `workflow/scripts/prepare_mirna_target_resources.py` on the selected BEAS
-  open or project-owned target export, inspect the unmapped target and miRNA
-  diagnostics, and use the generated config fragment in the BEAS validation
-  config.
-- Configure a real BEAS resource bundle using only open or user-owned content.
-- After real BEAS resources are configured, add configurable warnings or
-  failures for low-but-nonzero mapping rates. The current preflight blocks
-  zero-overlap resources and metadata inconsistencies, but it intentionally
-  waits for real resource distributions before deciding practical thresholds.
-- Run RNA-seq ORA/GSEA on BEAS gene and transcript DESeq2 results.
-- Run smallRNA miRNA target enrichment and target-gene feature-set enrichment
-  once a valid target table is configured.
-- Add compact ORA/GSEA dotplots or ranked-term panels for successful resources.
+- Add a smallRNA target-resource preparation helper equivalent to
+  `tests/prepare_g100_beas_feature_sets.sh`, but parameterized so it can be used
+  with any reviewed open or project-owned miRNA-target export.
+- Add compact ORA/GSEA dotplots or ranked-term panels for successful enrichment
+  resources.
 - Preserve explicit `not_configured`, `resource_missing`, `invalid_resource`,
   `insufficient_mapping`, `no_significant_features`, `no_significant_terms`,
-  and `ok` statuses in TSV, HTML, and PDF outputs.
+  and `ok` statuses consistently in TSV, HTML, and PDF outputs.
+- After at least one real resource bundle is prepared, add configurable warnings
+  or failures for low-but-nonzero mapping rates. The current preflight blocks
+  zero-overlap resources and metadata inconsistencies, but practical warning
+  thresholds should be based on observed real resource distributions.
+
+Operator/data validation tasks:
+
+- Freeze selected open RNA-seq feature-set sources, run the feature-set
+  preparation helper, inspect `unmapped_features.tsv`, `resource_summary.tsv`,
+  and the identifier maps, then paste the generated config fragment into the
+  chosen validation config. Do not commit large prepared payloads unless they
+  are intentionally tiny and redistributable.
+- Freeze a reviewed open or project-owned miRNA-target export, run
+  `workflow/scripts/prepare_mirna_target_resources.py` or its future helper,
+  inspect unmapped target and miRNA diagnostics, then paste the generated config
+  fragment into the chosen validation config.
+- Run RNA-seq ORA/GSEA on a real validation cohort with gene and transcript
+  DESeq2 results.
+- Run smallRNA miRNA target enrichment and target-gene feature-set enrichment on
+  a real validation cohort once a valid target table is configured.
+- Review the generated enrichment and target-enrichment reports to confirm that
+  configured resources produce non-placeholder panels and honest status rows.
 
 Acceptance criteria:
 
@@ -140,7 +168,7 @@ Reason for priority: the pipeline now produces many correct files, but the
 reader experience is too fragmented. A single entry point exists, but users can
 quickly fall into nested pages without knowing which report is authoritative.
 
-Implementation tasks:
+Remaining code tasks:
 
 - Redesign the run-level dashboard as the primary entry point:
   - project cards grouped by project;
@@ -205,11 +233,12 @@ Acceptance criteria:
 
 ## P0 - RNA-seq And SmallRNA Matched Integration
 
-Reason for priority: BEAS has both RNA-seq and smallRNA for the same biological
-experiment, but the current reports do not yet make the cross-assay comparison
-visible.
+Reason for priority: matched RNA-seq and smallRNA projects should make the
+cross-assay comparison visible. BEAS_2B is one available example, but the
+implementation should work for any project with compatible RNA-seq and smallRNA
+metadata.
 
-Implementation tasks:
+Remaining code tasks:
 
 - Define the matching contract for paired assays:
   - same `project`;
@@ -242,8 +271,8 @@ Implementation tasks:
 
 Acceptance criteria:
 
-- A combined BEAS project report shows RNA-seq, smallRNA, and miRNA-mRNA
-  integration side by side.
+- A combined project report shows RNA-seq, smallRNA, and miRNA-mRNA integration
+  side by side for any compatible matched validation cohort.
 - Users with only RNA-seq or only smallRNA get clear standalone reports and a
   visible "integration not applicable" status.
 - Every integrated table can be traced back to both assays, both contrasts, and
@@ -254,7 +283,7 @@ Acceptance criteria:
 Reason for priority: the technical PDFs are intended for biologist review, but
 current output is too low-resolution and visually compressed.
 
-Implementation tasks:
+Remaining code tasks:
 
 - Audit `render_technical_pdf_report.py` and all report inputs to identify where
   plots are rasterized, downsampled, or embedded as unreadable thumbnails.
@@ -289,53 +318,58 @@ Acceptance criteria:
 
 ## P0 - Full Real-Data Validation Matrix
 
-Reason for priority: one successful BEAS run is strong progress, but production
-readiness requires complete, documented validation across the real projects and
-configured resources.
+Reason for priority: one successful real run is strong progress, but production
+readiness requires complete, documented validation with configured resources and
+at least one representative real dataset that exercises the major workflow
+surfaces.
 
-Implementation tasks:
+Remaining code tasks:
 
-- Complete the BEAS_2B G100 validation with configured resource bundles.
-- Run the HEP_G2 RNA-seq and smallRNA datasets through the same current root
-  `Snakefile`.
-- Validate both full projects from raw FASTQ to final reports.
+- Add a machine-readable validation matrix template with project, assay, branch,
+  layer, config, commit, reference bundle, resource bundle, run location,
+  status, and review notes.
+- Add a lightweight validator for completed validation-matrix rows so future
+  claims have the required provenance fields.
+
+Operator/data validation tasks:
+
+- Choose one or more appropriate real validation cohorts. BEAS_2B and HEP_G2
+  are available candidates, not mandatory requirements.
 - Run `validate_project_inputs.py` before every full submission.
 - Confirm every intake row has stable `library_id`, `biospecimen_id`,
   `project`, `assay`, `input_1`, `input_2`, and design columns.
-- Confirm real configs use G100 paths, not WSL/local paths, and do not point to
-  synthetic smoke-test references.
+- Confirm real configs use execution-environment paths, not stale WSL/local
+  paths, and do not point to synthetic smoke-test references.
 - Confirm reference genome, annotation, aligner indexes, miRNA references,
   contaminant references, target tables, and feature-set resources are the
   intended real files.
-- Compare ASPIS outputs against legacy outputs:
-  - gene counts;
-  - transcript counts;
-  - miRNA counts;
-  - normalized counts;
-  - DESeq2 gene/transcript/miRNA results;
-  - enrichment inputs and outputs;
-  - isoform-switch event tables;
-  - smallRNA target tables;
-  - report inventories.
+- Run at least one full real project from raw FASTQ to final reports with
+  configured open resources.
+- Compare ASPIS outputs against an appropriate reference point when one exists:
+  legacy outputs, an independent pipeline, or a documented manual review. The
+  old pipeline is useful context but not a source of truth.
 - Record expected differences due to changed tools, references, thresholds,
   model formulas, resource versions, or bug fixes.
-- Keep an explicit validation matrix by project, assay, branch, layer, config,
-  commit, reference bundle, and run location.
+- Keep the validation matrix updated by project, assay, branch, layer, config,
+  commit, reference bundle, resource bundle, and run location.
 
 Acceptance criteria:
 
-- BEAS_2B and HEP_G2 complete on G100 with reports.
+- At least one representative real validation cohort completes with configured
+  reports and open/resource-reviewed enrichment layers.
+- A second independent cohort or public dataset is validated when practical, to
+  reduce overfitting to one experiment line.
 - Every major output family has a passed comparison, documented intentional
   difference, or explicit blocker.
 - Validation notes identify commit, config, intake, reference files, resource
-  files, environment, and run date.
+  files, environment, run date, and reviewer decision.
 
 ## P1 - DTU Methods
 
 Reason for priority: DTU is expected for transcript-level biology, but the
 current DTU layer is still effectively not configured.
 
-Implementation tasks:
+Remaining code tasks:
 
 - Decide which DTU engines are supported first:
   - DRIMSeq for count-based DTU;
@@ -367,7 +401,8 @@ Implementation tasks:
   - blocked by insufficient replicates;
   - failed;
   - ok.
-- Validate on a synthetic smoke test, then BEAS real data.
+- Validate on a synthetic smoke test, then on an appropriate real validation
+  cohort.
 
 Acceptance criteria:
 
@@ -378,10 +413,10 @@ Acceptance criteria:
 ## P1 - Isoform-Switch Consequence Annotation Hardening
 
 Reason for priority: isoform-switch execution, event pages, exon diagrams, and
-NT/AA sequence extraction now work on BEAS. The remaining value comes from
+NT/AA sequence extraction now work on real data. The remaining value comes from
 annotation quality and clearer consequence interpretation.
 
-Implementation tasks:
+Remaining code tasks:
 
 - Improve gene-name propagation from StringTie/gffcompare outputs.
 - Map MSTRG and reference transcript IDs to gene symbols, gene IDs, transcript
@@ -412,7 +447,7 @@ Acceptance criteria:
 Reason for priority: the biological report is useful only if plots are readable
 without manual zooming and label interpretation is not painful.
 
-Implementation tasks:
+Remaining code tasks:
 
 - Fix heatmap and sample-distance titles, axis labels, and dense sample names so
   they do not leave the frame.
@@ -440,7 +475,7 @@ Acceptance criteria:
 Reason for priority: current summaries are useful but sometimes feel chaotic
 because machine manifests and human interpretation are mixed.
 
-Implementation tasks:
+Remaining code tasks:
 
 - Split compact human summaries from wide machine manifests.
 - Rename capped inspection counts such as smallRNA length `total_reads` to
@@ -463,7 +498,7 @@ Acceptance criteria:
 Reason for priority: strandedness affects featureCounts and StringTie
 interpretation, and real data can silently suffer if assumptions are wrong.
 
-Implementation tasks:
+Remaining code tasks:
 
 - Validate strandedness inference on real RNA-seq libraries.
 - Keep strandedness warnings prominent in branch and differential reports.
@@ -483,7 +518,7 @@ Acceptance criteria:
 Reason for priority: core ASPIS should stay installable, while optional
 advanced tools can live in separate environments or site-managed modules.
 
-Implementation tasks:
+Remaining code tasks:
 
 - Keep required tools fail-fast in environment reports.
 - Keep optional tools visible but non-blocking.
@@ -518,7 +553,7 @@ Likely legacy/quarantine targets:
 - `config/sample_sheet.csv`;
 - `config/sample_sheet_tests.csv`.
 
-Implementation tasks:
+Remaining code tasks:
 
 - Keep legacy files until at least one real legacy-vs-new comparison is
   documented.
@@ -538,7 +573,7 @@ Acceptance criteria:
 Reason for priority: the root `Snakefile` is intentionally the user entrypoint,
 but it is large enough to slow development.
 
-Implementation tasks:
+Remaining code tasks:
 
 - Split the root workflow internally into included `.smk` modules while
   preserving one visible root `Snakefile`.
@@ -594,7 +629,7 @@ Acceptance criteria:
 Reason for priority: operational docs are close to current reality, but they
 must stay synchronized with the workflow as real validation proceeds.
 
-Implementation tasks:
+Remaining code tasks:
 
 - Keep README usage examples account-neutral and site-neutral.
 - Keep G100-specific details in G100 docs with placeholders for accounts and
