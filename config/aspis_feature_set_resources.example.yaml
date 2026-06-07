@@ -14,6 +14,11 @@ resources:
     provenance: resources/feature_sets/resource_provenance.tsv
     summary: resources/feature_sets/resource_summary.tsv
   smallrna_targets:
+    target_table: resources/smallrna_targets/project_open_targets_targets.tsv
+    target_tables:
+      - resources/smallrna_targets/project_open_targets_targets.tsv
+    target_feature_set_tables:
+      - resources/smallrna_targets/project_open_targets_target_feature_sets.tsv
     provenance: resources/smallrna_targets/project_open_targets_target_provenance.tsv
     summary: resources/smallrna_targets/project_open_targets_target_summary.tsv
 
@@ -49,6 +54,11 @@ smallrna:
   # validated, predicted, conserved, or user_provided. Matched RNA-seq
   # integration adds matched_expressed and inverse_integrated target evidence
   # labels in the derived target-mode outputs.
+  target_enrichment_mode: table
+  target_table: resources/smallrna_targets/project_open_targets_targets.tsv
+  target_tables:
+    - resources/smallrna_targets/project_open_targets_targets.tsv
+
   target_feature_sets: resources/feature_sets/wikipathways_human.gmt
   target_feature_set_tables: >-
     resources/feature_sets/go_bp.tsv,

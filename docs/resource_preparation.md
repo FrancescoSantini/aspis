@@ -20,6 +20,13 @@ default because their terms are not equivalent to open data or open-source
 software licenses. If a local project uses them anyway, it must be an explicit
 project decision outside the default open-resource workflow.
 
+The machine-readable source policy is
+`config/aspis_open_resource_sources.example.yaml`. It documents the current
+recommended open RNA-seq sources, the reviewed user-provided categories, and the
+manual-only restricted resources. Keep this file and
+`tests/validate_open_resource_policy.py` updated whenever the default resource
+policy changes.
+
 ## Recommended Layout
 
 Use one project-controlled resource directory on the machine that will run the
@@ -45,7 +52,9 @@ databases during Snakemake execution.
 
 ## Open RNA-seq ORA/GSEA Feature Sets
 
-Download frozen open source files once. Example source endpoints:
+Download frozen open source files once. The recommended open source plan is
+recorded in `config/aspis_open_resource_sources.example.yaml`. Example source
+endpoints:
 
 ```bash
 mkdir -p /path/to/aspis_resources/source
@@ -272,9 +281,13 @@ config/aspis_g100_beas_full.yaml
 ```
 
 The BEAS full config already enables the GRCh38 BSgenome object needed for
-isoform-switch NT/AA sequence extraction. ORA/GSEA and miRNA target enrichment
-remain disabled until the prepared open feature-set and target TSVs exist and
-their paths are pasted into the config.
+isoform-switch NT/AA sequence extraction. The default open-resource decision is
+recorded in `config/aspis_open_resource_sources.example.yaml`: prepare GO
+GAF/OBO and Reactome for RNA-seq enrichment, add only reviewed open/user-owned
+GMTs when needed, and configure miRNA targets only from reviewed open or
+project-owned local exports. ORA/GSEA and miRNA target enrichment remain
+disabled until the prepared feature-set and target TSVs exist and their paths
+are pasted into the config.
 
 Then rerun:
 

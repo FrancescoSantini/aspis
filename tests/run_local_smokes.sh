@@ -61,6 +61,8 @@ if [[ "$MODE" == "run" ]]; then
   python3 tests/validate_branch_design_contract.py
   echo "==> project preflight input contract"
   python3 tests/validate_project_preflight_contract.py
+  echo "==> open resource source policy"
+  python3 tests/validate_open_resource_policy.py
   echo "==> core smoke output contracts"
   python3 tests/validate_smoke_contract_outputs.py
   echo "==> isoform-switch ready contract smoke"

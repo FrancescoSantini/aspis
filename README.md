@@ -215,10 +215,13 @@ Main settings to check before running:
 
 Feature-set ORA/GSEA resources and miRNA target resources are documented in
 `docs/feature_set_resources.md` and `docs/resource_preparation.md`, with tiny
-parser/report examples under `examples/resources/`. Real analyses should use
-the preparation scripts to convert frozen open-license GO, Reactome, open GMT,
-and miRNA-target exports into ASPIS-ready TSVs. Without configured resources,
-enrichment and target panels are explicitly marked as not configured.
+parser/report examples under `examples/resources/`. The allowed default source
+policy is recorded in `config/aspis_open_resource_sources.example.yaml`: GO and
+Reactome are the recommended open RNA-seq sources, reviewed open/user-owned GMTs
+are optional, and miRNA target tables must be explicit reviewed local exports.
+Real analyses should use the preparation scripts to convert frozen resources
+into ASPIS-ready TSVs. Without configured resources, enrichment and target
+panels are explicitly marked as not configured.
 
 Operational planning notes:
 
