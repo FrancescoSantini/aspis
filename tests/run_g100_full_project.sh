@@ -56,11 +56,31 @@ FORCE_ARGS=()
 case "$FORCE_MODE" in
   none)
     ;;
+  reports)
+    FORCE_ARGS+=(
+      --forcerun
+      run_isoform_switch
+      render_isoform_switch_report
+      render_rnaseq_biotype_summary
+      render_rnaseq_biological_warnings
+      render_rnaseq_differential_plots
+      render_rnaseq_differential_enrichment
+      render_rnaseq_differential_summaries
+      render_rnaseq_differential_report_index
+      render_smallrna_report_plots
+      render_smallrna_report_summaries
+      render_smallrna_report_index
+      build_branch_provenance_bundle
+      render_branch_report_index
+      render_project_report_index
+      render_run_dashboard
+    )
+    ;;
   all)
     FORCE_ARGS+=(--forceall)
     ;;
   *)
-    echo "Unsupported FORCE_MODE=$FORCE_MODE; use FORCE_MODE=none or FORCE_MODE=all" >&2
+    echo "Unsupported FORCE_MODE=$FORCE_MODE; use FORCE_MODE=none, FORCE_MODE=reports, or FORCE_MODE=all" >&2
     exit 2
     ;;
 esac
