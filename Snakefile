@@ -6262,6 +6262,7 @@ rule render_rnaseq_differential_summaries_item:
         enrichment_done=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/reports/enrichment/items/{level}/{contrast_id}/enrichment.done"
     output:
         manifest=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/reports/summaries/items/{level}/{contrast_id}/summaries_manifest.tsv",
+        html=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/reports/{level}/{contrast_id}/summary.html",
         done=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/reports/summaries/items/{level}/{contrast_id}/summaries.done"
     params:
         top_n=RNASEQ_DIFFERENTIAL_REPORT_TOP_N
