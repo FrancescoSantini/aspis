@@ -203,16 +203,19 @@ Completed hardening slice:
   from a table-heavy index to an event overview page. It summarizes contrast
   status, event class counts, top candidate switches, source tables, plot PDF,
   and event-level diagram/FASTA links before the full coding/noncoding tables.
+- The run-level dashboard now has project cards above the branch inventory.
+  Each project card shows assay/status badges plus direct links to integrated
+  project reports, RNA-seq differential/enrichment/isoform-switch outputs,
+  smallRNA differential target/integration outputs, major QC pages, and
+  technical PDFs.
 
 Remaining code tasks:
 
-- Redesign the run-level dashboard as the primary entry point:
-  - project cards grouped by project;
-  - assay badges for RNA-seq and smallRNA;
-  - branch status summaries;
-  - direct links to the most useful biological reports;
-  - direct links to technical PDFs;
-  - explicit missing/blocked optional-layer statuses.
+- Continue refining the run-level dashboard as the primary entry point:
+  - project cards, assay badges, direct biological links, QC links, technical
+    PDF links, and missing/not-present statuses are now present;
+  - remaining work is mainly visual hierarchy, filtering/search for larger
+    runs, and a compact status strip for optional advanced layers.
 - Add a project-level report when RNA-seq and smallRNA share the same project:
   - keep refining the integrated overview page for the biological experiment;
   - RNA-seq, smallRNA, and integration sections are present, but need better

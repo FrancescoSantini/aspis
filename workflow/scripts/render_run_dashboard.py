@@ -58,6 +58,11 @@ def optional_link(path: Path, label: str, base_dir: Path) -> str:
     return f'<span class="status muted">{html.escape(label)}: not present</span>'
 
 
+def status_span(status: str) -> str:
+    value = status or "unknown"
+    return f'<span class="status {html.escape(value)}">{html.escape(value)}</span>'
+
+
 def count_rows(path: Path) -> int:
     rows = read_table(path)
     return len(rows)
@@ -79,8 +84,9 @@ def branch_resources(assay: str, project: str, branch_dir: Path, base_dir: Path)
                 optional_link(base / "quantification/biotypes/biotype_summary.html", "biotypes", base_dir),
                 optional_link(base / "quantification/sample_qc/sample_qc_manifest.tsv", "sample QC", base_dir),
                 optional_link(base / "differential/reports/index.html", "differential report", base_dir),
+                optional_link(base / "differential/reports/enrichment/index.html", "GO/Reactome overview", base_dir),
                 optional_link(base / "differential/reports/technical_report.pdf", "technical PDF", base_dir),
-                optional_link(base / "differential/isoform_switch/report/index.html", "isoform switch", base_dir),
+                optional_link(base / "differential/isoform_switch/report/index.html", "isoform-switch overview", base_dir),
                 optional_link(base / "biological_warnings/warnings.html", "warnings", base_dir),
                 optional_link(base / "provenance/provenance_manifest.tsv", "provenance", base_dir),
             ]
@@ -92,12 +98,57 @@ def branch_resources(assay: str, project: str, branch_dir: Path, base_dir: Path)
                 optional_link(small / "preprocess/multiqc/multiqc_report.html", "post-trim MultiQC", base_dir),
                 optional_link(small / "length_qc/length_distribution.svg", "length QC", base_dir),
                 optional_link(small / "differential/reports/index.html", "differential report", base_dir),
+                optional_link(small / "differential/reports/targets/index.html", "target/integration overview", base_dir),
                 optional_link(small / "differential/reports/technical_report.pdf", "technical PDF", base_dir),
                 optional_link(small / "biological_warnings/warnings.html", "warnings", base_dir),
                 optional_link(base / "provenance/provenance_manifest.tsv", "provenance", base_dir),
             ]
         )
     return resources
+
+
+def project_card(project: str, plan_rows: list[dict[str, str]], branch_dir: Path, base_dir: Path) -> str:
+    rows = [row for row in plan_rows if row.get("project", "") == project]
+    badges = []
+    for row in sorted(rows, key=lambda item: item.get("assay", "")):
+        assay = row.get("assay", "")
+        status = row.get("status", "")
+        badges.append(f'<span class="badge {html.escape(status or "unknown")}">{html.escape(assay)} {html.escape(status or "unknown")}</span>')
+    rnaseq = branch_dir / "rnaseq" / project
+    smallrna = branch_dir / "smallrna" / project
+    project_report = base_dir / "projects" / project / "index.html"
+    core_links = [
+        link_if_exists(project_report, "integrated project report", base_dir),
+        optional_link(rnaseq / "differential/reports/index.html", "RNA-seq differential", base_dir),
+        optional_link(rnaseq / "differential/reports/enrichment/index.html", "RNA-seq GO/Reactome", base_dir),
+        optional_link(rnaseq / "differential/isoform_switch/report/index.html", "isoform-switch overview", base_dir),
+        optional_link(smallrna / "smallrna/differential/reports/index.html", "smallRNA differential", base_dir),
+        optional_link(smallrna / "smallrna/differential/reports/targets/index.html", "miRNA targets/integration", base_dir),
+    ]
+    qc_links = [
+        optional_link(rnaseq / "multiqc/multiqc_report.html", "RNA-seq raw MultiQC", base_dir),
+        optional_link(rnaseq / "preprocess/multiqc/multiqc_report.html", "RNA-seq post-trim MultiQC", base_dir),
+        optional_link(rnaseq / "alignment/qc/multiqc/multiqc_report.html", "RNA-seq alignment MultiQC", base_dir),
+        optional_link(smallrna / "multiqc/multiqc_report.html", "smallRNA raw MultiQC", base_dir),
+        optional_link(smallrna / "smallrna/preprocess/multiqc/multiqc_report.html", "smallRNA post-trim MultiQC", base_dir),
+        optional_link(smallrna / "smallrna/length_qc/length_distribution.svg", "smallRNA length QC", base_dir),
+    ]
+    pdf_links = [
+        optional_link(rnaseq / "differential/reports/technical_report.pdf", "RNA-seq technical PDF", base_dir),
+        optional_link(smallrna / "smallrna/differential/reports/technical_report.pdf", "smallRNA technical PDF", base_dir),
+    ]
+    notes = "; ".join(row.get("reason", "") for row in rows if row.get("reason", ""))
+    notes_html = f'<p class="muted">{html.escape(notes)}</p>' if notes else ""
+    return (
+        '<article class="project-card">'
+        f"<h3>{html.escape(project)}</h3>"
+        f'<div class="badges">{"".join(badges)}</div>'
+        f'<p class="card-links"><strong>Biology:</strong> {" | ".join(core_links)}</p>'
+        f'<p class="card-links"><strong>QC:</strong> {" | ".join(qc_links)}</p>'
+        f'<p class="card-links"><strong>PDF:</strong> {" | ".join(pdf_links)}</p>'
+        f"{notes_html}"
+        "</article>"
+    )
 
 
 def render(args: argparse.Namespace) -> None:
@@ -137,6 +188,7 @@ def render(args: argparse.Namespace) -> None:
         )
 
     projects = sorted({row.get("project", "") for row in plan_rows if row.get("project", "")})
+    project_cards = "".join(project_card(project, plan_rows, branch_dir, base_dir) for project in projects)
     project_table_rows = []
     for project in projects:
         project_rows = [row for row in plan_rows if row.get("project", "") == project]
@@ -186,6 +238,16 @@ def render(args: argparse.Namespace) -> None:
     .status.failed {{ color: #cf222e; }}
     .status.muted {{ color: #57606a; font-weight: 400; }}
     .resources {{ margin: 1rem 0; }}
+    .project-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap: 1rem; margin: 1rem 0 1.5rem; }}
+    .project-card {{ border: 1px solid #d0d7de; border-radius: 6px; padding: 1rem; }}
+    .project-card h3 {{ margin: 0 0 0.5rem; }}
+    .badges {{ display: flex; flex-wrap: wrap; gap: 0.4rem; margin-bottom: 0.75rem; }}
+    .badge {{ border: 1px solid #d0d7de; border-radius: 999px; padding: 0.18rem 0.55rem; font-size: 0.88rem; font-weight: 700; }}
+    .badge.ready {{ background: #dafbe1; color: #1a7f37; }}
+    .badge.blocked {{ background: #fff8c5; color: #9a6700; }}
+    .badge.failed {{ background: #ffebe9; color: #cf222e; }}
+    .card-links {{ line-height: 1.55; margin: 0.55rem 0; }}
+    .muted {{ color: #57606a; }}
   </style>
 </head>
 <body>
@@ -207,6 +269,7 @@ def render(args: argparse.Namespace) -> None:
   </section>
   <h2>Projects</h2>
   <p class="note">Project pages join assay branches that share a project identifier, so matched RNA-seq and smallRNA analyses can be reviewed together.</p>
+  <div class="project-grid">{project_cards}</div>
   <table>
     <thead>
       <tr><th>project report</th><th>ready assays</th><th>planned branches</th><th>ready branches</th><th>notes</th></tr>
