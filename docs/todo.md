@@ -4,7 +4,7 @@ This is the canonical ASPIS backlog. Older TODO-style notes have been merged
 here so that implementation priorities, validation blockers, and cleanup work
 are tracked in one place.
 
-Last updated: 2026-06-08.
+Last updated: 2026-06-09.
 
 ## How To Read This Backlog
 
@@ -39,14 +39,16 @@ where configured, and top-level run dashboards.
 This is not yet a production-complete release. The real runs exposed the next
 blockers:
 
-- ORA/GSEA and miRNA target enrichment now have open/reviewed resource
-  preparation helpers, but at least one resource-backed validation run still
-  needs final biological review.
+- ORA/GSEA and miRNA target enrichment have open/reviewed resource preparation
+  helpers and have passed a first BEAS_2B resource-backed validation run.
+  Remaining enrichment work is now report polish, mapping-threshold QA, and
+  additional cohort validation rather than basic resource plumbing.
 - The report graph is too nested: run index, branch reports, differential
   reports, isoform-switch pages, smallRNA pages, and tables are all reachable,
   but the navigation is not yet biologist-friendly.
-- RNA-seq and smallRNA branches for the same project are not yet summarized
-  together in a biologically useful miRNA-mRNA comparison layer.
+- RNA-seq and smallRNA branches for the same project now have a first integrated
+  project contrast matrix. The broader report graph still needs polish for
+  larger studies and easier biological navigation.
 - Technical PDF reports now use a vector-text ReportLab renderer and prefer
   source plot PDFs/SVGs over raster previews. The regenerated real-run PDFs
   still need visual QA after the environment update.
@@ -58,12 +60,17 @@ blockers:
 The sections below are ordered by implementation dependency and practical
 validation value. Earlier sections should be completed before later polish work.
 
-## P0 - Open Resource Bundles For ORA/GSEA And Target Analysis
+## Validated - Open Resource Bundles For ORA/GSEA And Target Analysis
 
 Reason for priority: enrichment, target enrichment, miRNA-mRNA integration, and
 some report interpretation are biologically incomplete until real resources are
 configured. Placeholder statuses are useful for honesty, but not enough for a
 production demonstration.
+
+Status: closed as a P0 blocker after the BEAS_2B G100 full validation with
+configured GO/Reactome feature sets and reviewed/project-owned miRNA target
+resources. Residual work remains tracked under report information architecture,
+technical PDF QA, and the full real-data validation matrix.
 
 Policy:
 
@@ -136,36 +143,14 @@ Completed hardening slice:
   `insufficient_mapping`, `no_significant_features`, `no_significant_terms`,
   and `ok` outcomes. Missing resources therefore remain visible as status
   panels instead of being confused with successful null biological results.
+- BEAS_2B full validation exercised the configured resources end to end:
+  RNA-seq gene/transcript ORA and ranked enrichment completed with GO/Reactome
+  resources, smallRNA target enrichment and target-gene feature-set enrichment
+  completed with the reviewed target table, and the integrated project report
+  now exposes gene, transcript, miRNA, GO/Reactome, target, and integration
+  links on one contrast matrix.
 
-Remaining code tasks:
-
-- After at least one real resource bundle is prepared, add configurable warnings
-  or failures for low-but-nonzero mapping rates. The current preflight blocks
-  zero-overlap resources and metadata inconsistencies, but practical warning
-  thresholds should be based on observed real resource distributions.
-- Audit the technical PDF aggregation after a real resource-backed run to confirm
-  these enrichment status panels and resource summaries are rendered with the
-  same clarity already present in the TSV/HTML report layers.
-
-Operator/data validation tasks:
-
-- Freeze selected open RNA-seq feature-set sources, run the feature-set
-  preparation helper, inspect `unmapped_features.tsv`, `resource_summary.tsv`,
-  and the identifier maps, then paste the generated config fragment into the
-  chosen validation config. Do not commit large prepared payloads unless they
-  are intentionally tiny and redistributable.
-- Freeze a reviewed open or project-owned miRNA-target export, run
-  `tests/prepare_g100_smallrna_targets.sh`, inspect unmapped target and miRNA
-  diagnostics, then paste the generated config fragment into the chosen
-  validation config.
-- Run RNA-seq ORA/GSEA on a real validation cohort with gene and transcript
-  DESeq2 results.
-- Run smallRNA miRNA target enrichment and target-gene feature-set enrichment on
-  a real validation cohort once a valid target table is configured.
-- Review the generated enrichment and target-enrichment reports to confirm that
-  configured resources produce non-placeholder panels and honest status rows.
-
-Acceptance criteria:
+Closed acceptance evidence:
 
 - A user can prepare an open resource bundle offline, point a config at it, and
   obtain non-placeholder ORA/GSEA panels.
@@ -389,6 +374,10 @@ Remaining code tasks:
   status, and review notes.
 - Add a lightweight validator for completed validation-matrix rows so future
   claims have the required provenance fields.
+- Add configurable warnings or failures for low-but-nonzero resource mapping
+  rates once more real resource distributions are observed. Current preflight
+  blocks zero-overlap resources and metadata inconsistencies; practical warning
+  thresholds should be calibrated from validation runs rather than guessed.
 
 Operator/data validation tasks:
 
