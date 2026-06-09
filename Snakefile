@@ -6333,6 +6333,7 @@ rule render_rnaseq_differential_report_index:
         dtu=rnaseq_dtu_report_inputs
     output:
         html=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/reports/index.html",
+        enrichment_overview=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/reports/enrichment/index.html",
         asset_manifest=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/reports/asset_manifest.tsv",
         technical_pdf=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/reports/technical_report.pdf",
         technical_done=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/reports/technical_report.done",
@@ -6400,6 +6401,7 @@ rule render_rnaseq_differential_report_index:
           --plots-manifest {input.plots_manifest:q} \
           --enrichment-manifest {input.enrichment_manifest:q} \
           --summary-manifest {input.summary_manifest:q} \
+          --enrichment-overview {output.enrichment_overview:q} \
           --asset-manifest {output.asset_manifest:q} \
           --output {output.html:q} \
           --done {output.done:q} \

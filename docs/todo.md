@@ -197,6 +197,12 @@ Completed hardening slice:
   later run that tries to reuse the same namespace with a different config fails
   early, preventing accidental overwrites such as resource-backed ORA/GSEA
   reports being regenerated with a non-resource config.
+- RNA-seq differential report rendering now creates a tracked
+  `differential/reports/enrichment/index.html` overview. It groups gene and
+  transcript contrasts, exposes ORA and ranked feature-set plots directly, links
+  back to the contrast summary/table artifacts, and links from the differential
+  report index. This addresses the first real-run usability issue where
+  GO/Reactome dotplots existed but were hidden several pages deep.
 
 Remaining code tasks:
 
@@ -215,8 +221,10 @@ Remaining code tasks:
   - report status matrix by assay and workflow layer.
 - Reduce nested navigation:
   - branch reports should be detailed maps, not mandatory intermediate stops;
-  - differential report pages should link directly to contrast summaries,
-    plots, enrichment, isoform-switch reports, and source TSVs;
+  - differential report pages should continue gaining direct overview pages for
+    high-value layers. RNA-seq enrichment now has its first overview page; the
+    same pattern is still needed for smallRNA target enrichment, miRNA-mRNA
+    integration, isoform-switch events, and QC summaries;
   - event-level isoform-switch pages should stay reachable from the
     isoform-switch index and the project page, not hidden several pages deep.
 - Add breadcrumbs and consistent titles to all report pages:

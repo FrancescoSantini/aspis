@@ -111,6 +111,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--isoform-switch-plots-pdf", default="", help="Optional isoform-switch multi-page plot PDF")
     parser.add_argument("--dtu-plan", default="", help="Optional DTU/splicing plan TSV")
     parser.add_argument("--dtu-method-manifest", default="", help="Optional DTU/splicing method manifest TSV")
+    parser.add_argument(
+        "--enrichment-overview",
+        default="",
+        help="Optional output HTML page summarizing all RNA-seq ORA/GSEA plots",
+    )
     parser.add_argument("--asset-manifest", required=True, help="Report asset inventory TSV")
     parser.add_argument("--output", required=True, help="Report index HTML")
     parser.add_argument("--done", required=True, help="Completion sentinel")
@@ -518,9 +523,122 @@ def render_table(rows: list[dict[str, str]], output: Path) -> str:
     return "\n".join(body)
 
 
+def plot_panel(row: dict[str, str], plot_column: str, table_column: str, title: str, overview: Path) -> str:
+    plot_path = row.get(plot_column, "")
+    table_path = row.get(table_column, "")
+    links = link_list(
+        [
+            ("plot", plot_path),
+            ("table", table_path),
+            ("summary", row.get("summary_html", "")),
+        ],
+        overview,
+    )
+    if plot_path and Path(plot_path).exists():
+        image = (
+            f'<a href="{html.escape(relative_link(plot_path, overview))}">'
+            f'<img src="{html.escape(relative_link(plot_path, overview))}" '
+            f'alt="{html.escape(title)}" loading="lazy"></a>'
+        )
+    else:
+        image = '<div class="empty">No plot artifact is available for this contrast.</div>'
+    return (
+        '<div class="plot-panel">'
+        f"<h4>{html.escape(title)}</h4>"
+        f"{image}"
+        f'<div class="links">{links}</div>'
+        "</div>"
+    )
+
+
+def render_enrichment_overview(rows: list[dict[str, str]], overview: Path) -> None:
+    overview.parent.mkdir(parents=True, exist_ok=True)
+    cards = []
+    for row in rows:
+        status = row.get("status", "unknown")
+        contrast = row.get("contrast_id", "")
+        level = row.get("level", "")
+        reason = row.get("reason", "")
+        cards.append(
+            '<section class="card">'
+            '<div class="card-head">'
+            f'<div><span class="level">{html.escape(level)}</span>'
+            f'<h3><code>{html.escape(contrast)}</code></h3></div>'
+            f'<span class="status {status_class(status)}">{html.escape(status)}</span>'
+            "</div>"
+            '<div class="metrics">'
+            f'<span>resources <strong>{html.escape(row.get("n_feature_set_resources", ""))}</strong></span>'
+            f'<span>ORA terms <strong>{html.escape(row.get("n_feature_set_terms", ""))}</strong></span>'
+            f'<span>ranked terms <strong>{html.escape(row.get("n_ranked_feature_set_terms", ""))}</strong></span>'
+            "</div>"
+            f'<p class="reason">{html.escape(reason) if reason else "Feature-set resources were evaluated for this contrast."}</p>'
+            '<div class="plots">'
+            + plot_panel(row, "feature_set_plot", "feature_set_results", "ORA / over-representation", overview)
+            + plot_panel(
+                row,
+                "ranked_feature_set_plot",
+                "ranked_feature_set_results",
+                "Ranked feature-set enrichment",
+                overview,
+            )
+            + "</div>"
+            "</section>"
+        )
+    body = "\n".join(cards) or '<p class="empty">No enrichment contrasts were available.</p>'
+    ok = sum(1 for row in rows if row.get("status") == "ok")
+    not_configured = sum(1 for row in rows if row.get("status") == "not_configured")
+    blocked = sum(1 for row in rows if row.get("status") == "blocked")
+    failed = sum(1 for row in rows if row.get("status") == "failed")
+    overview.write_text(
+        f"""<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>RNA-seq GO/Reactome enrichment overview</title>
+  <style>
+    body {{ font-family: system-ui, -apple-system, Segoe UI, sans-serif; margin: 24px; max-width: 1440px; color: #24292f; }}
+    h1 {{ font-size: 28px; margin-bottom: 8px; }}
+    h3 {{ margin: 0.2rem 0 0; font-size: 1rem; }}
+    h4 {{ margin: 0 0 0.5rem; }}
+    code {{ font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }}
+    a {{ color: #0969da; text-decoration: none; }}
+    a:hover {{ text-decoration: underline; }}
+    .note {{ background: #f6f8fa; border-left: 4px solid #57606a; margin: 12px 0 18px; padding: 10px 12px; }}
+    .counts {{ color: #57606a; margin-bottom: 18px; }}
+    .card {{ border: 1px solid #d0d7de; border-radius: 6px; margin: 18px 0; padding: 16px; }}
+    .card-head {{ display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; }}
+    .level {{ color: #57606a; font-size: 0.85rem; font-weight: 700; text-transform: uppercase; }}
+    .status {{ font-weight: 700; }}
+    .status.ok {{ color: #1a7f37; }}
+    .status.blocked {{ color: #9a6700; }}
+    .status.failed {{ color: #cf222e; }}
+    .status.unknown {{ color: #57606a; }}
+    .metrics {{ display: flex; flex-wrap: wrap; gap: 0.75rem; margin: 0.8rem 0; }}
+    .metrics span {{ background: #f6f8fa; border: 1px solid #d0d7de; border-radius: 999px; padding: 0.25rem 0.65rem; }}
+    .reason {{ color: #57606a; }}
+    .plots {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap: 1rem; }}
+    .plot-panel {{ border: 1px solid #d0d7de; border-radius: 6px; padding: 12px; }}
+    .plot-panel img {{ display: block; width: 100%; max-height: 520px; object-fit: contain; border: 1px solid #d0d7de; background: white; }}
+    .links {{ margin-top: 0.5rem; font-size: 0.92rem; }}
+    .empty {{ color: #57606a; background: #f6f8fa; padding: 1rem; border: 1px dashed #d0d7de; }}
+  </style>
+</head>
+<body>
+  <h1>RNA-seq GO/Reactome enrichment overview</h1>
+  <p class="note">This page collects ORA and ranked feature-set enrichment plots across gene and transcript contrasts. ORA panels summarize significant-feature overlap with configured resources; ranked panels use all tested features ordered by the differential statistic.</p>
+  <div class="counts">contrasts: {len(rows)}; ok: {ok}; not configured: {not_configured}; blocked: {blocked}; failed: {failed}; <a href="../index.html">back to differential index</a></div>
+  {body}
+</body>
+</html>
+""",
+        encoding="utf-8",
+    )
+
+
 def render_html(
     rows: list[dict[str, str]],
     output: Path,
+    enrichment_overview: str = "",
     biotype_html: str = "",
     warnings_html: str = "",
     isoform_switch_html: str = "",
@@ -555,6 +673,10 @@ def render_html(
         dtu_method_manifest,
     )
     dtu_summary = render_dtu_summary(dtu_plan_rows or [], dtu_method_rows or [], output)
+    enrichment_overview_link = file_link("GO/Reactome enrichment overview", enrichment_overview, output)
+    enrichment_overview_html = (
+        f"; {enrichment_overview_link}" if enrichment_overview_link else ""
+    )
     return f"""<!doctype html>
 <html lang="en">
 <head>
@@ -591,7 +713,7 @@ def render_html(
     <div><strong>Plots</strong><br>Volcano, MA, PCA, sample-distance, and heatmap outputs. Open full source files for detailed inspection.</div>
     <div><strong>Enrichment</strong><br>ORA/GSEA-style outputs appear only when feature-set resources are configured and enough features map.</div>
   </div>
-  <div class="counts">contrasts: {len(rows)}; ok: {ok}; blocked: {blocked}; failed: {failed}; <a href="technical_report.pdf">printable technical PDF</a></div>
+  <div class="counts">contrasts: {len(rows)}; ok: {ok}; blocked: {blocked}; failed: {failed}; <a href="technical_report.pdf">printable technical PDF</a>{enrichment_overview_html}</div>
   {project_resources}
   {dtu_summary}
   <table>
@@ -745,10 +867,13 @@ def main() -> int:
         row["_manifest_path"] = args.dtu_method_manifest
     output = Path(args.output)
     output.parent.mkdir(parents=True, exist_ok=True)
+    enrichment_overview = Path(args.enrichment_overview) if args.enrichment_overview else output.parent / "enrichment/index.html"
+    render_enrichment_overview(rows, enrichment_overview)
     output.write_text(
         render_html(
             rows,
             output,
+            str(enrichment_overview),
             args.biotype_html,
             args.warnings_html,
             args.isoform_switch_html,
@@ -765,6 +890,7 @@ def main() -> int:
         encoding="utf-8",
     )
     project_assets = [
+        ("enrichment", "project", "enrichment_overview", "html", str(enrichment_overview), "ok"),
         ("isoform_switch", "isoform_switch", "report_html", "html", args.isoform_switch_html, "ok"),
         ("isoform_switch", "isoform_switch", "candidate_table", "table", args.isoform_switch_candidates, "ok"),
         ("isoform_switch", "isoform_switch", "event_summary", "table", args.isoform_switch_events, "ok"),
