@@ -80,6 +80,7 @@ RUN_CONFIGFILE = os.environ.get("ASPIS_CONFIGFILE", "config/aspis.yaml")
 PREFLIGHT_REPORT = os.environ.get("ASPIS_PREFLIGHT_REPORT", "")
 BRANCH_DIR = PATHS.get("branch_dir", "results/branches")
 RUN_DASHBOARD = PATHS.get("run_dashboard", str(Path(BRANCH_DIR).parent / "index.html"))
+RUN_REPORT_INVENTORY = PATHS.get("report_inventory", str(Path(RUN_DASHBOARD).parent / "report_inventory.tsv"))
 RUN_DASHBOARD_DONE = PATHS.get("run_dashboard_done", str(Path(RUN_DASHBOARD).with_suffix(".done")))
 PROJECT_REPORT_DIR = PATHS.get("project_report_dir", str(Path(BRANCH_DIR).parent / "projects"))
 SRA_CACHE_DIR = PATHS.get("sra_cache_dir", "cache/sra")
@@ -2170,6 +2171,7 @@ rule render_run_dashboard:
         run_dashboard_inputs
     output:
         html=RUN_DASHBOARD,
+        report_inventory=RUN_REPORT_INVENTORY,
         done=RUN_DASHBOARD_DONE
     params:
         analysis_plan=ANALYSIS_PLAN,
@@ -2188,6 +2190,7 @@ rule render_run_dashboard:
           --environment-report {params.environment_report:q} \
           --execution-report {params.execution_report:q} \
           --branch-dir {params.branch_dir:q} \
+          --report-inventory {output.report_inventory:q} \
           --output {output.html:q} \
           --done {output.done:q} \
           > {log:q} 2>&1

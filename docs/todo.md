@@ -208,6 +208,10 @@ Completed hardening slice:
   project reports, RNA-seq differential/enrichment/isoform-switch outputs,
   smallRNA differential target/integration outputs, major QC pages, and
   technical PDFs.
+- The run-level dashboard now writes `report_inventory.tsv`, a typed map of
+  project, branch, QC, differential, enrichment, isoform-switch, target,
+  warning, PDF, table, and manifest report artifacts. This gives packaging and
+  QA scripts a stable report graph without scraping nested HTML pages.
 
 Remaining code tasks:
 
@@ -239,17 +243,12 @@ Remaining code tasks:
   - assay;
   - analysis layer;
   - contrast when applicable.
-- Convert the current scattered report links into a typed report inventory:
-  - `report_type`;
-  - `project`;
-  - `assay`;
-  - `contrast_id`;
-  - `status`;
-  - `html`;
-  - `pdf`;
-  - `summary_tsv`;
-  - `primary_tables`;
-  - `source_manifests`.
+- Continue refining the typed report inventory:
+  - the first run-level `report_inventory.tsv` exists with report type,
+    project, assay, contrast, status, HTML, PDF, summary TSV, primary table,
+    and source-manifest paths;
+  - remaining work is to add per-contrast report rows and use the inventory in
+    bundle packaging and QA validators.
 - Separate human summaries from machine manifests:
   - short human tables in HTML/PDF;
   - complete manifests linked as source data;

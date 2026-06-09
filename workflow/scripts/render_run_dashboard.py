@@ -12,6 +12,19 @@ from pathlib import Path
 
 
 REQUIRED_PLAN_COLUMNS = {"assay", "project", "status", "reason"}
+REPORT_INVENTORY_COLUMNS = [
+    "report_type",
+    "report_label",
+    "project",
+    "assay",
+    "contrast_id",
+    "status",
+    "html",
+    "pdf",
+    "summary_tsv",
+    "primary_tables",
+    "source_manifests",
+]
 
 
 def parse_args() -> argparse.Namespace:
@@ -21,6 +34,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--environment-report", required=True, help="Environment report TSV")
     parser.add_argument("--execution-report", required=True, help="Execution report TSV")
     parser.add_argument("--branch-dir", required=True, help="Branch results directory")
+    parser.add_argument("--report-inventory", default="", help="Optional output typed report inventory TSV")
     parser.add_argument("--output", required=True, help="Output dashboard HTML")
     parser.add_argument("--done", required=True, help="Completion sentinel")
     return parser.parse_args()
@@ -66,6 +80,234 @@ def status_span(status: str) -> str:
 def count_rows(path: Path) -> int:
     rows = read_table(path)
     return len(rows)
+
+
+def path_text(path: Path) -> str:
+    return path.as_posix()
+
+
+def join_paths(paths: list[Path]) -> str:
+    return ";".join(path_text(path) for path in paths)
+
+
+def inventory_status(paths: list[Path], expected: bool = True) -> str:
+    if any(path.exists() for path in paths):
+        return "ok"
+    return "missing" if expected else "not_present"
+
+
+def inventory_row(
+    *,
+    report_type: str,
+    label: str,
+    project: str,
+    assay: str = "",
+    contrast_id: str = "",
+    html_path: Path | None = None,
+    pdf_path: Path | None = None,
+    summary_paths: list[Path] | None = None,
+    primary_paths: list[Path] | None = None,
+    manifest_paths: list[Path] | None = None,
+    expected: bool = True,
+) -> dict[str, str]:
+    summary_paths = summary_paths or []
+    primary_paths = primary_paths or []
+    manifest_paths = manifest_paths or []
+    status_paths = [path for path in [html_path, pdf_path] if path is not None] + summary_paths + primary_paths + manifest_paths
+    return {
+        "report_type": report_type,
+        "report_label": label,
+        "project": project,
+        "assay": assay,
+        "contrast_id": contrast_id,
+        "status": inventory_status(status_paths, expected),
+        "html": path_text(html_path) if html_path else "",
+        "pdf": path_text(pdf_path) if pdf_path else "",
+        "summary_tsv": join_paths(summary_paths),
+        "primary_tables": join_paths(primary_paths),
+        "source_manifests": join_paths(manifest_paths),
+    }
+
+
+def build_report_inventory(projects: list[str], plan_rows: list[dict[str, str]], branch_dir: Path, base_dir: Path) -> list[dict[str, str]]:
+    rows: list[dict[str, str]] = []
+    for project in projects:
+        rows.append(
+            inventory_row(
+                report_type="project",
+                label="integrated project report",
+                project=project,
+                html_path=base_dir / "projects" / project / "index.html",
+                manifest_paths=[],
+            )
+        )
+    for plan in sorted(plan_rows, key=lambda item: (item.get("project", ""), item.get("assay", ""))):
+        assay = plan.get("assay", "")
+        project = plan.get("project", "")
+        expected = plan.get("status", "") == "ready"
+        base = branch_dir / assay / project
+        rows.append(
+            inventory_row(
+                report_type="branch",
+                label="branch report",
+                project=project,
+                assay=assay,
+                html_path=base / "report/index.html",
+                summary_paths=[base / "samples.tsv", base / "design.tsv"],
+                manifest_paths=[base / "materialized_manifest.tsv"],
+                expected=expected,
+            )
+        )
+        rows.append(
+            inventory_row(
+                report_type="qc",
+                label="raw MultiQC",
+                project=project,
+                assay=assay,
+                html_path=base / "multiqc/multiqc_report.html",
+                manifest_paths=[base / "fastqc/fastqc_manifest.tsv"],
+                expected=expected,
+            )
+        )
+        if assay == "rnaseq":
+            rows.extend(
+                [
+                    inventory_row(
+                        report_type="qc",
+                        label="post-trim MultiQC",
+                        project=project,
+                        assay=assay,
+                        html_path=base / "preprocess/multiqc/multiqc_report.html",
+                        manifest_paths=[base / "preprocess/preprocess_manifest.tsv"],
+                        expected=expected,
+                    ),
+                    inventory_row(
+                        report_type="qc",
+                        label="alignment MultiQC",
+                        project=project,
+                        assay=assay,
+                        html_path=base / "alignment/qc/multiqc/multiqc_report.html",
+                        summary_paths=[base / "alignment/qc/alignment_qc_summary.tsv"],
+                        manifest_paths=[base / "alignment/aligned_samples.tsv"],
+                        expected=expected,
+                    ),
+                    inventory_row(
+                        report_type="differential",
+                        label="RNA-seq differential report",
+                        project=project,
+                        assay=assay,
+                        html_path=base / "differential/reports/index.html",
+                        pdf_path=base / "differential/reports/technical_report.pdf",
+                        summary_paths=[base / "differential/reports/summaries/summary_manifest.tsv"],
+                        manifest_paths=[base / "differential/reports/report_plan.tsv"],
+                        expected=expected,
+                    ),
+                    inventory_row(
+                        report_type="enrichment",
+                        label="RNA-seq GO/Reactome overview",
+                        project=project,
+                        assay=assay,
+                        html_path=base / "differential/reports/enrichment/index.html",
+                        summary_paths=[base / "differential/reports/enrichment/enrichment_manifest.tsv"],
+                        manifest_paths=[base / "differential/reports/feature_set_resources.tsv"],
+                        expected=expected,
+                    ),
+                    inventory_row(
+                        report_type="isoform_switch",
+                        label="isoform-switch overview",
+                        project=project,
+                        assay=assay,
+                        html_path=base / "differential/isoform_switch/report/index.html",
+                        pdf_path=base / "differential/isoform_switch/report/switch_plots.pdf",
+                        summary_paths=[base / "differential/isoform_switch/report/switch_event_summary.tsv"],
+                        primary_paths=[
+                            base / "differential/isoform_switch/report/switch_candidates.tsv",
+                            base / "differential/isoform_switch/report/coding_switch_summary.tsv",
+                            base / "differential/isoform_switch/report/ncrna_switch_interpretation.tsv",
+                        ],
+                        manifest_paths=[base / "differential/isoform_switch/isoform_switch_manifest.tsv"],
+                        expected=False,
+                    ),
+                    inventory_row(
+                        report_type="warnings",
+                        label="RNA-seq biological warnings",
+                        project=project,
+                        assay=assay,
+                        html_path=base / "biological_warnings/warnings.html",
+                        summary_paths=[base / "biological_warnings/warnings.tsv"],
+                        manifest_paths=[base / "biological_warnings/warnings_manifest.tsv"],
+                        expected=False,
+                    ),
+                ]
+            )
+        elif assay == "smallrna":
+            small = base / "smallrna"
+            rows.extend(
+                [
+                    inventory_row(
+                        report_type="qc",
+                        label="post-trim MultiQC",
+                        project=project,
+                        assay=assay,
+                        html_path=small / "preprocess/multiqc/multiqc_report.html",
+                        manifest_paths=[small / "preprocess/preprocess_manifest.tsv"],
+                        expected=expected,
+                    ),
+                    inventory_row(
+                        report_type="qc",
+                        label="length/read-fate QC",
+                        project=project,
+                        assay=assay,
+                        html_path=small / "length_qc/length_distribution.svg",
+                        summary_paths=[small / "length_qc/length_stage_summary.tsv", small / "length_qc/arm_summary.tsv"],
+                        manifest_paths=[small / "length_qc/length_qc_manifest.tsv"],
+                        expected=False,
+                    ),
+                    inventory_row(
+                        report_type="differential",
+                        label="smallRNA differential report",
+                        project=project,
+                        assay=assay,
+                        html_path=small / "differential/reports/index.html",
+                        pdf_path=small / "differential/reports/technical_report.pdf",
+                        summary_paths=[small / "differential/reports/summaries/summary_manifest.tsv"],
+                        manifest_paths=[small / "differential/reports/report_plan.tsv"],
+                        expected=expected,
+                    ),
+                    inventory_row(
+                        report_type="targets",
+                        label="smallRNA target/integration overview",
+                        project=project,
+                        assay=assay,
+                        html_path=small / "differential/reports/targets/index.html",
+                        summary_paths=[
+                            small / "differential/target_enrichment/target_manifest.tsv",
+                            small / "differential/mirna_mrna_integration/mirna_mrna_manifest.tsv",
+                        ],
+                        manifest_paths=[small / "differential/reports/asset_manifest.tsv"],
+                        expected=False,
+                    ),
+                    inventory_row(
+                        report_type="warnings",
+                        label="smallRNA biological warnings",
+                        project=project,
+                        assay=assay,
+                        html_path=small / "biological_warnings/warnings.html",
+                        summary_paths=[small / "biological_warnings/warnings.tsv"],
+                        manifest_paths=[small / "biological_warnings/warnings_manifest.tsv"],
+                        expected=False,
+                    ),
+                ]
+            )
+    return rows
+
+
+def write_report_inventory(path: Path, rows: list[dict[str, str]]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=REPORT_INVENTORY_COLUMNS, delimiter="\t", lineterminator="\n")
+        writer.writeheader()
+        writer.writerows(rows)
 
 
 def branch_resources(assay: str, project: str, branch_dir: Path, base_dir: Path) -> list[str]:
@@ -188,6 +430,9 @@ def render(args: argparse.Namespace) -> None:
         )
 
     projects = sorted({row.get("project", "") for row in plan_rows if row.get("project", "")})
+    report_inventory = build_report_inventory(projects, plan_rows, branch_dir, base_dir)
+    report_inventory_path = Path(args.report_inventory) if args.report_inventory else output.parent / "report_inventory.tsv"
+    write_report_inventory(report_inventory_path, report_inventory)
     project_cards = "".join(project_card(project, plan_rows, branch_dir, base_dir) for project in projects)
     project_table_rows = []
     for project in projects:
@@ -209,8 +454,10 @@ def render(args: argparse.Namespace) -> None:
     exec_link = link_if_exists(Path(args.execution_report), "execution report", base_dir)
     manifest_link = link_if_exists(Path(args.manifest), "materialized manifest", base_dir)
     plan_link = link_if_exists(Path(args.analysis_plan), "analysis plan", base_dir)
+    inventory_link = link_if_exists(report_inventory_path, "report inventory", base_dir)
     env_failed = sum(1 for row in environment_rows if row.get("status") not in {"ok", "optional_missing", "not_checked", ""})
     execution_failed = sum(1 for row in execution_rows if row.get("status") not in {"ok", "warning", ""})
+    inventory_counts = Counter(row.get("report_type", "unknown") for row in report_inventory if row.get("status") == "ok")
 
     content = f"""<!doctype html>
 <html lang=\"en\">
@@ -258,7 +505,7 @@ def render(args: argparse.Namespace) -> None:
     <div><strong>Branch reports</strong><br>Open assay/project pages for QC, alignment, quantification, differential results, warnings, and reports.</div>
     <div><strong>Environment</strong><br>Confirm required tools and optional advanced tools before trusting expensive outputs.</div>
   </div>
-  <div class=\"resources\">{manifest_link} | {plan_link} | {env_link} | {exec_link}</div>
+  <div class=\"resources\">{manifest_link} | {plan_link} | {env_link} | {exec_link} | {inventory_link}</div>
   <section class=\"metrics\">
     <div class=\"metric\"><strong>planned branches</strong><span>{len(plan_rows)}</span></div>
     <div class=\"metric\"><strong>ready branches</strong><span>{len(ready)}</span></div>
@@ -266,7 +513,9 @@ def render(args: argparse.Namespace) -> None:
     <div class=\"metric\"><strong>smallRNA branches</strong><span>{assay_counts.get('smallrna', 0)}</span></div>
     <div class=\"metric\"><strong>environment issues</strong><span>{env_failed}</span></div>
     <div class=\"metric\"><strong>execution issues</strong><span>{execution_failed}</span></div>
+    <div class=\"metric\"><strong>available reports</strong><span>{sum(inventory_counts.values())}</span></div>
   </section>
+  <p class="note">The report inventory is a typed TSV map of the generated report graph. It is intended for auditing, packaging, and programmatic checks without opening every nested HTML page.</p>
   <h2>Projects</h2>
   <p class="note">Project pages join assay branches that share a project identifier, so matched RNA-seq and smallRNA analyses can be reviewed together.</p>
   <div class="project-grid">{project_cards}</div>
