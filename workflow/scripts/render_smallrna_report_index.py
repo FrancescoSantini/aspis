@@ -88,6 +88,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--summary-manifest", required=True, help="SmallRNA summary manifest TSV")
     parser.add_argument("--warnings-html", default="", help="Optional biological warnings HTML")
     parser.add_argument("--asset-manifest", required=True, help="Report asset inventory TSV")
+    parser.add_argument("--target-overview", default="", help="Optional target/integration overview HTML")
     parser.add_argument("--output", required=True, help="Output index HTML")
     parser.add_argument("--done", required=True, help="Completion sentinel")
     return parser.parse_args()
@@ -190,7 +191,11 @@ ASSET_FIELDS = [
 ]
 
 
-def write_asset_manifest(path: Path, rows: list[dict[str, str]]) -> None:
+def write_asset_manifest(
+    path: Path,
+    rows: list[dict[str, str]],
+    project_assets: list[dict[str, str]] | None = None,
+) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", newline="", encoding="utf-8") as handle:
         writer = csv.DictWriter(handle, fieldnames=ASSET_COLUMNS, delimiter="\t", lineterminator="\n")
@@ -214,9 +219,195 @@ def write_asset_manifest(path: Path, rows: list[dict[str, str]]) -> None:
                         "exists": str(Path(asset_path).exists()).lower(),
                     }
                 )
+        for asset in project_assets or []:
+            writer.writerow(
+                {
+                    "project": asset.get("project", ""),
+                    "assay": "smallrna",
+                    "level": asset.get("level", "mirna"),
+                    "contrast_id": asset.get("contrast_id", "project"),
+                    "status": asset.get("status", "ok"),
+                    "asset_group": asset.get("asset_group", ""),
+                    "asset_label": asset.get("asset_label", ""),
+                    "asset_kind": asset.get("asset_kind", "html"),
+                    "path": asset.get("path", ""),
+                    "exists": str(Path(asset.get("path", "")).exists()).lower(),
+                }
+            )
 
 
-def render_index(path: Path, rows: list[dict[str, str]], warnings_html: str = "") -> None:
+def render_plot_panel(
+    row: dict[str, str],
+    *,
+    title: str,
+    plot_column: str,
+    table_column: str,
+    base_dir: Path,
+    extra_columns: tuple[str, ...] = (),
+) -> str:
+    plot_path = row.get(plot_column, "")
+    table_path = row.get(table_column, "")
+    links = [link(table_path, "table", base_dir), link(plot_path, "plot", base_dir)]
+    links.extend(link(row.get(column, ""), column.replace("_", " "), base_dir) for column in extra_columns)
+    links_text = " ".join(item for item in links if item)
+    plot_block = '<div class="empty-plot">No plot artifact</div>'
+    if plot_path and Path(plot_path).exists():
+        href = html.escape(local_href(plot_path, base_dir))
+        if Path(plot_path).suffix.lower() == ".pdf":
+            plot_block = (
+                f'<object data="{href}" type="application/pdf" aria-label="{html.escape(title)}">'
+                f'<a href="{href}">open plot PDF</a>'
+                "</object>"
+            )
+        else:
+            plot_block = f'<a href="{href}"><img src="{href}" loading="lazy" alt="{html.escape(title)}"></a>'
+    asset_links = links_text or '<span class="muted">no linked artifacts</span>'
+    return (
+        f'<article class="plot-card"><h4>{html.escape(title)}</h4>'
+        f"{plot_block}"
+        f'<p class="asset-links">{asset_links}</p>'
+        "</article>"
+    )
+
+
+def render_target_overview(path: Path, rows: list[dict[str, str]]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    projects = sorted({row.get("project", "") for row in rows if row.get("project", "")})
+    title_project = ", ".join(projects) if projects else "smallRNA"
+    cards = []
+    for row in sorted(rows, key=lambda item: (item.get("project", ""), item.get("contrast_id", ""))):
+        status = row.get("status", "unknown") or "unknown"
+        metrics = [
+            ("miRNAs", row.get("n_features", "")),
+            ("significant", row.get("n_significant", "")),
+            ("targets", row.get("n_targets", "")),
+            ("target terms", row.get("n_enrichment_terms", "")),
+            ("inverse pairs", row.get("n_mirna_mrna_inverse_pairs", "")),
+            ("target-set terms", row.get("n_target_feature_set_terms", "")),
+            ("inverse target-set terms", row.get("n_mirna_mrna_target_feature_set_terms", "")),
+            ("ranked inverse terms", row.get("n_mirna_mrna_target_ranked_feature_set_terms", "")),
+        ]
+        metric_html = "".join(
+            f'<span><strong>{html.escape(label)}</strong>{html.escape(value or "0")}</span>'
+            for label, value in metrics
+        )
+        plot_cards = [
+            render_plot_panel(
+                row,
+                title="Target over-representation",
+                plot_column="target_enrichment_plot",
+                table_column="target_enrichment",
+                base_dir=path.parent,
+                extra_columns=("target_universe", "target_summary", "target_source_summary"),
+            ),
+            render_plot_panel(
+                row,
+                title="Target-gene feature sets",
+                plot_column="target_feature_set_plot",
+                table_column="target_feature_set_results",
+                base_dir=path.parent,
+                extra_columns=("target_feature_set_universe",),
+            ),
+            render_plot_panel(
+                row,
+                title="miRNA-mRNA integration",
+                plot_column="mirna_mrna_plot",
+                table_column="mirna_mrna_pairs",
+                base_dir=path.parent,
+                extra_columns=("mirna_mrna_summary", "mirna_mrna_target_mode_summary"),
+            ),
+            render_plot_panel(
+                row,
+                title="Inverse target feature sets",
+                plot_column="mirna_mrna_target_feature_set_plot",
+                table_column="mirna_mrna_target_feature_set_results",
+                base_dir=path.parent,
+                extra_columns=("mirna_mrna_target_feature_set_universe",),
+            ),
+            render_plot_panel(
+                row,
+                title="Ranked inverse target feature sets",
+                plot_column="mirna_mrna_target_ranked_feature_set_plot",
+                table_column="mirna_mrna_target_ranked_feature_set_results",
+                base_dir=path.parent,
+                extra_columns=("mirna_mrna_target_ranked_feature_set_universe",),
+            ),
+            render_plot_panel(
+                row,
+                title="miRNA identifier feature sets",
+                plot_column="mirna_feature_set_plot",
+                table_column="mirna_feature_set_results",
+                base_dir=path.parent,
+                extra_columns=("mirna_feature_set_universe",),
+            ),
+            render_plot_panel(
+                row,
+                title="Ranked miRNA identifier feature sets",
+                plot_column="mirna_ranked_feature_set_plot",
+                table_column="mirna_ranked_feature_set_results",
+                base_dir=path.parent,
+                extra_columns=("mirna_ranked_feature_set_universe",),
+            ),
+        ]
+        cards.append(
+            '<section class="contrast-card">'
+            f'<div class="contrast-head"><div><h2>{html.escape(row.get("contrast_id", ""))}</h2>'
+            f'<p>{html.escape(row.get("project", ""))} / {html.escape(row.get("level", "mirna"))}</p></div>'
+            f'<span class="status {html.escape(status)}">{html.escape(status)}</span></div>'
+            f'<p class="reason">{html.escape(row.get("reason", ""))}</p>'
+            f'<div class="metrics">{metric_html}</div>'
+            f'<div class="plot-grid">{"".join(plot_cards)}</div>'
+            "</section>"
+        )
+    content = f"""<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>{html.escape(title_project)} smallRNA target and integration overview</title>
+  <style>
+    body {{ font-family: system-ui, -apple-system, Segoe UI, sans-serif; margin: 24px; max-width: 1360px; color: #24292f; }}
+    h1 {{ margin-bottom: 0.25rem; }}
+    h2 {{ margin: 0; font-size: 1.15rem; }}
+    h4 {{ margin: 0 0 0.5rem; }}
+    a {{ color: #0969da; text-decoration: none; }}
+    a:hover {{ text-decoration: underline; }}
+    .note {{ background: #f6f8fa; border-left: 4px solid #57606a; margin: 12px 0 18px; padding: 10px 12px; }}
+    .contrast-card {{ border: 1px solid #d0d7de; border-radius: 6px; margin: 1rem 0; padding: 1rem; }}
+    .contrast-head {{ align-items: flex-start; display: flex; gap: 1rem; justify-content: space-between; }}
+    .contrast-head p, .reason {{ color: #57606a; margin: 0.25rem 0 0; }}
+    .metrics {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 0.5rem; margin: 0.85rem 0; }}
+    .metrics span {{ border: 1px solid #d0d7de; border-radius: 6px; padding: 0.55rem; }}
+    .metrics strong {{ color: #57606a; display: block; font-size: 0.78rem; font-weight: 600; }}
+    .plot-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 0.85rem; }}
+    .plot-card {{ border: 1px solid #d0d7de; border-radius: 6px; padding: 0.75rem; }}
+    .plot-card img, .plot-card object {{ background: white; border: 1px solid #d0d7de; display: block; height: 360px; max-width: 100%; object-fit: contain; width: 100%; }}
+    .empty-plot {{ align-items: center; background: #f6f8fa; border: 1px dashed #d0d7de; color: #57606a; display: flex; height: 160px; justify-content: center; }}
+    .asset-links {{ color: #57606a; font-size: 0.9rem; margin: 0.5rem 0 0; }}
+    .muted {{ color: #57606a; }}
+    .status {{ border-radius: 999px; font-weight: 700; padding: 0.2rem 0.55rem; }}
+    .status.ok {{ background: #dafbe1; color: #1a7f37; }}
+    .status.not_configured, .status.muted {{ background: #f6f8fa; color: #57606a; }}
+    .status.blocked {{ background: #fff8c5; color: #9a6700; }}
+    .status.failed {{ background: #ffebe9; color: #cf222e; }}
+  </style>
+</head>
+<body>
+  <p><a href="../index.html">back to smallRNA report index</a></p>
+  <h1>{html.escape(title_project)} smallRNA target and integration overview</h1>
+  <p class="note">This page pulls target enrichment, target-gene feature sets, miRNA-mRNA integration, and integrated target feature-set outputs into one contrast-level view. Empty panels mean the corresponding layer produced no plot artifact or was not configured for that contrast; the linked TSVs remain the source of truth.</p>
+  {''.join(cards)}
+</body>
+</html>
+"""
+    path.write_text(content, encoding="utf-8")
+
+
+def render_index(
+    path: Path,
+    rows: list[dict[str, str]],
+    warnings_html: str = "",
+    target_overview: str = "",
+) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     projects = sorted({row.get("project", "") for row in rows if row.get("project", "")})
     title_project = ", ".join(projects) if projects else "smallRNA"
@@ -331,6 +522,8 @@ def render_index(path: Path, rows: list[dict[str, str]], warnings_html: str = ""
     )
     warnings_link = link(warnings_html, "biological warnings", path.parent)
     warnings_block = f"<p>{warnings_link}</p>" if warnings_link else ""
+    target_overview_link = link(target_overview, "target/integration overview", path.parent)
+    target_overview_block = f"; {target_overview_link}" if target_overview_link else ""
     content = f"""<!doctype html>
 <html lang="en">
 <head>
@@ -356,7 +549,7 @@ def render_index(path: Path, rows: list[dict[str, str]], warnings_html: str = ""
     <div><strong>SmallRNA QC</strong><br>Length distributions, arm/isomiR summaries, contaminant depletion, and residual-genome read fate.</div>
     <div><strong>Targets and integration</strong><br>Target enrichment and miRNA-mRNA outputs appear only when target resources and matched RNA-seq data are configured.</div>
   </div>
-  <p><a href="technical_report.pdf">printable technical PDF</a></p>
+  <p><a href="technical_report.pdf">printable technical PDF</a>{target_overview_block}</p>
   {warnings_block}
   <table><thead><tr>{header}</tr></thead><tbody>{''.join(body_rows)}</tbody></table>
 </body>
@@ -384,8 +577,25 @@ def main() -> int:
     rows = read_table(Path(args.summary_manifest), SUMMARY_COLUMNS)
     if not rows:
         raise ValueError("smallRNA summary manifest has no rows")
-    render_index(Path(args.output), rows, args.warnings_html)
-    write_asset_manifest(Path(args.asset_manifest), rows)
+    output = Path(args.output)
+    target_overview = Path(args.target_overview) if args.target_overview else output.parent / "targets/index.html"
+    render_target_overview(target_overview, rows)
+    render_index(output, rows, args.warnings_html, str(target_overview))
+    projects = sorted({row.get("project", "") for row in rows if row.get("project", "")})
+    write_asset_manifest(
+        Path(args.asset_manifest),
+        rows,
+        project_assets=[
+            {
+                "project": ",".join(projects),
+                "asset_group": "targets",
+                "asset_label": "target_integration_overview",
+                "asset_kind": "html",
+                "path": str(target_overview),
+                "status": "ok",
+            }
+        ],
+    )
     write_done(Path(args.done), rows)
     return 0
 

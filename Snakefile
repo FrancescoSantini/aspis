@@ -1867,6 +1867,7 @@ def planned_branch_targets(wildcards):
                             f"{BRANCH_DIR}/{assay}/{project}/smallrna/differential/reports/summaries/summary_manifest.tsv",
                             f"{BRANCH_DIR}/{assay}/{project}/smallrna/differential/reports/summaries/summary.done",
                             f"{BRANCH_DIR}/{assay}/{project}/smallrna/differential/reports/index.html",
+                            f"{BRANCH_DIR}/{assay}/{project}/smallrna/differential/reports/targets/index.html",
                             f"{BRANCH_DIR}/{assay}/{project}/smallrna/differential/reports/asset_manifest.tsv",
                             f"{BRANCH_DIR}/{assay}/{project}/smallrna/differential/reports/technical_report.pdf",
                             f"{BRANCH_DIR}/{assay}/{project}/smallrna/differential/reports/technical_report.done",
@@ -2125,6 +2126,7 @@ def branch_report_inputs(wildcards):
             inputs.extend(
                 [
                     f"{small}/differential/reports/index.html",
+                    f"{small}/differential/reports/targets/index.html",
                     f"{small}/differential/reports/technical_report.pdf",
                     f"{small}/differential/reports/technical_report.done",
                     f"{small}/differential/reports/report_index.done",
@@ -4242,6 +4244,7 @@ rule render_smallrna_report_index:
         )
     output:
         index=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/differential/reports/index.html",
+        target_overview=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/differential/reports/targets/index.html",
         asset_manifest=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/differential/reports/asset_manifest.tsv",
         technical_pdf=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/differential/reports/technical_report.pdf",
         technical_done=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/differential/reports/technical_report.done",
@@ -4260,6 +4263,7 @@ rule render_smallrna_report_index:
         mkdir -p logs/branches/smallrna
         python3 workflow/scripts/render_smallrna_report_index.py \
           --summary-manifest {input.manifest:q} \
+          --target-overview {output.target_overview:q} \
           --asset-manifest {output.asset_manifest:q} \
           --output {output.index:q} \
           --done {output.done:q} \

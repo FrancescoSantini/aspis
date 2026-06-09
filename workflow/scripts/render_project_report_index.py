@@ -308,12 +308,14 @@ def render(args: argparse.Namespace) -> None:
     {section("smallRNA", "miRNA preprocessing, length QC, miRNA quantification, miRNA differential expression, target enrichment, and reports.", [
         link(smallrna_base / "report/index.html", "smallRNA branch report", base_dir),
         link(smallrna_base / "smallrna/differential/reports/index.html", "smallRNA differential report", base_dir),
+        link(smallrna_base / "smallrna/differential/reports/targets/index.html", "target and integration overview", base_dir),
         link(smallrna_base / "smallrna/differential/reports/technical_report.pdf", "smallRNA technical PDF", base_dir),
         table_link(smallrna_base / "smallrna/differential/mirna_deseq2/deseq2_manifest.tsv", "miRNA DESeq2 manifest", base_dir),
         table_link(smallrna_base / "smallrna/differential/target_enrichment/target_manifest.tsv", "miRNA target enrichment", base_dir),
         table_link(smallrna_base / "smallrna/differential/mirna_feature_sets/mirna_feature_set_manifest.tsv", "miRNA feature sets", base_dir),
     ])}
     {section("Matched miRNA-mRNA", "Integration layers that require both RNA-seq and smallRNA branches from the same project.", [
+        link(smallrna_base / "smallrna/differential/reports/targets/index.html", "target and integration overview", base_dir),
         table_link(smallrna_base / "smallrna/differential/mirna_mrna_integration/mirna_mrna_manifest.tsv", "miRNA-mRNA integration manifest", base_dir),
         table_link(smallrna_base / "smallrna/differential/mirna_mrna_target_feature_sets/target_feature_set_manifest.tsv", "inverse target feature sets", base_dir),
         table_link(rnaseq_base / "differential/reports/summaries/summary_manifest.tsv", "RNA-seq summary manifest", base_dir),

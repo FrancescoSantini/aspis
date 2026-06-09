@@ -193,6 +193,12 @@ Completed hardening slice:
   miRNA DE, RNA-seq GO/Reactome, and miRNA target/integration links side by
   side. This is the first cross-assay navigation layer; it does not yet replace
   the deeper assay-specific reports.
+- SmallRNA differential reports now create a tracked
+  `smallrna/differential/reports/targets/index.html` overview. It groups each
+  miRNA contrast with target enrichment, target-gene feature sets,
+  miRNA-mRNA integration, inverse target feature sets, ranked inverse feature
+  sets, and miRNA-ID feature-set outputs, and is linked from both the smallRNA
+  report index and the integrated project report.
 
 Remaining code tasks:
 
@@ -215,8 +221,8 @@ Remaining code tasks:
   - branch reports should be detailed maps, not mandatory intermediate stops;
   - differential report pages should continue gaining direct overview pages for
     high-value layers. RNA-seq enrichment now has its first overview page; the
-    same pattern is still needed for smallRNA target enrichment, miRNA-mRNA
-    integration, isoform-switch events, and QC summaries;
+    smallRNA target/integration overview now has its first page; the same
+    pattern is still needed for isoform-switch events and QC summaries;
   - event-level isoform-switch pages should stay reachable from the
     isoform-switch index and the project page, not hidden several pages deep.
 - Add breadcrumbs and consistent titles to all report pages:
