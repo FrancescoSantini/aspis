@@ -53,6 +53,13 @@ def table_link(path: Path, label: str, base_dir: Path, expected: bool = False) -
     return f"{link(path, label, base_dir, expected)}{html.escape(suffix)}"
 
 
+def optional_row_link(row: dict[str, str], column: str, label: str, base_dir: Path) -> str:
+    path_text = row.get(column, "")
+    if not path_text:
+        return ""
+    return link(Path(path_text), label, base_dir)
+
+
 def status_counts(rows: list[dict[str, str]], key: str = "status") -> str:
     counts = Counter(row.get(key, "unknown") or "unknown" for row in rows)
     return ", ".join(f"{name}:{count}" for name, count in sorted(counts.items())) or "none"
@@ -106,6 +113,129 @@ def summary_table(base_dir: Path, rnaseq_base: Path, smallrna_base: Path) -> str
     )
 
 
+def summary_cell(row: dict[str, str] | None, base_dir: Path, feature_label: str = "features") -> str:
+    if not row:
+        return '<span class="status muted">not present</span>'
+    status = row.get("status", "unknown") or "unknown"
+    features = row.get("n_features", row.get("n_mirnas", ""))
+    significant = row.get("n_significant", "")
+    up = row.get("n_up", "")
+    down = row.get("n_down", "")
+    summary = optional_row_link(row, "summary_html", "summary", base_dir)
+    result = optional_row_link(row, "results", "results", base_dir)
+    parts = [
+        f'<span class="status {html.escape(status)}">{html.escape(status)}</span>',
+        f"{html.escape(features)} {html.escape(feature_label)}" if features else "",
+        f"{html.escape(significant)} significant" if significant else "",
+        f"up {html.escape(up)} / down {html.escape(down)}" if up or down else "",
+        " ".join(part for part in [summary, result] if part),
+    ]
+    reason = row.get("reason", "")
+    if reason:
+        parts.append(f'<span class="status muted">{html.escape(reason)}</span>')
+    return "<br>".join(part for part in parts if part)
+
+
+def enrichment_cell(
+    gene_row: dict[str, str] | None,
+    transcript_row: dict[str, str] | None,
+    base_dir: Path,
+) -> str:
+    items = []
+    for label, row in [("gene", gene_row), ("transcript", transcript_row)]:
+        if not row:
+            continue
+        status = row.get("status", "")
+        terms = row.get("n_feature_set_terms", "")
+        ranked_terms = row.get("n_ranked_feature_set_terms", "")
+        links = [
+            optional_row_link(row, "feature_set_plot", "ORA plot", base_dir),
+            optional_row_link(row, "ranked_feature_set_plot", "ranked plot", base_dir),
+            optional_row_link(row, "feature_set_results", "ORA table", base_dir),
+            optional_row_link(row, "ranked_feature_set_results", "ranked table", base_dir),
+        ]
+        link_text = " ".join(link_text for link_text in links if link_text)
+        items.append(
+            f"<strong>{html.escape(label)}</strong>: "
+            f'<span class="status {html.escape(status or "unknown")}">{html.escape(status or "unknown")}</span>'
+            f" ({html.escape(terms)} ORA, {html.escape(ranked_terms)} ranked)"
+            + (f"<br>{link_text}" if link_text else "")
+        )
+    return "<hr>".join(items) if items else '<span class="status muted">not present</span>'
+
+
+def smallrna_target_cell(row: dict[str, str] | None, base_dir: Path) -> str:
+    if not row:
+        return '<span class="status muted">not present</span>'
+    metrics = [
+        f"{html.escape(row.get('n_targets', ''))} targets" if row.get("n_targets") else "",
+        f"{html.escape(row.get('n_enrichment_terms', ''))} target terms" if row.get("n_enrichment_terms") else "",
+        f"{html.escape(row.get('n_mirna_mrna_inverse_pairs', ''))} inverse pairs"
+        if row.get("n_mirna_mrna_inverse_pairs")
+        else "",
+        f"{html.escape(row.get('n_target_feature_set_terms', ''))} target-set terms"
+        if row.get("n_target_feature_set_terms")
+        else "",
+    ]
+    links = [
+        optional_row_link(row, "target_enrichment_plot", "target enrichment plot", base_dir),
+        optional_row_link(row, "target_enrichment", "target enrichment table", base_dir),
+        optional_row_link(row, "target_feature_set_plot", "target feature sets", base_dir),
+        optional_row_link(row, "mirna_mrna_pairs", "miRNA-mRNA pairs", base_dir),
+        optional_row_link(row, "mirna_mrna_plot", "integration plot", base_dir),
+    ]
+    return "<br>".join(part for part in [", ".join(item for item in metrics if item), " ".join(link for link in links if link)] if part)
+
+
+def contrast_matrix(
+    base_dir: Path,
+    rnaseq_summary: list[dict[str, str]],
+    smallrna_summary: list[dict[str, str]],
+    rnaseq_enrichment: list[dict[str, str]],
+) -> str:
+    rnaseq_by_key = {
+        (row.get("level", ""), row.get("contrast_id", "")): row
+        for row in rnaseq_summary
+    }
+    enrichment_by_key = {
+        (row.get("level", ""), row.get("contrast_id", "")): row
+        for row in rnaseq_enrichment
+    }
+    smallrna_by_contrast = {row.get("contrast_id", ""): row for row in smallrna_summary}
+    contrast_ids = sorted(
+        {
+            row.get("contrast_id", "")
+            for row in rnaseq_summary + smallrna_summary + rnaseq_enrichment
+            if row.get("contrast_id", "")
+        }
+    )
+    if not contrast_ids:
+        return '<p class="status muted">No gene, transcript, or miRNA contrasts are available yet.</p>'
+    body = []
+    for contrast_id in contrast_ids:
+        gene = rnaseq_by_key.get(("gene", contrast_id))
+        transcript = rnaseq_by_key.get(("transcript", contrast_id))
+        mirna = smallrna_by_contrast.get(contrast_id)
+        body.append(
+            "<tr>"
+            f"<td><code>{html.escape(contrast_id)}</code></td>"
+            f"<td>{summary_cell(gene, base_dir)}</td>"
+            f"<td>{summary_cell(transcript, base_dir)}</td>"
+            f"<td>{summary_cell(mirna, base_dir, 'miRNAs')}</td>"
+            f"<td>{enrichment_cell(enrichment_by_key.get(('gene', contrast_id)), enrichment_by_key.get(('transcript', contrast_id)), base_dir)}</td>"
+            f"<td>{smallrna_target_cell(mirna, base_dir)}</td>"
+            "</tr>"
+        )
+    return (
+        '<table class="contrast-matrix"><thead><tr>'
+        "<th>contrast</th><th>gene DE</th><th>transcript DE</th><th>miRNA DE</th>"
+        "<th>RNA-seq GO/Reactome</th><th>miRNA targets and integration</th>"
+        "</tr></thead><tbody>"
+        + "".join(body)
+        + "</tbody></table>"
+    )
+
+
 def render(args: argparse.Namespace) -> None:
     output = Path(args.output)
     output.parent.mkdir(parents=True, exist_ok=True)
@@ -117,6 +247,7 @@ def render(args: argparse.Namespace) -> None:
     smallrna_base = branch_dir / "smallrna" / args.project
 
     rnaseq_summary = read_table(rnaseq_base / "differential/reports/summaries/summary_manifest.tsv")
+    rnaseq_enrichment = read_table(rnaseq_base / "differential/reports/enrichment/enrichment_manifest.tsv")
     smallrna_summary = read_table(smallrna_base / "smallrna/differential/reports/summaries/summary_manifest.tsv")
     isoform_events = read_table(rnaseq_base / "differential/isoform_switch/report/switch_event_summary.tsv")
     mirna_integration = read_table(smallrna_base / "smallrna/differential/mirna_mrna_integration/mirna_mrna_manifest.tsv")
@@ -148,6 +279,9 @@ def render(args: argparse.Namespace) -> None:
     .status.not_configured, .status.muted {{ color: #57606a; font-weight: 400; }}
     .status.blocked, .status.missing {{ color: #9a6700; }}
     .status.failed {{ color: #cf222e; }}
+    .contrast-matrix td {{ min-width: 140px; }}
+    .contrast-matrix td:first-child {{ min-width: 220px; }}
+    hr {{ border: 0; border-top: 1px solid #d0d7de; margin: 0.55rem 0; }}
   </style>
 </head>
 <body>
@@ -165,6 +299,7 @@ def render(args: argparse.Namespace) -> None:
     {section("RNA-seq", "Gene, transcript, quantification, differential expression, enrichment, and isoform-switch outputs.", [
         link(rnaseq_base / "report/index.html", "RNA-seq branch report", base_dir),
         link(rnaseq_base / "differential/reports/index.html", "RNA-seq differential report", base_dir),
+        link(rnaseq_base / "differential/reports/enrichment/index.html", "GO/Reactome enrichment overview", base_dir),
         link(rnaseq_base / "differential/reports/technical_report.pdf", "RNA-seq technical PDF", base_dir),
         link(rnaseq_base / "differential/isoform_switch/report/index.html", "isoform-switch report", base_dir),
         table_link(rnaseq_base / "differential/reports/enrichment/enrichment_manifest.tsv", "RNA-seq ORA/GSEA manifest", base_dir),
@@ -185,8 +320,11 @@ def render(args: argparse.Namespace) -> None:
         table_link(smallrna_base / "smallrna/differential/reports/summaries/summary_manifest.tsv", "smallRNA summary manifest", base_dir),
     ])}
   </div>
-  <h2>Contrast Summary</h2>
-  <p class="section-note">This table is a compact cross-assay view. Open each assay report for full plots, full result tables, enrichment plots, and technical PDFs.</p>
+  <h2>Project Contrast Matrix</h2>
+  <p class="section-note">This matrix puts gene, transcript, and miRNA contrasts on the same row when assays share the same project and contrast labels. Use it as the biological navigation layer before opening assay-specific detail pages.</p>
+  {contrast_matrix(base_dir, rnaseq_summary, smallrna_summary, rnaseq_enrichment)}
+  <h2>Raw Contrast Summary</h2>
+  <p class="section-note">This lower table preserves the assay-specific summary rows used to build the matrix above.</p>
   {summary_table(base_dir, rnaseq_base, smallrna_base)}
 </body>
 </html>

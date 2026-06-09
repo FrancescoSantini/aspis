@@ -203,6 +203,11 @@ Completed hardening slice:
   back to the contrast summary/table artifacts, and links from the differential
   report index. This addresses the first real-run usability issue where
   GO/Reactome dotplots existed but were hidden several pages deep.
+- Integrated project reports now include a project contrast matrix when RNA-seq
+  and smallRNA share a project. Each contrast row places gene DE, transcript DE,
+  miRNA DE, RNA-seq GO/Reactome, and miRNA target/integration links side by
+  side. This is the first cross-assay navigation layer; it does not yet replace
+  the deeper assay-specific reports.
 
 Remaining code tasks:
 
@@ -214,10 +219,12 @@ Remaining code tasks:
   - direct links to technical PDFs;
   - explicit missing/blocked optional-layer statuses.
 - Add a project-level report when RNA-seq and smallRNA share the same project:
-  - one overview page for the biological experiment;
-  - RNA-seq, smallRNA, and integration sections;
+  - keep refining the integrated overview page for the biological experiment;
+  - RNA-seq, smallRNA, and integration sections are present, but need better
+    visual hierarchy and clearer status summaries;
   - sample/design summary for both assays;
-  - contrast inventory for both assays;
+  - contrast inventory now has a first gene/transcript/miRNA matrix, but should
+    gain filtering and clearer grouping for larger studies;
   - report status matrix by assay and workflow layer.
 - Reduce nested navigation:
   - branch reports should be detailed maps, not mandatory intermediate stops;
