@@ -320,7 +320,7 @@ def render_project_resources(
         (
             "Isoform Switch",
             [
-                ("isoform switch report", isoform_switch_html),
+                ("isoform switch overview", isoform_switch_html),
                 ("isoform switch candidates", isoform_switch_candidates),
                 ("isoform switch events", isoform_switch_events),
                 ("isoform switch ncRNA interpretation", isoform_switch_ncrna),

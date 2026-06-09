@@ -199,6 +199,10 @@ Completed hardening slice:
   miRNA-mRNA integration, inverse target feature sets, ranked inverse feature
   sets, and miRNA-ID feature-set outputs, and is linked from both the smallRNA
   report index and the integrated project report.
+- Isoform-switch reporting now promotes `differential/isoform_switch/report/index.html`
+  from a table-heavy index to an event overview page. It summarizes contrast
+  status, event class counts, top candidate switches, source tables, plot PDF,
+  and event-level diagram/FASTA links before the full coding/noncoding tables.
 
 Remaining code tasks:
 
@@ -221,8 +225,9 @@ Remaining code tasks:
   - branch reports should be detailed maps, not mandatory intermediate stops;
   - differential report pages should continue gaining direct overview pages for
     high-value layers. RNA-seq enrichment now has its first overview page; the
-    smallRNA target/integration overview now has its first page; the same
-    pattern is still needed for isoform-switch events and QC summaries;
+    smallRNA target/integration overview now has its first page; isoform-switch
+    now has an event overview; the same pattern is still needed for QC
+    summaries;
   - event-level isoform-switch pages should stay reachable from the
     isoform-switch index and the project page, not hidden several pages deep.
 - Add breadcrumbs and consistent titles to all report pages:

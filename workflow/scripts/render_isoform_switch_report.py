@@ -17,7 +17,7 @@ import os
 import re
 import shutil
 import subprocess
-from collections import defaultdict
+from collections import Counter, defaultdict
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, Optional
@@ -2690,6 +2690,117 @@ def run_external_tool_commands(
 def render_project_html(event_rows: list[dict[str, str]], coding_switch_rows: list[dict[str, str]], manifest_rows: list[dict[str, str]], output: Path) -> None:
     output.parent.mkdir(parents=True, exist_ok=True)
 
+    def status_badge(status: str) -> str:
+        value = status or "unknown"
+        return f'<span class="status {html.escape(value)}">{html.escape(value)}</span>'
+
+    def metric_card(label: str, value: object) -> str:
+        return f'<div class="metric"><strong>{html.escape(label)}</strong><span>{html.escape(str(value))}</span></div>'
+
+    def table_source_links() -> str:
+        links = [
+            file_link("candidate table", str(output.parent / "switch_candidates.tsv"), output),
+            file_link("event summary", str(output.parent / "switch_event_summary.tsv"), output),
+            file_link("coding switch summary", str(output.parent / "coding_switch_summary.tsv"), output),
+            file_link("ncRNA switch interpretation", str(output.parent / "ncrna_switch_interpretation.tsv"), output),
+            file_link("sequence summary", str(output.parent / "switch_sequence_summary.tsv"), output),
+            file_link("functional annotations", str(output.parent / "functional_annotation_summary.tsv"), output),
+            file_link("plot manifest", str(output.parent / "plot_manifest.tsv"), output),
+            file_link("plot PDF", str(output.parent / "switch_plots.pdf"), output),
+        ]
+        return " | ".join(link for link in links if link)
+
+    def event_sort_key(row: dict[str, str]) -> tuple[int, float, str]:
+        rank_text = row.get("switch_rank", "")
+        try:
+            rank = int(float(rank_text))
+        except (TypeError, ValueError):
+            rank = 999999
+        effect = abs(to_float(row.get("max_abs_dIF", "")) or 0.0)
+        return (rank, -effect, row.get("event_id", ""))
+
+    def top_event_cards(rows: list[dict[str, str]]) -> str:
+        cards = []
+        for row in sorted(rows, key=event_sort_key)[:12]:
+            links = " ".join(
+                link
+                for link in [
+                    file_link("event page", row.get("event_html", ""), output),
+                    file_link("diagram", row.get("plot_svg", ""), output),
+                    file_link("nt FASTA", row.get("event_nt_fasta", ""), output),
+                    file_link("aa FASTA", row.get("event_aa_fasta", ""), output),
+                ]
+                if link
+            )
+            cards.append(
+                '<article class="event-card">'
+                f'<h3>{file_link(row.get("event_id", "event"), row.get("event_html", ""), output)}</h3>'
+                f'<p><strong>{html.escape(row.get("gene_name") or row.get("gene_id", ""))}</strong> '
+                f'<code>{html.escape(row.get("gene_id", ""))}</code></p>'
+                f'<p>{html.escape(row.get("contrast_id", ""))}</p>'
+                f'<p>{status_badge(row.get("status", ""))} '
+                f'{html.escape(row.get("switch_biotype_class", ""))}; '
+                f'max abs dIF {html.escape(row.get("max_abs_dIF", ""))}; '
+                f'priority {html.escape(row.get("coding_priority_tier", ""))}</p>'
+                f'<p class="asset-links">{links}</p>'
+                "</article>"
+            )
+        if not cards:
+            return '<p class="muted">No event cards are available because no switch events passed the configured thresholds.</p>'
+        return '<div class="event-grid">' + "".join(cards) + "</div>"
+
+    def contrast_status_table() -> str:
+        events_by_contrast = Counter(row.get("contrast_id", "") for row in event_rows)
+        body = []
+        for row in sorted(manifest_rows, key=lambda item: item.get("contrast_id", "")):
+            contrast_id = row.get("contrast_id", "")
+            body.append(
+                "<tr>"
+                f"<td><code>{html.escape(contrast_id)}</code></td>"
+                f"<td>{status_badge(row.get('status', ''))}</td>"
+                f"<td>{html.escape(str(events_by_contrast.get(contrast_id, 0)))}</td>"
+                f"<td>{html.escape(row.get('reason', ''))}</td>"
+                f"<td>{file_link('detailed', row.get('detailed', ''), output)}</td>"
+                f"<td>{file_link('consequences', row.get('consequences', ''), output)}</td>"
+                "</tr>"
+            )
+        if not body:
+            return '<p class="muted">No isoform-switch manifest rows are available.</p>'
+        return (
+            "<table><thead><tr><th>contrast</th><th>status</th><th>rendered events</th>"
+            "<th>reason</th><th>detailed table</th><th>consequence table</th></tr></thead><tbody>"
+            + "".join(body)
+            + "</tbody></table>"
+        )
+
+    def overview_html() -> str:
+        class_counts = Counter(row.get("switch_biotype_class", "unknown") or "unknown" for row in event_rows)
+        status_counts = Counter(row.get("status", "unknown") or "unknown" for row in manifest_rows)
+        source_links = table_source_links()
+        metric_html = "".join(
+            [
+                metric_card("events", len(event_rows)),
+                metric_card("coding", class_counts.get("coding", 0)),
+                metric_card("noncoding/mixed", class_counts.get("noncoding", 0) + class_counts.get("mixed_coding_noncoding", 0)),
+                metric_card("ambiguous", sum(count for key, count in class_counts.items() if key not in {"coding", "noncoding", "mixed_coding_noncoding"})),
+                metric_card("contrasts ok", status_counts.get("ok", 0)),
+                metric_card("contrasts blocked/failed", status_counts.get("blocked", 0) + status_counts.get("failed", 0)),
+            ]
+        )
+        source_block = f'<p class="asset-links">{source_links}</p>' if source_links else ""
+        return (
+            '<section class="overview">'
+            '<h2>Isoform-Switch Overview</h2>'
+            '<p class="note">This overview is the first page to inspect. It summarizes which contrasts ran, how many candidate switch events were rendered, and which events have direct diagram and sequence links. The detailed tables below remain available for exhaustive review.</p>'
+            f'<div class="metrics">{metric_html}</div>'
+            f"{source_block}"
+            '<h2>Contrast Status</h2>'
+            f"{contrast_status_table()}"
+            '<h2>Top Candidate Events</h2>'
+            f"{top_event_cards(event_rows)}"
+            "</section>"
+        )
+
     def coding_priority_rows(rows: list[dict[str, str]]) -> str:
         body = []
         for row in rows:
@@ -2836,6 +2947,20 @@ def render_project_html(event_rows: list[dict[str, str]], coding_switch_rows: li
     a {{ color: #0969da; text-decoration: none; }}
     a:hover {{ text-decoration: underline; }}
     .note {{ background: #f6f8fa; border-left: 4px solid #57606a; margin: 12px 0 18px; padding: 10px 12px; }}
+    .metrics {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 0.75rem; margin: 1rem 0; }}
+    .metric {{ border: 1px solid #d0d7de; border-radius: 6px; padding: 0.75rem; }}
+    .metric strong {{ color: #57606a; display: block; font-size: 0.85rem; }}
+    .metric span {{ display: block; font-size: 1.25rem; font-weight: 700; margin-top: 0.25rem; }}
+    .event-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 0.85rem; }}
+    .event-card {{ border: 1px solid #d0d7de; border-radius: 6px; padding: 0.8rem; }}
+    .event-card h3 {{ margin: 0 0 0.35rem; font-size: 1rem; }}
+    .event-card p {{ margin: 0.25rem 0; }}
+    .asset-links {{ color: #57606a; font-size: 0.92rem; }}
+    .muted {{ color: #57606a; }}
+    .status {{ font-weight: 700; }}
+    .status.ok {{ color: #1a7f37; }}
+    .status.blocked {{ color: #9a6700; }}
+    .status.failed {{ color: #cf222e; }}
     table {{ display: block; overflow-x: auto; }}
   </style>
 </head>
@@ -2844,6 +2969,7 @@ def render_project_html(event_rows: list[dict[str, str]], coding_switch_rows: li
   <p>Events are ranked by absolute isoform fraction change and split into coding, noncoding/mixed, and ambiguous sections. Coding switches are additionally prioritized by predicted functional consequences. Noncoding switches are interpreted through transcript architecture rather than requiring ORF/domain evidence.</p>
   <p class="note">Use this page as an index of candidate events. The event links open per-gene pages with exon diagrams, switch-in/switch-out isoforms, coding or noncoding interpretation tables, optional functional annotations, and sequence extracts.</p>
   <p class="note">Isoform-switch calls are candidate transcript-usage changes. Prioritize events by effect size, replicate support, annotation quality, and biological plausibility; optional consequence annotation is supportive evidence, not a required condition for a valid switch.</p>
+  {overview_html()}
   {''.join(tables)}
 </body>
 </html>

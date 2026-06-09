@@ -301,7 +301,7 @@ def render(args: argparse.Namespace) -> None:
         link(rnaseq_base / "differential/reports/index.html", "RNA-seq differential report", base_dir),
         link(rnaseq_base / "differential/reports/enrichment/index.html", "GO/Reactome enrichment overview", base_dir),
         link(rnaseq_base / "differential/reports/technical_report.pdf", "RNA-seq technical PDF", base_dir),
-        link(rnaseq_base / "differential/isoform_switch/report/index.html", "isoform-switch report", base_dir),
+        link(rnaseq_base / "differential/isoform_switch/report/index.html", "isoform-switch overview", base_dir),
         table_link(rnaseq_base / "differential/reports/enrichment/enrichment_manifest.tsv", "RNA-seq ORA/GSEA manifest", base_dir),
         table_link(rnaseq_base / "alignment/strandedness/strandedness_report.tsv", "strandedness report", base_dir),
     ])}
