@@ -184,9 +184,12 @@ Completed hardening slice:
 - `tests/package_g100_review_bundle.sh` now creates a lightweight G100 review
   tarball with run dashboards, branch reports, differential reports, manifests,
   execution/preflight logs, and linked small files while excluding raw FASTQs,
-  BAM/SAM files, Bowtie/HISAT indexes, and transient files. The helper prints a
-  local download/extraction recipe that removes stale unpacked `results/<run_id>`
-  and `meta/<run_id>` folders before extraction.
+  BAM/SAM files, Bowtie/HISAT indexes, and transient files. It defaults to an
+  uncompressed `.tar` archive for G100 reliability, with explicit opt-in
+  `ASPIS_REVIEW_COMPRESSION=gzip` or `ASPIS_REVIEW_COMPRESSION=pigz` modes when
+  compression is acceptable. The helper prints a local download/extraction
+  recipe matching the created archive type and removes stale unpacked
+  `results/<run_id>` and `meta/<run_id>` folders before extraction.
 
 Remaining code tasks:
 

@@ -423,9 +423,20 @@ Package a lightweight review bundle after a G100 run:
 bash tests/package_g100_review_bundle.sh <run_id> <project>
 ```
 
-The helper prints a local `rsync` and extraction example. That example removes
-the stale unpacked `results/<run_id>` and `meta/<run_id>` folders before
-extracting, while preserving older tarballs for comparison.
+By default the helper writes an uncompressed `.tar` archive. This is larger
+than `.tar.gz`, but it avoids gzip subprocess failures that can happen on
+cluster login nodes or tightly managed jobs. If compression is acceptable for
+the current site, opt in explicitly:
+
+```bash
+ASPIS_REVIEW_COMPRESSION=gzip bash tests/package_g100_review_bundle.sh <run_id> <project>
+ASPIS_REVIEW_COMPRESSION=pigz ASPIS_REVIEW_PIGZ_THREADS=2 bash tests/package_g100_review_bundle.sh <run_id> <project>
+```
+
+The helper prints a matching local `rsync` and extraction example for the
+archive type it created. That example removes the stale unpacked
+`results/<run_id>` and `meta/<run_id>` folders before extracting, while
+preserving older archives for comparison.
 
 Rerun controls:
 

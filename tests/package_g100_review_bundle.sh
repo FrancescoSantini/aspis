@@ -20,7 +20,38 @@ if [[ ! -d "results/$RUN_ID" ]]; then
 fi
 
 mkdir -p "$OUTDIR"
-bundle="$OUTDIR/${RUN_ID}_${PROJECT}_review_${STAMP}.tar.gz"
+
+COMPRESSION="${ASPIS_REVIEW_COMPRESSION:-none}"
+case "$COMPRESSION" in
+  none)
+    bundle="$OUTDIR/${RUN_ID}_${PROJECT}_review_${STAMP}.tar"
+    tar_create=(tar -cf "$bundle")
+    tar_verify=(tar -tf "$bundle")
+    tar_extract_flag="-xf"
+    ;;
+  gzip)
+    bundle="$OUTDIR/${RUN_ID}_${PROJECT}_review_${STAMP}.tar.gz"
+    tar_create=(tar -I "gzip -1" -cf "$bundle")
+    tar_verify=(tar -tzf "$bundle")
+    tar_extract_flag="-xzf"
+    ;;
+  pigz)
+    if ! command -v pigz >/dev/null 2>&1; then
+      echo "ASPIS_REVIEW_COMPRESSION=pigz requested, but pigz is not available" >&2
+      exit 2
+    fi
+    PIGZ_THREADS="${ASPIS_REVIEW_PIGZ_THREADS:-2}"
+    bundle="$OUTDIR/${RUN_ID}_${PROJECT}_review_${STAMP}.tar.gz"
+    tar_create=(tar -I "pigz -1 -p $PIGZ_THREADS" -cf "$bundle")
+    tar_verify=(tar -tzf "$bundle")
+    tar_extract_flag="-xzf"
+    ;;
+  *)
+    echo "Unsupported ASPIS_REVIEW_COMPRESSION: $COMPRESSION" >&2
+    echo "Use one of: none, gzip, pigz" >&2
+    exit 2
+    ;;
+esac
 
 shopt -s nullglob
 paths=()
@@ -82,11 +113,12 @@ exclude_args=(
 printf '==> packaging review bundle: %s\n' "$bundle"
 printf '==> run_id: %s\n' "$RUN_ID"
 printf '==> project: %s\n' "$PROJECT"
+printf '==> compression: %s\n' "$COMPRESSION"
 printf '==> included roots:\n'
 printf '    %s\n' "${paths[@]}"
 
-tar -czf "$bundle" "${exclude_args[@]}" "${paths[@]}"
-tar -tzf "$bundle" >/dev/null
+"${tar_create[@]}" "${exclude_args[@]}" "${paths[@]}"
+"${tar_verify[@]}" >/dev/null
 ls -lh "$bundle"
 
 cat <<EOF
@@ -96,5 +128,5 @@ rm -rf "../aspis_g100_review/results/$RUN_ID" "../aspis_g100_review/meta/$RUN_ID
 rsync -avh --partial -e "ssh -o ServerAliveInterval=60 -o ServerAliveCountMax=10" \\
   "$REMOTE:$bundle" \\
   ../aspis_g100_review/
-tar -xzf "../aspis_g100_review/$(basename "$bundle")" -C ../aspis_g100_review
+tar $tar_extract_flag "../aspis_g100_review/$(basename "$bundle")" -C ../aspis_g100_review
 EOF
