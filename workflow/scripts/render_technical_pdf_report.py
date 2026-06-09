@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import tempfile
 from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
@@ -16,6 +17,7 @@ try:
     from reportlab.lib.styles import ParagraphStyle
     from reportlab.lib.units import mm
     from reportlab.lib.utils import ImageReader
+    from reportlab.platypus import Flowable
     from reportlab.platypus import (
         Image as PdfImage,
         PageBreak,
@@ -25,11 +27,24 @@ try:
         Table,
         TableStyle,
     )
+    from reportlab.graphics import renderPDF
 except ImportError as exc:  # pragma: no cover - only reached in incomplete envs.
     raise SystemExit(
         "ReportLab is required to render readable technical PDF reports. "
         "Update the ASPIS environment with envs/aspis-snakemake.yaml."
     ) from exc
+
+try:
+    from pypdf import PdfReader, PdfWriter, Transformation
+except ImportError:  # pragma: no cover - optional quality upgrade.
+    PdfReader = None  # type: ignore[assignment]
+    PdfWriter = None  # type: ignore[assignment]
+    Transformation = None  # type: ignore[assignment]
+
+try:
+    from svglib.svglib import svg2rlg
+except ImportError:  # pragma: no cover - optional SVG upgrade.
+    svg2rlg = None  # type: ignore[assignment]
 
 
 PAGE_WIDTH, PAGE_HEIGHT = A4
@@ -48,30 +63,35 @@ FAIL = colors.HexColor("#cf222e")
 
 PLOT_COLUMNS = [
     (
+        "volcano_pdf",
         "volcano_preview",
         "Volcano Plot",
         "Effect size is on the x-axis and statistical evidence is on the y-axis. "
         "Features far from the center and high on the plot are usually the most interpretable.",
     ),
     (
+        "ma_pdf",
         "ma_preview",
         "MA Plot",
         "This plot shows fold change against average expression. It helps separate systematic shifts "
         "from changes limited to low-abundance features.",
     ),
     (
+        "pca_pdf",
         "pca_preview",
         "PCA Plot",
         "This plot summarizes global sample similarity. Separation by condition is useful, but lack of "
         "clear separation is not automatically a failed analysis.",
     ),
     (
+        "sample_distance_pdf",
         "sample_distance_preview",
         "Sample Distance",
         "This heatmap shows sample-to-sample distances after transformation. Similar samples should "
         "cluster together when the design has a strong signal.",
     ),
     (
+        "heatmap_pdf",
         "heatmap_preview",
         "Expression Heatmap",
         "This heatmap shows selected variable or differential features across samples. It is useful for "
@@ -79,15 +99,18 @@ PLOT_COLUMNS = [
     ),
     (
         "target_enrichment_plot",
+        "target_enrichment_plot",
         "Target Enrichment Plot",
         "SmallRNA target enrichment summarizes biological terms associated with predicted or configured targets.",
     ),
     (
         "mirna_mrna_plot",
+        "mirna_mrna_plot",
         "miRNA-mRNA Integration Plot",
         "This panel summarizes matched miRNA and mRNA relationships when matched RNA-seq data and target resources are configured.",
     ),
     (
+        "smallrna_length_plot",
         "smallrna_length_plot",
         "SmallRNA Length Distribution",
         "This plot summarizes read-length classes after smallRNA preprocessing and mapping.",
@@ -450,12 +473,143 @@ def image_flowables(
     ]
 
 
+class VectorPdfFlowable(Flowable):
+    """Reserve a plot box and record where a source PDF should be merged."""
+
+    def __init__(self, path: Path, placements: list[dict[str, object]]) -> None:
+        super().__init__()
+        self.path = path
+        self.placements = placements
+        self.source_width = CONTENT_WIDTH
+        self.source_height = CONTENT_WIDTH * 0.72
+        if PdfReader is not None:
+            try:
+                page = PdfReader(str(path)).pages[0]
+                self.source_width = float(page.mediabox.width)
+                self.source_height = float(page.mediabox.height)
+            except Exception:
+                pass
+        self.width = CONTENT_WIDTH
+        self.height = CONTENT_WIDTH * 0.72
+
+    def wrap(self, availWidth, availHeight):  # noqa: N802 - ReportLab API.
+        max_width = min(CONTENT_WIDTH, availWidth)
+        max_height = min(availHeight, PAGE_HEIGHT - (2 * MARGIN) - FOOTER_HEIGHT - (42 * mm))
+        if max_height <= 0:
+            max_height = PAGE_HEIGHT - (2 * MARGIN) - FOOTER_HEIGHT - (42 * mm)
+        scale = min(max_width / self.source_width, max_height / self.source_height)
+        self.width = self.source_width * scale
+        self.height = self.source_height * scale
+        return self.width, self.height
+
+    def drawOn(self, canv, x, y, _sW=0):  # noqa: N802 - ReportLab API.
+        self.placements.append(
+            {
+                "page_index": canv.getPageNumber() - 1,
+                "path": self.path.as_posix(),
+                "x": float(x),
+                "y": float(y),
+                "width": float(self.width),
+                "height": float(self.height),
+            }
+        )
+        canv.saveState()
+        canv.setStrokeColor(BORDER)
+        canv.setLineWidth(0.35)
+        canv.rect(x, y, self.width, self.height)
+        canv.restoreState()
+
+
+class SvgFlowable(Flowable):
+    """Draw an SVG as ReportLab vector graphics when svglib is available."""
+
+    def __init__(self, path: Path) -> None:
+        super().__init__()
+        self.path = path
+        self.drawing = svg2rlg(str(path)) if svg2rlg is not None else None
+        self.source_width = float(getattr(self.drawing, "width", CONTENT_WIDTH) or CONTENT_WIDTH)
+        self.source_height = float(getattr(self.drawing, "height", CONTENT_WIDTH * 0.72) or (CONTENT_WIDTH * 0.72))
+        self.width = CONTENT_WIDTH
+        self.height = CONTENT_WIDTH * 0.72
+        self.scale = 1.0
+
+    def wrap(self, availWidth, availHeight):  # noqa: N802 - ReportLab API.
+        max_width = min(CONTENT_WIDTH, availWidth)
+        max_height = min(availHeight, PAGE_HEIGHT - (2 * MARGIN) - FOOTER_HEIGHT - (42 * mm))
+        if max_height <= 0:
+            max_height = PAGE_HEIGHT - (2 * MARGIN) - FOOTER_HEIGHT - (42 * mm)
+        self.scale = min(max_width / self.source_width, max_height / self.source_height)
+        self.width = self.source_width * self.scale
+        self.height = self.source_height * self.scale
+        return self.width, self.height
+
+    def draw(self) -> None:
+        if self.drawing is None:
+            return
+        self.canv.saveState()
+        self.canv.scale(self.scale, self.scale)
+        renderPDF.draw(self.drawing, self.canv, 0, 0)
+        self.canv.restoreState()
+
+
+def vector_plot_flowables(
+    path: Path,
+    title: str,
+    explanation: str,
+    styles: dict[str, ParagraphStyle],
+    vector_pdf_placements: list[dict[str, object]],
+) -> list:
+    if not path.exists():
+        return []
+    suffix = path.suffix.lower()
+    plot = None
+    source_label = "vector plot"
+    if suffix == ".pdf" and PdfReader is not None:
+        plot = VectorPdfFlowable(path, vector_pdf_placements)
+        source_label = "source PDF"
+    elif suffix == ".svg" and svg2rlg is not None:
+        try:
+            plot = SvgFlowable(path)
+        except Exception:
+            plot = None
+        source_label = "source SVG"
+    if plot is None:
+        return []
+    plot.hAlign = "CENTER"
+    return [
+        PageBreak(),
+        para(title, styles["h1"]),
+        para(explanation, styles["body"]),
+        plot,
+        Spacer(1, 5 * mm),
+        para(f"Embedded vector plot from {source_label}: {compact_path(path.as_posix())}", styles["caption"]),
+    ]
+
+
+def plot_flowables(
+    vector_path: Path | None,
+    preview_path: Path | None,
+    title: str,
+    explanation: str,
+    styles: dict[str, ParagraphStyle],
+    vector_pdf_placements: list[dict[str, object]],
+) -> list:
+    if vector_path is not None:
+        flowables = vector_plot_flowables(vector_path, title, explanation, styles, vector_pdf_placements)
+        if flowables:
+            return flowables
+    if preview_path is not None:
+        return image_flowables(preview_path, title, explanation, styles)
+    return []
+
+
 def render_contrast(
     story: list,
     row: dict[str, str],
     assay: str,
     styles: dict[str, ParagraphStyle],
     top_table_rows: int,
+    vector_pdf_placements: list[dict[str, object]],
 ) -> None:
     level = row.get("level", "")
     contrast = row.get("contrast_id", "")
@@ -486,19 +640,32 @@ def render_contrast(
 
     embedded = 0
     unsupported: list[tuple[str, str]] = []
-    for column, label, explanation in PLOT_COLUMNS:
-        path_text = row.get(column, "")
-        if not path_text:
+    for vector_column, preview_column, label, explanation in PLOT_COLUMNS:
+        vector_text = row.get(vector_column, "")
+        preview_text = row.get(preview_column, "")
+        if not vector_text and not preview_text:
             continue
-        path = Path(path_text)
-        if not path.exists():
+        vector_path = Path(vector_text) if vector_text else None
+        preview_path = Path(preview_text) if preview_text else None
+        if vector_path is not None and not vector_path.exists():
+            vector_path = None
+        if preview_path is not None and not preview_path.exists():
+            preview_path = None
+        if vector_path is None and preview_path is None:
             continue
-        flowables = image_flowables(path, f"{level} {contrast} - {label}", explanation, styles)
+        flowables = plot_flowables(
+            vector_path,
+            preview_path,
+            f"{level} {contrast} - {label}",
+            explanation,
+            styles,
+            vector_pdf_placements,
+        )
         if flowables:
             story.extend(flowables)
             embedded += 1
         else:
-            unsupported.append((label, path_text))
+            unsupported.append((label, vector_text or preview_text))
 
     if embedded == 0:
         story.append(para("No embeddable PNG/JPEG plot previews were found for this contrast.", styles["muted"]))
@@ -511,6 +678,43 @@ def render_contrast(
         path_text = row.get(column, "")
         if path_text:
             story.extend(table_flowables(f"{level} {contrast} - {label}", Path(path_text), top_table_rows, styles))
+
+
+def apply_vector_pdf_overlays(output: Path, placements: list[dict[str, object]]) -> None:
+    if not placements or PdfReader is None or PdfWriter is None or Transformation is None:
+        return
+    reader = PdfReader(str(output))
+    by_page: dict[int, list[dict[str, object]]] = {}
+    for placement in placements:
+        by_page.setdefault(int(placement["page_index"]), []).append(placement)
+
+    writer = PdfWriter()
+    for page_index, page in enumerate(reader.pages):
+        for placement in by_page.get(page_index, []):
+            plot_path = Path(str(placement["path"]))
+            if not plot_path.exists():
+                continue
+            try:
+                plot_page = PdfReader(str(plot_path)).pages[0]
+                plot_width = float(plot_page.mediabox.width)
+                plot_height = float(plot_page.mediabox.height)
+            except Exception:
+                continue
+            if plot_width <= 0 or plot_height <= 0:
+                continue
+            box_width = float(placement["width"])
+            box_height = float(placement["height"])
+            scale = min(box_width / plot_width, box_height / plot_height)
+            x = float(placement["x"]) + ((box_width - (plot_width * scale)) / 2)
+            y = float(placement["y"]) + ((box_height - (plot_height * scale)) / 2)
+            transform = Transformation().scale(scale).translate(x, y)
+            page.merge_transformed_page(plot_page, transform, over=True)
+        writer.add_page(page)
+
+    with tempfile.NamedTemporaryFile("wb", suffix=".pdf", delete=False, dir=str(output.parent)) as handle:
+        tmp_path = Path(handle.name)
+        writer.write(handle)
+    tmp_path.replace(output)
 
 
 def draw_asset_inventory(
@@ -599,6 +803,7 @@ def render_report(args: argparse.Namespace) -> int:
     assay_label = readable_assay(args.assay)
     status_counts = Counter(row.get("status", "unknown") or "unknown" for row in rows)
     levels = Counter(row.get("level", "unknown") or "unknown" for row in rows)
+    vector_pdf_placements: list[dict[str, object]] = []
 
     story: list = []
     story.append(para("ASPIS Technical Report", styles["title"]))
@@ -657,7 +862,7 @@ def render_report(args: argparse.Namespace) -> int:
     )
 
     for row in sorted(rows, key=lambda item: (item.get("level", ""), item.get("contrast_id", ""))):
-        render_contrast(story, row, args.assay, styles, args.top_table_rows)
+        render_contrast(story, row, args.assay, styles, args.top_table_rows, vector_pdf_placements)
 
     if assets:
         draw_asset_inventory(story, assets, styles, args.max_asset_rows)
@@ -676,6 +881,7 @@ def render_report(args: argparse.Namespace) -> int:
         author="ASPIS",
     )
     doc.build(story, onFirstPage=footer(counter), onLaterPages=footer(counter))
+    apply_vector_pdf_overlays(output, vector_pdf_placements)
 
     done = Path(args.done)
     done.parent.mkdir(parents=True, exist_ok=True)

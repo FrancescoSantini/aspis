@@ -47,8 +47,9 @@ blockers:
   but the navigation is not yet biologist-friendly.
 - RNA-seq and smallRNA branches for the same project are not yet summarized
   together in a biologically useful miRNA-mRNA comparison layer.
-- Technical PDF reports now use a vector-text ReportLab renderer, but the
-  regenerated real-run PDFs still need visual QA after the environment update.
+- Technical PDF reports now use a vector-text ReportLab renderer and prefer
+  source plot PDFs/SVGs over raster previews. The regenerated real-run PDFs
+  still need visual QA after the environment update.
 - DTU methods are still not configured or validated.
 - At least one additional appropriate real validation cohort, or one repeated
   full validation with configured resources and documented review, remains
@@ -190,6 +191,12 @@ Completed hardening slice:
   compression is acceptable. The helper prints a local download/extraction
   recipe matching the created archive type and removes stale unpacked
   `results/<run_id>` and `meta/<run_id>` folders before extraction.
+- The real-project G100 helpers now run a config guard before Snakemake starts.
+  The guard records the config path, config checksum, output namespace, and
+  resource-affecting settings under `meta/<run_id>/run_config_guard.tsv`. A
+  later run that tries to reuse the same namespace with a different config fails
+  early, preventing accidental overwrites such as resource-backed ORA/GSEA
+  reports being regenerated with a non-resource config.
 
 Remaining code tasks:
 
@@ -319,7 +326,11 @@ Completed hardening slice:
   while complete TSVs remain linked from the HTML report.
 - The renderer now has explicit section/context pages and writes page counts in
   `technical_report.done`.
-- `reportlab` is declared in `envs/aspis-snakemake.yaml`.
+- Source plot PDFs are now merged into the technical report with `pypdf`, SVG
+  plots are rendered through `svglib` when available, and PNG/JPEG previews
+  remain a fallback for formats without a vector source.
+- `reportlab`, `pypdf`, and `svglib` are declared in
+  `envs/aspis-snakemake.yaml`.
 
 Remaining code tasks:
 
@@ -329,8 +340,8 @@ Remaining code tasks:
   - embedded images are not tiny relative to A4 page size;
   - the output contains text objects, not only one full-page raster image;
   - obvious placeholder-only reports are flagged.
-- Consider direct native PDF/SVG embedding for source plots if the current PNG
-  previews still lose too much plot-axis detail after real-run review.
+- Re-run visual QA on full real-run technical PDFs after the vector plot
+  embedding environment is installed on G100.
 - Preserve original plot files as linked artifacts.
 
 Operator/data validation tasks:

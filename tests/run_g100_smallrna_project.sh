@@ -17,6 +17,7 @@ CONFIGFILE="${CONFIGFILE:-}"
 PREFLIGHT="${PREFLIGHT:-1}"
 EXECUTION_REPORT="${EXECUTION_REPORT:-}"
 PREFLIGHT_REPORT="${PREFLIGHT_REPORT:-}"
+ALLOW_CONFIG_MISMATCH="${ASPIS_ALLOW_CONFIG_MISMATCH:-0}"
 
 if [[ $# -gt 0 && "${1}" != -* && ( -z "$ACCOUNT" || "${1}" == "$ACCOUNT" ) ]]; then
   ACCOUNT="$1"
@@ -87,6 +88,15 @@ echo "==> preflight: $PREFLIGHT"
 echo "==> preflight report: $PREFLIGHT_REPORT"
 
 g100_report_execution_context "$(basename "$0")" "$CONFIGFILE" "$MODE" "${TARGET:-rule all}"
+
+CONFIG_GUARD_ARGS=(--config "$CONFIGFILE")
+if [[ "$MODE" == "run" ]]; then
+  CONFIG_GUARD_ARGS+=(--write)
+fi
+if [[ "$ALLOW_CONFIG_MISMATCH" == "1" || "$ALLOW_CONFIG_MISMATCH" == "true" || "$ALLOW_CONFIG_MISMATCH" == "yes" ]]; then
+  CONFIG_GUARD_ARGS+=(--allow-mismatch)
+fi
+python3 workflow/scripts/check_run_config_guard.py "${CONFIG_GUARD_ARGS[@]}"
 
 if [[ "$PREFLIGHT" != "0" && "$PREFLIGHT" != "false" && "$PREFLIGHT" != "no" ]]; then
   mkdir -p "$(dirname "$PREFLIGHT_REPORT")"

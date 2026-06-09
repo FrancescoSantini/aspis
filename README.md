@@ -417,6 +417,13 @@ MODE=dry-run bash tests/run_g100_full_project.sh "$ACCOUNT" config/my_full_proje
 MODE=run     bash tests/run_g100_full_project.sh "$ACCOUNT" config/my_full_project.yaml
 ```
 
+The real-project helpers write a run config guard under `meta/<run_id>/`.
+Reusing the same output namespace with a different config is blocked before
+Snakemake starts. This prevents a non-resource config from overwriting
+resource-backed report layers such as ORA/GSEA. To intentionally change a run,
+use a new `paths.*` namespace or archive/delete the old `work/`, `meta/`, and
+`results/` run folders first.
+
 Package a lightweight review bundle after a G100 run:
 
 ```bash
