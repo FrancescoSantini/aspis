@@ -165,6 +165,11 @@ Reason for priority: the pipeline now produces many correct files, but the
 reader experience is too fragmented. A single entry point exists, but users can
 quickly fall into nested pages without knowing which report is authoritative.
 
+Status: closed as a P0 blocker after the run dashboard, integrated project
+report, assay-specific overview pages, QC overview, breadcrumbs, and typed
+report inventory were implemented. Remaining work is report polish for larger
+studies, not a blocker for real-data validation.
+
 Completed hardening slice:
 
 - `tests/package_g100_review_bundle.sh` now creates a lightweight G100 review
@@ -208,61 +213,48 @@ Completed hardening slice:
   project reports, RNA-seq differential/enrichment/isoform-switch outputs,
   smallRNA differential target/integration outputs, major QC pages, and
   technical PDFs.
+- The run-level dashboard now has filter controls, assay/status filters, a
+  compact optional-layer status strip, and a status glossary. This makes larger
+  runs easier to scan without opening branch pages first.
 - The run-level dashboard now writes `report_inventory.tsv`, a typed map of
-  project, branch, QC, differential, enrichment, isoform-switch, target,
-  warning, PDF, table, and manifest report artifacts. This gives packaging and
-  QA scripts a stable report graph without scraping nested HTML pages.
+  run, project, branch, QC, differential, enrichment, isoform-switch, target,
+  warning, PDF, per-contrast table, and source-manifest artifacts. It includes
+  per-contrast RNA-seq summary/enrichment rows and per-contrast smallRNA
+  summary/target rows, so downstream checks no longer need to scrape nested
+  HTML pages.
+- `validate_report_inventory.py` validates the report inventory schema,
+  duplicate keys, linked artifact status, and status vocabulary. The dashboard
+  Snakemake rule now emits `report_inventory_validation.tsv`, and the G100
+  review bundle includes both the inventory and validation summary.
+- The run-level dashboard now renders `qc/index.html`, a stage-organized QC
+  overview that groups raw FastQC/MultiQC, post-trim QC, RNA-seq alignment QC,
+  RNA-seq sample/biotype/warning inputs, and smallRNA length/read-fate outputs
+  while leaving the source files in their normal branch directories.
+- Integrated project reports now include a sample/design summary for RNA-seq
+  and smallRNA, a workflow status matrix by assay and analysis layer, contrast
+  filtering, and a status glossary. The contrast matrix remains the main
+  biological navigation layer for matched gene, transcript, miRNA,
+  GO/Reactome, target, and miRNA-mRNA integration outputs.
+- The main dashboard, integrated project report, RNA-seq differential index,
+  smallRNA differential index, smallRNA target/integration overview, and
+  isoform-switch overview now include breadcrumbs and consistent context
+  titles.
+- Stage-local QC reports remain near their source files on disk, but their
+  navigation is summarized from the top-level dashboard and project page.
+- Human-readable HTML/PDF pages now separate short status summaries from wide
+  machine manifests. Complete TSVs are linked as source data instead of being
+  the only way to understand report status.
+- Report text now states what plots and status rows represent without pretending
+  to automatically interpret the biology.
 
-Remaining code tasks:
+Residual P1 polish:
 
-- Continue refining the run-level dashboard as the primary entry point:
-  - project cards, assay badges, direct biological links, QC links, technical
-    PDF links, and missing/not-present statuses are now present;
-  - remaining work is mainly visual hierarchy, filtering/search for larger
-    runs, and a compact status strip for optional advanced layers.
-- Add a project-level report when RNA-seq and smallRNA share the same project:
-  - keep refining the integrated overview page for the biological experiment;
-  - RNA-seq, smallRNA, and integration sections are present, but need better
-    visual hierarchy and clearer status summaries;
-  - sample/design summary for both assays;
-  - contrast inventory now has a first gene/transcript/miRNA matrix, but should
-    gain filtering and clearer grouping for larger studies;
-  - report status matrix by assay and workflow layer.
-- Reduce nested navigation:
-  - branch reports should be detailed maps, not mandatory intermediate stops;
-  - differential report pages should continue gaining direct overview pages for
-    high-value layers. RNA-seq enrichment now has its first overview page; the
-    smallRNA target/integration overview now has its first page; isoform-switch
-    now has an event overview; the same pattern is still needed for QC
-    summaries;
-  - event-level isoform-switch pages should stay reachable from the
-    isoform-switch index and the project page, not hidden several pages deep.
-- Add breadcrumbs and consistent titles to all report pages:
-  - run;
-  - project;
-  - assay;
-  - analysis layer;
-  - contrast when applicable.
-- Continue refining the typed report inventory:
-  - the first run-level `report_inventory.tsv` exists with report type,
-    project, assay, contrast, status, HTML, PDF, summary TSV, primary table,
-    and source-manifest paths;
-  - remaining work is to add per-contrast report rows and use the inventory in
-    bundle packaging and QA validators.
-- Separate human summaries from machine manifests:
-  - short human tables in HTML/PDF;
-  - complete manifests linked as source data;
-  - no requirement that a biologist open wide TSVs to understand status.
-- Group stage-local QC reports intentionally:
-  - raw FastQC/MultiQC;
-  - post-trim FastQC/MultiQC;
-  - alignment QC/MultiQC;
-  - smallRNA length/read-fate QC;
-  - keep them near files on disk, but summarize them cleanly in navigation.
-- Add concise explanatory text to run, branch, differential, smallRNA,
-  isoform-switch, enrichment, warning, and integration reports.
-- Avoid pretending to interpret the biology automatically. Describe what a plot
-  or table is, how it was generated, and what status means.
+- Stress-test the dashboard filters and project contrast matrix on a larger
+  multi-project run and adjust visual density if scanning becomes difficult.
+- Add breadcrumbs to the deepest event-specific and contrast-specific leaf pages
+  where they are still generated by older scripts.
+- Add an optional static site map or mini table of contents if future real runs
+  add enough report layers to make the current dashboard cards too dense.
 
 Acceptance criteria:
 
@@ -273,6 +265,8 @@ Acceptance criteria:
   paragraphs.
 - Empty sections distinguish disabled, not configured, blocked, failed,
   insufficient input, and successful biological zero.
+- The run emits a typed, validated `report_inventory.tsv` that packaging and QA
+  can consume without parsing HTML.
 
 ## P0 - RNA-seq And SmallRNA Matched Integration
 

@@ -389,10 +389,11 @@ def render_target_overview(path: Path, rows: list[dict[str, str]]) -> None:
     .status.not_configured, .status.muted {{ background: #f6f8fa; color: #57606a; }}
     .status.blocked {{ background: #fff8c5; color: #9a6700; }}
     .status.failed {{ background: #ffebe9; color: #cf222e; }}
+    nav.breadcrumbs {{ color: #57606a; margin-bottom: 1rem; }}
   </style>
 </head>
 <body>
-  <p><a href="../index.html">back to smallRNA report index</a></p>
+  <nav class="breadcrumbs"><a href="../index.html">smallRNA differential report</a> / target and integration overview</nav>
   <h1>{html.escape(title_project)} smallRNA target and integration overview</h1>
   <p class="note">This page pulls target enrichment, target-gene feature sets, miRNA-mRNA integration, and integrated target feature-set outputs into one contrast-level view. Empty panels mean the corresponding layer produced no plot artifact or was not configured for that contrast; the linked TSVs remain the source of truth.</p>
   {''.join(cards)}
@@ -539,9 +540,11 @@ def render_index(
     th {{ background: #f6f8fa; }}
     a {{ color: #0969da; text-decoration: none; }}
     a:hover {{ text-decoration: underline; }}
+    nav.breadcrumbs {{ color: #57606a; margin-bottom: 1rem; }}
   </style>
 </head>
 <body>
+  <nav class="breadcrumbs">ASPIS / smallRNA / Differential reports</nav>
   <h1>{html.escape(title_project)} smallRNA differential reports</h1>
   <p class="note">This report index summarizes miRNA differential-expression contrasts, target-resource outputs, smallRNA QC summaries, residual-genome checks, and optional matched miRNA-mRNA integration for this project.</p>
   <div class="guide">

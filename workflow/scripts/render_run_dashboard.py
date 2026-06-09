@@ -35,6 +35,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--execution-report", required=True, help="Execution report TSV")
     parser.add_argument("--branch-dir", required=True, help="Branch results directory")
     parser.add_argument("--report-inventory", default="", help="Optional output typed report inventory TSV")
+    parser.add_argument("--qc-overview", default="", help="Optional output QC overview HTML")
     parser.add_argument("--output", required=True, help="Output dashboard HTML")
     parser.add_argument("--done", required=True, help="Completion sentinel")
     return parser.parse_args()
@@ -90,6 +91,12 @@ def join_paths(paths: list[Path]) -> str:
     return ";".join(path_text(path) for path in paths)
 
 
+def path_from_text(path_text_value: str) -> Path | None:
+    if not path_text_value:
+        return None
+    return Path(path_text_value)
+
+
 def inventory_status(paths: list[Path], expected: bool = True) -> str:
     if any(path.exists() for path in paths):
         return "ok"
@@ -129,8 +136,30 @@ def inventory_row(
     }
 
 
-def build_report_inventory(projects: list[str], plan_rows: list[dict[str, str]], branch_dir: Path, base_dir: Path) -> list[dict[str, str]]:
+def build_report_inventory(
+    projects: list[str],
+    plan_rows: list[dict[str, str]],
+    branch_dir: Path,
+    base_dir: Path,
+    qc_overview_path: Path,
+) -> list[dict[str, str]]:
     rows: list[dict[str, str]] = []
+    rows.append(
+        inventory_row(
+            report_type="run",
+            label="run dashboard",
+            project="",
+            html_path=base_dir / "index.html",
+        )
+    )
+    rows.append(
+        inventory_row(
+            report_type="qc",
+            label="run QC overview",
+            project="",
+            html_path=qc_overview_path,
+        )
+    )
     for project in projects:
         rows.append(
             inventory_row(
@@ -240,6 +269,51 @@ def build_report_inventory(projects: list[str], plan_rows: list[dict[str, str]],
                     ),
                 ]
             )
+            for row in read_table(base / "differential/reports/summaries/summary_manifest.tsv"):
+                level = row.get("level", "")
+                contrast = row.get("contrast_id", "")
+                rows.append(
+                    inventory_row(
+                        report_type="contrast_summary",
+                        label=f"RNA-seq {level} contrast summary",
+                        project=project,
+                        assay=assay,
+                        contrast_id=contrast,
+                        html_path=path_from_text(row.get("summary_html", "")),
+                        summary_paths=[path for path in [path_from_text(row.get("summary", ""))] if path],
+                        primary_paths=[
+                            path for path in [
+                                path_from_text(row.get("results", "")),
+                                path_from_text(row.get("filtered", "")),
+                            ] if path
+                        ],
+                        manifest_paths=[base / "differential/reports/summaries/summary_manifest.tsv"],
+                        expected=False,
+                    )
+                )
+            for row in read_table(base / "differential/reports/enrichment/enrichment_manifest.tsv"):
+                level = row.get("level", "")
+                contrast = row.get("contrast_id", "")
+                rows.append(
+                    inventory_row(
+                        report_type="contrast_enrichment",
+                        label=f"RNA-seq {level} ORA/GSEA",
+                        project=project,
+                        assay=assay,
+                        contrast_id=contrast,
+                        html_path=base / "differential/reports" / level / contrast / "summary.html",
+                        primary_paths=[
+                            path for path in [
+                                path_from_text(row.get("feature_set_results", "")),
+                                path_from_text(row.get("ranked_feature_set_results", "")),
+                                path_from_text(row.get("feature_set_plot", "")),
+                                path_from_text(row.get("ranked_feature_set_plot", "")),
+                            ] if path
+                        ],
+                        manifest_paths=[base / "differential/reports/enrichment/enrichment_manifest.tsv"],
+                        expected=False,
+                    )
+                )
         elif assay == "smallrna":
             small = base / "smallrna"
             rows.extend(
@@ -299,6 +373,50 @@ def build_report_inventory(projects: list[str], plan_rows: list[dict[str, str]],
                     ),
                 ]
             )
+            for row in read_table(small / "differential/reports/summaries/summary_manifest.tsv"):
+                contrast = row.get("contrast_id", "")
+                rows.append(
+                    inventory_row(
+                        report_type="contrast_summary",
+                        label="smallRNA miRNA contrast summary",
+                        project=project,
+                        assay=assay,
+                        contrast_id=contrast,
+                        html_path=path_from_text(row.get("summary_html", "")),
+                        primary_paths=[
+                            path for path in [
+                                path_from_text(row.get("results", "")),
+                                path_from_text(row.get("filtered", "")),
+                                path_from_text(row.get("target_enrichment", "")),
+                                path_from_text(row.get("mirna_mrna_pairs", "")),
+                                path_from_text(row.get("target_feature_set_results", "")),
+                            ] if path
+                        ],
+                        manifest_paths=[small / "differential/reports/summaries/summary_manifest.tsv"],
+                        expected=False,
+                    )
+                )
+                rows.append(
+                    inventory_row(
+                        report_type="contrast_targets",
+                        label="smallRNA target/integration contrast outputs",
+                        project=project,
+                        assay=assay,
+                        contrast_id=contrast,
+                        html_path=small / "differential/reports/targets/index.html",
+                        primary_paths=[
+                            path for path in [
+                                path_from_text(row.get("target_enrichment_plot", "")),
+                                path_from_text(row.get("target_feature_set_plot", "")),
+                                path_from_text(row.get("mirna_mrna_plot", "")),
+                                path_from_text(row.get("mirna_mrna_target_feature_set_plot", "")),
+                                path_from_text(row.get("mirna_mrna_target_ranked_feature_set_plot", "")),
+                            ] if path
+                        ],
+                        manifest_paths=[small / "differential/reports/asset_manifest.tsv"],
+                        expected=False,
+                    )
+                )
     return rows
 
 
@@ -381,8 +499,10 @@ def project_card(project: str, plan_rows: list[dict[str, str]], branch_dir: Path
     ]
     notes = "; ".join(row.get("reason", "") for row in rows if row.get("reason", ""))
     notes_html = f'<p class="muted">{html.escape(notes)}</p>' if notes else ""
+    assay_values = " ".join(sorted(row.get("assay", "") for row in rows if row.get("assay", "")))
+    status_values = " ".join(sorted(row.get("status", "") for row in rows if row.get("status", "")))
     return (
-        '<article class="project-card">'
+        f'<article class="project-card" data-project="{html.escape(project)}" data-assay="{html.escape(assay_values)}" data-status="{html.escape(status_values)}">'
         f"<h3>{html.escape(project)}</h3>"
         f'<div class="badges">{"".join(badges)}</div>'
         f'<p class="card-links"><strong>Biology:</strong> {" | ".join(core_links)}</p>'
@@ -391,6 +511,184 @@ def project_card(project: str, plan_rows: list[dict[str, str]], branch_dir: Path
         f"{notes_html}"
         "</article>"
     )
+
+
+def qc_stage_card(
+    *,
+    assay: str,
+    project: str,
+    stage: str,
+    description: str,
+    expected: bool,
+    links: list[tuple[str, Path]],
+    base_dir: Path,
+) -> str:
+    existing_links = [link_if_exists(path, label, base_dir) if expected else optional_link(path, label, base_dir) for label, path in links]
+    status = "ok" if any(path.exists() for _, path in links) else "missing" if expected else "not_present"
+    return (
+        f'<article class="qc-card" data-project="{html.escape(project)}" data-assay="{html.escape(assay)}" data-status="{html.escape(status)}">'
+        f'<h3>{html.escape(project)} / {html.escape(assay)} / {html.escape(stage)}</h3>'
+        f'<p>{status_span(status)}</p>'
+        f'<p class="muted">{html.escape(description)}</p>'
+        f'<p class="card-links">{" | ".join(existing_links)}</p>'
+        "</article>"
+    )
+
+
+def render_qc_overview(path: Path, plan_rows: list[dict[str, str]], branch_dir: Path, dashboard_path: Path) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    base_dir = path.parent
+    cards = []
+    for row in sorted(plan_rows, key=lambda item: (item.get("project", ""), item.get("assay", ""))):
+        assay = row.get("assay", "")
+        project = row.get("project", "")
+        expected = row.get("status", "") == "ready"
+        base = branch_dir / assay / project
+        cards.append(
+            qc_stage_card(
+                assay=assay,
+                project=project,
+                stage="raw reads",
+                description="Per-file FastQC and aggregate MultiQC before trimming or alignment.",
+                expected=expected,
+                links=[
+                    ("raw MultiQC", base / "multiqc/multiqc_report.html"),
+                    ("FastQC manifest", base / "fastqc/fastqc_manifest.tsv"),
+                    ("FASTQ inspection", base / "fastq_inspection.tsv"),
+                ],
+                base_dir=base_dir,
+            )
+        )
+        if assay == "rnaseq":
+            cards.extend(
+                [
+                    qc_stage_card(
+                        assay=assay,
+                        project=project,
+                        stage="post-trim reads",
+                        description="Fastp/cutadapt preprocessing outputs and post-trim FastQC/MultiQC.",
+                        expected=expected,
+                        links=[
+                            ("post-trim MultiQC", base / "preprocess/multiqc/multiqc_report.html"),
+                            ("preprocess manifest", base / "preprocess/preprocess_manifest.tsv"),
+                            ("post-trim inspection", base / "preprocess/fastq_inspection.tsv"),
+                        ],
+                        base_dir=base_dir,
+                    ),
+                    qc_stage_card(
+                        assay=assay,
+                        project=project,
+                        stage="alignment",
+                        description="Alignment summary, sorted-BAM checks, and alignment-level MultiQC.",
+                        expected=expected,
+                        links=[
+                            ("alignment MultiQC", base / "alignment/qc/multiqc/multiqc_report.html"),
+                            ("aligned samples", base / "alignment/aligned_samples.tsv"),
+                            ("alignment QC summary", base / "alignment/qc/alignment_qc_summary.tsv"),
+                            ("strandedness", base / "alignment/strandedness/strandedness_report.tsv"),
+                        ],
+                        base_dir=base_dir,
+                    ),
+                    qc_stage_card(
+                        assay=assay,
+                        project=project,
+                        stage="sample-level quantification QC",
+                        description="Count-level sample QC, biotype summaries, and warning inputs used by RNA-seq reports.",
+                        expected=False,
+                        links=[
+                            ("sample QC manifest", base / "quantification/sample_qc/sample_qc_manifest.tsv"),
+                            ("biotype summary", base / "quantification/biotypes/biotype_summary.html"),
+                            ("biological warnings", base / "biological_warnings/warnings.html"),
+                        ],
+                        base_dir=base_dir,
+                    ),
+                ]
+            )
+        elif assay == "smallrna":
+            small = base / "smallrna"
+            cards.extend(
+                [
+                    qc_stage_card(
+                        assay=assay,
+                        project=project,
+                        stage="post-trim reads",
+                        description="Adapter trimming and post-trim read-quality summary for smallRNA libraries.",
+                        expected=expected,
+                        links=[
+                            ("post-trim MultiQC", small / "preprocess/multiqc/multiqc_report.html"),
+                            ("preprocess manifest", small / "preprocess/preprocess_manifest.tsv"),
+                            ("post-trim inspection", small / "preprocess/fastq_inspection.tsv"),
+                        ],
+                        base_dir=base_dir,
+                    ),
+                    qc_stage_card(
+                        assay=assay,
+                        project=project,
+                        stage="length and read fate",
+                        description="SmallRNA length spectrum, arm/isomiR summaries, residual read fate, and contaminant context.",
+                        expected=False,
+                        links=[
+                            ("length plot", small / "length_qc/length_distribution.svg"),
+                            ("length stages", small / "length_qc/length_stage_summary.tsv"),
+                            ("arm summary", small / "length_qc/arm_summary.tsv"),
+                            ("residual manifest", small / "differential/reports/asset_manifest.tsv"),
+                        ],
+                        base_dir=base_dir,
+                    ),
+                ]
+            )
+    content = f"""<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>ASPIS QC overview</title>
+  <style>
+    body {{ font-family: system-ui, -apple-system, Segoe UI, sans-serif; margin: 24px; max-width: 1320px; color: #24292f; }}
+    nav.breadcrumbs {{ color: #57606a; margin-bottom: 1rem; }}
+    .note {{ background: #f6f8fa; border-left: 4px solid #57606a; margin: 12px 0 18px; padding: 10px 12px; }}
+    .controls {{ display: flex; flex-wrap: wrap; gap: 0.75rem; margin: 1rem 0; }}
+    input, select {{ border: 1px solid #d0d7de; border-radius: 6px; padding: 0.45rem 0.55rem; }}
+    .qc-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 1rem; }}
+    .qc-card {{ border: 1px solid #d0d7de; border-radius: 6px; padding: 1rem; }}
+    .qc-card h3 {{ margin: 0 0 0.5rem; }}
+    a {{ color: #0969da; text-decoration: none; }}
+    a:hover {{ text-decoration: underline; }}
+    .status {{ font-weight: 700; }}
+    .status.ok {{ color: #1a7f37; }}
+    .status.missing {{ color: #9a6700; }}
+    .status.not_present, .status.muted {{ color: #57606a; font-weight: 400; }}
+    .muted {{ color: #57606a; }}
+    .card-links {{ line-height: 1.55; }}
+  </style>
+</head>
+<body>
+  <nav class="breadcrumbs"><a href="{html.escape(rel_href(dashboard_path, base_dir))}">ASPIS run dashboard</a> / QC overview</nav>
+  <h1>ASPIS QC overview</h1>
+  <p class="note">This page groups stage-local QC artifacts without moving the source files. Use it to answer where raw-read, post-trim, alignment, sample-level, and smallRNA length/read-fate evidence lives.</p>
+  <div class="controls">
+    <input id="qcSearch" placeholder="Filter QC cards">
+    <select id="qcAssay"><option value="">all assays</option><option value="rnaseq">RNA-seq</option><option value="smallrna">smallRNA</option></select>
+    <select id="qcStatus"><option value="">all statuses</option><option value="ok">ok</option><option value="missing">missing</option><option value="not_present">not present</option></select>
+  </div>
+  <div class="qc-grid">{''.join(cards)}</div>
+  <script>
+    function applyQcFilters() {{
+      const text = document.getElementById('qcSearch').value.toLowerCase();
+      const assay = document.getElementById('qcAssay').value;
+      const status = document.getElementById('qcStatus').value;
+      document.querySelectorAll('.qc-card').forEach(card => {{
+        const okText = !text || card.textContent.toLowerCase().includes(text);
+        const okAssay = !assay || card.dataset.assay === assay;
+        const okStatus = !status || card.dataset.status === status;
+        card.style.display = okText && okAssay && okStatus ? '' : 'none';
+      }});
+    }}
+    ['qcSearch', 'qcAssay', 'qcStatus'].forEach(id => document.getElementById(id).addEventListener('input', applyQcFilters));
+  </script>
+</body>
+</html>
+"""
+    path.write_text(content, encoding="utf-8")
 
 
 def render(args: argparse.Namespace) -> None:
@@ -418,7 +716,7 @@ def render(args: argparse.Namespace) -> None:
         library_count = materialized_counts.get((assay, project), 0)
         resources = "<br>".join(branch_resources(assay, project, branch_dir, base_dir)) if status == "ready" else ""
         branch_table_rows.append(
-            "<tr>"
+            f'<tr class="branch-row" data-project="{html.escape(project)}" data-assay="{html.escape(assay)}" data-status="{html.escape(status or "unknown")}">'
             f"<td>{html.escape(assay)}</td>"
             f"<td>{html.escape(project)}</td>"
             f"<td class=\"status {html.escape(status or 'unknown')}\">{html.escape(status or 'unknown')}</td>"
@@ -430,7 +728,9 @@ def render(args: argparse.Namespace) -> None:
         )
 
     projects = sorted({row.get("project", "") for row in plan_rows if row.get("project", "")})
-    report_inventory = build_report_inventory(projects, plan_rows, branch_dir, base_dir)
+    qc_overview_path = Path(args.qc_overview) if args.qc_overview else output.parent / "qc/index.html"
+    render_qc_overview(qc_overview_path, plan_rows, branch_dir, output)
+    report_inventory = build_report_inventory(projects, plan_rows, branch_dir, base_dir, qc_overview_path)
     report_inventory_path = Path(args.report_inventory) if args.report_inventory else output.parent / "report_inventory.tsv"
     write_report_inventory(report_inventory_path, report_inventory)
     project_cards = "".join(project_card(project, plan_rows, branch_dir, base_dir) for project in projects)
@@ -455,9 +755,17 @@ def render(args: argparse.Namespace) -> None:
     manifest_link = link_if_exists(Path(args.manifest), "materialized manifest", base_dir)
     plan_link = link_if_exists(Path(args.analysis_plan), "analysis plan", base_dir)
     inventory_link = link_if_exists(report_inventory_path, "report inventory", base_dir)
+    qc_overview_link = link_if_exists(qc_overview_path, "QC overview", base_dir)
     env_failed = sum(1 for row in environment_rows if row.get("status") not in {"ok", "optional_missing", "not_checked", ""})
     execution_failed = sum(1 for row in execution_rows if row.get("status") not in {"ok", "warning", ""})
     inventory_counts = Counter(row.get("report_type", "unknown") for row in report_inventory if row.get("status") == "ok")
+    optional_types = ["enrichment", "isoform_switch", "targets", "warnings", "qc"]
+    optional_strip = "".join(
+        f'<span class="option-pill"><strong>{html.escape(report_type)}</strong> '
+        f'{sum(1 for row in report_inventory if row.get("report_type") == report_type and row.get("status") == "ok")} ok / '
+        f'{sum(1 for row in report_inventory if row.get("report_type") == report_type and row.get("status") != "ok")} not ready</span>'
+        for report_type in optional_types
+    )
 
     content = f"""<!doctype html>
 <html lang=\"en\">
@@ -495,9 +803,15 @@ def render(args: argparse.Namespace) -> None:
     .badge.failed {{ background: #ffebe9; color: #cf222e; }}
     .card-links {{ line-height: 1.55; margin: 0.55rem 0; }}
     .muted {{ color: #57606a; }}
+    .breadcrumbs {{ color: #57606a; margin-bottom: 1rem; }}
+    .controls {{ display: flex; flex-wrap: wrap; gap: 0.75rem; margin: 1rem 0; }}
+    input, select {{ border: 1px solid #d0d7de; border-radius: 6px; padding: 0.45rem 0.55rem; }}
+    .option-strip {{ display: flex; flex-wrap: wrap; gap: 0.5rem; margin: 0.75rem 0 1.25rem; }}
+    .option-pill {{ border: 1px solid #d0d7de; border-radius: 999px; padding: 0.25rem 0.65rem; }}
   </style>
 </head>
 <body>
+  <nav class="breadcrumbs">ASPIS / Run dashboard</nav>
   <h1>ASPIS run dashboard</h1>
   <p class="note">This page is the top-level navigation point for one ASPIS run. Start here to check which assay/project branches were planned, whether they are ready, and where the branch reports, QC summaries, provenance, and technical PDFs live.</p>
   <div class="guide">
@@ -505,7 +819,7 @@ def render(args: argparse.Namespace) -> None:
     <div><strong>Branch reports</strong><br>Open assay/project pages for QC, alignment, quantification, differential results, warnings, and reports.</div>
     <div><strong>Environment</strong><br>Confirm required tools and optional advanced tools before trusting expensive outputs.</div>
   </div>
-  <div class=\"resources\">{manifest_link} | {plan_link} | {env_link} | {exec_link} | {inventory_link}</div>
+  <div class=\"resources\">{manifest_link} | {plan_link} | {env_link} | {exec_link} | {inventory_link} | {qc_overview_link}</div>
   <section class=\"metrics\">
     <div class=\"metric\"><strong>planned branches</strong><span>{len(plan_rows)}</span></div>
     <div class=\"metric\"><strong>ready branches</strong><span>{len(ready)}</span></div>
@@ -515,7 +829,14 @@ def render(args: argparse.Namespace) -> None:
     <div class=\"metric\"><strong>execution issues</strong><span>{execution_failed}</span></div>
     <div class=\"metric\"><strong>available reports</strong><span>{sum(inventory_counts.values())}</span></div>
   </section>
+  <h2>Optional-Layer Status</h2>
+  <div class="option-strip">{optional_strip}</div>
   <p class="note">The report inventory is a typed TSV map of the generated report graph. It is intended for auditing, packaging, and programmatic checks without opening every nested HTML page.</p>
+  <div class="controls">
+    <input id="dashboardSearch" placeholder="Filter projects and branches">
+    <select id="dashboardAssay"><option value="">all assays</option><option value="rnaseq">RNA-seq</option><option value="smallrna">smallRNA</option></select>
+    <select id="dashboardStatus"><option value="">all statuses</option><option value="ready">ready</option><option value="blocked">blocked</option><option value="failed">failed</option></select>
+  </div>
   <h2>Projects</h2>
   <p class="note">Project pages join assay branches that share a project identifier, so matched RNA-seq and smallRNA analyses can be reviewed together.</p>
   <div class="project-grid">{project_cards}</div>
@@ -532,10 +853,28 @@ def render(args: argparse.Namespace) -> None:
     </thead>
     <tbody>{''.join(branch_table_rows)}</tbody>
   </table>
+  <h2>Status Glossary</h2>
+  <p class="note"><strong>ready</strong> means the branch is planned and can produce reports. <strong>missing</strong> means ASPIS expected a report artifact but it is absent. <strong>not present</strong> means an optional layer was not configured or did not apply. <strong>blocked</strong> and <strong>failed</strong> indicate pipeline or input problems that require inspection before biological interpretation.</p>
+  <script>
+    function applyDashboardFilters() {{
+      const text = document.getElementById('dashboardSearch').value.toLowerCase();
+      const assay = document.getElementById('dashboardAssay').value;
+      const status = document.getElementById('dashboardStatus').value;
+      document.querySelectorAll('.project-card, .branch-row').forEach(node => {{
+        const okText = !text || node.textContent.toLowerCase().includes(text);
+        const okAssay = !assay || !node.dataset.assay || node.dataset.assay === assay || node.textContent.toLowerCase().includes(assay);
+        const okStatus = !status || !node.dataset.status || node.dataset.status === status || node.textContent.toLowerCase().includes(status);
+        node.style.display = okText && okAssay && okStatus ? '' : 'none';
+      }});
+    }}
+    ['dashboardSearch', 'dashboardAssay', 'dashboardStatus'].forEach(id => document.getElementById(id).addEventListener('input', applyDashboardFilters));
+  </script>
 </body>
 </html>
 """
     output.write_text(content, encoding="utf-8")
+    report_inventory = build_report_inventory(projects, plan_rows, branch_dir, base_dir, qc_overview_path)
+    write_report_inventory(report_inventory_path, report_inventory)
     done = Path(args.done)
     done.parent.mkdir(parents=True, exist_ok=True)
     with done.open("w", encoding="utf-8") as handle:

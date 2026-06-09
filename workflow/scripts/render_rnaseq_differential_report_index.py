@@ -703,9 +703,11 @@ def render_html(
     .status.failed {{ color: #cf222e; }}
     .status.unknown {{ color: #57606a; }}
     .resource-status td:nth-child(3) {{ min-width: 220px; }}
+    nav.breadcrumbs {{ color: #57606a; margin-bottom: 1rem; }}
   </style>
 </head>
 <body>
+  <nav class="breadcrumbs">ASPIS / RNA-seq / Differential reports</nav>
   <h1>{html.escape(title)}</h1>
   <p class="note">This report index summarizes RNA-seq differential-expression contrasts for this project. Use it to find contrast-level summaries, DESeq2 tables, diagnostic plots, enrichment outputs, optional isoform-switch/DTU resources, warnings, and the printable technical PDF.</p>
   <div class="guide">

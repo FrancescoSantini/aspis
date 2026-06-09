@@ -79,6 +79,8 @@ add_existing \
   "results/$RUN_ID/index.html" \
   "results/$RUN_ID/index.done" \
   "results/$RUN_ID/report_inventory.tsv" \
+  "results/$RUN_ID/report_inventory_validation.tsv" \
+  "results/$RUN_ID/qc" \
   "results/$RUN_ID/projects/$PROJECT" \
   "results/$RUN_ID/branches/rnaseq/$PROJECT" \
   "results/$RUN_ID/branches/smallrna/$PROJECT" \

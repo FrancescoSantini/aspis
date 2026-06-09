@@ -2962,9 +2962,11 @@ def render_project_html(event_rows: list[dict[str, str]], coding_switch_rows: li
     .status.blocked {{ color: #9a6700; }}
     .status.failed {{ color: #cf222e; }}
     table {{ display: block; overflow-x: auto; }}
+    nav.breadcrumbs {{ color: #57606a; margin-bottom: 1rem; }}
   </style>
 </head>
 <body>
+  <nav class="breadcrumbs">ASPIS / RNA-seq / Isoform-switch overview</nav>
   <h1>Isoform-switch report</h1>
   <p>Events are ranked by absolute isoform fraction change and split into coding, noncoding/mixed, and ambiguous sections. Coding switches are additionally prioritized by predicted functional consequences. Noncoding switches are interpreted through transcript architecture rather than requiring ORF/domain evidence.</p>
   <p class="note">Use this page as an index of candidate events. The event links open per-gene pages with exon diagrams, switch-in/switch-out isoforms, coding or noncoding interpretation tables, optional functional annotations, and sequence extracts.</p>

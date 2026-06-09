@@ -80,6 +80,88 @@ def section(title: str, description: str, items: list[str]) -> str:
     )
 
 
+def status_label(path: Path, expected: bool = False) -> str:
+    if path.exists():
+        return '<span class="status ok">ok</span>'
+    if expected:
+        return '<span class="status missing">missing</span>'
+    return '<span class="status muted">not present</span>'
+
+
+def design_columns(path: Path) -> str:
+    rows = read_table(path)
+    if not rows:
+        return ""
+    skipped = {"sample_id", "library_id", "project", "assay", "input_1", "input_2"}
+    columns = [column for column in rows[0].keys() if column not in skipped]
+    return ", ".join(columns)
+
+
+def assay_sample_summary(base_dir: Path, rnaseq_base: Path, smallrna_base: Path) -> str:
+    items = [
+        (
+            "RNA-seq",
+            rnaseq_base / "samples.tsv",
+            rnaseq_base / "design.tsv",
+            rnaseq_base / "fastq_inspection.tsv",
+        ),
+        (
+            "smallRNA",
+            smallrna_base / "samples.tsv",
+            smallrna_base / "design.tsv",
+            smallrna_base / "fastq_inspection.tsv",
+        ),
+    ]
+    rows = []
+    for assay, samples, design, inspection in items:
+        rows.append(
+            "<tr>"
+            f"<td>{html.escape(assay)}</td>"
+            f"<td>{len(read_table(samples))}</td>"
+            f"<td>{len(read_table(design))}</td>"
+            f"<td>{html.escape(design_columns(design) or 'not available')}</td>"
+            f"<td>{table_link(samples, 'samples', base_dir)}</td>"
+            f"<td>{table_link(design, 'design', base_dir)}</td>"
+            f"<td>{table_link(inspection, 'FASTQ inspection', base_dir)}</td>"
+            "</tr>"
+        )
+    return (
+        "<table><thead><tr><th>assay</th><th>sample rows</th><th>design rows</th>"
+        "<th>design columns</th><th>samples</th><th>design</th><th>FASTQ inspection</th></tr></thead><tbody>"
+        + "".join(rows)
+        + "</tbody></table>"
+    )
+
+
+def workflow_status_matrix(base_dir: Path, rnaseq_base: Path, smallrna_base: Path) -> str:
+    checks = [
+        ("RNA-seq", "branch report", rnaseq_base / "report/index.html", True),
+        ("RNA-seq", "raw QC", rnaseq_base / "multiqc/multiqc_report.html", False),
+        ("RNA-seq", "post-trim QC", rnaseq_base / "preprocess/multiqc/multiqc_report.html", False),
+        ("RNA-seq", "alignment QC", rnaseq_base / "alignment/qc/multiqc/multiqc_report.html", False),
+        ("RNA-seq", "differential report", rnaseq_base / "differential/reports/index.html", False),
+        ("RNA-seq", "GO/Reactome overview", rnaseq_base / "differential/reports/enrichment/index.html", False),
+        ("RNA-seq", "isoform-switch overview", rnaseq_base / "differential/isoform_switch/report/index.html", False),
+        ("smallRNA", "branch report", smallrna_base / "report/index.html", True),
+        ("smallRNA", "raw QC", smallrna_base / "multiqc/multiqc_report.html", False),
+        ("smallRNA", "post-trim QC", smallrna_base / "smallrna/preprocess/multiqc/multiqc_report.html", False),
+        ("smallRNA", "length/read-fate QC", smallrna_base / "smallrna/length_qc/length_distribution.svg", False),
+        ("smallRNA", "differential report", smallrna_base / "smallrna/differential/reports/index.html", False),
+        ("smallRNA", "target/integration overview", smallrna_base / "smallrna/differential/reports/targets/index.html", False),
+    ]
+    rows = []
+    for assay, layer, path, expected in checks:
+        rows.append(
+            "<tr>"
+            f"<td>{html.escape(assay)}</td>"
+            f"<td>{html.escape(layer)}</td>"
+            f"<td>{status_label(path, expected)}</td>"
+            f"<td>{link(path, 'open', base_dir, expected=expected)}</td>"
+            "</tr>"
+        )
+    return "<table><thead><tr><th>assay</th><th>layer</th><th>status</th><th>artifact</th></tr></thead><tbody>" + "".join(rows) + "</tbody></table>"
+
+
 def summary_table(base_dir: Path, rnaseq_base: Path, smallrna_base: Path) -> str:
     rows = []
     sources = [
@@ -217,7 +299,7 @@ def contrast_matrix(
         transcript = rnaseq_by_key.get(("transcript", contrast_id))
         mirna = smallrna_by_contrast.get(contrast_id)
         body.append(
-            "<tr>"
+            f'<tr class="contrast-row" data-contrast="{html.escape(contrast_id)}">'
             f"<td><code>{html.escape(contrast_id)}</code></td>"
             f"<td>{summary_cell(gene, base_dir)}</td>"
             f"<td>{summary_cell(transcript, base_dir)}</td>"
@@ -282,9 +364,13 @@ def render(args: argparse.Namespace) -> None:
     .contrast-matrix td {{ min-width: 140px; }}
     .contrast-matrix td:first-child {{ min-width: 220px; }}
     hr {{ border: 0; border-top: 1px solid #d0d7de; margin: 0.55rem 0; }}
+    nav.breadcrumbs {{ color: #57606a; margin-bottom: 1rem; }}
+    .controls {{ display: flex; flex-wrap: wrap; gap: 0.75rem; margin: 1rem 0; }}
+    input {{ border: 1px solid #d0d7de; border-radius: 6px; padding: 0.45rem 0.55rem; }}
   </style>
 </head>
 <body>
+  <nav class="breadcrumbs"><a href="../../index.html">ASPIS run dashboard</a> / project / {html.escape(args.project)}</nav>
   <h1>{html.escape(args.project)} integrated ASPIS report</h1>
   <p class="note">This project page joins assay-specific branches for the same biological project. Use it to move between RNA-seq gene/transcript/isoform-switch outputs, smallRNA miRNA outputs, target enrichment, and miRNA-mRNA integration without losing the project context.</p>
   <div class="metrics">
@@ -295,6 +381,12 @@ def render(args: argparse.Namespace) -> None:
     {metric("isoform-switch events", len(isoform_events))}
     {metric("miRNA-mRNA rows", len(mirna_integration))}
   </div>
+  <h2>Sample And Design Summary</h2>
+  <p class="section-note">This table gives the basic assay-level sample/design shape used by the project reports. It does not judge the biological design; it shows which metadata columns and sample tables are available for review.</p>
+  {assay_sample_summary(base_dir, rnaseq_base, smallrna_base)}
+  <h2>Workflow Status Matrix</h2>
+  <p class="section-note">This matrix separates expected branch artifacts from optional layers. Missing required branch pages need attention; optional layers can be not present when they were not configured.</p>
+  {workflow_status_matrix(base_dir, rnaseq_base, smallrna_base)}
   <div class="grid">
     {section("RNA-seq", "Gene, transcript, quantification, differential expression, enrichment, and isoform-switch outputs.", [
         link(rnaseq_base / "report/index.html", "RNA-seq branch report", base_dir),
@@ -324,10 +416,24 @@ def render(args: argparse.Namespace) -> None:
   </div>
   <h2>Project Contrast Matrix</h2>
   <p class="section-note">This matrix puts gene, transcript, and miRNA contrasts on the same row when assays share the same project and contrast labels. Use it as the biological navigation layer before opening assay-specific detail pages.</p>
+  <div class="controls"><input id="contrastFilter" placeholder="Filter contrasts"></div>
   {contrast_matrix(base_dir, rnaseq_summary, smallrna_summary, rnaseq_enrichment)}
   <h2>Raw Contrast Summary</h2>
   <p class="section-note">This lower table preserves the assay-specific summary rows used to build the matrix above.</p>
   {summary_table(base_dir, rnaseq_base, smallrna_base)}
+  <h2>Status Glossary</h2>
+  <p class="note"><strong>ok</strong> means the artifact exists or the source manifest says the layer completed. <strong>not present</strong> means an optional layer was not configured or did not apply. <strong>missing</strong> means an expected linked artifact is absent. Biological interpretation still requires reviewing the linked source tables and plots.</p>
+  <script>
+    const contrastInput = document.getElementById('contrastFilter');
+    if (contrastInput) {{
+      contrastInput.addEventListener('input', () => {{
+        const text = contrastInput.value.toLowerCase();
+        document.querySelectorAll('.contrast-row').forEach(row => {{
+          row.style.display = !text || row.textContent.toLowerCase().includes(text) ? '' : 'none';
+        }});
+      }});
+    }}
+  </script>
 </body>
 </html>
 """
