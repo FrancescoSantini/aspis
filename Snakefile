@@ -4260,6 +4260,7 @@ rule render_smallrna_report_index:
         asset_manifest=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/differential/reports/asset_manifest.tsv",
         technical_pdf=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/differential/reports/technical_report.pdf",
         technical_done=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/differential/reports/technical_report.done",
+        technical_qa=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/differential/reports/technical_report.qa.tsv",
         done=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/differential/reports/report_index.done"
     params:
         warnings_html=lambda wildcards: optional_shell_arg(
@@ -4287,6 +4288,10 @@ rule render_smallrna_report_index:
           --asset-manifest {output.asset_manifest:q} \
           --output {output.technical_pdf:q} \
           --done {output.technical_done:q} \
+          >> {log:q} 2>&1
+        python3 workflow/scripts/validate_technical_pdf_report.py \
+          --pdf {output.technical_pdf:q} \
+          --output {output.technical_qa:q} \
           >> {log:q} 2>&1
         """
 
@@ -6353,6 +6358,7 @@ rule render_rnaseq_differential_report_index:
         asset_manifest=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/reports/asset_manifest.tsv",
         technical_pdf=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/reports/technical_report.pdf",
         technical_done=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/reports/technical_report.done",
+        technical_qa=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/reports/technical_report.qa.tsv",
         done=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/reports/report_index.done"
     params:
         biotype_html=lambda wildcards: optional_shell_arg(
@@ -6438,6 +6444,10 @@ rule render_rnaseq_differential_report_index:
           --asset-manifest {output.asset_manifest:q} \
           --output {output.technical_pdf:q} \
           --done {output.technical_done:q} \
+          >> {log:q} 2>&1
+        python3 workflow/scripts/validate_technical_pdf_report.py \
+          --pdf {output.technical_pdf:q} \
+          --output {output.technical_qa:q} \
           >> {log:q} 2>&1
         """
 

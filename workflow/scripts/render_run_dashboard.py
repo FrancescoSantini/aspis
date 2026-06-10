@@ -231,7 +231,10 @@ def build_report_inventory(
                         assay=assay,
                         html_path=base / "differential/reports/index.html",
                         pdf_path=base / "differential/reports/technical_report.pdf",
-                        summary_paths=[base / "differential/reports/summaries/summary_manifest.tsv"],
+                        summary_paths=[
+                            base / "differential/reports/summaries/summary_manifest.tsv",
+                            base / "differential/reports/technical_report.qa.tsv",
+                        ],
                         manifest_paths=[base / "differential/reports/report_plan.tsv"],
                         expected=expected,
                     ),
@@ -348,7 +351,10 @@ def build_report_inventory(
                         assay=assay,
                         html_path=small / "differential/reports/index.html",
                         pdf_path=small / "differential/reports/technical_report.pdf",
-                        summary_paths=[small / "differential/reports/summaries/summary_manifest.tsv"],
+                        summary_paths=[
+                            small / "differential/reports/summaries/summary_manifest.tsv",
+                            small / "differential/reports/technical_report.qa.tsv",
+                        ],
                         manifest_paths=[small / "differential/reports/report_plan.tsv"],
                         expected=expected,
                     ),

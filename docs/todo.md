@@ -352,17 +352,21 @@ Completed hardening slice:
   RNA-seq technical report, 118 pages; smallRNA technical report, 113 pages.
   Both reports are generated as PDF documents rather than screenshot-only
   browser captures.
+- `validate_technical_pdf_report.py` now writes a structural QA TSV for each
+  generated technical PDF. It checks file existence, nonzero page count,
+  extractable text, tiny raster image placements, and full-page raster captures
+  with little text.
+- RNA-seq and smallRNA technical report rules now emit
+  `technical_report.qa.tsv` beside `technical_report.pdf`; the run dashboard
+  inventory links these QA TSVs as report summary artifacts.
+- `tests/validate_technical_pdf_report_contract.py` covers a valid vector-text
+  PDF, a tiny embedded raster image failure, and a full-page raster/no-text
+  failure.
 
-Remaining code tasks:
+Residual P1 polish:
 
-- Add a PDF rendering QA smoke test that checks:
-  - file exists;
-  - page count is nonzero;
-  - embedded images are not tiny relative to A4 page size;
-  - the output contains text objects, not only one full-page raster image;
-  - obvious placeholder-only reports are flagged.
 - Keep a final manual visual QA spot check for regenerated real-run technical
-  PDFs, especially plot labels and dense tables.
+  PDFs when layout changes, especially plot labels and dense tables.
 - Preserve original plot files as linked artifacts.
 
 Operator/data validation tasks:
