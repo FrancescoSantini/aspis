@@ -97,7 +97,10 @@ def path_from_text(path_text_value: str) -> Path | None:
     return Path(path_text_value)
 
 
-def inventory_status(paths: list[Path], expected: bool = True) -> str:
+def inventory_status(paths: list[Path], expected: bool = True, required_paths: list[Path] | None = None) -> str:
+    required_paths = required_paths or []
+    if required_paths and not all(path.exists() for path in required_paths):
+        return "missing" if expected else "not_present"
     if any(path.exists() for path in paths):
         return "ok"
     return "missing" if expected else "not_present"
@@ -121,13 +124,14 @@ def inventory_row(
     primary_paths = primary_paths or []
     manifest_paths = manifest_paths or []
     status_paths = [path for path in [html_path, pdf_path] if path is not None] + summary_paths + primary_paths + manifest_paths
+    required_paths = [html_path] if html_path is not None else []
     return {
         "report_type": report_type,
         "report_label": label,
         "project": project,
         "assay": assay,
         "contrast_id": contrast_id,
-        "status": inventory_status(status_paths, expected),
+        "status": inventory_status(status_paths, expected, required_paths),
         "html": path_text(html_path) if html_path else "",
         "pdf": path_text(pdf_path) if pdf_path else "",
         "summary_tsv": join_paths(summary_paths),

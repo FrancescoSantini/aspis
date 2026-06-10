@@ -66,8 +66,9 @@ def validate(rows: list[dict[str, str]]) -> list[str]:
             errors.append(f"line {index}: report_type is blank")
         if not row["report_label"]:
             errors.append(f"line {index}: report_label is blank")
+        html_paths = split_paths(row["html"])
         linked_paths = (
-            split_paths(row["html"])
+            html_paths
             + split_paths(row["pdf"])
             + split_paths(row["summary_tsv"])
             + split_paths(row["primary_tables"])
@@ -78,8 +79,12 @@ def validate(rows: list[dict[str, str]]) -> list[str]:
         existing = [path for path in linked_paths if path.exists()]
         if row["status"] == "ok" and not existing:
             errors.append(f"line {index}: status is ok but no linked artifact exists")
-        if row["status"] in {"missing", "not_present"} and existing:
-            errors.append(f"line {index}: status is {row['status']} but at least one linked artifact exists")
+        if row["status"] == "ok":
+            missing_html = [path for path in html_paths if not path.exists()]
+            if missing_html:
+                errors.append(f"line {index}: status is ok but HTML artifact is missing: {missing_html[0]}")
+        if row["status"] in {"missing", "not_present"} and html_paths and all(path.exists() for path in html_paths):
+            errors.append(f"line {index}: status is {row['status']} but all listed HTML artifacts exist")
     return errors
 
 
