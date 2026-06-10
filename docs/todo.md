@@ -4,7 +4,7 @@ This is the canonical ASPIS backlog. Older TODO-style notes have been merged
 here so that implementation priorities, validation blockers, and cleanup work
 are tracked in one place.
 
-Last updated: 2026-06-09.
+Last updated: 2026-06-10.
 
 ## How To Read This Backlog
 
@@ -28,34 +28,30 @@ environment, inputs, and outputs.
 
 ## Current Validation Baseline
 
-ASPIS has substantial real-data validation from a BEAS_2B G100 full run and
-earlier local subset runs. This proves a meaningful path through
-materialization, branch planning, staged FastQC/MultiQC, RNA-seq preprocessing,
-RNA-seq alignment, alignment QC, StringTie/gffcompare quantification,
-gene/transcript DESeq2, isoform-switch execution, isoform-switch FASTA export,
-smallRNA preprocessing, smallRNA alignment/quantification/differential reporting
-where configured, and top-level run dashboards.
+ASPIS has substantial real-data validation from a BEAS_2B G100 full run,
+including a resource-backed review bundle inspected on 2026-06-10. This proves
+a meaningful path through materialization, branch planning, staged
+FastQC/MultiQC, RNA-seq preprocessing, RNA-seq alignment, alignment QC,
+StringTie/gffcompare quantification, gene/transcript DESeq2, isoform-switch
+execution, isoform-switch FASTA export, smallRNA preprocessing, smallRNA
+alignment/quantification/differential reporting, GO/Reactome ORA and ranked
+enrichment, smallRNA target enrichment, miRNA-mRNA integration, integrated
+project reports, QC overview, typed report inventory, and top-level run
+dashboards.
 
-This is not yet a production-complete release. The real runs exposed the next
-blockers:
+This is not yet a production-complete release. The remaining blockers are now
+narrower:
 
-- ORA/GSEA and miRNA target enrichment have open/reviewed resource preparation
-  helpers and have passed a first BEAS_2B resource-backed validation run.
-  Remaining enrichment work is now report polish, mapping-threshold QA, and
-  additional cohort validation rather than basic resource plumbing.
-- The report graph is too nested: run index, branch reports, differential
-  reports, isoform-switch pages, smallRNA pages, and tables are all reachable,
-  but the navigation is not yet biologist-friendly.
-- RNA-seq and smallRNA branches for the same project now have a first integrated
-  project contrast matrix. The broader report graph still needs polish for
-  larger studies and easier biological navigation.
-- Technical PDF reports now use a vector-text ReportLab renderer and prefer
-  source plot PDFs/SVGs over raster previews. The regenerated real-run PDFs
-  still need visual QA after the environment update.
 - DTU methods are still not configured or validated.
-- At least one additional appropriate real validation cohort, or one repeated
-  full validation with configured resources and documented review, remains
-  incomplete.
+- Technical PDF reports have structurally valid vector-text output on the
+  inspected BEAS_2B bundle, but automated PDF QA and final visual spot checks
+  still need to be formalized.
+- A machine-readable validation matrix is still missing, even though the
+  BEAS_2B run now provides one full validation example.
+- At least one additional appropriate real validation cohort remains desirable
+  to reduce overfitting to one experiment line.
+- Optional isoform-switch consequence annotation paths remain unvalidated for
+  open local tools or precomputed user-supplied annotation tables.
 
 The sections below are ordered by implementation dependency and practical
 validation value. Earlier sections should be completed before later polish work.
@@ -149,6 +145,11 @@ Completed hardening slice:
   completed with the reviewed target table, and the integrated project report
   now exposes gene, transcript, miRNA, GO/Reactome, target, and integration
   links on one contrast matrix.
+- The inspected `g100_beas_full_BEAS_2B_review_20260610_1159.tar` bundle
+  contains no stale "No feature set GMT or table configured" message in the
+  main report pages checked. It includes 48 RNA-seq enrichment SVG/TSV
+  artifacts, 24 smallRNA target-enrichment SVG artifacts, and 6 miRNA-mRNA
+  integration SVG artifacts.
 
 Closed acceptance evidence:
 
@@ -159,7 +160,7 @@ Closed acceptance evidence:
 - Missing resources never look like successful null biological results.
 - License-restricted resources are never implied to be free ASPIS defaults.
 
-## P0 - Report Information Architecture
+## Validated - Report Information Architecture
 
 Reason for priority: the pipeline now produces many correct files, but the
 reader experience is too fragmented. A single entry point exists, but users can
@@ -223,9 +224,10 @@ Completed hardening slice:
   summary/target rows, so downstream checks no longer need to scrape nested
   HTML pages.
 - `validate_report_inventory.py` validates the report inventory schema,
-  duplicate keys, linked artifact status, and status vocabulary. The dashboard
-  Snakemake rule now emits `report_inventory_validation.tsv`, and the G100
-  review bundle includes both the inventory and validation summary.
+  duplicate keys, linked HTML artifact existence, linked artifact status, and
+  status vocabulary. The dashboard Snakemake rule now emits
+  `report_inventory_validation.tsv`, and the G100 review bundle includes both
+  the inventory and validation summary.
 - The run-level dashboard now renders `qc/index.html`, a stage-organized QC
   overview that groups raw FastQC/MultiQC, post-trim QC, RNA-seq alignment QC,
   RNA-seq sample/biotype/warning inputs, and smallRNA length/read-fate outputs
@@ -246,6 +248,13 @@ Completed hardening slice:
   the only way to understand report status.
 - Report text now states what plots and status rows represent without pretending
   to automatically interpret the biology.
+- The inspected `g100_beas_full_BEAS_2B_review_20260610_1159.tar` bundle passed
+  the stricter report inventory check: 54 inventory rows, 54 `ok` statuses, 36
+  contrast-level rows, and zero validation errors.
+- The same bundle passed a local link audit on the dashboard, QC overview,
+  integrated project page, RNA-seq enrichment overview, smallRNA differential
+  index, and smallRNA target/integration overview: 696 local HTML/SVG/PDF/TSV
+  references checked and zero missing links.
 
 Residual P1 polish:
 
@@ -268,43 +277,44 @@ Acceptance criteria:
 - The run emits a typed, validated `report_inventory.tsv` that packaging and QA
   can consume without parsing HTML.
 
-## P0 - RNA-seq And SmallRNA Matched Integration
+## Validated - RNA-seq And SmallRNA Matched Integration
 
 Reason for priority: matched RNA-seq and smallRNA projects should make the
 cross-assay comparison visible. BEAS_2B is one available example, but the
 implementation should work for any project with compatible RNA-seq and smallRNA
 metadata.
 
-Remaining code tasks:
+Status: closed as a P0 blocker for projects where RNA-seq and smallRNA branches
+share project and contrast labels. Residual pairing sophistication is now P1
+polish, not a blocker for the current real-data validation claim.
 
-- Define the matching contract for paired assays:
-  - same `project`;
-  - compatible `biospecimen_id` or an explicit match table;
-  - matching condition/treatment/dose/dose_unit/time_h when appropriate;
-  - support for RNA-seq-only, smallRNA-only, and mixed projects.
-- Build a cross-assay project plan:
-  - RNA-seq branch path;
-  - smallRNA branch path;
-  - shared and assay-specific samples;
-  - shared contrasts;
-  - non-overlapping contrasts;
-  - match status and reasons.
-- Implement miRNA-mRNA comparison outputs:
-  - differentially expressed miRNAs;
-  - differentially expressed target genes;
-  - inverse-direction miRNA-target pairs;
-  - target set ORA/GSEA for miRNA target genes;
-  - optional correlation across matched biospecimens when sample pairing is
-    valid and replicate count is sufficient.
-- Add integration reports:
-  - project-level overview panel;
-  - contrast-level miRNA-mRNA tables;
-  - target evidence/source summaries;
-  - plots for direction agreement, inverse target pairs, and enriched target
-    pathways;
-  - status rows when targets or assay pairing are not configured.
-- Ensure integration never blocks standalone RNA-seq or standalone smallRNA
-  runs.
+Completed hardening slice:
+
+- Integrated project reports join RNA-seq and smallRNA branches by shared
+  project and contrast labels.
+- The project contrast matrix places gene DE, transcript DE, miRNA DE,
+  RNA-seq GO/Reactome, target enrichment, target-gene feature sets, and
+  miRNA-mRNA integration links side by side.
+- SmallRNA target/integration reports expose target enrichment, target-source
+  summaries, target-gene feature sets, inverse miRNA-target pairs,
+  miRNA-mRNA integration tables, integration SVGs, inverse target feature sets,
+  and ranked inverse target feature sets.
+- Standalone assay reports continue to render independently; missing optional
+  target/integration layers report status instead of blocking RNA-seq or
+  smallRNA differential outputs.
+- The inspected BEAS_2B bundle validates the integrated path with 6 matched
+  contrasts, 6 miRNA-mRNA integration SVGs, and target/integration links
+  reachable from the run dashboard, smallRNA report, target overview, and
+  integrated project matrix.
+
+Residual P1 polish:
+
+- Add an explicit optional match table for studies where RNA-seq and smallRNA
+  sample pairing is not captured by shared project/contrast metadata.
+- Add correlation across matched biospecimens when sample pairing is valid and
+  replicate count is sufficient.
+- Summarize non-overlapping RNA-seq-only and smallRNA-only contrasts more
+  explicitly in the project page for mixed or incomplete studies.
 
 Acceptance criteria:
 
@@ -338,6 +348,10 @@ Completed hardening slice:
   remain a fallback for formats without a vector source.
 - `reportlab`, `pypdf`, and `svglib` are declared in
   `envs/aspis-snakemake.yaml`.
+- The inspected BEAS_2B bundle contains structurally valid A4 technical PDFs:
+  RNA-seq technical report, 118 pages; smallRNA technical report, 113 pages.
+  Both reports are generated as PDF documents rather than screenshot-only
+  browser captures.
 
 Remaining code tasks:
 
@@ -347,18 +361,14 @@ Remaining code tasks:
   - embedded images are not tiny relative to A4 page size;
   - the output contains text objects, not only one full-page raster image;
   - obvious placeholder-only reports are flagged.
-- Re-run visual QA on full real-run technical PDFs after the vector plot
-  embedding environment is installed on G100.
+- Keep a final manual visual QA spot check for regenerated real-run technical
+  PDFs, especially plot labels and dense tables.
 - Preserve original plot files as linked artifacts.
 
 Operator/data validation tasks:
 
-- Update the active ASPIS environment on G100 after pulling the ReportLab
-  dependency.
-- Force-regenerate RNA-seq and smallRNA `technical_report.pdf` outputs on a
-  real run.
-- Visually inspect the regenerated PDFs at normal zoom for plot labels, table
-  readability, page count, and section order.
+- Visually inspect regenerated PDFs at normal zoom when report layout changes,
+  especially plot labels, table readability, page count, and section order.
 
 Acceptance criteria:
 
@@ -385,6 +395,11 @@ Remaining code tasks:
   rates once more real resource distributions are observed. Current preflight
   blocks zero-overlap resources and metadata inconsistencies; practical warning
   thresholds should be calibrated from validation runs rather than guessed.
+- Record the inspected BEAS_2B full-resource run in the validation matrix once
+  the template exists. Evidence to carry forward: resource-backed GO/Reactome,
+  smallRNA target resources, miRNA-mRNA integration, 54-row report inventory,
+  zero missing links across the six main report pages checked, RNA-seq and
+  smallRNA technical PDFs, and commit state at/after `d020d6d`.
 
 Operator/data validation tasks:
 
@@ -398,8 +413,9 @@ Operator/data validation tasks:
 - Confirm reference genome, annotation, aligner indexes, miRNA references,
   contaminant references, target tables, and feature-set resources are the
   intended real files.
-- Run at least one full real project from raw FASTQ to final reports with
-  configured open resources.
+- Treat the inspected BEAS_2B full-resource run as the first completed real
+  project from raw FASTQ to final reports with configured open/reviewed
+  resources; repeat the process on another appropriate cohort when practical.
 - Compare ASPIS outputs against an appropriate reference point when one exists:
   legacy outputs, an independent pipeline, or a documented manual review. The
   old pipeline is useful context but not a source of truth.
