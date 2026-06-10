@@ -388,22 +388,31 @@ readiness requires complete, documented validation with configured resources and
 at least one representative real dataset that exercises the major workflow
 surfaces.
 
+Completed hardening slice:
+
+- `docs/validation_matrix.template.tsv` defines the machine-readable validation
+  matrix columns: project, assay, branch, layer, config, commit, reference
+  bundle, resource bundle, run location, report bundle, status, validation
+  date, validator, evidence, and review notes.
+- `workflow/scripts/validate_validation_matrix.py` validates required columns,
+  unique validation IDs, allowed statuses/assays, ISO dates, git SHA format,
+  non-placeholder fields for passed rows, evidence/review-note length, and
+  absence of personal/private path tokens in committed public matrices.
+- `tests/validate_validation_matrix_contract.py` covers valid rows, duplicate
+  IDs, placeholder values, and private-path leakage.
+- `docs/validation_matrix.tsv` now records the inspected BEAS_2B full-resource
+  run as the first real-data validation claim: 15 passed rows spanning input
+  materialization, RNA-seq QC/preprocess/alignment/quantification/DESeq2,
+  GO/Reactome enrichment, isoform switch, smallRNA QC/alignment/quantification,
+  smallRNA DESeq2, target enrichment, miRNA-mRNA integration, technical PDFs,
+  and report inventory/link checks.
+
 Remaining code tasks:
 
-- Add a machine-readable validation matrix template with project, assay, branch,
-  layer, config, commit, reference bundle, resource bundle, run location,
-  status, and review notes.
-- Add a lightweight validator for completed validation-matrix rows so future
-  claims have the required provenance fields.
 - Add configurable warnings or failures for low-but-nonzero resource mapping
   rates once more real resource distributions are observed. Current preflight
   blocks zero-overlap resources and metadata inconsistencies; practical warning
   thresholds should be calibrated from validation runs rather than guessed.
-- Record the inspected BEAS_2B full-resource run in the validation matrix once
-  the template exists. Evidence to carry forward: resource-backed GO/Reactome,
-  smallRNA target resources, miRNA-mRNA integration, 54-row report inventory,
-  zero missing links across the six main report pages checked, RNA-seq and
-  smallRNA technical PDFs, and commit state at/after `d020d6d`.
 
 Operator/data validation tasks:
 
@@ -426,7 +435,8 @@ Operator/data validation tasks:
 - Record expected differences due to changed tools, references, thresholds,
   model formulas, resource versions, or bug fixes.
 - Keep the validation matrix updated by project, assay, branch, layer, config,
-  commit, reference bundle, resource bundle, and run location.
+  commit, reference bundle, resource bundle, run location, report bundle,
+  validator, evidence, and review notes.
 
 Acceptance criteria:
 
