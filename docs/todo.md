@@ -42,7 +42,7 @@ technical PDFs, review-bundle packaging, and top-level run dashboards.
 This is not yet a production-complete release, but the active work is now
 narrower and no longer organized as open P0 report/resource plumbing:
 
-- DTU methods are still not configured or validated.
+- Native DRIMSeq DTU execution is now implemented and contract-tested, but real-run validation with `R::DRIMSeq` is still pending.
 - Optional isoform-switch consequence annotation paths remain unvalidated for
   open local tools or precomputed user-supplied annotation tables.
 - Resource mapping thresholds for low-but-nonzero mapping rates need calibration
@@ -537,49 +537,50 @@ Residual validation:
 
 ## P1 - DTU Methods
 
-Reason for priority: DTU is expected for transcript-level biology, but the
-current DTU layer is still effectively not configured.
+Reason for priority: DTU is expected for transcript-level biology. ASPIS now
+uses a staged implementation so the first engine is useful and auditable before
+adding event-specific methods.
+
+Current scope being implemented:
+
+- DRIMSeq is the first native DTU engine.
+- DTU planning is contrast-level and mirrors the DESeq2/isoform-switch split:
+  condition comparisons are optionally stratified by `contrast_by` columns such
+  as `time_h`.
+- DRIMSeq runs from transcript-level count matrices and transcript-to-gene
+  metadata. It produces contrast-specific gene-level, transcript-level, summary,
+  and standardized result tables.
+- Missing `Rscript`, missing `R::DRIMSeq`, insufficient replicates, missing
+  sample columns, and empty post-filter universes are reported as blocked rather
+  than silently skipped.
+- DEXSeq, SUPPA2, and rMATS remain command-template methods for now because they
+  require method-specific count/event inputs that should not be guessed from the
+  transcript count matrix.
 
 Remaining code tasks:
 
-- Decide which DTU engines are supported first:
-  - DRIMSeq for count-based DTU;
-  - DEXSeq-based DTU if the input model is appropriate;
-  - SUPPA2 or rMATS only if event-level inputs are intentionally supported.
-- Keep DTU separate from IsoformSwitchAnalyzeR:
-  - DTU asks whether transcript usage changes;
-  - isoform-switch reporting prioritizes candidate switch events and
-    consequences.
-- Add config keys for DTU methods:
-  - enabled methods;
-  - design formula;
-  - minimum replicate count;
-  - minimum count/expression filters;
-  - per-method extra arguments;
-  - optional environment/tool commands.
-- Add environment reports for DTU dependencies:
-  - `R::DRIMSeq`;
-  - `R::DEXSeq`;
-  - `suppa.py` when supported;
-  - `rmats.py` when supported.
-- Implement per-contrast DTU jobs where possible, mirroring DESeq2 and
-  isoform-switch splitting.
-- Write method-specific result tables plus a merged DTU manifest.
-- Add DTU report sections and status rows:
-  - disabled;
-  - not configured;
-  - missing optional tool;
-  - blocked by insufficient replicates;
-  - failed;
-  - ok.
-- Validate on a synthetic smoke test, then on an appropriate real validation
-  cohort.
+- Validate native DRIMSeq on a real RNA-seq validation run with
+  `rnaseq_dtu.run: true` and prepared `R::DRIMSeq` in the active environment.
+- Surface DRIMSeq result summaries more prominently in the RNA-seq differential
+  report and project-level transcript section.
+- Add report rows that distinguish `planned`, `blocked`, `failed`, and
+  `completed` per DTU contrast/method.
+- Decide whether DEXSeq should be supported through exon-bin counting or kept as
+  a user-provided command-template method.
+- Decide whether SUPPA2 and rMATS belong in ASPIS native execution; if so, add
+  explicit event-generation inputs instead of inferring events from transcript
+  counts.
+- Add optional environment checks for future engines only when their native input
+  contracts are implemented.
 
 Acceptance criteria:
 
-- `rnaseq_dtu.run: true` with a configured method produces real DTU tables.
-- Missing DTU tools do not break standard RNA-seq analysis.
-- Reports explain whether DTU was not configured, blocked, failed, or completed.
+- `rnaseq_dtu.run: true` with `method: DRIMSeq` produces real contrast-level DTU
+  tables when DRIMSeq is installed.
+- Missing DRIMSeq dependencies do not break standard RNA-seq analysis; the DTU
+  manifest records a blocked status with a concrete reason.
+- Reports explain whether each DTU contrast was planned, blocked, failed, or
+  completed.
 
 ## P1 - Isoform-Switch Consequence Annotation Hardening
 

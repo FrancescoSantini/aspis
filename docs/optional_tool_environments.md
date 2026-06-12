@@ -110,23 +110,27 @@ Externally managed or site-managed tools:
 - `rMATS` or `rMATS-turbo`, because installations often vary by Python,
   compiler, and cluster setup.
 
-DTU command templates are configured under:
+Native DRIMSeq DTU is configured under:
 
 ```yaml
 rnaseq_dtu:
   run: true
-  method: planned
-  candidate_methods:
-    - DRIMSeq
-    - DEXSeq
-    - SUPPA2
-    - rMATS
-  drimseq_command: ""
-  dexseq_command: ""
-  suppa2_command: ""
-  rmats_command: ""
+  method: DRIMSeq
+  contrast_by:
+    - time_h
+  min_replicates_per_group: 2
+  min_count: 10
+  min_samples: 2
+  min_proportion: 0.05
+  min_gene_count: 10
+  min_transcripts_per_gene: 2
+  rscript: Rscript
+  drimseq_script: workflow/scripts/run_drimseq_dtu.R
 ```
 
+If `Rscript` or `R::DRIMSeq` is missing, the DTU manifest records a blocked
+status. DEXSeq, SUPPA2, and rMATS are still available only as command-template
+methods while their native event/count input contracts remain undecided.
 Templates may use `{samples}`, `{aligned_samples}`, `{transcript_counts}`,
 `{transcript_metadata}`, `{annotation_gtf}`, `{outdir}`, `{project}`, and
 `{method}`.
@@ -143,8 +147,9 @@ directory for common tabular result files and writes:
 The standard table uses these columns:
 
 ```text
-project, method, source_file, feature_id, gene_id, gene_name, event_type,
-statistic, log2_fold_change, delta_psi, pvalue, padj, direction, status
+project, method, contrast_id, source_file, feature_id, gene_id, gene_name,
+event_type, statistic, log2_fold_change, delta_psi, pvalue, padj, direction,
+status
 ```
 
 The parser accepts common DRIMSeq, DEXSeq, SUPPA2, and rMATS-style column names,

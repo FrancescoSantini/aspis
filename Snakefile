@@ -5973,8 +5973,21 @@ rule plan_rnaseq_dtu:
             "annotation_gtf",
             RNASEQ_ALIGNMENT.get("annotation_gtf", ""),
         ),
-        method=RNASEQ_DTU.get("method", "planned"),
-        candidate_methods=joined_config_values(RNASEQ_DTU.get("candidate_methods", "DRIMSeq,DEXSeq,SUPPA2,rMATS"))
+        method=RNASEQ_DTU.get("method", "DRIMSeq"),
+        candidate_methods=joined_config_values(RNASEQ_DTU.get("candidate_methods", "DRIMSeq,DEXSeq,SUPPA2,rMATS")),
+        condition_col=RNASEQ_DTU.get(
+            "condition_col",
+            RNASEQ_DIFFERENTIAL.get("condition_col", "condition"),
+        ),
+        control_label=RNASEQ_DTU.get(
+            "control_label",
+            RNASEQ_DIFFERENTIAL.get("control_label", "control"),
+        ),
+        contrast_by=joined_config_values(RNASEQ_DTU.get(
+            "contrast_by",
+            RNASEQ_DIFFERENTIAL.get("contrast_by", []),
+        )),
+        min_replicates=RNASEQ_DTU.get("min_replicates_per_group", 2)
     log:
         "logs/branches/rnaseq/{project}.dtu_plan.log"
     shell:
@@ -5990,6 +6003,10 @@ rule plan_rnaseq_dtu:
           --project {wildcards.project:q} \
           --method {params.method:q} \
           --candidate-methods {params.candidate_methods:q} \
+          --condition-col {params.condition_col:q} \
+          --control-label {params.control_label:q} \
+          --contrast-by {params.contrast_by:q} \
+          --min-replicates {params.min_replicates:q} \
           > {log:q} 2>&1
         """
 
@@ -6012,8 +6029,15 @@ rule run_rnaseq_dtu_methods:
             "annotation_gtf",
             RNASEQ_ALIGNMENT.get("annotation_gtf", ""),
         ),
-        method=RNASEQ_DTU.get("method", "planned"),
+        method=RNASEQ_DTU.get("method", "DRIMSeq"),
         candidate_methods=joined_config_values(RNASEQ_DTU.get("candidate_methods", "DRIMSeq,DEXSeq,SUPPA2,rMATS")),
+        rscript=RNASEQ_DTU.get("rscript", "Rscript"),
+        drimseq_script=RNASEQ_DTU.get("drimseq_script", "workflow/scripts/run_drimseq_dtu.R"),
+        min_count=RNASEQ_DTU.get("min_count", 10),
+        min_samples=RNASEQ_DTU.get("min_samples", 2),
+        min_proportion=RNASEQ_DTU.get("min_proportion", 0.05),
+        min_gene_count=RNASEQ_DTU.get("min_gene_count", 10),
+        min_transcripts_per_gene=RNASEQ_DTU.get("min_transcripts_per_gene", 2),
         drimseq_command=shell_arg("--drimseq-command", RNASEQ_DTU.get("drimseq_command", "")),
         dexseq_command=shell_arg("--dexseq-command", RNASEQ_DTU.get("dexseq_command", "")),
         suppa2_command=shell_arg("--suppa2-command", RNASEQ_DTU.get("suppa2_command", "")),
@@ -6036,6 +6060,13 @@ rule run_rnaseq_dtu_methods:
           --project {wildcards.project:q} \
           --method {params.method:q} \
           --methods {params.candidate_methods:q} \
+          --rscript {params.rscript:q} \
+          --drimseq-script {params.drimseq_script:q} \
+          --dtu-min-count {params.min_count:q} \
+          --dtu-min-samples {params.min_samples:q} \
+          --dtu-min-proportion {params.min_proportion:q} \
+          --dtu-min-gene-count {params.min_gene_count:q} \
+          --dtu-min-transcripts-per-gene {params.min_transcripts_per_gene:q} \
           {params.drimseq_command} \
           {params.dexseq_command} \
           {params.suppa2_command} \

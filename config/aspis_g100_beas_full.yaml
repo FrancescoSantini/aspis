@@ -228,7 +228,19 @@ rnaseq_differential:
   lfc_shrinkage: none
 rnaseq_dtu:
   run: false
-  method: planned
+  method: DRIMSeq
+  condition_col: condition
+  control_label: control
+  contrast_by:
+  - time_h
+  min_replicates_per_group: 2
+  min_count: 10
+  min_samples: 2
+  min_proportion: 0.05
+  min_gene_count: 10
+  min_transcripts_per_gene: 2
+  rscript: Rscript
+  drimseq_script: workflow/scripts/run_drimseq_dtu.R
   candidate_methods:
   - DRIMSeq
   - DEXSeq

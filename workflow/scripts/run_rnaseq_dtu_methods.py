@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
-"""Run or manifest optional RNA-seq event-level DTU/splicing engines."""
+"""Run or manifest optional RNA-seq DTU/splicing engines."""
 
 from __future__ import annotations
 
 import argparse
 import csv
 import re
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -25,6 +26,7 @@ MANIFEST_COLUMNS = [
     "assay",
     "level",
     "method",
+    "contrast_id",
     "status",
     "reason",
     "command",
@@ -37,6 +39,9 @@ MANIFEST_COLUMNS = [
     "transcript_counts",
     "transcript_metadata",
     "annotation_gtf",
+    "gene_results",
+    "transcript_results",
+    "summary",
     "standardized_results",
     "standardized_result_count",
     "standardized_status",
@@ -45,6 +50,7 @@ MANIFEST_COLUMNS = [
 STANDARD_RESULT_COLUMNS = [
     "project",
     "method",
+    "contrast_id",
     "source_file",
     "feature_id",
     "gene_id",
@@ -61,6 +67,7 @@ STANDARD_RESULT_COLUMNS = [
 
 RESULT_SUFFIXES = {".csv", ".dpsi", ".pvalues", ".tsv", ".txt"}
 RMATS_EVENT_TYPES = {"A3SS", "A5SS", "MXE", "RI", "SE"}
+DRIMSEQ_BLOCKED_EXIT = 20
 
 
 class SafeFormat(dict):
@@ -80,8 +87,15 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--manifest", required=True)
     parser.add_argument("--done", required=True)
     parser.add_argument("--project", required=True)
-    parser.add_argument("--method", default="planned")
+    parser.add_argument("--method", default="DRIMSeq")
     parser.add_argument("--methods", default="DRIMSeq,DEXSeq,SUPPA2,rMATS")
+    parser.add_argument("--rscript", default="Rscript")
+    parser.add_argument("--drimseq-script", default="workflow/scripts/run_drimseq_dtu.R")
+    parser.add_argument("--dtu-min-count", type=int, default=10)
+    parser.add_argument("--dtu-min-samples", type=int, default=2)
+    parser.add_argument("--dtu-min-proportion", type=float, default=0.05)
+    parser.add_argument("--dtu-min-gene-count", type=int, default=10)
+    parser.add_argument("--dtu-min-transcripts-per-gene", type=int, default=2)
     parser.add_argument("--drimseq-command", default="")
     parser.add_argument("--dexseq-command", default="")
     parser.add_argument("--suppa2-command", default="")
@@ -97,32 +111,36 @@ def read_tsv(path: Path) -> list[dict[str, str]]:
         return [{key: value or "" for key, value in row.items()} for row in reader]
 
 
-def write_tsv(path: Path, rows: list[dict[str, str]]) -> None:
+def write_tsv(path: Path, rows: list[dict[str, str]], columns: list[str] = MANIFEST_COLUMNS) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(handle, fieldnames=MANIFEST_COLUMNS, delimiter="\t", lineterminator="\n")
+        writer = csv.DictWriter(handle, fieldnames=columns, delimiter="\t", lineterminator="\n")
         writer.writeheader()
         for row in rows:
-            writer.writerow({column: row.get(column, "") for column in MANIFEST_COLUMNS})
+            writer.writerow({column: row.get(column, "") for column in columns})
 
 
 def write_done(path: Path, rows: list[dict[str, str]]) -> None:
-    failures = [row for row in rows if row["status"] == "failed"]
+    failed = [row for row in rows if row["status"] == "failed"]
     completed = [row for row in rows if row["status"] == "completed"]
+    blocked = [row for row in rows if row["status"] == "blocked"]
     planned = [row for row in rows if row["status"] == "planned"]
-    if failures:
+    if failed:
         status = "failed"
-        reason = ",".join(row["method"] for row in failures)
+        reason = ",".join(row["method"] for row in failed)
     elif completed:
         status = "ok"
-        reason = f"{len(completed)} method(s) completed"
+        reason = f"{len(completed)} DTU contrast/method job(s) completed"
+    elif blocked:
+        status = "blocked"
+        reason = f"{len(blocked)} DTU contrast/method job(s) blocked"
     else:
         status = "planned"
         reason = f"{len(planned)} method(s) have no configured command template"
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", encoding="utf-8") as handle:
-        handle.write("status\tcompleted_methods\tplanned_methods\treason\n")
-        handle.write(f"{status}\t{len(completed)}\t{len(planned)}\t{reason}\n")
+        handle.write("status\tcompleted\tplanned\tblocked\tfailed\ttotal\treason\n")
+        handle.write(f"{status}\t{len(completed)}\t{len(planned)}\t{len(blocked)}\t{len(failed)}\t{len(rows)}\t{reason}\n")
 
 
 def normalize_methods(method: str, methods: str) -> list[str]:
@@ -213,6 +231,8 @@ def infer_event_type(path: Path, row: dict[str, str]) -> str:
     explicit = first_value(row, ["event_type", "eventType", "event", "EventType"])
     if explicit:
         return explicit
+    if "drimseq" in path.name.lower():
+        return "transcript_usage"
     name = path.name.upper()
     for event_type in sorted(RMATS_EVENT_TYPES):
         if name.startswith(event_type + ".") or f".{event_type}." in name:
@@ -247,7 +267,7 @@ def read_result_rows(path: Path) -> list[dict[str, str]]:
 def is_result_file(path: Path) -> bool:
     if not path.is_file():
         return False
-    if path.name in {"stderr.log", "stdout.log", "standardized_results.tsv"}:
+    if path.name in {"stderr.log", "stdout.log", "standardized_results.tsv", "dtu_counts.tsv", "dtu_coldata.tsv", "drimseq_summary.tsv"}:
         return False
     if path.suffix.lower() in RESULT_SUFFIXES:
         return True
@@ -261,6 +281,7 @@ def candidate_result_files(method_dir: Path) -> list[Path]:
 def standardize_native_row(
     args: argparse.Namespace,
     method: str,
+    contrast_id: str,
     source_file: Path,
     row: dict[str, str],
 ) -> dict[str, str] | None:
@@ -292,11 +313,12 @@ def standardize_native_row(
         row,
         ["padj", "adjusted_pvalue", "adj_pvalue", "adj.p.value", "qvalue", "qval", "FDR"],
     )
-    if not any([feature_id, gene_id, statistic, log2_fold_change, delta_psi, pvalue, padj]):
+    if not any([statistic, log2_fold_change, delta_psi, pvalue, padj]):
         return None
     return {
         "project": args.project,
         "method": method,
+        "contrast_id": contrast_id,
         "source_file": str(source_file),
         "feature_id": feature_id,
         "gene_id": gene_id,
@@ -328,11 +350,12 @@ def standardize_method_outputs(
     args: argparse.Namespace,
     method: str,
     method_dir: Path,
+    contrast_id: str = "",
 ) -> tuple[str, int, str]:
     rows: list[dict[str, str]] = []
     for source_file in candidate_result_files(method_dir):
         for row in read_result_rows(source_file):
-            standardized = standardize_native_row(args, method, source_file, row)
+            standardized = standardize_native_row(args, method, contrast_id, source_file, row)
             if standardized is not None:
                 rows.append(standardized)
     if not rows:
@@ -342,31 +365,40 @@ def standardize_method_outputs(
     return str(output), len(rows), "ok"
 
 
-def run_method(args: argparse.Namespace, method: str, plan: Path) -> dict[str, str]:
-    method_dir = Path(args.outdir) / method.lower().replace("-", "_")
-    method_dir.mkdir(parents=True, exist_ok=True)
-    stdout = method_dir / "stdout.log"
-    stderr = method_dir / "stderr.log"
-    command_template = command_for_method(args, method).strip()
-    row = {
+def base_manifest_row(args: argparse.Namespace, method: str, method_dir: Path, contrast_id: str = "") -> dict[str, str]:
+    return {
         "project": args.project,
         "assay": "rnaseq",
         "level": "differential_transcript_usage",
         "method": method,
-        "command": command_template,
+        "contrast_id": contrast_id,
+        "command": "",
         "output_dir": str(method_dir),
         "stdout": "",
         "stderr": "",
-        "plan": str(plan),
+        "plan": args.plan,
         "samples": args.samples,
         "aligned_samples": args.aligned_samples,
         "transcript_counts": args.transcript_counts,
         "transcript_metadata": args.transcript_metadata,
         "annotation_gtf": args.annotation_gtf,
+        "gene_results": "",
+        "transcript_results": "",
+        "summary": "",
         "standardized_results": "",
         "standardized_result_count": "0",
         "standardized_status": "not_run",
     }
+
+
+def run_external_method(args: argparse.Namespace, method: str, plan: Path) -> dict[str, str]:
+    method_dir = Path(args.outdir) / method.lower().replace("-", "_")
+    method_dir.mkdir(parents=True, exist_ok=True)
+    stdout = method_dir / "stdout.log"
+    stderr = method_dir / "stderr.log"
+    command_template = command_for_method(args, method).strip()
+    row = base_manifest_row(args, method, method_dir)
+    row["command"] = command_template
     if not command_template:
         row.update(
             {
@@ -385,9 +417,7 @@ def run_method(args: argparse.Namespace, method: str, plan: Path) -> dict[str, s
     if completed.returncode == 0:
         row["status"] = "completed"
         row["reason"] = ""
-        standardized_results, result_count, standardized_status = standardize_method_outputs(
-            args, method, method_dir
-        )
+        standardized_results, result_count, standardized_status = standardize_method_outputs(args, method, method_dir)
         row["standardized_results"] = standardized_results
         row["standardized_result_count"] = str(result_count)
         row["standardized_status"] = standardized_status
@@ -395,6 +425,159 @@ def run_method(args: argparse.Namespace, method: str, plan: Path) -> dict[str, s
         row["status"] = "failed"
         row["reason"] = f"command exited with status {completed.returncode}"
     return row
+
+
+def selected_samples(samples: list[dict[str, str]], plan_row: dict[str, str]) -> list[dict[str, str]]:
+    wanted = {sample_id for sample_id in plan_row.get("samples", "").split(",") if sample_id}
+    return [row for row in samples if row.get("library_id", "") in wanted]
+
+
+def write_drimseq_inputs(args: argparse.Namespace, plan_row: dict[str, str], method_dir: Path) -> tuple[Path, Path]:
+    method_dir.mkdir(parents=True, exist_ok=True)
+    sample_rows = selected_samples(read_tsv(Path(args.samples)), plan_row)
+    sample_ids = [row["library_id"] for row in sample_rows]
+    if not sample_ids:
+        raise ValueError(f"contrast {plan_row.get('contrast_id', '')} selected no samples")
+
+    counts_path = method_dir / "dtu_counts.tsv"
+    coldata_path = method_dir / "dtu_coldata.tsv"
+    with Path(args.transcript_counts).open(newline="", encoding="utf-8") as input_handle, counts_path.open("w", newline="", encoding="utf-8") as output_handle:
+        reader = csv.DictReader(input_handle, delimiter="\t")
+        if reader.fieldnames is None:
+            raise ValueError(f"{args.transcript_counts} is empty")
+        id_column = reader.fieldnames[0]
+        missing = [sample_id for sample_id in sample_ids if sample_id not in reader.fieldnames]
+        if missing:
+            raise ValueError("sample(s) missing from transcript counts: " + ",".join(missing))
+        writer = csv.DictWriter(output_handle, fieldnames=[id_column, *sample_ids], delimiter="\t", lineterminator="\n")
+        writer.writeheader()
+        for row in reader:
+            writer.writerow({column: row.get(column, "") for column in [id_column, *sample_ids]})
+
+    condition_col = plan_row.get("condition_col") or "condition"
+    control_label = plan_row.get("control_label") or "control"
+    test_label = plan_row.get("test_label") or "treated"
+    with coldata_path.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=["sample_id", "condition"], delimiter="\t", lineterminator="\n")
+        writer.writeheader()
+        for row in sample_rows:
+            label = row.get(condition_col, "")
+            if label == control_label:
+                condition = control_label
+            elif label == test_label:
+                condition = test_label
+            else:
+                continue
+            writer.writerow({"sample_id": row["library_id"], "condition": condition})
+    return counts_path, coldata_path
+
+
+def executable_exists(command: str) -> bool:
+    return bool(shutil.which(command) or Path(command).exists())
+
+
+def blocked_row(args: argparse.Namespace, method: str, plan_row: dict[str, str], method_dir: Path, reason: str) -> dict[str, str]:
+    row = base_manifest_row(args, method, method_dir, plan_row.get("contrast_id", ""))
+    row.update(
+        {
+            "status": "blocked",
+            "reason": reason,
+            "gene_results": str(method_dir / "drimseq_gene_results.tsv"),
+            "transcript_results": str(method_dir / "drimseq_transcript_results.tsv"),
+            "summary": str(method_dir / "drimseq_summary.tsv"),
+        }
+    )
+    return row
+
+
+def run_drimseq_contrast(args: argparse.Namespace, plan_row: dict[str, str]) -> dict[str, str]:
+    contrast_id = plan_row.get("contrast_id", "contrast")
+    method_dir = Path(args.outdir) / "drimseq" / re.sub(r"[^A-Za-z0-9_.-]+", "_", contrast_id)
+    row = base_manifest_row(args, "DRIMSeq", method_dir, contrast_id)
+    row["gene_results"] = str(method_dir / "drimseq_gene_results.tsv")
+    row["transcript_results"] = str(method_dir / "drimseq_transcript_results.tsv")
+    row["summary"] = str(method_dir / "drimseq_summary.tsv")
+    if plan_row.get("status") != "ready":
+        return blocked_row(args, "DRIMSeq", plan_row, method_dir, plan_row.get("reason") or "contrast was not ready for DRIMSeq")
+    if not executable_exists(args.rscript):
+        return blocked_row(args, "DRIMSeq", plan_row, method_dir, f"Rscript executable not found: {args.rscript}")
+    if not Path(args.drimseq_script).exists():
+        return blocked_row(args, "DRIMSeq", plan_row, method_dir, f"DRIMSeq runner script not found: {args.drimseq_script}")
+    method_dir.mkdir(parents=True, exist_ok=True)
+    stdout = method_dir / "stdout.log"
+    stderr = method_dir / "stderr.log"
+    try:
+        contrast_counts, contrast_coldata = write_drimseq_inputs(args, plan_row, method_dir)
+    except Exception as exc:  # pragma: no cover - defensive manifest conversion
+        return blocked_row(args, "DRIMSeq", plan_row, method_dir, str(exc))
+    command = [
+        args.rscript,
+        args.drimseq_script,
+        "--counts",
+        str(contrast_counts),
+        "--coldata",
+        str(contrast_coldata),
+        "--metadata",
+        args.transcript_metadata,
+        "--gene-results",
+        row["gene_results"],
+        "--transcript-results",
+        row["transcript_results"],
+        "--summary",
+        row["summary"],
+        "--condition-col",
+        "condition",
+        "--control-label",
+        plan_row.get("control_label") or "control",
+        "--test-label",
+        plan_row.get("test_label") or "treated",
+        "--min-count",
+        str(args.dtu_min_count),
+        "--min-samples",
+        str(args.dtu_min_samples),
+        "--min-proportion",
+        str(args.dtu_min_proportion),
+        "--min-gene-count",
+        str(args.dtu_min_gene_count),
+        "--min-transcripts-per-gene",
+        str(args.dtu_min_transcripts_per_gene),
+    ]
+    completed = subprocess.run(command, text=True, capture_output=True, check=False)
+    stdout.write_text(completed.stdout, encoding="utf-8")
+    stderr.write_text(completed.stderr, encoding="utf-8")
+    row["command"] = " ".join(command)
+    row["stdout"] = str(stdout)
+    row["stderr"] = str(stderr)
+    if completed.returncode == 0:
+        row["status"] = "completed"
+        row["reason"] = ""
+        standardized_results, result_count, standardized_status = standardize_method_outputs(
+            args, "DRIMSeq", method_dir, contrast_id
+        )
+        row["standardized_results"] = standardized_results
+        row["standardized_result_count"] = str(result_count)
+        row["standardized_status"] = standardized_status
+    elif completed.returncode == DRIMSEQ_BLOCKED_EXIT:
+        row["status"] = "blocked"
+        row["reason"] = (completed.stderr.strip().splitlines() or ["DRIMSeq contrast was blocked"])[-1]
+    else:
+        row["status"] = "failed"
+        row["reason"] = f"DRIMSeq exited with status {completed.returncode}"
+    return row
+
+
+def run_drimseq_native(args: argparse.Namespace, plan_rows: list[dict[str, str]]) -> list[dict[str, str]]:
+    rows = [run_drimseq_contrast(args, plan_row) for plan_row in plan_rows]
+    if rows:
+        return rows
+    method_dir = Path(args.outdir) / "drimseq"
+    return [blocked_row(args, "DRIMSeq", {"contrast_id": "no_contrasts"}, method_dir, "DTU plan contains no contrast rows")]
+
+
+def run_method_rows(args: argparse.Namespace, method: str, plan: Path, plan_rows: list[dict[str, str]]) -> list[dict[str, str]]:
+    if method == "DRIMSeq" and not command_for_method(args, method).strip():
+        return run_drimseq_native(args, plan_rows)
+    return [run_external_method(args, method, plan)]
 
 
 def main() -> int:
@@ -410,14 +593,17 @@ def main() -> int:
     for path_text in required:
         if not Path(path_text).exists():
             raise FileNotFoundError(path_text)
-    read_tsv(Path(args.plan))
+    plan = Path(args.plan)
+    plan_rows = read_tsv(plan)
     methods = normalize_methods(args.method, args.methods)
     if not methods:
         raise ValueError("no DTU methods selected")
-    rows = [run_method(args, method, Path(args.plan)) for method in methods]
+    rows: list[dict[str, str]] = []
+    for method in methods:
+        rows.extend(run_method_rows(args, method, plan, plan_rows))
     write_tsv(Path(args.manifest), rows)
     write_done(Path(args.done), rows)
-    failed = [row["method"] for row in rows if row["status"] == "failed"]
+    failed = [f"{row['method']}:{row.get('contrast_id', '')}" for row in rows if row["status"] == "failed"]
     if failed:
         raise RuntimeError(f"DTU method command(s) failed: {','.join(failed)}")
     return 0

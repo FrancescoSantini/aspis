@@ -195,22 +195,28 @@ Outputs are written under:
 Review these tables for implausible signals, such as dominant rRNA,
 pseudogene, or unclassified counts in a library expected to be mRNA-enriched.
 
-Event-level differential transcript usage is currently a planning contract:
+Differential transcript usage can be enabled with native DRIMSeq execution:
 
 ```yaml
 rnaseq_dtu:
   run: true
-  method: planned
-  candidate_methods:
-    - DRIMSeq
-    - DEXSeq
-    - SUPPA2
-    - rMATS
+  method: DRIMSeq
+  contrast_by:
+    - time_h
+  min_replicates_per_group: 2
+  min_count: 10
+  min_samples: 2
+  min_proportion: 0.05
+  min_gene_count: 10
+  min_transcripts_per_gene: 2
 ```
 
-This records the available inputs and candidate engines without claiming an
-implemented DTU analysis. Real-data validation will decide which engine is
-appropriate for the project design and annotation.
+ASPIS plans DRIMSeq one contrast at a time, using the transcript count matrix
+and transcript-to-gene metadata from RNA-seq quantification. Missing `Rscript`,
+missing `R::DRIMSeq`, insufficient replicates, or empty post-filter universes are
+reported as blocked DTU rows rather than silently skipped. DEXSeq, SUPPA2, and
+rMATS remain command-template methods until their event/count input contracts are
+implemented explicitly.
 
 ## Feature-Set Tables
 

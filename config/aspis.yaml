@@ -203,13 +203,22 @@ rnaseq_differential:
   lfc_shrinkage: none
 
 rnaseq_dtu:
-  # Optional event-level / differential transcript usage companion layer.
-  # Leave command templates empty to record a method-ready manifest without
-  # executing external engines. Templates may use {samples}, {aligned_samples},
-  # {transcript_counts}, {transcript_metadata}, {annotation_gtf}, {outdir},
-  # {project}, and {method}.
+  # Optional differential transcript usage companion layer.
+  # DRIMSeq is the first native engine. DEXSeq, SUPPA2, and rMATS remain
+  # command-template methods until their event/count inputs are explicitly wired.
   run: false
-  method: planned
+  method: DRIMSeq
+  condition_col: condition
+  control_label: control
+  contrast_by: []
+  min_replicates_per_group: 2
+  min_count: 10
+  min_samples: 2
+  min_proportion: 0.05
+  min_gene_count: 10
+  min_transcripts_per_gene: 2
+  rscript: Rscript
+  drimseq_script: workflow/scripts/run_drimseq_dtu.R
   candidate_methods:
     - DRIMSeq
     - DEXSeq

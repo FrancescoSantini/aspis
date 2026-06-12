@@ -249,6 +249,7 @@ def exercise_biotype_and_dtu(paths: dict[str, Path]) -> None:
             [
                 'chr1\ttoy\tgene\t1\t100\t.\t+\t.\tgene_id "GENE1"; gene_biotype "protein_coding";',
                 'chr1\ttoy\ttranscript\t1\t100\t.\t+\t.\tgene_id "GENE1"; transcript_id "TX1"; transcript_biotype "protein_coding";',
+                'chr1\ttoy\ttranscript\t20\t120\t.\t+\t.\tgene_id "GENE1"; transcript_id "TX1B"; transcript_biotype "protein_coding";',
                 'chr1\ttoy\tgene\t200\t300\t.\t-\t.\tgene_id "GENE2"; gene_biotype "lncRNA";',
                 'chr1\ttoy\ttranscript\t200\t300\t.\t-\t.\tgene_id "GENE2"; transcript_id "TX2"; transcript_biotype "lncRNA";',
             ]
@@ -261,11 +262,11 @@ def exercise_biotype_and_dtu(paths: dict[str, Path]) -> None:
     transcript_counts = INPUT / "transcript_counts.tsv"
     transcript_metadata = INPUT / "transcript_metadata.tsv"
     aligned_samples = INPUT / "aligned_samples.tsv"
-    write_tsv(gene_counts, ["Geneid", "s1", "s2"], [{"Geneid": "GENE1", "s1": "10", "s2": "20"}, {"Geneid": "GENE2", "s1": "3", "s2": "0"}])
+    write_tsv(gene_counts, ["Geneid", "rna1", "rna2"], [{"Geneid": "GENE1", "rna1": "20", "rna2": "35"}, {"Geneid": "GENE2", "rna1": "3", "rna2": "0"}])
     write_tsv(gene_metadata, ["Geneid", "feature_type"], [{"Geneid": "GENE1", "feature_type": "protein_coding"}, {"Geneid": "GENE2", "feature_type": "lncRNA"}])
-    write_tsv(transcript_counts, ["transcript_id", "s1", "s2"], [{"transcript_id": "TX1", "s1": "10", "s2": "20"}, {"transcript_id": "TX2", "s1": "3", "s2": "0"}])
-    write_tsv(transcript_metadata, ["transcript_id", "gene_id"], [{"transcript_id": "TX1", "gene_id": "GENE1"}, {"transcript_id": "TX2", "gene_id": "GENE2"}])
-    write_tsv(aligned_samples, ["library_id", "bam"], [{"library_id": "s1", "bam": "s1.bam"}, {"library_id": "s2", "bam": "s2.bam"}])
+    write_tsv(transcript_counts, ["transcript_id", "rna1", "rna2"], [{"transcript_id": "TX1", "rna1": "12", "rna2": "30"}, {"transcript_id": "TX1B", "rna1": "8", "rna2": "5"}, {"transcript_id": "TX2", "rna1": "3", "rna2": "0"}])
+    write_tsv(transcript_metadata, ["transcript_id", "gene_id"], [{"transcript_id": "TX1", "gene_id": "GENE1"}, {"transcript_id": "TX1B", "gene_id": "GENE1"}, {"transcript_id": "TX2", "gene_id": "GENE2"}])
+    write_tsv(aligned_samples, ["library_id", "bam"], [{"library_id": "rna1", "bam": "rna1.bam"}, {"library_id": "rna2", "bam": "rna2.bam"}])
     biotype_dir = BASE / "biotypes"
     run_command(
         [
@@ -324,11 +325,41 @@ def exercise_biotype_and_dtu(paths: dict[str, Path]) -> None:
             str(dtu_dir / "dtu.done"),
             "--project",
             "ASPIS_CONTRACT",
+            "--method",
+            "DRIMSeq",
+            "--contrast-by",
+            "time_h",
+            "--min-replicates",
+            "1",
         ]
     )
-    dtu_rows = read_tsv(dtu_dir / "dtu_plan.tsv", {"status", "candidate_methods"})
-    if dtu_rows[0]["status"] != "planned" or "DRIMSeq" not in dtu_rows[0]["candidate_methods"]:
+    dtu_rows = read_tsv(dtu_dir / "dtu_plan.tsv", {"status", "candidate_methods", "contrast_id", "method", "n_multi_isoform_genes"})
+    if dtu_rows[0]["status"] != "ready" or dtu_rows[0]["method"] != "DRIMSeq":
         raise ValueError(f"unexpected DTU plan row: {dtu_rows[0]}")
+    if dtu_rows[0]["contrast_id"] != "treated_vs_control__time_h_24" or dtu_rows[0]["n_multi_isoform_genes"] != "1":
+        raise ValueError(f"unexpected DTU contrast planning: {dtu_rows[0]}")
+
+    fake_drimseq = INPUT / "fake_drimseq_runner.py"
+    fake_drimseq.write_text(
+        "\n".join(
+            [
+                "import sys",
+                "from pathlib import Path",
+                "args = sys.argv[1:]",
+                "def value(flag):",
+                "    return Path(args[args.index(flag) + 1])",
+                "gene = value('--gene-results')",
+                "tx = value('--transcript-results')",
+                "summary = value('--summary')",
+                "gene.parent.mkdir(parents=True, exist_ok=True)",
+                "gene.write_text('gene_id\\tpvalue\\tpadj\\tstatus\\nGENE1\\t0.002\\t0.01\\tok\\n', encoding='utf-8')",
+                "tx.write_text('gene_id\\tfeature_id\\tpvalue\\tpadj\\tstatistic\\tstatus\\nGENE1\\tTX1\\t0.002\\t0.01\\t4.2\\tok\\n', encoding='utf-8')",
+                "summary.write_text('status\\treason\\tn_tested_genes\\nok\\t\\t1\\n', encoding='utf-8')",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
     run_command(
         [
             sys.executable,
@@ -353,14 +384,23 @@ def exercise_biotype_and_dtu(paths: dict[str, Path]) -> None:
             str(dtu_dir / "dtu_methods.done"),
             "--project",
             "ASPIS_CONTRACT",
+            "--method",
+            "DRIMSeq",
+            "--rscript",
+            sys.executable,
+            "--drimseq-script",
+            str(fake_drimseq),
+            "--dtu-min-samples",
+            "1",
         ]
     )
-    method_rows = read_tsv(dtu_dir / "dtu_method_manifest.tsv", {"method", "status", "reason"})
-    methods = {row["method"] for row in method_rows}
-    if not {"DRIMSeq", "DEXSeq", "SUPPA2", "rMATS"} <= methods:
-        raise ValueError(f"unexpected DTU method rows: {method_rows}")
-    if {row["status"] for row in method_rows} != {"planned"}:
-        raise ValueError(f"unconfigured DTU methods should be planned: {method_rows}")
+    drimseq_rows = read_tsv(dtu_dir / "dtu_method_manifest.tsv", {"method", "contrast_id", "status", "standardized_results", "standardized_result_count", "standardized_status"})
+    if drimseq_rows[0]["status"] != "completed" or drimseq_rows[0]["standardized_status"] != "ok":
+        raise ValueError(f"native DRIMSeq DTU was not standardized: {drimseq_rows}")
+    drimseq_standardized = read_tsv(Path(drimseq_rows[0]["standardized_results"]), {"method", "contrast_id", "feature_id", "gene_id", "event_type", "pvalue", "padj"})
+    if drimseq_standardized[0]["method"] != "DRIMSeq" or drimseq_standardized[0]["event_type"] != "transcript_usage":
+        raise ValueError(f"standardized DRIMSeq row lost method/event type: {drimseq_standardized}")
+
     helper = INPUT / "write_fake_rmats.py"
     helper.write_text(
         "\n".join(
@@ -420,8 +460,7 @@ def exercise_biotype_and_dtu(paths: dict[str, Path]) -> None:
         raise ValueError(f"standardized rMATS row lost identifiers: {standardized}")
     if expected["padj"] != "0.01" or expected["direction"] != "increased_usage":
         raise ValueError(f"standardized rMATS row lost statistics: {standardized}")
-    exercise_rnaseq_report_dtu_assets(dtu_dir / "dtu_plan.tsv", executed_dir / "dtu_method_manifest.tsv")
-
+    exercise_rnaseq_report_dtu_assets(dtu_dir / "dtu_plan.tsv", dtu_dir / "dtu_method_manifest.tsv")
 
 def exercise_rnaseq_report_dtu_assets(dtu_plan: Path, dtu_manifest: Path) -> None:
     report_dir = BASE / "rnaseq_report_index"
@@ -569,10 +608,10 @@ def exercise_rnaseq_report_dtu_assets(dtu_plan: Path, dtu_manifest: Path) -> Non
     dtu_assets = [row for row in assets if row["asset_group"] == "dtu"]
     if not any(row["asset_label"] == "dtu_method_manifest" for row in dtu_assets):
         raise ValueError(f"DTU manifest was not exposed as a report asset: {dtu_assets}")
-    if not any(row["asset_label"] == "rMATS_standardized_results" for row in dtu_assets):
-        raise ValueError(f"standardized DTU results were not exposed as report assets: {dtu_assets}")
+    if not any(row["asset_label"] == "DRIMSeq_standardized_results" for row in dtu_assets):
+        raise ValueError(f"standardized DRIMSeq results were not exposed as report assets: {dtu_assets}")
     html_text = (report_dir / "index.html").read_text(encoding="utf-8")
-    if "DTU / splicing methods" not in html_text or "standardized rows: 1" not in html_text:
+    if "DTU / splicing methods" not in html_text or "standardized rows: 2" not in html_text:
         raise ValueError("DTU summary was not rendered in the RNA-seq report index")
 
 
