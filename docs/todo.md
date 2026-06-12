@@ -49,11 +49,13 @@ narrower and no longer organized as open P0 report/resource plumbing:
   from more real resource distributions.
 - Report and PDF polish remains useful, but the current report graph, inventory,
   link validation, and structural PDF QA are in place.
-- Further validation should target genuinely new surfaces, such as a distinct
-  organism/reference, a public shareable dataset, optional DTU, optional
-  consequence annotation, larger multi-project layout, or an independently
-  prepared resource bundle, rather than simply repeating the same BEAS/HEP
-  matched-cell-line pattern.
+
+Additional real-data validation is closed for the current cycle. Future
+validation should target genuinely new surfaces, such as a distinct organism or
+reference, a public shareable dataset, optional DTU, optional consequence
+annotation, larger multi-project layout, or an independently prepared resource
+bundle, rather than simply repeating the same BEAS/HEP matched-cell-line
+pattern.
 
 The sections below are ordered by implementation dependency and practical
 validation value. Earlier sections should be completed before later polish work.
@@ -402,16 +404,26 @@ Closed acceptance evidence:
 - Validation notes identify commit, config, intake, reference files, resource
   files, environment, run date, and reviewer decision.
 
-## P1 - Real-Data Validation Expansion
+## Validated - Real-Data Validation Expansion
 
 Reason for priority: BEAS_2B and HEP_G2 now provide two matched real-data
-cell-line validations. Additional validation is no longer needed to close the
-current P0/P1 resource/report claims, but it remains valuable for release
-breadth when it exercises a new design, organism, public dataset, optional tool,
-or independently prepared resource bundle.
+cell-line validations. There are no additional datasets planned for the current
+development cycle, so this item is closed. Future validation remains useful only
+when it exercises a genuinely new design, organism, public dataset, optional
+tool, larger project structure, or independently prepared resource bundle.
+
+Status: closed for the current validation cycle after BEAS_2B and HEP_G2 full
+G100 validations with RNA-seq plus smallRNA, configured GO/Reactome resources,
+reviewed miRNA target resources, cross-assay integration, and report inventory
+validation.
 
 Completed hardening slice:
 
+- BEAS_2B is recorded in `docs/validation_matrix.tsv` as 15 passed rows spanning
+  input materialization, RNA-seq QC/preprocess/alignment/quantification/DESeq2,
+  GO/Reactome enrichment, isoform switch, smallRNA QC/alignment/quantification,
+  smallRNA DESeq2, target enrichment, miRNA-mRNA integration, technical PDFs,
+  and report inventory/link checks.
 - HEP_G2 was run as `g100_hepg2_full` with 27 paired-end RNA-seq libraries, 27
   smallRNA libraries, six matched contrasts, config
   `config/aspis_g100_hepg2_full.yaml`, pipeline commit `1397878`, and review
@@ -420,39 +432,26 @@ Completed hardening slice:
   rows, 6/6 isoform-switch contrasts, 6/6 smallRNA target enrichment rows, 6/6
   target feature-set rows, 6/6 miRNA-mRNA integration rows, and a valid 54-row
   report inventory.
+- `docs/validation_matrix.tsv` currently passes
+  `validate_validation_matrix.py` with 30 passed rows and zero errors.
 
-Operator/data validation tasks:
+Closed acceptance evidence:
 
-- Choose one or more additional validation cohorts only when they exercise a new
-  surface. BEAS_2B and HEP_G2 already cover the current matched RNA-seq plus
-  smallRNA human cell-line path.
-- Run `validate_project_inputs.py` before every full submission.
-- Confirm every intake row has stable `library_id`, `biospecimen_id`,
-  `project`, `assay`, `input_1`, `input_2`, and design columns.
-- Confirm real configs use execution-environment paths, not stale WSL/local
-  paths, and do not point to synthetic smoke-test references.
-- Confirm reference genome, annotation, aligner indexes, miRNA references,
-  contaminant references, target tables, and feature-set resources are the
-  intended real files.
-- Compare ASPIS outputs against an appropriate reference point when one exists:
-  legacy outputs, an independent pipeline, or a documented manual review. The
-  old pipeline is useful context but not a source of truth.
-- Record expected differences due to changed tools, references, thresholds,
-  model formulas, resource versions, or bug fixes.
-- Keep `docs/validation_matrix.tsv` updated by project, assay, branch, layer,
-  config, commit, reference bundle, resource bundle, run location, report
-  bundle, validator, evidence, and review notes.
+- Two independent matched human cell-line cohorts completed the configured
+  RNA-seq plus smallRNA real-data path.
+- Every major output family has passed validation rows instead of one vague
+  whole-run pass.
+- Validation notes identify commit, config, intake, reference/resource context,
+  run date, report bundle, validator, evidence, and review decision.
 
-Acceptance criteria:
+Future release-breadth candidates, not current blockers:
 
-- The validation matrix passes `validate_validation_matrix.py` after every new
-  validation row is added.
-- New validation rows distinguish completed layers, intentional differences,
-  and explicit blockers instead of summarizing a whole run as one vague pass.
-- Future validation expansion targets genuinely new risk: optional DTU,
-  optional consequence annotation, non-human or alternate references, a public
-  shareable dataset, larger multi-project structure, or an independently
-  prepared resource bundle.
+- optional DTU validation;
+- optional isoform-switch consequence annotation validation;
+- non-human or alternate-reference validation;
+- public shareable dataset validation;
+- larger multi-project or more heterogeneous design validation;
+- independently prepared resource-bundle validation.
 
 ## P1 - Resource Mapping Threshold Calibration
 
