@@ -353,7 +353,7 @@ def exercise_biotype_and_dtu(paths: dict[str, Path]) -> None:
                 "summary = value('--summary')",
                 "gene.parent.mkdir(parents=True, exist_ok=True)",
                 "gene.write_text('gene_id\\tpvalue\\tpadj\\tstatus\\nGENE1\\t0.002\\t0.01\\tok\\n', encoding='utf-8')",
-                "tx.write_text('gene_id\\tfeature_id\\tpvalue\\tpadj\\tstatistic\\tstatus\\nGENE1\\tTX1\\t0.002\\t0.01\\t4.2\\tok\\n', encoding='utf-8')",
+                "tx.write_text('gene_id\\tfeature_id\\tmean_usage_control\\tmean_usage_test\\tdelta_usage\\tstatus\\nGENE1\\tTX1\\t0.2\\t0.8\\t0.6\\tok\\n', encoding='utf-8')",
                 "summary.write_text('status\\treason\\tn_tested_genes\\nok\\t\\t1\\n', encoding='utf-8')",
             ]
         )
@@ -611,7 +611,7 @@ def exercise_rnaseq_report_dtu_assets(dtu_plan: Path, dtu_manifest: Path) -> Non
     if not any(row["asset_label"] == "DRIMSeq_standardized_results" for row in dtu_assets):
         raise ValueError(f"standardized DRIMSeq results were not exposed as report assets: {dtu_assets}")
     html_text = (report_dir / "index.html").read_text(encoding="utf-8")
-    if "DTU / splicing methods" not in html_text or "standardized rows: 2" not in html_text:
+    if "DTU / splicing methods" not in html_text or "standardized rows: 1" not in html_text:
         raise ValueError("DTU summary was not rendered in the RNA-seq report index")
 
 

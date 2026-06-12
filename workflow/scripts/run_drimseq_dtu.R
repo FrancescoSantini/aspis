@@ -202,28 +202,46 @@ if (!"padj" %in% names(result) && "adj.p.value" %in% names(result)) {
 if (!"padj" %in% names(result) && "pvalue" %in% names(result)) {
   result$padj <- ave(result$pvalue, result$gene_id, FUN = function(x) p.adjust(x, method = "BH"))
 }
-if (!"feature_id" %in% names(result)) {
-  result$feature_id <- ""
-}
-
 result$status <- "ok"
-dir.create(dirname(transcript_results), recursive = TRUE, showWarnings = FALSE)
-write.table(result, file = transcript_results, sep = "\t", quote = FALSE, row.names = FALSE)
+dir.create(dirname(gene_results), recursive = TRUE, showWarnings = FALSE)
+write.table(result, file = gene_results, sep = "\t", quote = FALSE, row.names = FALSE)
 
-gene_result <- aggregate(
-  cbind(pvalue = result$pvalue, padj = result$padj),
-  by = list(gene_id = result$gene_id),
-  FUN = min,
-  na.rm = TRUE
+usage_counts <- as.data.frame(lapply(merged[, sample_cols, drop = FALSE], as.numeric), check.names = FALSE)
+rownames(usage_counts) <- seq_len(nrow(usage_counts))
+gene_totals <- usage_counts
+for (sample in sample_cols) {
+  gene_totals[[sample]] <- ave(usage_counts[[sample]], merged[[gene_col]], FUN = sum)
+}
+usage_props <- usage_counts
+for (sample in sample_cols) {
+  usage_props[[sample]] <- ifelse(gene_totals[[sample]] > 0, usage_counts[[sample]] / gene_totals[[sample]], NA_real_)
+}
+control_samples <- coldata$sample_id[coldata[[condition_col]] == control_label]
+test_samples <- coldata$sample_id[coldata[[condition_col]] == test_label]
+mean_or_na <- function(frame, cols) {
+  if (length(cols) == 0) {
+    return(rep(NA_real_, nrow(frame)))
+  }
+  rowMeans(frame[, cols, drop = FALSE], na.rm = TRUE)
+}
+transcript_usage <- data.frame(
+  gene_id = merged[[gene_col]],
+  feature_id = merged[[feature_col]],
+  mean_usage_control = mean_or_na(usage_props, control_samples),
+  mean_usage_test = mean_or_na(usage_props, test_samples),
+  delta_usage = mean_or_na(usage_props, test_samples) - mean_or_na(usage_props, control_samples),
+  mean_count_control = mean_or_na(usage_counts, control_samples),
+  mean_count_test = mean_or_na(usage_counts, test_samples),
+  status = "ok",
+  stringsAsFactors = FALSE
 )
-gene_result$status <- "ok"
-write.table(gene_result, file = gene_results, sep = "\t", quote = FALSE, row.names = FALSE)
+write.table(transcript_usage, file = transcript_results, sep = "\t", quote = FALSE, row.names = FALSE)
 summary <- data.frame(
   status = "ok",
   reason = "",
   n_input_transcripts = nrow(counts),
-  n_tested_transcripts = nrow(result),
-  n_tested_genes = length(unique(result$gene_id)),
+  n_tested_genes = nrow(result),
+  n_usage_transcripts = nrow(transcript_usage),
   control_label = control_label,
   test_label = test_label,
   stringsAsFactors = FALSE
