@@ -173,6 +173,7 @@ mirna_mrna_integration:
   run: true
   match_columns:
     - biospecimen_id
+  match_table: ""  # optional TSV with smallrna_library_id and rnaseq_library_id
   min_pairs: 2
   min_abs_correlation: 0.0
 ```
@@ -180,9 +181,7 @@ mirna_mrna_integration:
 The integration joins miRNA DESeq2 results, RNA-seq gene DESeq2 results,
 miRNA-target mappings, and normalized counts. It reports target pairs such as
 upregulated miRNA with downregulated target genes, plus sample-level Pearson
-correlations when the two assays can be matched. If no `match_columns` are
-present in both sample sheets, ASPIS falls back to shared `condition`,
-`replicate`, and `time_h` where available.
+correlations when the two assays can be matched. If `match_table` is set, it must be a TSV containing `smallrna_library_id` and `rnaseq_library_id` values from the corresponding branch sample sheets; optional `pair_id` or `match_id` columns are preserved in the pairing provenance table. If no explicit match table is configured, ASPIS uses `match_columns`; if those columns are not present in both sample sheets, it falls back to shared `condition`, `replicate`, and `time_h` where available.
 
 This layer should be considered biologically interpretable only after real-data
 validation confirms the sample matching and target source choices.

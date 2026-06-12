@@ -3790,7 +3790,12 @@ rule render_mirna_mrna_integration:
         rnaseq_gene_manifest=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/gene_deseq2/deseq2_manifest.tsv",
         rnaseq_gene_done=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/gene_deseq2/deseq2.done",
         target_manifest=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/differential/target_enrichment/target_manifest.tsv",
-        target_done=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/differential/target_enrichment/target_enrichment.done"
+        target_done=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/differential/target_enrichment/target_enrichment.done",
+        match_table=lambda wildcards: (
+            [str(MIRNA_MRNA_INTEGRATION.get("match_table", "")).strip()]
+            if str(MIRNA_MRNA_INTEGRATION.get("match_table", "")).strip()
+            else []
+        )
     output:
         manifest=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/differential/mirna_mrna_integration/mirna_mrna_manifest.tsv",
         done=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/differential/mirna_mrna_integration/mirna_mrna.done"
@@ -3800,6 +3805,7 @@ rule render_mirna_mrna_integration:
             shlex.quote(str(value))
             for value in config_value_list(MIRNA_MRNA_INTEGRATION.get("match_columns", ["biospecimen_id"]))
         ),
+        match_table=optional_shell_arg("--match-table", MIRNA_MRNA_INTEGRATION.get("match_table", "")),
         min_pairs=MIRNA_MRNA_INTEGRATION.get("min_pairs", 2),
         min_abs_correlation=MIRNA_MRNA_INTEGRATION.get("min_abs_correlation", 0.0),
         top_n=MIRNA_MRNA_INTEGRATION.get("top_n", 40)
@@ -3818,6 +3824,7 @@ rule render_mirna_mrna_integration:
           --manifest {output.manifest:q} \
           --done {output.done:q} \
           --match-columns {params.match_columns} \
+          {params.match_table} \
           --min-pairs {params.min_pairs:q} \
           --min-abs-correlation {params.min_abs_correlation:q} \
           --top-n {params.top_n:q} \

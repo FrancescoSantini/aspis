@@ -442,6 +442,8 @@ def exercise_mirna_mrna_target_modes() -> Path:
         manifest,
         {
             "status",
+            "sample_pairing",
+            "n_sample_pairs",
             "mirna_mrna_target_modes",
             "mirna_mrna_target_mode_summary",
             "n_expressed_targets",
@@ -451,6 +453,8 @@ def exercise_mirna_mrna_target_modes() -> Path:
     )[0]
     if row["status"] != "ok":
         raise ValueError(f"miRNA-mRNA integration was not ok: {row}")
+    if int(row["n_sample_pairs"]) < 2 or not Path(row["sample_pairing"]).exists():
+        raise ValueError(f"miRNA-mRNA sample pairing was not recorded: {row}")
     if row["n_expressed_targets"] != "2" or row["n_inverse_integrated_targets"] != "2":
         raise ValueError(f"target-mode counts are unexpected: {row}")
     mode_rows = read_tsv(

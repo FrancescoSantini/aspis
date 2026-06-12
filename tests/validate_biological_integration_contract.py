@@ -195,6 +195,15 @@ def exercise_target_and_integration(paths: dict[str, Path]) -> None:
     if "validated" not in {row["target_evidence_type"] for row in source_summary}:
         raise ValueError(f"cached multiMiR-style evidence was not propagated: {source_summary}")
 
+    match_table = BASE / "mirna_mrna_match_table.tsv"
+    write_tsv(
+        match_table,
+        ["pair_id", "smallrna_library_id", "rnaseq_library_id"],
+        [
+            {"pair_id": "pair_1", "smallrna_library_id": "sm1", "rnaseq_library_id": "rna1"},
+            {"pair_id": "pair_2", "smallrna_library_id": "sm2", "rnaseq_library_id": "rna2"},
+        ],
+    )
     integration_manifest = BASE / "mirna_mrna" / "mirna_mrna_manifest.tsv"
     run_command(
         [
@@ -218,14 +227,19 @@ def exercise_target_and_integration(paths: dict[str, Path]) -> None:
             str(BASE / "mirna_mrna" / "mirna_mrna.done"),
             "--match-columns",
             "biospecimen_id",
+            "--match-table",
+            str(match_table),
             "--min-pairs",
             "2",
         ]
     )
-    integration_rows = read_tsv(integration_manifest, {"status", "n_pairs", "n_inverse_pairs", "n_anticorrelated_pairs"})
+    integration_rows = read_tsv(integration_manifest, {"status", "sample_pairing", "n_sample_pairs", "n_pairs", "n_inverse_pairs", "n_anticorrelated_pairs"})
     row = integration_rows[0]
-    if row["status"] != "ok" or int(row["n_pairs"]) < 2 or int(row["n_inverse_pairs"]) < 2:
+    if row["status"] != "ok" or int(row["n_sample_pairs"]) != 2 or int(row["n_pairs"]) < 2 or int(row["n_inverse_pairs"]) < 2:
         raise ValueError(f"unexpected miRNA-mRNA integration row: {row}")
+    pairing_rows = read_tsv(Path(row["sample_pairing"]), {"pair_id", "smallrna_library_id", "rnaseq_library_id", "match_source"})
+    if {item["pair_id"] for item in pairing_rows} != {"pair_1", "pair_2"}:
+        raise ValueError(f"explicit pairing provenance was not preserved: {pairing_rows}")
 
 
 def exercise_biotype_and_dtu(paths: dict[str, Path]) -> None:

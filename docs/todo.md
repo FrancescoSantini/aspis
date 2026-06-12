@@ -508,27 +508,32 @@ Acceptance criteria:
 - Multi-project runs remain navigable from `results/<run_id>/index.html`.
 - Deep report pages still provide a clear route back to project and run context.
 
-## P1 - Cross-Assay Integration Refinement
+## Validated - Cross-Assay Integration Refinement
 
-Reason for priority: RNA-seq/smallRNA integration is validated for shared
-project and contrast labels. More sophisticated studies may need explicit sample
-pairing or correlation-aware integration.
+Status: implemented pending routine real-run refresh after the next full project
+run.
 
-Remaining code tasks:
+Implemented:
 
-- Add an explicit optional match table for studies where RNA-seq and smallRNA
-  sample pairing is not captured by shared project/contrast metadata.
-- Add correlation across matched biospecimens when sample pairing is valid and
-  replicate count is sufficient.
-- Summarize non-overlapping RNA-seq-only and smallRNA-only contrasts more
-  explicitly in the project page for mixed or incomplete studies.
+- `mirna_mrna_integration.match_table` accepts an optional TSV with
+  `smallrna_library_id` and `rnaseq_library_id` values from the branch sample
+  sheets, plus optional `pair_id` or `match_id` provenance labels.
+- Metadata-based matching is still supported through `match_columns`; when those
+  columns are absent, the conservative `condition`/`replicate`/`time_h` fallback
+  remains available.
+- The integration manifest now records the sample-pairing table and number of
+  matched pairs, and the per-contrast manifest records `sample_pairing` as an
+  auditable resource.
+- Correlation is reported only when at least `min_pairs` matched assay pairs are
+  available.
+- The integrated project page now marks each contrast as integrated, RNA-seq
+  only, smallRNA only, shared without integration, blocked, or failed.
 
-Acceptance criteria:
+Residual validation:
 
-- Users can provide explicit cross-assay pairing when metadata labels are not
-  sufficient.
-- Matched-sample correlation is reported only when the design supports it.
-- Mixed projects show which contrasts are integrated and which are assay-only.
+- On the next combined real-data refresh, verify that explicit match-table runs
+  and metadata-matched runs produce the expected pairing table and contrast
+  matrix labels.
 
 ## P1 - DTU Methods
 

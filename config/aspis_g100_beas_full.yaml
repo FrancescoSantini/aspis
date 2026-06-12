@@ -334,6 +334,7 @@ mirna_mrna_integration:
   run: false
   match_columns:
   - biospecimen_id
+  match_table: ""
   min_pairs: 2
   min_abs_correlation: 0.0
   top_n: 40

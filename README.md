@@ -631,4 +631,6 @@ results/<run_id>/branches/smallrna/<project>/
 The smallRNA report can include miRNA DESeq2 plots, target enrichment,
 target-gene feature-set enrichment, isomiR/length summaries, residual read fate,
 and matched miRNA-mRNA integration. Target and integration sections require
-configured target/resource tables.
+configured target/resource tables. Cross-assay integration uses shared metadata
+columns by default, or an explicit miRNA/RNA-seq match table when sample pairing
+is not captured by common labels.

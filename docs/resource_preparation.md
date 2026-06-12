@@ -232,6 +232,8 @@ smallrna:
   target_feature_set_tables: [/path/to/aspis_resources/beas/smallrna_targets/project_reviewed_targets_target_feature_sets.tsv]
 mirna_mrna_integration:
   run: true
+  # Optional TSV with smallrna_library_id and rnaseq_library_id.
+  match_table: ""
 ```
 
 ## Isoform-Switch Functional Annotation

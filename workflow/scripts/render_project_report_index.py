@@ -246,14 +246,23 @@ def enrichment_cell(
     return "<hr>".join(items) if items else '<span class="status muted">not present</span>'
 
 
-def smallrna_target_cell(row: dict[str, str] | None, base_dir: Path) -> str:
-    if not row:
+def smallrna_target_cell(
+    row: dict[str, str] | None,
+    integration_row: dict[str, str] | None,
+    base_dir: Path,
+) -> str:
+    if not row and not integration_row:
         return '<span class="status muted">not present</span>'
+    row = row or {}
+    integration_row = integration_row or {}
     metrics = [
         f"{html.escape(row.get('n_targets', ''))} targets" if row.get("n_targets") else "",
         f"{html.escape(row.get('n_enrichment_terms', ''))} target terms" if row.get("n_enrichment_terms") else "",
-        f"{html.escape(row.get('n_mirna_mrna_inverse_pairs', ''))} inverse pairs"
-        if row.get("n_mirna_mrna_inverse_pairs")
+        f"{html.escape(integration_row.get('n_inverse_pairs', row.get('n_mirna_mrna_inverse_pairs', '')))} inverse pairs"
+        if integration_row.get("n_inverse_pairs") or row.get("n_mirna_mrna_inverse_pairs")
+        else "",
+        f"{html.escape(integration_row.get('n_anticorrelated_pairs', ''))} anticorrelated pairs"
+        if integration_row.get("n_anticorrelated_pairs")
         else "",
         f"{html.escape(row.get('n_target_feature_set_terms', ''))} target-set terms"
         if row.get("n_target_feature_set_terms")
@@ -263,10 +272,59 @@ def smallrna_target_cell(row: dict[str, str] | None, base_dir: Path) -> str:
         optional_row_link(row, "target_enrichment_plot", "target enrichment plot", base_dir),
         optional_row_link(row, "target_enrichment", "target enrichment table", base_dir),
         optional_row_link(row, "target_feature_set_plot", "target feature sets", base_dir),
-        optional_row_link(row, "mirna_mrna_pairs", "miRNA-mRNA pairs", base_dir),
-        optional_row_link(row, "mirna_mrna_plot", "integration plot", base_dir),
+        optional_row_link(integration_row, "sample_pairing", "sample pairing", base_dir),
+        optional_row_link(integration_row, "mirna_mrna_pairs", "miRNA-mRNA pairs", base_dir),
+        optional_row_link(integration_row, "mirna_mrna_plot", "integration plot", base_dir),
     ]
     return "<br>".join(part for part in [", ".join(item for item in metrics if item), " ".join(link for link in links if link)] if part)
+
+
+def assay_only_contrast_count(
+    rnaseq_summary: list[dict[str, str]],
+    smallrna_summary: list[dict[str, str]],
+) -> int:
+    rnaseq = {row.get("contrast_id", "") for row in rnaseq_summary if row.get("contrast_id", "")}
+    smallrna = {row.get("contrast_id", "") for row in smallrna_summary if row.get("contrast_id", "")}
+    return len(rnaseq.symmetric_difference(smallrna))
+
+
+def integration_state_cell(
+    gene_row: dict[str, str] | None,
+    transcript_row: dict[str, str] | None,
+    mirna_row: dict[str, str] | None,
+    integration_row: dict[str, str] | None,
+    base_dir: Path,
+) -> str:
+    has_rnaseq = bool(gene_row or transcript_row)
+    has_smallrna = bool(mirna_row)
+    if has_rnaseq and has_smallrna and integration_row:
+        status = integration_row.get("status", "unknown") or "unknown"
+        label = "integrated" if status == "ok" else f"integration {status}"
+        details = [
+            f'<span class="status {html.escape(status)}">{html.escape(label)}</span>',
+            f"{html.escape(integration_row.get('n_sample_pairs', ''))} matched sample pairs"
+            if integration_row.get("n_sample_pairs")
+            else "",
+            f"{html.escape(integration_row.get('n_pairs', ''))} miRNA-target pairs"
+            if integration_row.get("n_pairs")
+            else "",
+            optional_row_link(integration_row, "sample_pairing", "pairing table", base_dir),
+            optional_row_link(integration_row, "mirna_mrna_summary", "integration summary", base_dir),
+        ]
+        reason = integration_row.get("reason", "")
+        if reason:
+            details.append(f'<span class="status muted">{html.escape(reason)}</span>')
+        return "<br>".join(item for item in details if item)
+    if has_rnaseq and has_smallrna:
+        return '<span class="status muted">shared contrast; integration not present</span>'
+    if has_rnaseq:
+        return '<span class="status muted">RNA-seq only</span>'
+    if has_smallrna:
+        return '<span class="status muted">smallRNA only</span>'
+    if integration_row:
+        status = integration_row.get("status", "unknown") or "unknown"
+        return f'<span class="status {html.escape(status)}">integration-only row: {html.escape(status)}</span>'
+    return '<span class="status muted">not present</span>'
 
 
 def contrast_matrix(
@@ -274,6 +332,7 @@ def contrast_matrix(
     rnaseq_summary: list[dict[str, str]],
     smallrna_summary: list[dict[str, str]],
     rnaseq_enrichment: list[dict[str, str]],
+    mirna_integration: list[dict[str, str]],
 ) -> str:
     rnaseq_by_key = {
         (row.get("level", ""), row.get("contrast_id", "")): row
@@ -284,33 +343,36 @@ def contrast_matrix(
         for row in rnaseq_enrichment
     }
     smallrna_by_contrast = {row.get("contrast_id", ""): row for row in smallrna_summary}
+    integration_by_contrast = {row.get("contrast_id", ""): row for row in mirna_integration}
     contrast_ids = sorted(
         {
             row.get("contrast_id", "")
-            for row in rnaseq_summary + smallrna_summary + rnaseq_enrichment
+            for row in rnaseq_summary + smallrna_summary + rnaseq_enrichment + mirna_integration
             if row.get("contrast_id", "")
         }
     )
     if not contrast_ids:
-        return '<p class="status muted">No gene, transcript, or miRNA contrasts are available yet.</p>'
+        return '<p class="status muted">No gene, transcript, miRNA, or integration contrasts are available yet.</p>'
     body = []
     for contrast_id in contrast_ids:
         gene = rnaseq_by_key.get(("gene", contrast_id))
         transcript = rnaseq_by_key.get(("transcript", contrast_id))
         mirna = smallrna_by_contrast.get(contrast_id)
+        integration = integration_by_contrast.get(contrast_id)
         body.append(
             f'<tr class="contrast-row" data-contrast="{html.escape(contrast_id)}">'
             f"<td><code>{html.escape(contrast_id)}</code></td>"
+            f"<td>{integration_state_cell(gene, transcript, mirna, integration, base_dir)}</td>"
             f"<td>{summary_cell(gene, base_dir)}</td>"
             f"<td>{summary_cell(transcript, base_dir)}</td>"
             f"<td>{summary_cell(mirna, base_dir, 'miRNAs')}</td>"
             f"<td>{enrichment_cell(enrichment_by_key.get(('gene', contrast_id)), enrichment_by_key.get(('transcript', contrast_id)), base_dir)}</td>"
-            f"<td>{smallrna_target_cell(mirna, base_dir)}</td>"
+            f"<td>{smallrna_target_cell(mirna, integration, base_dir)}</td>"
             "</tr>"
         )
     return (
         '<table class="contrast-matrix"><thead><tr>'
-        "<th>contrast</th><th>gene DE</th><th>transcript DE</th><th>miRNA DE</th>"
+        "<th>contrast</th><th>cross-assay state</th><th>gene DE</th><th>transcript DE</th><th>miRNA DE</th>"
         "<th>RNA-seq GO/Reactome</th><th>miRNA targets and integration</th>"
         "</tr></thead><tbody>"
         + "".join(body)
@@ -380,6 +442,8 @@ def render(args: argparse.Namespace) -> None:
     {metric("smallRNA summaries", len(smallrna_summary))}
     {metric("isoform-switch events", len(isoform_events))}
     {metric("miRNA-mRNA rows", len(mirna_integration))}
+    {metric("integrated contrasts", sum(1 for row in mirna_integration if row.get("status") == "ok"))}
+    {metric("assay-only contrasts", assay_only_contrast_count(rnaseq_summary, smallrna_summary))}
   </div>
   <h2>Sample And Design Summary</h2>
   <p class="section-note">This table gives the basic assay-level sample/design shape used by the project reports. It does not judge the biological design; it shows which metadata columns and sample tables are available for review.</p>
@@ -415,9 +479,9 @@ def render(args: argparse.Namespace) -> None:
     ])}
   </div>
   <h2>Project Contrast Matrix</h2>
-  <p class="section-note">This matrix puts gene, transcript, and miRNA contrasts on the same row when assays share the same project and contrast labels. Use it as the biological navigation layer before opening assay-specific detail pages.</p>
+  <p class="section-note">This matrix puts gene, transcript, and miRNA contrasts on the same row when assays share the same project and contrast labels. The cross-assay state marks integrated contrasts, RNA-seq-only contrasts, smallRNA-only contrasts, and shared contrasts where integration is not present.</p>
   <div class="controls"><input id="contrastFilter" placeholder="Filter contrasts"></div>
-  {contrast_matrix(base_dir, rnaseq_summary, smallrna_summary, rnaseq_enrichment)}
+  {contrast_matrix(base_dir, rnaseq_summary, smallrna_summary, rnaseq_enrichment, mirna_integration)}
   <h2>Raw Contrast Summary</h2>
   <p class="section-note">This lower table preserves the assay-specific summary rows used to build the matrix above.</p>
   {summary_table(base_dir, rnaseq_base, smallrna_base)}

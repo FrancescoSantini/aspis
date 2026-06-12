@@ -17,6 +17,8 @@ MANIFEST_COLUMNS = [
     "contrast_id",
     "status",
     "reason",
+    "sample_pairing",
+    "n_sample_pairs",
     "mirna_mrna_manifest",
     "mirna_mrna_pairs",
     "mirna_mrna_summary",
@@ -97,6 +99,7 @@ TARGET_MODE_SUMMARY_COLUMNS = [
     "median_pearson",
 ]
 CONTRAST_MANIFEST_COLUMNS = ["contrast_id", "resource", "status", "reason", "path", "n_rows"]
+PAIRING_COLUMNS = ["pair_id", "smallrna_library_id", "rnaseq_library_id", "match_source", "match_key", "status", "reason"]
 STAT_COLUMNS = {"baseMean", "log2FoldChange", "lfcSE", "stat", "pvalue", "padj"}
 INVERSE_CLASSES = {"mirna_up_target_down", "mirna_down_target_up"}
 EXPRESSED_TARGET_UNIVERSE = (
@@ -120,6 +123,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--manifest", required=True)
     parser.add_argument("--done", required=True)
     parser.add_argument("--match-columns", nargs="*", default=["biospecimen_id"])
+    parser.add_argument("--match-table", default="")
     parser.add_argument("--min-pairs", type=int, default=2)
     parser.add_argument("--min-abs-correlation", type=float, default=0.0)
     parser.add_argument("--top-n", type=int, default=40)
@@ -192,31 +196,150 @@ def counts_by_feature(path_text: str) -> tuple[str, dict[str, dict[str, float]]]
     return feature_column, matrix
 
 
-def sample_matches(
+def library_ids(rows: list[dict[str, str]], path: Path) -> set[str]:
+    ids = {row.get("library_id", "") for row in rows if row.get("library_id", "")}
+    if not ids:
+        raise ValueError(f"Sample table has no library_id values: {path}")
+    return ids
+
+
+def first_existing_column(columns: list[str], candidates: list[str]) -> str | None:
+    for column in candidates:
+        if column in columns:
+            return column
+    return None
+
+
+def metadata_sample_matches(
     smallrna_samples_path: Path,
     rnaseq_samples_path: Path,
     match_columns: list[str],
-) -> list[tuple[str, str]]:
+) -> tuple[list[tuple[str, str]], list[dict[str, str]]]:
     small_cols, small_rows = read_table(smallrna_samples_path)
     rna_cols, rna_rows = read_table(rnaseq_samples_path)
+    if "library_id" not in small_cols or "library_id" not in rna_cols:
+        raise ValueError("Both sample tables must contain a library_id column for miRNA-mRNA integration")
+
     columns = [column for column in match_columns if column in small_cols and column in rna_cols]
     if not columns:
         columns = [column for column in ["condition", "replicate", "time_h"] if column in small_cols and column in rna_cols]
     if not columns:
-        return []
+        return [], []
+
+    match_source = "metadata:" + ",".join(columns)
     rna_by_key: dict[tuple[str, ...], list[str]] = {}
     for row in rna_rows:
         key = tuple(row.get(column, "") for column in columns)
         if all(key):
             rna_by_key.setdefault(key, []).append(row["library_id"])
-    matches = []
+
+    matches: list[tuple[str, str]] = []
+    pairing_rows: list[dict[str, str]] = []
+    seen: set[tuple[str, str]] = set()
     for row in small_rows:
         key = tuple(row.get(column, "") for column in columns)
         if not all(key):
             continue
+        match_key = "|".join(f"{column}={value}" for column, value in zip(columns, key))
         for rnaseq_id in rna_by_key.get(key, []):
-            matches.append((row["library_id"], rnaseq_id))
-    return matches
+            pair = (row["library_id"], rnaseq_id)
+            if pair in seen:
+                continue
+            seen.add(pair)
+            matches.append(pair)
+            pairing_rows.append(
+                {
+                    "pair_id": f"pair_{len(pairing_rows) + 1}",
+                    "smallrna_library_id": row["library_id"],
+                    "rnaseq_library_id": rnaseq_id,
+                    "match_source": match_source,
+                    "match_key": match_key,
+                    "status": "ok",
+                    "reason": "",
+                }
+            )
+    return matches, pairing_rows
+
+
+def explicit_sample_matches(
+    match_table: Path,
+    smallrna_samples_path: Path,
+    rnaseq_samples_path: Path,
+) -> tuple[list[tuple[str, str]], list[dict[str, str]]]:
+    columns, rows = read_table(match_table)
+    small_col = first_existing_column(
+        columns,
+        ["smallrna_library_id", "smallrna_sample_id", "smallrna_id", "smallrna", "mirna_library_id", "mirna_sample_id"],
+    )
+    rna_col = first_existing_column(
+        columns,
+        ["rnaseq_library_id", "rnaseq_sample_id", "rnaseq_id", "rnaseq", "mrna_library_id", "mrna_sample_id"],
+    )
+    if not small_col or not rna_col:
+        raise ValueError(
+            f"Explicit match table {match_table} must contain smallrna_library_id and rnaseq_library_id "
+            "columns, or compatible aliases whose values are sample-table library_id values"
+        )
+
+    _, small_rows = read_table(smallrna_samples_path)
+    _, rna_rows = read_table(rnaseq_samples_path)
+    small_ids = library_ids(small_rows, smallrna_samples_path)
+    rna_ids = library_ids(rna_rows, rnaseq_samples_path)
+
+    matches: list[tuple[str, str]] = []
+    pairing_rows: list[dict[str, str]] = []
+    seen: set[tuple[str, str]] = set()
+    errors: list[str] = []
+    for index, row in enumerate(rows, start=2):
+        small_id = row.get(small_col, "")
+        rna_id = row.get(rna_col, "")
+        if not small_id or not rna_id:
+            errors.append(f"row {index}: missing {small_col} or {rna_col}")
+            continue
+        if small_id not in small_ids:
+            errors.append(f"row {index}: unknown smallRNA library_id {small_id}")
+            continue
+        if rna_id not in rna_ids:
+            errors.append(f"row {index}: unknown RNA-seq library_id {rna_id}")
+            continue
+        pair = (small_id, rna_id)
+        if pair in seen:
+            continue
+        seen.add(pair)
+        pair_id = row.get("pair_id", "") or row.get("match_id", "") or f"pair_{len(pairing_rows) + 1}"
+        match_key = row.get("match_key", "") or pair_id
+        matches.append(pair)
+        pairing_rows.append(
+            {
+                "pair_id": pair_id,
+                "smallrna_library_id": small_id,
+                "rnaseq_library_id": rna_id,
+                "match_source": f"table:{match_table}",
+                "match_key": match_key,
+                "status": "ok",
+                "reason": "",
+            }
+        )
+
+    if errors:
+        preview = "; ".join(errors[:8])
+        if len(errors) > 8:
+            preview += f"; ... ({len(errors)} total errors)"
+        raise ValueError(f"Explicit miRNA-mRNA match table failed validation: {preview}")
+    return matches, pairing_rows
+
+
+def sample_matches(
+    smallrna_samples_path: Path,
+    rnaseq_samples_path: Path,
+    match_columns: list[str],
+    match_table: Path | None = None,
+) -> tuple[list[tuple[str, str]], list[dict[str, str]]]:
+    if match_table is not None and str(match_table).strip():
+        if not match_table.exists():
+            raise FileNotFoundError(f"Explicit miRNA-mRNA match table does not exist: {match_table}")
+        return explicit_sample_matches(match_table, smallrna_samples_path, rnaseq_samples_path)
+    return metadata_sample_matches(smallrna_samples_path, rnaseq_samples_path, match_columns)
 
 
 def pearson(xs: list[float], ys: list[float]) -> float:
@@ -409,13 +532,21 @@ def write_svg(path: Path, rows: list[dict[str, str]], top_n: int) -> None:
     path.write_text("\n".join(elements) + "\n", encoding="utf-8")
 
 
-def blocked_row(row: dict[str, str], outdir: Path, reason: str) -> dict[str, str]:
+def blocked_row(
+    row: dict[str, str],
+    outdir: Path,
+    reason: str,
+    pairing_path: Path | None = None,
+    n_sample_pairs: int = 0,
+) -> dict[str, str]:
     contrast_dir = outdir / row["contrast_id"]
     manifest = contrast_dir / "mirna_mrna_manifest.tsv"
+    pairing_text = str(pairing_path) if pairing_path else ""
     write_table(
         manifest,
         CONTRAST_MANIFEST_COLUMNS,
         [
+            {"contrast_id": row["contrast_id"], "resource": "sample_pairing", "status": "ok" if pairing_text else "blocked", "reason": "" if pairing_text else reason, "path": pairing_text, "n_rows": str(n_sample_pairs)},
             {"contrast_id": row["contrast_id"], "resource": "mirna_mrna_pairs", "status": "blocked", "reason": reason, "path": "", "n_rows": "0"},
             {"contrast_id": row["contrast_id"], "resource": "mirna_mrna_summary", "status": "blocked", "reason": reason, "path": "", "n_rows": "0"},
             {"contrast_id": row["contrast_id"], "resource": "mirna_mrna_plot", "status": "blocked", "reason": reason, "path": "", "n_rows": "0"},
@@ -427,6 +558,8 @@ def blocked_row(row: dict[str, str], outdir: Path, reason: str) -> dict[str, str
         "contrast_id": row["contrast_id"],
         "status": "blocked",
         "reason": reason,
+        "sample_pairing": pairing_text,
+        "n_sample_pairs": str(n_sample_pairs),
         "mirna_mrna_manifest": str(manifest),
         "mirna_mrna_pairs": "",
         "mirna_mrna_summary": "",
@@ -447,6 +580,7 @@ def render_contrast(
     rnaseq_rows_by_contrast: dict[str, dict[str, str]],
     target_rows_by_contrast: dict[str, dict[str, str]],
     matches: list[tuple[str, str]],
+    pairing_path: Path,
     outdir: Path,
     min_pairs: int,
     min_abs_correlation: float,
@@ -463,17 +597,17 @@ def render_contrast(
         "target_mode_summary": contrast_dir / "mirna_mrna_target_mode_summary.tsv",
     }
     if small_row.get("status") != "ok":
-        return blocked_row(small_row, outdir, small_row.get("reason", "") or "smallRNA DESeq2 contrast is not ok")
+        return blocked_row(small_row, outdir, small_row.get("reason", "") or "smallRNA DESeq2 contrast is not ok", pairing_path, len(matches))
     rnaseq_row = rnaseq_rows_by_contrast.get(contrast_id)
     if not rnaseq_row:
-        return blocked_row(small_row, outdir, f"RNA-seq gene DESeq2 manifest lacks contrast {contrast_id}")
+        return blocked_row(small_row, outdir, f"RNA-seq gene DESeq2 manifest lacks contrast {contrast_id}", pairing_path, len(matches))
     if rnaseq_row.get("status") != "ok":
-        return blocked_row(small_row, outdir, rnaseq_row.get("reason", "") or "RNA-seq gene DESeq2 contrast is not ok")
+        return blocked_row(small_row, outdir, rnaseq_row.get("reason", "") or "RNA-seq gene DESeq2 contrast is not ok", pairing_path, len(matches))
     target_row = target_rows_by_contrast.get(contrast_id)
     if not target_row or target_row.get("status") != "ok":
-        return blocked_row(small_row, outdir, "miRNA target manifest is not ok for this contrast")
+        return blocked_row(small_row, outdir, "miRNA target manifest is not ok for this contrast", pairing_path, len(matches))
     if len(matches) < min_pairs:
-        return blocked_row(small_row, outdir, f"only {len(matches)} matched RNA-seq/smallRNA sample pair(s), need {min_pairs}")
+        return blocked_row(small_row, outdir, f"only {len(matches)} matched RNA-seq/smallRNA sample pair(s), need {min_pairs}", pairing_path, len(matches))
 
     mirna_results = row_by_feature(small_row["results"])
     gene_results = row_by_feature(rnaseq_row["results"])
@@ -538,6 +672,7 @@ def render_contrast(
         paths["manifest"],
         CONTRAST_MANIFEST_COLUMNS,
         [
+            {"contrast_id": contrast_id, "resource": "sample_pairing", "status": "ok", "reason": "", "path": str(pairing_path), "n_rows": str(len(matches))},
             {"contrast_id": contrast_id, "resource": "mirna_mrna_pairs", "status": "ok", "reason": "", "path": str(paths["pairs"]), "n_rows": str(len(pairs))},
             {"contrast_id": contrast_id, "resource": "mirna_mrna_summary", "status": "ok", "reason": "", "path": str(paths["summary"]), "n_rows": str(len(summary))},
             {"contrast_id": contrast_id, "resource": "mirna_mrna_plot", "status": "ok", "reason": "", "path": str(paths["plot"]), "n_rows": str(len(pairs))},
@@ -561,6 +696,8 @@ def render_contrast(
         "contrast_id": contrast_id,
         "status": "ok",
         "reason": "",
+        "sample_pairing": str(pairing_path),
+        "n_sample_pairs": str(len(matches)),
         "mirna_mrna_manifest": str(paths["manifest"]),
         "mirna_mrna_pairs": str(paths["pairs"]),
         "mirna_mrna_summary": str(paths["summary"]),
@@ -595,10 +732,18 @@ def main() -> int:
     _, small_rows = read_table(Path(args.smallrna_deseq2_manifest), SMALLRNA_COLUMNS)
     _, rnaseq_rows = read_table(Path(args.rnaseq_gene_manifest), RNASEQ_COLUMNS)
     _, target_rows = read_table(Path(args.target_manifest), TARGET_COLUMNS)
-    matches = sample_matches(Path(args.smallrna_samples), Path(args.rnaseq_samples), args.match_columns)
+    outdir = Path(args.outdir)
+    pairing_path = outdir / "sample_pairing.tsv"
+    match_table = Path(args.match_table) if args.match_table else None
+    matches, pairing_rows = sample_matches(
+        Path(args.smallrna_samples),
+        Path(args.rnaseq_samples),
+        args.match_columns,
+        match_table,
+    )
+    write_table(pairing_path, PAIRING_COLUMNS, pairing_rows)
     rnaseq_by_contrast = {row["contrast_id"]: row for row in rnaseq_rows}
     targets_by_contrast = {row["contrast_id"]: row for row in target_rows}
-    outdir = Path(args.outdir)
     rows = []
     for row in small_rows:
         try:
@@ -608,6 +753,7 @@ def main() -> int:
                     rnaseq_by_contrast,
                     targets_by_contrast,
                     matches,
+                    pairing_path,
                     outdir,
                     args.min_pairs,
                     args.min_abs_correlation,
@@ -615,7 +761,7 @@ def main() -> int:
                 )
             )
         except Exception as exc:
-            rows.append({**blocked_row(row, outdir, str(exc)), "status": "failed"})
+            rows.append({**blocked_row(row, outdir, str(exc), pairing_path, len(matches)), "status": "failed"})
     write_table(Path(args.manifest), MANIFEST_COLUMNS, rows)
     write_done(Path(args.done), rows)
     return 0
