@@ -4,7 +4,7 @@ This is the canonical ASPIS backlog. Older TODO-style notes have been merged
 here so that implementation priorities, validation blockers, and cleanup work
 are tracked in one place.
 
-Last updated: 2026-06-10.
+Last updated: 2026-06-12.
 
 ## How To Read This Backlog
 
@@ -28,29 +28,32 @@ environment, inputs, and outputs.
 
 ## Current Validation Baseline
 
-ASPIS has substantial real-data validation from a BEAS_2B G100 full run,
-including a resource-backed review bundle inspected on 2026-06-10. This proves
-a meaningful path through materialization, branch planning, staged
+ASPIS now has two matched real-data G100 full validations: BEAS_2B,
+inspected on 2026-06-10, and HEP_G2, inspected on 2026-06-12. Together these
+prove a meaningful path through materialization, branch planning, staged
 FastQC/MultiQC, RNA-seq preprocessing, RNA-seq alignment, alignment QC,
 StringTie/gffcompare quantification, gene/transcript DESeq2, isoform-switch
 execution, isoform-switch FASTA export, smallRNA preprocessing, smallRNA
 alignment/quantification/differential reporting, GO/Reactome ORA and ranked
-enrichment, smallRNA target enrichment, miRNA-mRNA integration, integrated
-project reports, QC overview, typed report inventory, and top-level run
-dashboards.
+enrichment, smallRNA target enrichment, target-gene feature sets, miRNA-mRNA
+integration, integrated project reports, QC overview, typed report inventory,
+technical PDFs, review-bundle packaging, and top-level run dashboards.
 
-This is not yet a production-complete release. The remaining active work is now
+This is not yet a production-complete release, but the active work is now
 narrower and no longer organized as open P0 report/resource plumbing:
 
 - DTU methods are still not configured or validated.
-- At least one additional appropriate real validation cohort remains desirable
-  to reduce overfitting to one experiment line.
 - Optional isoform-switch consequence annotation paths remain unvalidated for
   open local tools or precomputed user-supplied annotation tables.
 - Resource mapping thresholds for low-but-nonzero mapping rates need calibration
   from more real resource distributions.
 - Report and PDF polish remains useful, but the current report graph, inventory,
   link validation, and structural PDF QA are in place.
+- Further validation should target genuinely new surfaces, such as a distinct
+  organism/reference, a public shareable dataset, optional DTU, optional
+  consequence annotation, larger multi-project layout, or an independently
+  prepared resource bundle, rather than simply repeating the same BEAS/HEP
+  matched-cell-line pattern.
 
 The sections below are ordered by implementation dependency and practical
 validation value. Earlier sections should be completed before later polish work.
@@ -62,10 +65,10 @@ some report interpretation are biologically incomplete until real resources are
 configured. Placeholder statuses are useful for honesty, but not enough for a
 production demonstration.
 
-Status: closed as a P0 blocker after the BEAS_2B G100 full validation with
-configured GO/Reactome feature sets and reviewed/project-owned miRNA target
-resources. Residual mapping-threshold calibration is tracked under P1 resource
-mapping calibration.
+Status: closed as a P0 blocker after BEAS_2B and HEP_G2 G100 full
+validations with configured GO/Reactome feature sets and reviewed/project-owned
+miRNA target resources. Residual mapping-threshold calibration is tracked under
+P1 resource mapping calibration.
 
 Policy:
 
@@ -149,6 +152,13 @@ Completed hardening slice:
   main report pages checked. It includes 48 RNA-seq enrichment SVG/TSV
   artifacts, 24 smallRNA target-enrichment SVG artifacts, and 6 miRNA-mRNA
   integration SVG artifacts.
+- HEP_G2 full validation exercised the same configured-resource path on an
+  independent experiment line. RNA-seq enrichment completed 12/12 contrasts with
+  921 ORA terms and 107,401 ranked term rows across gene/transcript reports;
+  smallRNA target enrichment, target-gene feature sets, miRNA-mRNA integration,
+  and inverse target feature sets each completed 6/6 contrasts. Contrasts with
+  zero target pairs or zero target terms were explicit successful null outcomes,
+  not missing-resource failures.
 
 Closed acceptance evidence:
 
@@ -167,8 +177,9 @@ quickly fall into nested pages without knowing which report is authoritative.
 
 Status: closed as a P0 blocker after the run dashboard, integrated project
 report, assay-specific overview pages, QC overview, breadcrumbs, and typed
-report inventory were implemented. Remaining work is report polish for larger
-studies, not a blocker for real-data validation.
+report inventory were implemented and confirmed on BEAS_2B plus HEP_G2 review
+bundles. Remaining work is report polish for larger or more heterogeneous
+studies, not a blocker for the current real-data validation claim.
 
 Completed hardening slice:
 
@@ -254,6 +265,11 @@ Completed hardening slice:
   integrated project page, RNA-seq enrichment overview, smallRNA differential
   index, and smallRNA target/integration overview: 696 local HTML/SVG/PDF/TSV
   references checked and zero missing links.
+- The inspected HEP_G2 review bundle passed the same structural report pattern:
+  `report_inventory_validation.tsv` reported 54 inventory rows and zero errors;
+  the bundle exposed 93 HTML pages, 24 RNA-seq enrichment SVG plots, 30 smallRNA
+  SVG plots, project-level RNA-seq/smallRNA contrast navigation, and no stale
+  missing-feature-set messages in real report content beyond CSS class names.
 
 Acceptance criteria:
 
@@ -370,12 +386,12 @@ Completed hardening slice:
   absence of personal/private path tokens in committed public matrices.
 - `tests/validate_validation_matrix_contract.py` covers valid rows, duplicate
   IDs, placeholder values, and private-path leakage.
-- `docs/validation_matrix.tsv` now records the inspected BEAS_2B full-resource
-  run as the first real-data validation claim: 15 passed rows spanning input
-  materialization, RNA-seq QC/preprocess/alignment/quantification/DESeq2,
-  GO/Reactome enrichment, isoform switch, smallRNA QC/alignment/quantification,
-  smallRNA DESeq2, target enrichment, miRNA-mRNA integration, technical PDFs,
-  and report inventory/link checks.
+- `docs/validation_matrix.tsv` now records two inspected full-resource
+  validation claims: BEAS_2B and HEP_G2. The matrix contains 30 passed rows
+  spanning input materialization, RNA-seq QC/preprocess/alignment/
+  quantification/DESeq2, GO/Reactome enrichment, isoform switch, smallRNA
+  QC/alignment/quantification, smallRNA DESeq2, target enrichment, miRNA-mRNA integration,
+  technical PDFs, and report inventory/link checks.
 
 Closed acceptance evidence:
 
@@ -388,15 +404,28 @@ Closed acceptance evidence:
 
 ## P1 - Real-Data Validation Expansion
 
-Reason for priority: one well-documented BEAS_2B validation run is a real
-baseline, but another appropriate cohort or public dataset will reduce the risk
-that report logic, resource mappings, or biological summaries are overfit to one
-experiment line.
+Reason for priority: BEAS_2B and HEP_G2 now provide two matched real-data
+cell-line validations. Additional validation is no longer needed to close the
+current P0/P1 resource/report claims, but it remains valuable for release
+breadth when it exercises a new design, organism, public dataset, optional tool,
+or independently prepared resource bundle.
+
+Completed hardening slice:
+
+- HEP_G2 was run as `g100_hepg2_full` with 27 paired-end RNA-seq libraries, 27
+  smallRNA libraries, six matched contrasts, config
+  `config/aspis_g100_hepg2_full.yaml`, pipeline commit `1397878`, and review
+  bundle `g100_hepg2_full_HEP_G2_review_20260612_1732.tar.gz`. The inspected
+  run completed both RNA-seq and smallRNA branches, 12/12 RNA-seq enrichment
+  rows, 6/6 isoform-switch contrasts, 6/6 smallRNA target enrichment rows, 6/6
+  target feature-set rows, 6/6 miRNA-mRNA integration rows, and a valid 54-row
+  report inventory.
 
 Operator/data validation tasks:
 
-- Choose one or more appropriate real validation cohorts. BEAS_2B and HEP_G2
-  are available candidates, not mandatory requirements.
+- Choose one or more additional validation cohorts only when they exercise a new
+  surface. BEAS_2B and HEP_G2 already cover the current matched RNA-seq plus
+  smallRNA human cell-line path.
 - Run `validate_project_inputs.py` before every full submission.
 - Confirm every intake row has stable `library_id`, `biospecimen_id`,
   `project`, `assay`, `input_1`, `input_2`, and design columns.
@@ -416,11 +445,14 @@ Operator/data validation tasks:
 
 Acceptance criteria:
 
-- A second independent cohort or public dataset is validated when practical.
 - The validation matrix passes `validate_validation_matrix.py` after every new
   validation row is added.
 - New validation rows distinguish completed layers, intentional differences,
   and explicit blockers instead of summarizing a whole run as one vague pass.
+- Future validation expansion targets genuinely new risk: optional DTU,
+  optional consequence annotation, non-human or alternate references, a public
+  shareable dataset, larger multi-project structure, or an independently
+  prepared resource bundle.
 
 ## P1 - Resource Mapping Threshold Calibration
 
