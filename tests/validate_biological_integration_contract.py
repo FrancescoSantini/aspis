@@ -386,6 +386,8 @@ def exercise_biotype_and_dtu(paths: dict[str, Path]) -> None:
             "ASPIS_CONTRACT",
             "--method",
             "DRIMSeq",
+            "--contrast-id",
+            "treated_vs_control__time_h_24",
             "--rscript",
             sys.executable,
             "--drimseq-script",

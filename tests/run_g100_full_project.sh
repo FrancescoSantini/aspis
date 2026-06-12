@@ -170,6 +170,10 @@ fi
     run_transcript_deseq2_contrast:mem_mb=16000 \
     run_isoform_switch_contrast:runtime=720 \
     run_isoform_switch_contrast:mem_mb=48000 \
+    run_rnaseq_dtu_contrast:runtime=240 \
+    run_rnaseq_dtu_contrast:mem_mb=32000 \
+    run_rnaseq_dtu_methods:runtime=30 \
+    run_rnaseq_dtu_methods:mem_mb=4000 \
     render_isoform_switch_report:runtime=120 \
     render_isoform_switch_report:mem_mb=16000 \
     prepare_smallrna_reference:runtime=60 \

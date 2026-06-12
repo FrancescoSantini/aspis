@@ -42,7 +42,7 @@ technical PDFs, review-bundle packaging, and top-level run dashboards.
 This is not yet a production-complete release, but the active work is now
 narrower and no longer organized as open P0 report/resource plumbing:
 
-- Native DRIMSeq DTU execution is now implemented and contract-tested, but real-run validation with `R::DRIMSeq` is still pending.
+- Native DRIMSeq DTU execution is implemented, contract-tested, and split into one schedulable job per contrast; real-run validation with `R::DRIMSeq` should now be rerun in split mode.
 - Optional isoform-switch consequence annotation paths remain unvalidated for
   open local tools or precomputed user-supplied annotation tables.
 - Resource mapping thresholds for low-but-nonzero mapping rates need calibration
@@ -559,12 +559,11 @@ Current scope being implemented:
 
 Remaining code tasks:
 
-- Validate native DRIMSeq on a real RNA-seq validation run with
-  `rnaseq_dtu.run: true` and prepared `R::DRIMSeq` in the active environment.
+- Rerun native DRIMSeq on a real RNA-seq validation branch after the split-per-contrast DAG change, confirming separate scheduler jobs and merged `dtu_method_manifest.tsv` output.
 - Surface DRIMSeq result summaries more prominently in the RNA-seq differential
   report and project-level transcript section.
-- Add report rows that distinguish `planned`, `blocked`, `failed`, and
-  `completed` per DTU contrast/method.
+- Keep report rows that distinguish `planned`, `blocked`, `failed`, and
+  `completed` per DTU contrast/method, now sourced from the merged per-contrast manifest.
 - Decide whether DEXSeq should be supported through exon-bin counting or kept as
   a user-provided command-template method.
 - Decide whether SUPPA2 and rMATS belong in ASPIS native execution; if so, add
@@ -580,7 +579,7 @@ Acceptance criteria:
 - Missing DRIMSeq dependencies do not break standard RNA-seq analysis; the DTU
   manifest records a blocked status with a concrete reason.
 - Reports explain whether each DTU contrast was planned, blocked, failed, or
-  completed.
+  completed from the merged per-contrast manifest.
 
 ## P1 - Isoform-Switch Consequence Annotation Hardening
 

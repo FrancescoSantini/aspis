@@ -87,6 +87,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--manifest", required=True)
     parser.add_argument("--done", required=True)
     parser.add_argument("--project", required=True)
+    parser.add_argument("--contrast-id", default="", help="Run only one contrast_id from the DTU plan")
     parser.add_argument("--method", default="DRIMSeq")
     parser.add_argument("--methods", default="DRIMSeq,DEXSeq,SUPPA2,rMATS")
     parser.add_argument("--rscript", default="Rscript")
@@ -167,7 +168,7 @@ def command_for_method(args: argparse.Namespace, method: str) -> str:
     return commands.get(method, "")
 
 
-def context_for(args: argparse.Namespace, method: str, method_dir: Path) -> SafeFormat:
+def context_for(args: argparse.Namespace, method: str, method_dir: Path, contrast_id: str = "") -> SafeFormat:
     context = SafeFormat()
     context.update(
         {
@@ -180,6 +181,7 @@ def context_for(args: argparse.Namespace, method: str, method_dir: Path) -> Safe
             "transcript_counts": str(Path(args.transcript_counts).resolve()),
             "transcript_metadata": str(Path(args.transcript_metadata).resolve()),
             "annotation_gtf": str(Path(args.annotation_gtf).resolve()),
+            "contrast_id": contrast_id,
         }
     )
     return context
@@ -391,13 +393,16 @@ def base_manifest_row(args: argparse.Namespace, method: str, method_dir: Path, c
     }
 
 
-def run_external_method(args: argparse.Namespace, method: str, plan: Path) -> dict[str, str]:
+def run_external_method(args: argparse.Namespace, method: str, plan: Path, plan_row: dict[str, str] | None = None) -> dict[str, str]:
+    contrast_id = (plan_row or {}).get("contrast_id", "")
     method_dir = Path(args.outdir) / method.lower().replace("-", "_")
+    if contrast_id:
+        method_dir = method_dir / re.sub(r"[^A-Za-z0-9_.-]+", "_", contrast_id)
     method_dir.mkdir(parents=True, exist_ok=True)
     stdout = method_dir / "stdout.log"
     stderr = method_dir / "stderr.log"
     command_template = command_for_method(args, method).strip()
-    row = base_manifest_row(args, method, method_dir)
+    row = base_manifest_row(args, method, method_dir, contrast_id)
     row["command"] = command_template
     if not command_template:
         row.update(
@@ -407,7 +412,7 @@ def run_external_method(args: argparse.Namespace, method: str, plan: Path) -> di
             }
         )
         return row
-    command = command_template.format_map(context_for(args, method, method_dir))
+    command = command_template.format_map(context_for(args, method, method_dir, contrast_id))
     completed = subprocess.run(command, shell=True, text=True, capture_output=True, check=False)
     stdout.write_text(completed.stdout, encoding="utf-8")
     stderr.write_text(completed.stderr, encoding="utf-8")
@@ -417,7 +422,7 @@ def run_external_method(args: argparse.Namespace, method: str, plan: Path) -> di
     if completed.returncode == 0:
         row["status"] = "completed"
         row["reason"] = ""
-        standardized_results, result_count, standardized_status = standardize_method_outputs(args, method, method_dir)
+        standardized_results, result_count, standardized_status = standardize_method_outputs(args, method, method_dir, contrast_id)
         row["standardized_results"] = standardized_results
         row["standardized_result_count"] = str(result_count)
         row["standardized_status"] = standardized_status
@@ -577,6 +582,8 @@ def run_drimseq_native(args: argparse.Namespace, plan_rows: list[dict[str, str]]
 def run_method_rows(args: argparse.Namespace, method: str, plan: Path, plan_rows: list[dict[str, str]]) -> list[dict[str, str]]:
     if method == "DRIMSeq" and not command_for_method(args, method).strip():
         return run_drimseq_native(args, plan_rows)
+    if args.contrast_id:
+        return [run_external_method(args, method, plan, plan_row) for plan_row in plan_rows]
     return [run_external_method(args, method, plan)]
 
 
@@ -595,6 +602,10 @@ def main() -> int:
             raise FileNotFoundError(path_text)
     plan = Path(args.plan)
     plan_rows = read_tsv(plan)
+    if args.contrast_id:
+        plan_rows = [row for row in plan_rows if row.get("contrast_id", "") == args.contrast_id]
+        if not plan_rows:
+            raise ValueError(f"DTU plan {plan} has no contrast_id row matching {args.contrast_id}")
     methods = normalize_methods(args.method, args.methods)
     if not methods:
         raise ValueError("no DTU methods selected")

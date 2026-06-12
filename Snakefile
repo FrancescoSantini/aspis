@@ -911,6 +911,22 @@ def rnaseq_isoform_switch_contrast_manifests(wildcards):
     ]
 
 
+def rnaseq_dtu_contrast_manifest(project, contrast_id):
+    return f"{BRANCH_DIR}/rnaseq/{project}/differential/dtu/contrast_manifests/{contrast_id}.manifest.tsv"
+
+
+def rnaseq_dtu_contrast_done(project, contrast_id):
+    return f"{BRANCH_DIR}/rnaseq/{project}/differential/dtu/contrast_manifests/{contrast_id}.done"
+
+
+def rnaseq_dtu_contrast_manifests(wildcards):
+    plan_path = checkpoints.plan_rnaseq_dtu.get(project=wildcards.project).output[0]
+    return [
+        rnaseq_dtu_contrast_manifest(wildcards.project, contrast_id)
+        for contrast_id in contrast_ids_from_plan(plan_path)
+    ]
+
+
 def rnaseq_report_item_plan(project, level, contrast_id):
     return f"{BRANCH_DIR}/rnaseq/{project}/differential/reports/items/{level}/{contrast_id}/report_plan.tsv"
 
@@ -5959,7 +5975,7 @@ rule render_rnaseq_biological_warnings:
         """
 
 
-rule plan_rnaseq_dtu:
+checkpoint plan_rnaseq_dtu:
     input:
         samples=f"{BRANCH_DIR}" + "/rnaseq/{project}/samples.tsv",
         transcript_counts=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/counts/transcript_counts.tsv",
@@ -6011,7 +6027,7 @@ rule plan_rnaseq_dtu:
         """
 
 
-rule run_rnaseq_dtu_methods:
+rule run_rnaseq_dtu_contrast:
     input:
         plan=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/dtu/dtu_plan.tsv",
         plan_done=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/dtu/dtu.done",
@@ -6021,8 +6037,8 @@ rule run_rnaseq_dtu_methods:
         transcript_metadata=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/counts/transcript_metadata.tsv",
         quantification_done=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/counts/quantification.done"
     output:
-        manifest=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/dtu/dtu_method_manifest.tsv",
-        done=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/dtu/dtu_methods.done"
+        manifest=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/dtu/contrast_manifests/{contrast_id}.manifest.tsv",
+        done=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/dtu/contrast_manifests/{contrast_id}.done"
     params:
         outdir=lambda wildcards: f"{BRANCH_DIR}/rnaseq/{wildcards.project}/differential/dtu/methods",
         annotation_gtf=lambda wildcards: RNASEQ_QUANTIFICATION.get(
@@ -6043,7 +6059,7 @@ rule run_rnaseq_dtu_methods:
         suppa2_command=shell_arg("--suppa2-command", RNASEQ_DTU.get("suppa2_command", "")),
         rmats_command=shell_arg("--rmats-command", RNASEQ_DTU.get("rmats_command", ""))
     log:
-        "logs/branches/rnaseq/{project}.dtu_methods.log"
+        "logs/branches/rnaseq/{project}.dtu_methods.{contrast_id}.log"
     shell:
         r"""
         mkdir -p logs/branches/rnaseq
@@ -6058,6 +6074,7 @@ rule run_rnaseq_dtu_methods:
           --manifest {output.manifest:q} \
           --done {output.done:q} \
           --project {wildcards.project:q} \
+          --contrast-id {wildcards.contrast_id:q} \
           --method {params.method:q} \
           --methods {params.candidate_methods:q} \
           --rscript {params.rscript:q} \
@@ -6071,6 +6088,26 @@ rule run_rnaseq_dtu_methods:
           {params.dexseq_command} \
           {params.suppa2_command} \
           {params.rmats_command} \
+          > {log:q} 2>&1
+        """
+
+
+rule run_rnaseq_dtu_methods:
+    input:
+        manifests=rnaseq_dtu_contrast_manifests
+    output:
+        manifest=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/dtu/dtu_method_manifest.tsv",
+        done=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/dtu/dtu_methods.done"
+    log:
+        "logs/branches/rnaseq/{project}.dtu_methods.merge.log"
+    shell:
+        r"""
+        mkdir -p logs/branches/rnaseq
+        python3 workflow/scripts/merge_status_manifests.py \
+          --kind dtu \
+          --manifest {output.manifest:q} \
+          --done {output.done:q} \
+          {input.manifests:q} \
           > {log:q} 2>&1
         """
 

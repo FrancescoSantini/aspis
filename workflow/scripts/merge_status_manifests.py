@@ -15,6 +15,7 @@ DONE_COLUMNS = {
     "plots": ("plots", []),
     "enrichment": ("enrichment", ["not_configured"]),
     "summaries": ("summaries", []),
+    "dtu": ("dtu_methods", []),
 }
 
 REQUIRED_INPUT_COLUMNS = {
@@ -23,6 +24,7 @@ REQUIRED_INPUT_COLUMNS = {
     "plots": {"project", "level", "contrast_id", "status", "n_features", "n_significant"},
     "enrichment": {"project", "level", "contrast_id", "status", "n_ranked", "n_feature_sets"},
     "summaries": {"project", "level", "contrast_id", "status", "n_features", "n_significant", "n_up", "n_down"},
+    "dtu": {"project", "method", "contrast_id", "status", "standardized_results", "standardized_result_count", "standardized_status"},
 }
 
 
@@ -132,7 +134,7 @@ def expand_plan_placeholder(
             for row in rows
             if row.get("level", "") and row.get("contrast_id", "")
         ]
-    elif kind in {"deseq2", "isoform_switch"}:
+    elif kind in {"deseq2", "isoform_switch", "dtu"}:
         if "contrast_id" not in columns:
             return input_paths
         expanded = [
@@ -170,6 +172,31 @@ def write_manifest(path: Path, columns: list[str], rows: list[dict[str, str]]) -
 
 
 def write_done(path: Path, kind: str, rows: list[dict[str, str]]) -> None:
+    if kind == "dtu":
+        completed = sum(1 for row in rows if row.get("status") == "completed")
+        planned = sum(1 for row in rows if row.get("status") == "planned")
+        blocked = sum(1 for row in rows if row.get("status") == "blocked")
+        failed = sum(1 for row in rows if row.get("status") == "failed")
+        if failed:
+            status = "failed"
+            reason = ",".join(row.get("contrast_id", "") for row in rows if row.get("status") == "failed")
+        elif blocked:
+            status = "blocked"
+            reason = f"{blocked} DTU contrast/method job(s) blocked"
+        elif completed:
+            status = "ok"
+            reason = f"{completed} DTU contrast/method job(s) completed"
+        else:
+            status = "planned"
+            reason = f"{planned} DTU contrast/method job(s) planned"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("w", encoding="utf-8") as handle:
+            handle.write("status\tcompleted\tplanned\tblocked\tfailed\ttotal\treason\n")
+            handle.write(f"{status}\t{completed}\t{planned}\t{blocked}\t{failed}\t{len(rows)}\t{reason}\n")
+        if failed:
+            raise RuntimeError(f"Merged {kind} manifest contains failed item(s): {reason}")
+        return
+
     prefix, extra_statuses = DONE_COLUMNS[kind]
     ok = sum(1 for row in rows if row.get("status") == "ok")
     blocked = sum(1 for row in rows if row.get("status") == "blocked")
