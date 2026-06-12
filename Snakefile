@@ -3704,6 +3704,7 @@ rule render_smallrna_target_enrichment:
         target_tables=SMALLRNA_TARGET_INPUTS
     output:
         manifest=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/differential/target_enrichment/target_manifest.tsv",
+        qa=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/differential/target_enrichment/resource_mapping_qa.tsv",
         done=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/differential/target_enrichment/target_enrichment.done"
     params:
         outdir=lambda wildcards: f"{BRANCH_DIR}/smallrna/{wildcards.project}/smallrna/differential/target_enrichment",
@@ -3716,7 +3717,9 @@ rule render_smallrna_target_enrichment:
             joined_config_values(SMALLRNA_TARGET_CACHE_INPUTS),
         ),
         min_overlap=SMALLRNA.get("target_min_overlap", 1),
-        top_n=SMALLRNA.get("target_top_n", 20)
+        top_n=SMALLRNA.get("target_top_n", 20),
+        mapping_warn_fraction=SMALLRNA.get("target_mapping_warn_fraction", 0.05),
+        mapping_fail_fraction=SMALLRNA.get("target_mapping_fail_fraction", 0.001)
     log:
         "logs/branches/smallrna/{project}.target_enrichment.log"
     shell:
@@ -3730,8 +3733,11 @@ rule render_smallrna_target_enrichment:
           --outdir {params.outdir:q} \
           --manifest {output.manifest:q} \
           --done {output.done:q} \
+          --qa {output.qa:q} \
           --min-overlap {params.min_overlap:q} \
           --top-n {params.top_n:q} \
+          --mapping-warn-fraction {params.mapping_warn_fraction:q} \
+          --mapping-fail-fraction {params.mapping_fail_fraction:q} \
           > {log:q} 2>&1
         """
 
@@ -6216,6 +6222,7 @@ rule render_rnaseq_differential_enrichment_item:
     output:
         manifest=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/reports/enrichment/items/{level}/{contrast_id}/enrichment_manifest.tsv",
         contrast_manifest=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/reports/{level}/{contrast_id}/enrichment/enrichment_manifest.tsv",
+        resource_mapping_qa=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/reports/{level}/{contrast_id}/enrichment/resource_mapping_qa.tsv",
         done=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/reports/enrichment/items/{level}/{contrast_id}/enrichment.done"
     params:
         feature_sets=lambda wildcards: optional_shell_arg(
@@ -6233,7 +6240,9 @@ rule render_rnaseq_differential_enrichment_item:
         ),
         ranked_permutations=RNASEQ_DIFFERENTIAL.get("report_ranked_feature_set_permutations", 1000),
         ranked_seed=RNASEQ_DIFFERENTIAL.get("report_ranked_feature_set_seed", 1),
-        ranked_min_mapped=RNASEQ_DIFFERENTIAL.get("report_ranked_feature_set_min_mapped", 100)
+        ranked_min_mapped=RNASEQ_DIFFERENTIAL.get("report_ranked_feature_set_min_mapped", 100),
+        mapping_warn_fraction=RNASEQ_DIFFERENTIAL.get("report_feature_set_mapping_warn_fraction", 0.1),
+        mapping_fail_fraction=RNASEQ_DIFFERENTIAL.get("report_feature_set_mapping_fail_fraction", 0.001)
     log:
         "logs/branches/rnaseq/{project}.differential_enrichment.{level}.{contrast_id}.log"
     shell:
@@ -6250,6 +6259,8 @@ rule render_rnaseq_differential_enrichment_item:
           --ranked-feature-set-permutations {params.ranked_permutations:q} \
           --ranked-feature-set-seed {params.ranked_seed:q} \
           --ranked-feature-set-min-mapped {params.ranked_min_mapped:q} \
+          --feature-set-mapping-warn-fraction {params.mapping_warn_fraction:q} \
+          --feature-set-mapping-fail-fraction {params.mapping_fail_fraction:q} \
           > {log:q} 2>&1
         """
 
@@ -6259,6 +6270,7 @@ rule render_rnaseq_differential_enrichment:
         rnaseq_report_enrichment_manifests
     output:
         manifest=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/reports/enrichment/enrichment_manifest.tsv",
+        qa=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/reports/enrichment/resource_mapping_qa.tsv",
         done=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/reports/enrichment/enrichment.done"
     log:
         "logs/branches/rnaseq/{project}.differential_enrichment.merge.log"
@@ -6271,6 +6283,10 @@ rule render_rnaseq_differential_enrichment:
           --done {output.done:q} \
           {input:q} \
           > {log:q} 2>&1
+        python3 workflow/scripts/merge_resource_mapping_qa.py \
+          --manifest {output.manifest:q} \
+          --output {output.qa:q} \
+          >> {log:q} 2>&1
         """
 
 

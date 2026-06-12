@@ -180,12 +180,17 @@ def main() -> int:
             str(paths["done"]),
             "--min-overlap",
             "1",
+            "--mapping-warn-fraction",
+            "0.6",
+            "--mapping-fail-fraction",
+            "0.1",
         ],
         check=True,
     )
 
     manifest_row = read_tsv(paths["manifest"])[0]
     universe_rows = read_tsv(Path(manifest_row["target_universe"]))
+    qa_rows = read_tsv(Path(manifest_row["resource_mapping_qa"]))
     all_sources = row_by_source(universe_rows, "all_sources", "all_types")
     validated = row_by_source(universe_rows, "validated_db", "validated")
     predicted = row_by_source(universe_rows, "predicted_db", "predicted")
@@ -193,7 +198,18 @@ def main() -> int:
     expectations = [
         (all_sources, {"tested_mirnas": "4", "mapped_tested_mirnas": "4", "target_universe_size": "3"}),
         (validated, {"tested_mirnas": "4", "mapped_tested_mirnas": "3", "resource_mapping_loss": "1"}),
-        (predicted, {"tested_mirnas": "4", "mapped_tested_mirnas": "2", "resource_mapping_loss": "2"}),
+        (
+            predicted,
+            {
+                "tested_mirnas": "4",
+                "mapped_tested_mirnas": "2",
+                "resource_mapping_loss": "2",
+                "mapping_fraction": "0.5",
+                "mapping_status": "warning",
+                "mapping_warn_fraction": "0.6",
+                "mapping_fail_fraction": "0.1",
+            },
+        ),
     ]
     for row, expected_values in expectations:
         if row["target_analysis_mode"] != "database_target":
@@ -201,6 +217,33 @@ def main() -> int:
         for key, expected in expected_values.items():
             if row.get(key, "") != expected:
                 raise ValueError(f"Expected {key}={expected!r}, got {row.get(key, '')!r}: {row}")
+
+    predicted_qa = [
+        row
+        for row in qa_rows
+        if row.get("resource_source") == "predicted_db" and row.get("resource_collection") == "predicted/predicted"
+    ]
+    if len(predicted_qa) != 1:
+        raise ValueError(f"Expected one predicted_db QA row, got {len(predicted_qa)}")
+    expected_qa = {
+        "assay": "smallrna",
+        "level": "mirna_target",
+        "resource_kind": "mirna_target_table",
+        "mapping_mode": "mirna_id",
+        "tested_features": "4",
+        "mapped_tested_features": "2",
+        "resource_universe_size": "3",
+        "final_universe_size": "2",
+        "resource_mapping_loss": "2",
+        "mapping_fraction": "0.5",
+        "warn_fraction": "0.6",
+        "fail_fraction": "0.1",
+        "status": "warning",
+    }
+    for key, expected in expected_qa.items():
+        observed = predicted_qa[0].get(key, "")
+        if observed != expected:
+            raise ValueError(f"resource mapping QA expected {key}={expected!r}, got {observed!r}: {predicted_qa[0]}")
 
     enrichment_rows = read_tsv(Path(manifest_row["target_enrichment"]))
     source_rows = [

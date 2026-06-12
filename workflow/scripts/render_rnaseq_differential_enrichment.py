@@ -39,6 +39,7 @@ MANIFEST_COLUMNS = [
     "feature_set_plot",
     "ranked_feature_set_results",
     "ranked_feature_set_plot",
+    "resource_mapping_qa",
     "n_ranked",
     "n_significant",
     "n_up",
@@ -47,6 +48,8 @@ MANIFEST_COLUMNS = [
     "n_feature_set_resources",
     "n_feature_set_terms",
     "n_ranked_feature_set_terms",
+    "n_mapping_warnings",
+    "n_mapping_failures",
 ]
 CONTRAST_MANIFEST_COLUMNS = [
     "contrast_id",
@@ -135,7 +138,33 @@ FEATURE_SET_UNIVERSE_COLUMNS = [
     "ranked_mapping_fraction",
     "ranked_mapping_status",
     "ranked_mapping_warning",
+    "mapping_fraction",
+    "mapping_status",
+    "mapping_warning",
+    "mapping_warn_fraction",
+    "mapping_fail_fraction",
     "min_overlap",
+]
+RESOURCE_MAPPING_QA_COLUMNS = [
+    "assay",
+    "level",
+    "contrast_id",
+    "resource_kind",
+    "resource_source",
+    "resource_collection",
+    "resource_version",
+    "mapping_mode",
+    "tested_features",
+    "mapped_tested_features",
+    "resource_universe_size",
+    "final_universe_size",
+    "resource_mapping_loss",
+    "mapping_fraction",
+    "warn_fraction",
+    "fail_fraction",
+    "min_mapped_features",
+    "status",
+    "reason",
 ]
 STAT_COLUMNS = {
     "baseMean",
@@ -212,6 +241,18 @@ def parse_args() -> argparse.Namespace:
         type=int,
         default=100,
         help="Warn when fewer ranked features map to a configured feature-set resource",
+    )
+    parser.add_argument(
+        "--feature-set-mapping-warn-fraction",
+        type=float,
+        default=0.1,
+        help="Warn when a configured feature-set resource maps below this tested-feature fraction",
+    )
+    parser.add_argument(
+        "--feature-set-mapping-fail-fraction",
+        type=float,
+        default=0.001,
+        help="Fail when a configured feature-set resource maps below this tested-feature fraction",
     )
     return parser.parse_args()
 
@@ -870,6 +911,8 @@ def feature_set_universe_rows(
     feature_sets: list[FeatureSet],
     min_overlap: int,
     min_ranked_mapped: int,
+    mapping_warn_fraction: float,
+    mapping_fail_fraction: float,
 ) -> list[dict[str, str]]:
     mapped_universe = feature_ids(feature_lists.ranked)
     tested_count = len(original_feature_ids(feature_lists.ranked))
@@ -883,6 +926,27 @@ def feature_set_universe_rows(
         grouped_version = grouped_feature_set_version(grouped_sets)
         final_universe = mapped_universe & resource_members
         ranked_mapping_fraction = len(final_universe) / mapped_count if mapped_count else 0.0
+        mapping_fraction = ranked_mapping_fraction
+        mapping_status = "ok"
+        mapping_warning = ""
+        if not final_universe:
+            mapping_status = "failed"
+            mapping_warning = (
+                f"no tested {level or 'feature'} identifiers mapped to "
+                f"{source}/{collection}; check identifier namespace, mapping mode, and resource universe"
+            )
+        elif mapping_fraction < mapping_fail_fraction:
+            mapping_status = "failed"
+            mapping_warning = (
+                f"mapping fraction {mapping_fraction:.6g} is below fail threshold "
+                f"{mapping_fail_fraction:.6g} for {source}/{collection}"
+            )
+        elif mapping_fraction < mapping_warn_fraction:
+            mapping_status = "warning"
+            mapping_warning = (
+                f"mapping fraction {mapping_fraction:.6g} is below warn threshold "
+                f"{mapping_warn_fraction:.6g} for {source}/{collection}"
+            )
         if len(final_universe) < min_ranked_mapped:
             ranked_mapping_status = "warning"
             ranked_mapping_warning = (
@@ -914,6 +978,11 @@ def feature_set_universe_rows(
                 "ranked_mapping_fraction": f"{ranked_mapping_fraction:.6g}",
                 "ranked_mapping_status": ranked_mapping_status,
                 "ranked_mapping_warning": ranked_mapping_warning,
+                "mapping_fraction": f"{mapping_fraction:.6g}",
+                "mapping_status": mapping_status,
+                "mapping_warning": mapping_warning,
+                "mapping_warn_fraction": f"{mapping_warn_fraction:.6g}",
+                "mapping_fail_fraction": f"{mapping_fail_fraction:.6g}",
                 "min_overlap": str(min_overlap),
             }
         )
@@ -970,6 +1039,8 @@ def write_feature_lists(
     permutations: int,
     seed: int,
     min_ranked_mapped: int,
+    mapping_warn_fraction: float,
+    mapping_fail_fraction: float,
 ) -> tuple[FeatureLists, dict[str, str], list[dict[str, str]]]:
     result_columns, result_rows = read_table(Path(row["results"]))
     filtered_columns, filtered_rows = read_table(Path(row["filtered"]))
@@ -988,6 +1059,7 @@ def write_feature_lists(
         "feature_set_plot": outdir / "feature_set_enrichment.svg",
         "ranked_feature_set_results": outdir / "ranked_feature_set_enrichment.tsv",
         "ranked_feature_set_plot": outdir / "ranked_feature_set_enrichment.svg",
+        "resource_mapping_qa": outdir / "resource_mapping_qa.tsv",
     }
 
     ranked = [feature_row(source_row, result_feature_column, id_map) for source_row in result_rows]
@@ -1019,6 +1091,8 @@ def write_feature_lists(
         feature_sets,
         min_overlap,
         min_ranked_mapped,
+        mapping_warn_fraction,
+        mapping_fail_fraction,
     )
     term_rows = enrichment_rows(row["contrast_id"], row.get("level", ""), map_mode, feature_lists, feature_sets, min_overlap)
     ranked_term_rows = ranked_feature_set_rows(
@@ -1031,7 +1105,35 @@ def write_feature_lists(
         permutations,
         seed,
     )
+    qa_rows = [
+        {
+            "assay": "rnaseq",
+            "level": universe_row.get("level", row.get("level", "")),
+            "contrast_id": universe_row["contrast_id"],
+            "resource_kind": "feature_set",
+            "resource_source": universe_row["feature_set_source"],
+            "resource_collection": universe_row["feature_set_collection"],
+            "resource_version": universe_row["feature_set_version"],
+            "mapping_mode": universe_row["mapping_mode"],
+            "tested_features": universe_row["tested_features"],
+            "mapped_tested_features": universe_row["mapped_tested_features"],
+            "resource_universe_size": universe_row["resource_universe_size"],
+            "final_universe_size": universe_row["final_universe_size"],
+            "resource_mapping_loss": universe_row["resource_mapping_loss"],
+            "mapping_fraction": universe_row["mapping_fraction"],
+            "warn_fraction": universe_row["mapping_warn_fraction"],
+            "fail_fraction": universe_row["mapping_fail_fraction"],
+            "min_mapped_features": universe_row["ranked_min_mapped_features"],
+            "status": universe_row["mapping_status"],
+            "reason": universe_row["mapping_warning"],
+        }
+        for universe_row in universe_rows
+    ]
+    qa_warnings = sum(1 for qa_row in qa_rows if qa_row["status"] == "warning")
+    qa_failures = sum(1 for qa_row in qa_rows if qa_row["status"] == "failed")
+
     write_table(paths["feature_set_universe"], FEATURE_SET_UNIVERSE_COLUMNS, universe_rows)
+    write_table(paths["resource_mapping_qa"], RESOURCE_MAPPING_QA_COLUMNS, qa_rows)
     write_table(paths["feature_set_results"], FEATURE_SET_COLUMNS, term_rows)
     write_enrichment_svg(paths["feature_set_plot"], term_rows, top_n)
     write_table(paths["ranked_feature_set_results"], RANKED_FEATURE_SET_COLUMNS, ranked_term_rows)
@@ -1047,6 +1149,7 @@ def write_feature_lists(
         "feature_set_plot": str(paths["feature_set_plot"]),
         "ranked_feature_set_results": str(paths["ranked_feature_set_results"]),
         "ranked_feature_set_plot": str(paths["ranked_feature_set_plot"]),
+        "resource_mapping_qa": str(paths["resource_mapping_qa"]),
         "n_ranked": str(len(ranked)),
         "n_significant": str(len(significant)),
         "n_up": str(len(up)),
@@ -1055,6 +1158,8 @@ def write_feature_lists(
         "n_feature_set_resources": str(len(universe_rows)),
         "n_feature_set_terms": str(len(term_rows)),
         "n_ranked_feature_set_terms": str(len(ranked_term_rows)),
+        "n_mapping_warnings": str(qa_warnings),
+        "n_mapping_failures": str(qa_failures),
     }
     universe_status = "not_configured" if not feature_sets else "insufficient_mapping" if not universe_rows else "ok"
     universe_reason = "No feature set GMT or table configured" if not feature_sets else "No tested features mapped to configured feature sets" if not universe_rows else ""
@@ -1062,6 +1167,16 @@ def write_feature_lists(
     term_reason = "No feature set GMT or table configured" if not feature_sets else "No ORA terms passed configured overlap/significance thresholds" if not term_rows else ""
     ranked_status = "not_configured" if not feature_sets else "no_significant_terms" if not ranked_term_rows else "ok"
     ranked_reason = "No feature set GMT or table configured" if not feature_sets else "No ranked feature-set terms passed configured thresholds" if not ranked_term_rows else ""
+    qa_status = "not_configured" if not feature_sets else "failed" if qa_failures else "warning" if qa_warnings else "ok"
+    qa_reason = (
+        "No feature set GMT or table configured"
+        if not feature_sets
+        else f"{qa_failures} feature-set resource mapping failure(s)"
+        if qa_failures
+        else f"{qa_warnings} feature-set resource mapping warning(s)"
+        if qa_warnings
+        else ""
+    )
     resources = [
         ("ranked_features", paths["ranked_features"], "ok", "", len(ranked)),
         ("significant_features", paths["significant_features"], "ok", "", len(significant)),
@@ -1070,6 +1185,7 @@ def write_feature_lists(
         ("feature_set_universe", paths["feature_set_universe"], universe_status, universe_reason, len(universe_rows)),
         ("feature_set_results", paths["feature_set_results"], term_status, term_reason, len(term_rows)),
         ("feature_set_plot", paths["feature_set_plot"], term_status, term_reason, len(term_rows)),
+        ("resource_mapping_qa", paths["resource_mapping_qa"], qa_status, qa_reason, len(qa_rows)),
         ("ranked_feature_set_results", paths["ranked_feature_set_results"], ranked_status, ranked_reason, len(ranked_term_rows)),
         ("ranked_feature_set_plot", paths["ranked_feature_set_plot"], ranked_status, ranked_reason, len(ranked_term_rows)),
     ]
@@ -1102,6 +1218,7 @@ def write_blocked_contrast_manifest(row: dict[str, str], reason: str) -> None:
         "feature_set_plot",
         "ranked_feature_set_results",
         "ranked_feature_set_plot",
+        "resource_mapping_qa",
     ]
     write_table(
         Path(row["enrichment_manifest"]),
@@ -1135,6 +1252,7 @@ def empty_output(row: dict[str, str]) -> dict[str, str]:
         "feature_set_plot": "",
         "ranked_feature_set_results": "",
         "ranked_feature_set_plot": "",
+        "resource_mapping_qa": "",
         "n_ranked": "0",
         "n_significant": "0",
         "n_up": "0",
@@ -1143,6 +1261,8 @@ def empty_output(row: dict[str, str]) -> dict[str, str]:
         "n_feature_set_resources": "0",
         "n_feature_set_terms": "0",
         "n_ranked_feature_set_terms": "0",
+        "n_mapping_warnings": "0",
+        "n_mapping_failures": "0",
     }
 
 
@@ -1154,6 +1274,8 @@ def render_row(
     permutations: int,
     seed: int,
     min_ranked_mapped: int,
+    mapping_warn_fraction: float,
+    mapping_fail_fraction: float,
 ) -> dict[str, str]:
     output = empty_output(row)
     if row["status"] != "ready":
@@ -1169,6 +1291,8 @@ def render_row(
             permutations,
             seed,
             min_ranked_mapped,
+            mapping_warn_fraction,
+            mapping_fail_fraction,
         )
         if not feature_sets:
             return {
@@ -1176,6 +1300,13 @@ def render_row(
                 **paths,
                 "status": "not_configured",
                 "reason": "No feature set GMT or table configured",
+            }
+        if int(paths.get("n_mapping_failures", "0") or "0"):
+            return {
+                **output,
+                **paths,
+                "status": "failed",
+                "reason": f"Resource mapping failed configured threshold(s); see {paths['resource_mapping_qa']}",
             }
         return {**output, **paths, "status": "ok", "reason": ""}
     except Exception as exc:
@@ -1218,6 +1349,11 @@ def main() -> int:
         raise ValueError("--ranked-feature-set-permutations must be >= 0")
     if args.ranked_feature_set_min_mapped < 0:
         raise ValueError("--ranked-feature-set-min-mapped must be >= 0")
+    if not (0.0 <= args.feature_set_mapping_fail_fraction <= args.feature_set_mapping_warn_fraction <= 1.0):
+        raise ValueError(
+            "--feature-set-mapping-fail-fraction and --feature-set-mapping-warn-fraction "
+            "must satisfy 0 <= fail <= warn <= 1"
+        )
     _, plan_rows = read_table(Path(args.plan), REQUIRED_PLAN_COLUMNS)
     if not plan_rows:
         raise ValueError("Differential report plan has no rows")
@@ -1231,6 +1367,8 @@ def main() -> int:
             args.ranked_feature_set_permutations,
             args.ranked_feature_set_seed,
             args.ranked_feature_set_min_mapped,
+            args.feature_set_mapping_warn_fraction,
+            args.feature_set_mapping_fail_fraction,
         )
         for row in plan_rows
     ]

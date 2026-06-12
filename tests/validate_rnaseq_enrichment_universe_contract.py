@@ -168,12 +168,17 @@ def main() -> int:
             "50",
             "--ranked-feature-set-min-mapped",
             "3",
+            "--feature-set-mapping-warn-fraction",
+            "0.75",
+            "--feature-set-mapping-fail-fraction",
+            "0.1",
         ],
         check=True,
     )
 
     manifest_row = require_single(read_tsv(paths["manifest"]), "top-level manifest")
     universe_path = Path(manifest_row["feature_set_universe"])
+    qa_path = Path(manifest_row["resource_mapping_qa"])
     enrichment_path = Path(manifest_row["feature_set_results"])
     ranked_path = Path(manifest_row["ranked_feature_set_results"])
 
@@ -195,6 +200,10 @@ def main() -> int:
         "ranked_min_mapped_features": "3",
         "ranked_mapping_fraction": "0.5",
         "ranked_mapping_status": "warning",
+        "mapping_fraction": "0.5",
+        "mapping_status": "warning",
+        "mapping_warn_fraction": "0.75",
+        "mapping_fail_fraction": "0.1",
     }
     for key, expected in expected_universe.items():
         observed = universe_row.get(key, "")
@@ -202,6 +211,34 @@ def main() -> int:
             raise ValueError(f"{universe_path} expected {key}={expected!r}, got {observed!r}")
     if "only 2 ranked feature(s)" not in universe_row.get("ranked_mapping_warning", ""):
         raise ValueError(f"{universe_path} missing low ranked mapping warning: {universe_row}")
+    if "mapping fraction 0.5" not in universe_row.get("mapping_warning", ""):
+        raise ValueError(f"{universe_path} missing threshold mapping warning: {universe_row}")
+
+    qa_row = require_single(read_tsv(qa_path), "resource mapping QA")
+    expected_qa = {
+        "assay": "rnaseq",
+        "level": "gene",
+        "contrast_id": "treated_vs_control",
+        "resource_kind": "feature_set",
+        "resource_source": "toy_pathways",
+        "resource_collection": "go_bp",
+        "resource_version": "toy_go_2026_05",
+        "mapping_mode": "native",
+        "tested_features": "4",
+        "mapped_tested_features": "4",
+        "resource_universe_size": "4",
+        "final_universe_size": "2",
+        "resource_mapping_loss": "2",
+        "mapping_fraction": "0.5",
+        "warn_fraction": "0.75",
+        "fail_fraction": "0.1",
+        "min_mapped_features": "3",
+        "status": "warning",
+    }
+    for key, expected in expected_qa.items():
+        observed = qa_row.get(key, "")
+        if observed != expected:
+            raise ValueError(f"{qa_path} expected {key}={expected!r}, got {observed!r}")
 
     enrichment_rows = [
         row

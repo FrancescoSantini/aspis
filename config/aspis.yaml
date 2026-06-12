@@ -124,6 +124,8 @@ rnaseq_differential:
   report_ranked_feature_set_permutations: 1000
   report_ranked_feature_set_seed: 1
   report_ranked_feature_set_min_mapped: 100
+  report_feature_set_mapping_warn_fraction: 0.1
+  report_feature_set_mapping_fail_fraction: 0.001
   report_heatmap_modes:
     - significant
     - variable
@@ -274,6 +276,8 @@ smallrna:
   target_cache: ""
   target_min_overlap: 1
   target_top_n: 20
+  target_mapping_warn_fraction: 0.05
+  target_mapping_fail_fraction: 0.001
   target_feature_sets: ""
   target_feature_set_tables: ""
   target_feature_set_min_overlap: 2

@@ -23,11 +23,14 @@ MANIFEST_COLUMNS = [
     "target_summary",
     "target_source_summary",
     "target_enrichment_plot",
+    "resource_mapping_qa",
     "n_mirnas_significant",
     "n_target_rows",
     "n_targets",
     "n_target_resources",
     "n_enrichment_terms",
+    "n_mapping_warnings",
+    "n_mapping_failures",
 ]
 CONTRAST_MANIFEST_COLUMNS = ["contrast_id", "resource", "status", "reason", "path", "n_rows"]
 TARGET_MAPPING_COLUMNS = [
@@ -95,7 +98,33 @@ TARGET_UNIVERSE_COLUMNS = [
     "up_query_size",
     "down_query_size",
     "target_rows",
+    "mapping_fraction",
+    "mapping_status",
+    "mapping_warning",
+    "mapping_warn_fraction",
+    "mapping_fail_fraction",
     "min_overlap",
+]
+RESOURCE_MAPPING_QA_COLUMNS = [
+    "assay",
+    "level",
+    "contrast_id",
+    "resource_kind",
+    "resource_source",
+    "resource_collection",
+    "resource_version",
+    "mapping_mode",
+    "tested_features",
+    "mapped_tested_features",
+    "resource_universe_size",
+    "final_universe_size",
+    "resource_mapping_loss",
+    "mapping_fraction",
+    "warn_fraction",
+    "fail_fraction",
+    "min_mapped_features",
+    "status",
+    "reason",
 ]
 SUMMARY_COLUMNS = [
     "contrast_id",
@@ -188,8 +217,21 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--outdir", required=True, help="Output directory")
     parser.add_argument("--manifest", required=True, help="Output target-enrichment manifest TSV")
     parser.add_argument("--done", required=True, help="Completion sentinel")
+    parser.add_argument("--qa", default="", help="Optional aggregate resource-mapping QA TSV")
     parser.add_argument("--min-overlap", type=int, default=1, help="Minimum miRNA overlap per target")
     parser.add_argument("--top-n", type=int, default=20, help="Maximum targets in the SVG dotplot")
+    parser.add_argument(
+        "--mapping-warn-fraction",
+        type=float,
+        default=0.05,
+        help="Warn when a configured miRNA-target resource maps below this tested-miRNA fraction",
+    )
+    parser.add_argument(
+        "--mapping-fail-fraction",
+        type=float,
+        default=0.001,
+        help="Fail when a configured miRNA-target resource maps below this tested-miRNA fraction",
+    )
     return parser.parse_args()
 
 
@@ -493,6 +535,8 @@ def target_universe_rows(
     selected: dict[str, dict[str, str]],
     target_rows: list[dict[str, str]],
     min_overlap: int,
+    mapping_warn_fraction: float,
+    mapping_fail_fraction: float,
 ) -> list[dict[str, str]]:
     rows = []
     significant = set(selected)
@@ -506,6 +550,28 @@ def target_universe_rows(
             for row in grouped_rows
             if row.get("target_id", "") and row.get("mirna_id", "") in final_universe
         }
+        mapping_fraction = len(final_universe) / len(result_features) if result_features else 0.0
+        mapping_status = "ok"
+        mapping_warning = ""
+        resource_label = f"{target_source}/{target_source_type}/{evidence_type}"
+        if not final_universe:
+            mapping_status = "failed"
+            mapping_warning = (
+                f"no tested miRNA identifiers mapped to {resource_label}; "
+                "check miRNA identifier namespace and target-resource universe"
+            )
+        elif mapping_fraction < mapping_fail_fraction:
+            mapping_status = "failed"
+            mapping_warning = (
+                f"mapping fraction {mapping_fraction:.6g} is below fail threshold "
+                f"{mapping_fail_fraction:.6g} for {resource_label}"
+            )
+        elif mapping_fraction < mapping_warn_fraction:
+            mapping_status = "warning"
+            mapping_warning = (
+                f"mapping fraction {mapping_fraction:.6g} is below warn threshold "
+                f"{mapping_warn_fraction:.6g} for {resource_label}"
+            )
         rows.append(
             {
                 "contrast_id": contrast_id,
@@ -524,6 +590,11 @@ def target_universe_rows(
                 "up_query_size": str(len(up & final_universe)),
                 "down_query_size": str(len(down & final_universe)),
                 "target_rows": str(len(grouped_rows)),
+                "mapping_fraction": f"{mapping_fraction:.6g}",
+                "mapping_status": mapping_status,
+                "mapping_warning": mapping_warning,
+                "mapping_warn_fraction": f"{mapping_warn_fraction:.6g}",
+                "mapping_fail_fraction": f"{mapping_fail_fraction:.6g}",
                 "min_overlap": str(min_overlap),
             }
         )
@@ -767,6 +838,7 @@ def blocked_output(row: dict[str, str], outdir: Path, reason: str) -> dict[str, 
             ("target_summary", "blocked", reason, "", 0),
             ("target_source_summary", "blocked", reason, "", 0),
             ("target_enrichment_plot", "blocked", reason, "", 0),
+            ("resource_mapping_qa", "blocked", reason, "", 0),
         ],
     )
     return {
@@ -780,11 +852,14 @@ def blocked_output(row: dict[str, str], outdir: Path, reason: str) -> dict[str, 
         "target_summary": "",
         "target_source_summary": "",
         "target_enrichment_plot": "",
+        "resource_mapping_qa": "",
         "n_mirnas_significant": "0",
         "n_target_rows": "0",
         "n_targets": "0",
         "n_target_resources": "0",
         "n_enrichment_terms": "0",
+        "n_mapping_warnings": "0",
+        "n_mapping_failures": "0",
     }
 
 
@@ -794,6 +869,8 @@ def render_contrast(
     outdir: Path,
     min_overlap: int,
     top_n: int,
+    mapping_warn_fraction: float,
+    mapping_fail_fraction: float,
 ) -> dict[str, str]:
     if row.get("status") != "ok":
         return blocked_output(row, outdir, row.get("reason", "") or "DESeq2 contrast is not ok")
@@ -806,6 +883,7 @@ def render_contrast(
         "target_summary": contrast_dir / "target_summary.tsv",
         "target_source_summary": contrast_dir / "target_source_summary.tsv",
         "target_enrichment_plot": contrast_dir / "target_enrichment.svg",
+        "resource_mapping_qa": contrast_dir / "resource_mapping_qa.tsv",
     }
     try:
         _, result_rows = read_feature_rows(Path(row["results"]))
@@ -814,11 +892,53 @@ def render_contrast(
         by_mirna = targets_by_mirna(target_rows)
         selected = {mirna_id: feature_row for mirna_id, feature_row in filtered_rows.items()}
         mapping = mapping_rows(row["contrast_id"], selected, by_mirna)
-        universe = target_universe_rows(row["contrast_id"], result_ids, selected, target_rows, min_overlap)
+        universe = target_universe_rows(
+            row["contrast_id"],
+            result_ids,
+            selected,
+            target_rows,
+            min_overlap,
+            mapping_warn_fraction,
+            mapping_fail_fraction,
+        )
         enriched = enrichment_rows(row["contrast_id"], result_ids, selected, target_rows, min_overlap)
         summary = summary_rows(row["contrast_id"], selected, mapping)
+        qa_rows = [
+            {
+                "assay": "smallrna",
+                "level": "mirna_target",
+                "contrast_id": universe_row["contrast_id"],
+                "resource_kind": "mirna_target_table",
+                "resource_source": universe_row["target_source"],
+                "resource_collection": "/".join(
+                    value
+                    for value in [
+                        universe_row.get("target_source_type", ""),
+                        universe_row.get("target_evidence_type", ""),
+                    ]
+                    if value
+                ),
+                "resource_version": universe_row["target_source_version"],
+                "mapping_mode": "mirna_id",
+                "tested_features": universe_row["tested_mirnas"],
+                "mapped_tested_features": universe_row["mapped_tested_mirnas"],
+                "resource_universe_size": universe_row["resource_mirnas"],
+                "final_universe_size": universe_row["final_mirna_universe_size"],
+                "resource_mapping_loss": universe_row["resource_mapping_loss"],
+                "mapping_fraction": universe_row["mapping_fraction"],
+                "warn_fraction": universe_row["mapping_warn_fraction"],
+                "fail_fraction": universe_row["mapping_fail_fraction"],
+                "min_mapped_features": "0",
+                "status": universe_row["mapping_status"],
+                "reason": universe_row["mapping_warning"],
+            }
+            for universe_row in universe
+        ]
+        qa_warnings = sum(1 for qa_row in qa_rows if qa_row["status"] == "warning")
+        qa_failures = sum(1 for qa_row in qa_rows if qa_row["status"] == "failed")
         write_table(paths["mirna_targets"], TARGET_MAPPING_COLUMNS, mapping)
         write_table(paths["target_universe"], TARGET_UNIVERSE_COLUMNS, universe)
+        write_table(paths["resource_mapping_qa"], RESOURCE_MAPPING_QA_COLUMNS, qa_rows)
         write_table(paths["target_enrichment"], TARGET_ENRICHMENT_COLUMNS, enriched)
         write_table(paths["target_summary"], SUMMARY_COLUMNS, summary)
         write_table(paths["target_source_summary"], SUMMARY_COLUMNS, summary)
@@ -827,6 +947,14 @@ def render_contrast(
         universe_reason = "No tested miRNAs mapped to configured target resources" if not universe else ""
         enrichment_status = "no_significant_terms" if not enriched else "ok"
         enrichment_reason = "No target terms passed configured overlap/significance thresholds" if not enriched else ""
+        qa_status = "failed" if qa_failures else "warning" if qa_warnings else "ok"
+        qa_reason = (
+            f"{qa_failures} miRNA target resource mapping failure(s)"
+            if qa_failures
+            else f"{qa_warnings} miRNA target resource mapping warning(s)"
+            if qa_warnings
+            else ""
+        )
         write_contrast_manifest(
             paths["target_manifest"],
             row["contrast_id"],
@@ -837,9 +965,10 @@ def render_contrast(
                 ("target_summary", "ok", "", str(paths["target_summary"]), len(summary)),
                 ("target_source_summary", "ok", "", str(paths["target_source_summary"]), len(summary)),
                 ("target_enrichment_plot", enrichment_status, enrichment_reason, str(paths["target_enrichment_plot"]), len(enriched)),
+                ("resource_mapping_qa", qa_status, qa_reason, str(paths["resource_mapping_qa"]), len(qa_rows)),
             ],
         )
-        return {
+        output = {
             "contrast_id": row["contrast_id"],
             "status": "ok",
             "reason": "",
@@ -850,12 +979,22 @@ def render_contrast(
             "target_summary": str(paths["target_summary"]),
             "target_source_summary": str(paths["target_source_summary"]),
             "target_enrichment_plot": str(paths["target_enrichment_plot"]),
+            "resource_mapping_qa": str(paths["resource_mapping_qa"]),
             "n_mirnas_significant": str(len(selected)),
             "n_target_rows": str(len(mapping)),
             "n_targets": str(len({mapping_row["target_id"] for mapping_row in mapping})),
             "n_target_resources": str(len(universe)),
             "n_enrichment_terms": str(len(enriched)),
+            "n_mapping_warnings": str(qa_warnings),
+            "n_mapping_failures": str(qa_failures),
         }
+        if qa_failures:
+            return {
+                **output,
+                "status": "failed",
+                "reason": f"Resource mapping failed configured threshold(s); see {paths['resource_mapping_qa']}",
+            }
+        return output
     except Exception as exc:
         return {
             **blocked_output(row, outdir, str(exc)),
@@ -892,6 +1031,8 @@ def main() -> int:
         raise ValueError("--min-overlap must be >= 1")
     if args.top_n < 1:
         raise ValueError("--top-n must be >= 1")
+    if not (0.0 <= args.mapping_fail_fraction <= args.mapping_warn_fraction <= 1.0):
+        raise ValueError("--mapping-fail-fraction and --mapping-warn-fraction must satisfy 0 <= fail <= warn <= 1")
     _, deseq2_rows = read_table(Path(args.deseq2_manifest), REQUIRED_MANIFEST_COLUMNS)
     if not deseq2_rows:
         raise ValueError("DESeq2 manifest has no rows")
@@ -902,10 +1043,25 @@ def main() -> int:
         rows = [blocked_output(row, outdir, stage_blocker) for row in deseq2_rows]
     else:
         rows = [
-            render_contrast(row, target_rows, outdir, args.min_overlap, args.top_n)
+            render_contrast(
+                row,
+                target_rows,
+                outdir,
+                args.min_overlap,
+                args.top_n,
+                args.mapping_warn_fraction,
+                args.mapping_fail_fraction,
+            )
             for row in deseq2_rows
         ]
     write_table(Path(args.manifest), MANIFEST_COLUMNS, rows)
+    aggregate_qa_rows: list[dict[str, str]] = []
+    for row in rows:
+        qa_path = row.get("resource_mapping_qa", "")
+        if qa_path and Path(qa_path).exists():
+            _, qa_rows = read_table(Path(qa_path))
+            aggregate_qa_rows.extend(qa_rows)
+    write_table(Path(args.qa) if args.qa else outdir / "resource_mapping_qa.tsv", RESOURCE_MAPPING_QA_COLUMNS, aggregate_qa_rows)
     write_done(Path(args.done), rows)
     return 0
 

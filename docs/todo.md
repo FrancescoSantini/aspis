@@ -453,30 +453,40 @@ Future release-breadth candidates, not current blockers:
 - larger multi-project or more heterogeneous design validation;
 - independently prepared resource-bundle validation.
 
-## P1 - Resource Mapping Threshold Calibration
+## Validated - Resource Mapping Threshold Calibration
 
-Reason for priority: preflight now blocks zero-overlap and malformed resources,
-but low nonzero mapping can still mean a wrong identifier namespace, stale
-annotation, or weak target resource. Thresholds should be learned from real
-resource distributions rather than guessed.
+Reason for priority: preflight blocks zero-overlap and malformed resources, but
+low nonzero mapping can still mean a wrong identifier namespace, stale
+annotation, or weak target resource.
 
-Remaining code tasks:
+Status: code layer closed. RNA-seq feature-set enrichment and smallRNA
+miRNA-target enrichment now emit per-resource mapping QA tables with tested
+feature counts, mapped counts, resource universe size, final universe size,
+mapping fraction, warning threshold, failure threshold, status, and a concrete
+namespace/resource reason. The merged RNA-seq enrichment output also emits a
+compact aggregate `resource_mapping_qa.tsv`; smallRNA target enrichment emits an
+aggregate QA table at the target-enrichment level.
 
-- Add configurable warnings or failures for low-but-nonzero feature-set and
-  target-resource mapping rates.
-- Record mapping fractions in a compact QA table that can be compared across
-  validation runs.
-- Keep default thresholds conservative until at least two real validation
-  resource bundles have been inspected.
-- Make threshold failures explain which namespace, resource, and universe caused
-  the warning.
+Implemented defaults:
 
-Acceptance criteria:
+- RNA-seq feature-set mapping warns below `report_feature_set_mapping_warn_fraction`
+  default `0.1` and fails below `report_feature_set_mapping_fail_fraction`
+  default `0.001`.
+- smallRNA target-resource mapping warns below `target_mapping_warn_fraction`
+  default `0.05` and fails below `target_mapping_fail_fraction` default
+  `0.001`.
+- Zero mapping to a configured resource is always classified as failed with a
+  reason naming the resource and identifier namespace/mapping mode.
+- Warnings are report-visible but do not block the workflow; failures make the
+  affected enrichment/target contrast fail so wrong namespace/resource
+  combinations are not silently reported as valid biology.
 
-- Good-but-imperfect mappings warn without blocking.
-- Obviously wrong namespace/resource combinations fail before long cluster
-  runs.
-- Reports expose mapping fractions and thresholds next to enrichment status.
+Residual validation note:
+
+- These conservative defaults should be revisited only when future validation
+  uses a distinct organism, independently prepared resource bundle, or
+  substantially different annotation namespace. That is calibration work, not
+  missing P0/P1 implementation.
 
 ## P1 - Report Navigation Polish
 
