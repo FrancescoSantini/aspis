@@ -42,7 +42,7 @@ technical PDFs, review-bundle packaging, and top-level run dashboards.
 This is not yet a production-complete release, but the active work is now
 narrower and no longer organized as open P0 report/resource plumbing:
 
-- Native DRIMSeq DTU execution is implemented, contract-tested, and split into one schedulable job per contrast; real-run validation with `R::DRIMSeq` should now be rerun in split mode.
+- Native DRIMSeq DTU execution is implemented, contract-tested, split into one schedulable job per contrast, and validated on the BEAS_2B G100 real run.
 - Optional isoform-switch consequence annotation paths remain unvalidated for
   open local tools or precomputed user-supplied annotation tables.
 - Resource mapping thresholds for low-but-nonzero mapping rates need calibration
@@ -538,10 +538,10 @@ Residual validation:
 ## P1 - DTU Methods
 
 Reason for priority: DTU is expected for transcript-level biology. ASPIS now
-uses a staged implementation so the first engine is useful and auditable before
-adding event-specific methods.
+has a validated first native DTU engine. Remaining DTU work is about adding
+event-specific engines deliberately, not about making DRIMSeq usable.
 
-Current scope being implemented:
+Completed DRIMSeq scope:
 
 - DRIMSeq is the first native DTU engine.
 - DTU planning is contrast-level and mirrors the DESeq2/isoform-switch split:
@@ -550,20 +550,24 @@ Current scope being implemented:
 - DRIMSeq runs from transcript-level count matrices and transcript-to-gene
   metadata. It produces contrast-specific gene-level, transcript-level, summary,
   and standardized result tables.
+- Native DRIMSeq execution is split into one schedulable job per contrast and a
+  cheap merged `dtu_method_manifest.tsv`/`dtu_methods.done` aggregation step.
+- BEAS_2B G100 validation completed six DRIMSeq contrasts with completed status
+  and standardized result tables.
 - Missing `Rscript`, missing `R::DRIMSeq`, insufficient replicates, missing
   sample columns, and empty post-filter universes are reported as blocked rather
   than silently skipped.
+- RNA-seq differential and integrated project reports expose DTU status,
+  standardized rows, significant DRIMSeq rows, and links to summary, gene-result,
+  usage, and standardized result tables.
 - DEXSeq, SUPPA2, and rMATS remain command-template methods for now because they
   require method-specific count/event inputs that should not be guessed from the
   transcript count matrix.
 
 Remaining code tasks:
 
-- Rerun native DRIMSeq on a real RNA-seq validation branch after the split-per-contrast DAG change, confirming separate scheduler jobs and merged `dtu_method_manifest.tsv` output.
-- Surface DRIMSeq result summaries more prominently in the RNA-seq differential
-  report and project-level transcript section.
-- Keep report rows that distinguish `planned`, `blocked`, `failed`, and
-  `completed` per DTU contrast/method, now sourced from the merged per-contrast manifest.
+- Validate the enhanced DTU report/project summary after refreshing BEAS_2B or
+  HEP_G2 report-only targets.
 - Decide whether DEXSeq should be supported through exon-bin counting or kept as
   a user-provided command-template method.
 - Decide whether SUPPA2 and rMATS belong in ASPIS native execution; if so, add
@@ -575,12 +579,12 @@ Remaining code tasks:
 Acceptance criteria:
 
 - `rnaseq_dtu.run: true` with `method: DRIMSeq` produces real contrast-level DTU
-  tables when DRIMSeq is installed.
+  tables when DRIMSeq is installed. Validated on BEAS_2B.
 - Missing DRIMSeq dependencies do not break standard RNA-seq analysis; the DTU
   manifest records a blocked status with a concrete reason.
 - Reports explain whether each DTU contrast was planned, blocked, failed, or
-  completed from the merged per-contrast manifest.
-
+  completed from the merged per-contrast manifest, with per-contrast links to
+  summary, gene-result, usage, and standardized tables.
 ## P1 - Isoform-Switch Consequence Annotation Hardening
 
 Reason for priority: isoform-switch execution, event pages, exon diagrams, and

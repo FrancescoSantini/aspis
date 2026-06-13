@@ -354,7 +354,7 @@ def exercise_biotype_and_dtu(paths: dict[str, Path]) -> None:
                 "gene.parent.mkdir(parents=True, exist_ok=True)",
                 "gene.write_text('gene_id\\tpvalue\\tpadj\\tstatus\\nGENE1\\t0.002\\t0.01\\tok\\n', encoding='utf-8')",
                 "tx.write_text('gene_id\\tfeature_id\\tmean_usage_control\\tmean_usage_test\\tdelta_usage\\tstatus\\nGENE1\\tTX1\\t0.2\\t0.8\\t0.6\\tok\\n', encoding='utf-8')",
-                "summary.write_text('status\\treason\\tn_tested_genes\\nok\\t\\t1\\n', encoding='utf-8')",
+                "summary.write_text('status\\treason\\tn_tested_genes\\tn_usage_transcripts\\nok\\t\\t1\\t1\\n', encoding='utf-8')",
             ]
         )
         + "\n",
@@ -615,6 +615,8 @@ def exercise_rnaseq_report_dtu_assets(dtu_plan: Path, dtu_manifest: Path) -> Non
     html_text = (report_dir / "index.html").read_text(encoding="utf-8")
     if "DTU / splicing methods" not in html_text or "standardized rows: 1" not in html_text:
         raise ValueError("DTU summary was not rendered in the RNA-seq report index")
+    if "padj&lt;0.05 rows: 1" not in html_text or "usage table" not in html_text:
+        raise ValueError("DTU contrast table was not rendered in the RNA-seq report index")
 
 
 def main() -> int:

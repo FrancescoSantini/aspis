@@ -142,6 +142,7 @@ def workflow_status_matrix(base_dir: Path, rnaseq_base: Path, smallrna_base: Pat
         ("RNA-seq", "differential report", rnaseq_base / "differential/reports/index.html", False),
         ("RNA-seq", "GO/Reactome overview", rnaseq_base / "differential/reports/enrichment/index.html", False),
         ("RNA-seq", "isoform-switch overview", rnaseq_base / "differential/isoform_switch/report/index.html", False),
+        ("RNA-seq", "DTU methods", rnaseq_base / "differential/dtu/dtu_method_manifest.tsv", False),
         ("smallRNA", "branch report", smallrna_base / "report/index.html", True),
         ("smallRNA", "raw QC", smallrna_base / "multiqc/multiqc_report.html", False),
         ("smallRNA", "post-trim QC", smallrna_base / "smallrna/preprocess/multiqc/multiqc_report.html", False),
@@ -327,12 +328,36 @@ def integration_state_cell(
     return '<span class="status muted">not present</span>'
 
 
+def dtu_cell(row: dict[str, str] | None, base_dir: Path) -> str:
+    if not row:
+        return '<span class="status muted">not present</span>'
+    status = row.get("status", "unknown") or "unknown"
+    details = [
+        f'<span class="status {html.escape(status)}">{html.escape(status)}</span>',
+        html.escape(row.get("method", "")),
+        f"{html.escape(row.get('standardized_result_count', '0'))} standardized rows"
+        if row.get("standardized_result_count")
+        else "",
+        f"standardized {html.escape(row.get('standardized_status', ''))}"
+        if row.get("standardized_status")
+        else "",
+        optional_row_link(row, "summary", "summary", base_dir),
+        optional_row_link(row, "gene_results", "gene results", base_dir),
+        optional_row_link(row, "standardized_results", "standardized", base_dir),
+    ]
+    reason = row.get("reason", "")
+    if reason:
+        details.append(f'<span class="status muted">{html.escape(reason)}</span>')
+    return "<br>".join(part for part in details if part)
+
+
 def contrast_matrix(
     base_dir: Path,
     rnaseq_summary: list[dict[str, str]],
     smallrna_summary: list[dict[str, str]],
     rnaseq_enrichment: list[dict[str, str]],
     mirna_integration: list[dict[str, str]],
+    rnaseq_dtu: list[dict[str, str]],
 ) -> str:
     rnaseq_by_key = {
         (row.get("level", ""), row.get("contrast_id", "")): row
@@ -344,10 +369,11 @@ def contrast_matrix(
     }
     smallrna_by_contrast = {row.get("contrast_id", ""): row for row in smallrna_summary}
     integration_by_contrast = {row.get("contrast_id", ""): row for row in mirna_integration}
+    dtu_by_contrast = {row.get("contrast_id", ""): row for row in rnaseq_dtu}
     contrast_ids = sorted(
         {
             row.get("contrast_id", "")
-            for row in rnaseq_summary + smallrna_summary + rnaseq_enrichment + mirna_integration
+            for row in rnaseq_summary + smallrna_summary + rnaseq_enrichment + mirna_integration + rnaseq_dtu
             if row.get("contrast_id", "")
         }
     )
@@ -359,12 +385,14 @@ def contrast_matrix(
         transcript = rnaseq_by_key.get(("transcript", contrast_id))
         mirna = smallrna_by_contrast.get(contrast_id)
         integration = integration_by_contrast.get(contrast_id)
+        dtu = dtu_by_contrast.get(contrast_id)
         body.append(
             f'<tr class="contrast-row" data-contrast="{html.escape(contrast_id)}">'
             f"<td><code>{html.escape(contrast_id)}</code></td>"
             f"<td>{integration_state_cell(gene, transcript, mirna, integration, base_dir)}</td>"
             f"<td>{summary_cell(gene, base_dir)}</td>"
             f"<td>{summary_cell(transcript, base_dir)}</td>"
+            f"<td>{dtu_cell(dtu, base_dir)}</td>"
             f"<td>{summary_cell(mirna, base_dir, 'miRNAs')}</td>"
             f"<td>{enrichment_cell(enrichment_by_key.get(('gene', contrast_id)), enrichment_by_key.get(('transcript', contrast_id)), base_dir)}</td>"
             f"<td>{smallrna_target_cell(mirna, integration, base_dir)}</td>"
@@ -372,7 +400,7 @@ def contrast_matrix(
         )
     return (
         '<table class="contrast-matrix"><thead><tr>'
-        "<th>contrast</th><th>cross-assay state</th><th>gene DE</th><th>transcript DE</th><th>miRNA DE</th>"
+        "<th>contrast</th><th>cross-assay state</th><th>gene DE</th><th>transcript DE</th><th>DTU</th><th>miRNA DE</th>"
         "<th>RNA-seq GO/Reactome</th><th>miRNA targets and integration</th>"
         "</tr></thead><tbody>"
         + "".join(body)
@@ -392,6 +420,7 @@ def render(args: argparse.Namespace) -> None:
 
     rnaseq_summary = read_table(rnaseq_base / "differential/reports/summaries/summary_manifest.tsv")
     rnaseq_enrichment = read_table(rnaseq_base / "differential/reports/enrichment/enrichment_manifest.tsv")
+    rnaseq_dtu = read_table(rnaseq_base / "differential/dtu/dtu_method_manifest.tsv")
     smallrna_summary = read_table(smallrna_base / "smallrna/differential/reports/summaries/summary_manifest.tsv")
     isoform_events = read_table(rnaseq_base / "differential/isoform_switch/report/switch_event_summary.tsv")
     mirna_integration = read_table(smallrna_base / "smallrna/differential/mirna_mrna_integration/mirna_mrna_manifest.tsv")
@@ -419,7 +448,7 @@ def render(args: argparse.Namespace) -> None:
     a {{ color: #0969da; text-decoration: none; }}
     a:hover {{ text-decoration: underline; }}
     .status {{ font-weight: 700; }}
-    .status.ok, .status.ready {{ color: #1a7f37; }}
+    .status.ok, .status.ready, .status.completed {{ color: #1a7f37; }}
     .status.not_configured, .status.muted {{ color: #57606a; font-weight: 400; }}
     .status.blocked, .status.missing {{ color: #9a6700; }}
     .status.failed {{ color: #cf222e; }}
@@ -441,6 +470,7 @@ def render(args: argparse.Namespace) -> None:
     {metric("RNA-seq summaries", len(rnaseq_summary))}
     {metric("smallRNA summaries", len(smallrna_summary))}
     {metric("isoform-switch events", len(isoform_events))}
+    {metric("DTU methods", len(rnaseq_dtu))}
     {metric("miRNA-mRNA rows", len(mirna_integration))}
     {metric("integrated contrasts", sum(1 for row in mirna_integration if row.get("status") == "ok"))}
     {metric("assay-only contrasts", assay_only_contrast_count(rnaseq_summary, smallrna_summary))}
@@ -458,6 +488,7 @@ def render(args: argparse.Namespace) -> None:
         link(rnaseq_base / "differential/reports/enrichment/index.html", "GO/Reactome enrichment overview", base_dir),
         link(rnaseq_base / "differential/reports/technical_report.pdf", "RNA-seq technical PDF", base_dir),
         link(rnaseq_base / "differential/isoform_switch/report/index.html", "isoform-switch overview", base_dir),
+        table_link(rnaseq_base / "differential/dtu/dtu_method_manifest.tsv", "DTU method manifest", base_dir),
         table_link(rnaseq_base / "differential/reports/enrichment/enrichment_manifest.tsv", "RNA-seq ORA/GSEA manifest", base_dir),
         table_link(rnaseq_base / "alignment/strandedness/strandedness_report.tsv", "strandedness report", base_dir),
     ])}
@@ -481,7 +512,7 @@ def render(args: argparse.Namespace) -> None:
   <h2>Project Contrast Matrix</h2>
   <p class="section-note">This matrix puts gene, transcript, and miRNA contrasts on the same row when assays share the same project and contrast labels. The cross-assay state marks integrated contrasts, RNA-seq-only contrasts, smallRNA-only contrasts, and shared contrasts where integration is not present.</p>
   <div class="controls"><input id="contrastFilter" placeholder="Filter contrasts"></div>
-  {contrast_matrix(base_dir, rnaseq_summary, smallrna_summary, rnaseq_enrichment, mirna_integration)}
+  {contrast_matrix(base_dir, rnaseq_summary, smallrna_summary, rnaseq_enrichment, mirna_integration, rnaseq_dtu)}
   <h2>Raw Contrast Summary</h2>
   <p class="section-note">This lower table preserves the assay-specific summary rows used to build the matrix above.</p>
   {summary_table(base_dir, rnaseq_base, smallrna_base)}

@@ -218,6 +218,36 @@ def format_counts(values: Counter[str]) -> str:
     return ", ".join(f"{key}: {value}" for key, value in sorted(values.items())) or "none"
 
 
+def safe_float(value: str) -> float | None:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def count_significant_standardized(path_text: str, alpha: float = 0.05) -> int:
+    if not path_text:
+        return 0
+    path = Path(path_text)
+    if not path.is_file():
+        return 0
+    count = 0
+    with path.open(newline="", encoding="utf-8") as handle:
+        reader = csv.DictReader(handle, delimiter="\t")
+        if reader.fieldnames is None or "padj" not in reader.fieldnames:
+            return 0
+        for row in reader:
+            padj = safe_float(row.get("padj", ""))
+            if padj is not None and padj < alpha:
+                count += 1
+    return count
+
+
+def read_first_optional_row(path_text: str) -> dict[str, str]:
+    rows = read_optional_table(path_text)
+    return rows[0] if rows else {}
+
+
 def render_dtu_summary(
     plan_rows: list[dict[str, str]],
     method_rows: list[dict[str, str]],
@@ -233,6 +263,7 @@ def render_dtu_summary(
         if row.get("standardized_status", "") or row.get("status", "") == "completed"
     )
     standardized_rows = sum(safe_int(row.get("standardized_result_count", "")) for row in method_rows)
+    significant_rows = sum(count_significant_standardized(row.get("standardized_results", "")) for row in method_rows)
     plan_link = link_list(
         [
             ("plan", plan_rows[0].get("_plan_path", "") if plan_rows else ""),
@@ -240,20 +271,49 @@ def render_dtu_summary(
         ],
         output,
     )
-    resources = []
-    for row in method_rows:
-        method = row.get("method", "method") or "method"
-        standardized = row.get("standardized_results", "")
-        if standardized:
-            resources.append(file_link(f"{method} standardized results", standardized, output))
-    resource_html = "<br>".join(link for link in resources if link)
+    detail_rows = []
+    for row in sorted(method_rows, key=lambda item: (item.get("contrast_id", ""), item.get("method", ""))):
+        summary = read_first_optional_row(row.get("summary", ""))
+        links = link_list(
+            [
+                ("summary", row.get("summary", "")),
+                ("gene results", row.get("gene_results", "")),
+                ("usage table", row.get("transcript_results", "")),
+                ("standardized", row.get("standardized_results", "")),
+            ],
+            output,
+        )
+        detail_rows.append(
+            "<tr>"
+            f"<td><code>{html.escape(row.get('contrast_id', ''))}</code></td>"
+            f"<td>{html.escape(row.get('method', ''))}</td>"
+            f"<td class=\"status {status_class(row.get('status', ''))}\">{html.escape(row.get('status', ''))}</td>"
+            f"<td>{html.escape(summary.get('n_tested_genes', ''))}</td>"
+            f"<td>{html.escape(summary.get('n_usage_transcripts', ''))}</td>"
+            f"<td>{html.escape(row.get('standardized_result_count', '0'))}</td>"
+            f"<td>{count_significant_standardized(row.get('standardized_results', ''))}</td>"
+            f"<td>{links}</td>"
+            f"<td>{html.escape(row.get('reason', ''))}</td>"
+            "</tr>"
+        )
+    detail_table = ""
+    if detail_rows:
+        detail_table = (
+            "<table><thead><tr>"
+            "<th>contrast</th><th>method</th><th>status</th><th>tested genes</th>"
+            "<th>usage transcripts</th><th>standardized rows</th><th>padj&lt;0.05</th><th>tables</th><th>reason</th>"
+            "</tr></thead><tbody>"
+            + "".join(detail_rows)
+            + "</tbody></table>"
+        )
     return f"""
   <section class="dtu-summary">
     <h2>DTU / splicing methods</h2>
+    <p class="note">DRIMSeq tests differential transcript usage at the gene level. The usage table is descriptive transcript-level context; inferential p-values are the gene-level DRIMSeq results.</p>
     <div class="counts">plan status: {html.escape(plan.get("status", "") or "not_configured")}; candidate methods: {html.escape(plan.get("candidate_methods", "") or plan.get("method", ""))}</div>
-    <div class="counts">method status: {html.escape(format_counts(method_status))}; standardized status: {html.escape(format_counts(standardized_status))}; standardized rows: {standardized_rows}</div>
+    <div class="counts">method status: {html.escape(format_counts(method_status))}; standardized status: {html.escape(format_counts(standardized_status))}; standardized rows: {standardized_rows}; padj&lt;0.05 rows: {significant_rows}</div>
     <div class="counts">resources: {plan_link}</div>
-    {f'<div class="counts">standardized result tables: {resource_html}</div>' if resource_html else ''}
+    {detail_table}
   </section>
 """
 
@@ -450,7 +510,7 @@ def merged_rows(
 
 
 def status_class(status: str) -> str:
-    if status == "ok":
+    if status in {"ok", "completed", "ready"}:
         return "ok"
     if status == "blocked":
         return "blocked"
