@@ -403,6 +403,95 @@ def exercise_biotype_and_dtu(paths: dict[str, Path]) -> None:
     if drimseq_standardized[0]["method"] != "DRIMSeq" or drimseq_standardized[0]["event_type"] != "transcript_usage":
         raise ValueError(f"standardized DRIMSeq row lost method/event type: {drimseq_standardized}")
 
+    run_command(
+        [
+            sys.executable,
+            "workflow/scripts/render_rnaseq_dtu_plots.py",
+            "--method-manifest",
+            str(dtu_dir / "dtu_method_manifest.tsv"),
+            "--outdir",
+            str(dtu_dir / "plots"),
+            "--manifest",
+            str(dtu_dir / "plots" / "dtu_plot_manifest.tsv"),
+            "--done",
+            str(dtu_dir / "plots" / "dtu_plots.done"),
+            "--top-n",
+            "5",
+            "--max-points",
+            "100",
+        ]
+    )
+    dtu_plot_rows = read_tsv(dtu_dir / "plots" / "dtu_plot_manifest.tsv", {"method", "status", "overview_plot", "usage_plot"})
+    if dtu_plot_rows[0]["status"] != "ok":
+        raise ValueError(f"DTU plot rendering was not ok: {dtu_plot_rows}")
+    if not Path(dtu_plot_rows[0]["overview_plot"]).exists() or not Path(dtu_plot_rows[0]["usage_plot"]).exists():
+        raise ValueError(f"DTU plot files were not written: {dtu_plot_rows}")
+
+    fake_dexseq = INPUT / "fake_dexseq_runner.py"
+    fake_dexseq.write_text(
+        "\n".join(
+            [
+                "import sys",
+                "from pathlib import Path",
+                "args = sys.argv[1:]",
+                "def value(flag):",
+                "    return Path(args[args.index(flag) + 1])",
+                "gene = value('--gene-results')",
+                "tx = value('--feature-results')",
+                "summary = value('--summary')",
+                "gene.parent.mkdir(parents=True, exist_ok=True)",
+                "gene.write_text('gene_id\\tn_features\\tmin_pvalue\\tmin_padj\\tstatus\\nGENE1\\t2\\t0.004\\t0.02\\tok\\n', encoding='utf-8')",
+                "tx.write_text('gene_id\\tfeature_id\\tstatistic\\tlog2_fold_change\\tpvalue\\tpadj\\tevent_type\\tmean_usage_control\\tmean_usage_test\\tdelta_usage\\tstatus\\nGENE1\\tTX1\\t5.2\\t1.1\\t0.004\\t0.02\\ttranscript_feature_usage\\t0.2\\t0.8\\t0.6\\tok\\n', encoding='utf-8')",
+                "summary.write_text('status\\treason\\tn_tested_genes\\tn_usage_transcripts\\nok\\ttranscript-feature fake DEXSeq\\t1\\t1\\n', encoding='utf-8')",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    dexseq_dir = BASE / "dtu_dexseq"
+    run_command(
+        [
+            sys.executable,
+            "workflow/scripts/run_rnaseq_dtu_methods.py",
+            "--plan",
+            str(dtu_dir / "dtu_plan.tsv"),
+            "--samples",
+            str(paths["rnaseq_samples"]),
+            "--aligned-samples",
+            str(aligned_samples),
+            "--transcript-counts",
+            str(transcript_counts),
+            "--transcript-metadata",
+            str(transcript_metadata),
+            "--annotation-gtf",
+            str(gtf),
+            "--outdir",
+            str(dexseq_dir / "methods"),
+            "--manifest",
+            str(dexseq_dir / "dtu_method_manifest.tsv"),
+            "--done",
+            str(dexseq_dir / "dtu_methods.done"),
+            "--project",
+            "ASPIS_CONTRACT",
+            "--method",
+            "DEXSeq",
+            "--contrast-id",
+            "treated_vs_control__time_h_24",
+            "--rscript",
+            sys.executable,
+            "--dexseq-script",
+            str(fake_dexseq),
+            "--dtu-min-samples",
+            "1",
+        ]
+    )
+    dexseq_rows = read_tsv(dexseq_dir / "dtu_method_manifest.tsv", {"method", "status", "standardized_results", "standardized_status"})
+    if dexseq_rows[0]["method"] != "DEXSeq" or dexseq_rows[0]["status"] != "completed" or dexseq_rows[0]["standardized_status"] != "ok":
+        raise ValueError(f"native DEXSeq DTU was not standardized: {dexseq_rows}")
+    dexseq_standardized = read_tsv(Path(dexseq_rows[0]["standardized_results"]), {"method", "event_type", "feature_id", "gene_id", "pvalue", "padj"})
+    if dexseq_standardized[0]["method"] != "DEXSeq" or dexseq_standardized[0]["event_type"] != "transcript_feature_usage":
+        raise ValueError(f"standardized DEXSeq row lost method/event type: {dexseq_standardized}")
+
     helper = INPUT / "write_fake_rmats.py"
     helper.write_text(
         "\n".join(
@@ -462,9 +551,13 @@ def exercise_biotype_and_dtu(paths: dict[str, Path]) -> None:
         raise ValueError(f"standardized rMATS row lost identifiers: {standardized}")
     if expected["padj"] != "0.01" or expected["direction"] != "increased_usage":
         raise ValueError(f"standardized rMATS row lost statistics: {standardized}")
-    exercise_rnaseq_report_dtu_assets(dtu_dir / "dtu_plan.tsv", dtu_dir / "dtu_method_manifest.tsv")
+    exercise_rnaseq_report_dtu_assets(
+        dtu_dir / "dtu_plan.tsv",
+        dtu_dir / "dtu_method_manifest.tsv",
+        dtu_dir / "plots" / "dtu_plot_manifest.tsv",
+    )
 
-def exercise_rnaseq_report_dtu_assets(dtu_plan: Path, dtu_manifest: Path) -> None:
+def exercise_rnaseq_report_dtu_assets(dtu_plan: Path, dtu_manifest: Path, dtu_plot_manifest: Path) -> None:
     report_dir = BASE / "rnaseq_report_index"
     contrast = "treated_vs_control__time_h_24"
     base_row = {
@@ -598,6 +691,8 @@ def exercise_rnaseq_report_dtu_assets(dtu_plan: Path, dtu_manifest: Path) -> Non
             str(dtu_plan),
             "--dtu-method-manifest",
             str(dtu_manifest),
+            "--dtu-plot-manifest",
+            str(dtu_plot_manifest),
             "--asset-manifest",
             str(report_dir / "asset_manifest.tsv"),
             "--output",
@@ -612,10 +707,14 @@ def exercise_rnaseq_report_dtu_assets(dtu_plan: Path, dtu_manifest: Path) -> Non
         raise ValueError(f"DTU manifest was not exposed as a report asset: {dtu_assets}")
     if not any(row["asset_label"] == "DRIMSeq_standardized_results" for row in dtu_assets):
         raise ValueError(f"standardized DRIMSeq results were not exposed as report assets: {dtu_assets}")
+    if not any(row["asset_label"] == "dtu_plot_manifest" for row in dtu_assets):
+        raise ValueError(f"DTU plot manifest was not exposed as a report asset: {dtu_assets}")
+    if not any(row["asset_label"].endswith("_overview_plot") for row in dtu_assets):
+        raise ValueError(f"DTU overview plots were not exposed as report assets: {dtu_assets}")
     html_text = (report_dir / "index.html").read_text(encoding="utf-8")
     if "DTU / splicing methods" not in html_text or "standardized rows: 1" not in html_text:
         raise ValueError("DTU summary was not rendered in the RNA-seq report index")
-    if "padj&lt;0.05 rows: 1" not in html_text or "usage table" not in html_text:
+    if "padj&lt;0.05 rows: 1" not in html_text or "usage table" not in html_text or "overview plot" not in html_text:
         raise ValueError("DTU contrast table was not rendered in the RNA-seq report index")
 
 

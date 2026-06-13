@@ -1016,6 +1016,8 @@ def rnaseq_dtu_report_outputs(project):
         "plan_done": f"{base}/dtu.done",
         "method_manifest": f"{base}/dtu_method_manifest.tsv",
         "method_done": f"{base}/dtu_methods.done",
+        "plot_manifest": f"{base}/plots/dtu_plot_manifest.tsv",
+        "plot_done": f"{base}/plots/dtu_plots.done",
     }
 
 
@@ -1028,6 +1030,8 @@ def rnaseq_dtu_report_inputs(wildcards):
         outputs["plan_done"],
         outputs["method_manifest"],
         outputs["method_done"],
+        outputs["plot_manifest"],
+        outputs["plot_done"],
     ]
 
 
@@ -1305,6 +1309,8 @@ def branch_provenance_inputs(wildcards):
                             f"{base}/differential/dtu/dtu.done",
                             f"{base}/differential/dtu/dtu_method_manifest.tsv",
                             f"{base}/differential/dtu/dtu_methods.done",
+                            f"{base}/differential/dtu/plots/dtu_plot_manifest.tsv",
+                            f"{base}/differential/dtu/plots/dtu_plots.done",
                         ]
                     )
                 if RNASEQ_SAMPLE_QC_RUN:
@@ -1649,6 +1655,8 @@ def planned_branch_targets(wildcards):
                                     f"{BRANCH_DIR}/{assay}/{project}/differential/dtu/dtu.done",
                                     f"{BRANCH_DIR}/{assay}/{project}/differential/dtu/dtu_method_manifest.tsv",
                                     f"{BRANCH_DIR}/{assay}/{project}/differential/dtu/dtu_methods.done",
+                                    f"{BRANCH_DIR}/{assay}/{project}/differential/dtu/plots/dtu_plot_manifest.tsv",
+                                    f"{BRANCH_DIR}/{assay}/{project}/differential/dtu/plots/dtu_plots.done",
                                 ]
                             )
                         if RNASEQ_SAMPLE_QC_RUN:
@@ -2054,6 +2062,7 @@ def branch_report_inputs(wildcards):
                         [
                             f"{base}/differential/dtu/dtu.done",
                             f"{base}/differential/dtu/dtu_methods.done",
+                            f"{base}/differential/dtu/plots/dtu_plots.done",
                         ]
                     )
                 if RNASEQ_SAMPLE_QC_RUN:
@@ -6049,6 +6058,7 @@ rule run_rnaseq_dtu_contrast:
         candidate_methods=joined_config_values(RNASEQ_DTU.get("candidate_methods", "DRIMSeq,DEXSeq,SUPPA2,rMATS")),
         rscript=RNASEQ_DTU.get("rscript", "Rscript"),
         drimseq_script=RNASEQ_DTU.get("drimseq_script", "workflow/scripts/run_drimseq_dtu.R"),
+        dexseq_script=RNASEQ_DTU.get("dexseq_script", "workflow/scripts/run_dexseq_dtu.R"),
         min_count=RNASEQ_DTU.get("min_count", 10),
         min_samples=RNASEQ_DTU.get("min_samples", 2),
         min_proportion=RNASEQ_DTU.get("min_proportion", 0.05),
@@ -6079,6 +6089,7 @@ rule run_rnaseq_dtu_contrast:
           --methods {params.candidate_methods:q} \
           --rscript {params.rscript:q} \
           --drimseq-script {params.drimseq_script:q} \
+          --dexseq-script {params.dexseq_script:q} \
           --dtu-min-count {params.min_count:q} \
           --dtu-min-samples {params.min_samples:q} \
           --dtu-min-proportion {params.min_proportion:q} \
@@ -6108,6 +6119,35 @@ rule run_rnaseq_dtu_methods:
           --manifest {output.manifest:q} \
           --done {output.done:q} \
           {input.manifests:q} \
+          > {log:q} 2>&1
+        """
+
+
+rule render_rnaseq_dtu_plots:
+    input:
+        manifest=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/dtu/dtu_method_manifest.tsv",
+        done=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/dtu/dtu_methods.done"
+    output:
+        manifest=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/dtu/plots/dtu_plot_manifest.tsv",
+        done=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/dtu/plots/dtu_plots.done"
+    params:
+        outdir=lambda wildcards: f"{BRANCH_DIR}/rnaseq/{wildcards.project}/differential/dtu/plots",
+        padj=RNASEQ_DTU.get("plot_padj", 0.05),
+        top_n=RNASEQ_DTU.get("plot_top_n", 20),
+        max_points=RNASEQ_DTU.get("plot_max_points", 2500)
+    log:
+        "logs/branches/rnaseq/{project}.dtu_plots.log"
+    shell:
+        r"""
+        mkdir -p logs/branches/rnaseq
+        python3 workflow/scripts/render_rnaseq_dtu_plots.py \
+          --method-manifest {input.manifest:q} \
+          --outdir {params.outdir:q} \
+          --manifest {output.manifest:q} \
+          --done {output.done:q} \
+          --padj {params.padj:q} \
+          --top-n {params.top_n:q} \
+          --max-points {params.max_points:q} \
           > {log:q} 2>&1
         """
 
@@ -6503,6 +6543,11 @@ rule render_rnaseq_differential_report_index:
             wildcards,
             "method_manifest",
             "--dtu-method-manifest",
+        ),
+        dtu_plot_manifest=lambda wildcards: rnaseq_dtu_report_arg(
+            wildcards,
+            "plot_manifest",
+            "--dtu-plot-manifest",
         )
     log:
         "logs/branches/rnaseq/{project}.differential_report_index.log"
@@ -6528,6 +6573,7 @@ rule render_rnaseq_differential_report_index:
           {params.isoform_switch_plots_pdf} \
           {params.dtu_plan} \
           {params.dtu_method_manifest} \
+          {params.dtu_plot_manifest} \
           > {log:q} 2>&1
         python3 workflow/scripts/render_technical_pdf_report.py \
           --assay rnaseq \

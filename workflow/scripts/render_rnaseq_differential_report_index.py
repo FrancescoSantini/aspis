@@ -111,6 +111,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--isoform-switch-plots-pdf", default="", help="Optional isoform-switch multi-page plot PDF")
     parser.add_argument("--dtu-plan", default="", help="Optional DTU/splicing plan TSV")
     parser.add_argument("--dtu-method-manifest", default="", help="Optional DTU/splicing method manifest TSV")
+    parser.add_argument("--dtu-plot-manifest", default="", help="Optional DTU/splicing plot manifest TSV")
     parser.add_argument(
         "--enrichment-overview",
         default="",
@@ -251,12 +252,18 @@ def read_first_optional_row(path_text: str) -> dict[str, str]:
 def render_dtu_summary(
     plan_rows: list[dict[str, str]],
     method_rows: list[dict[str, str]],
+    plot_rows: list[dict[str, str]],
     output: Path,
 ) -> str:
-    if not plan_rows and not method_rows:
+    if not plan_rows and not method_rows and not plot_rows:
         return ""
     plan = plan_rows[0] if plan_rows else {}
+    plot_by_key = {
+        (row.get("method", ""), row.get("contrast_id", "")): row
+        for row in plot_rows
+    }
     method_status = Counter(row.get("status", "unknown") or "unknown" for row in method_rows)
+    plot_status = Counter(row.get("status", "unknown") or "unknown" for row in plot_rows)
     standardized_status = Counter(
         row.get("standardized_status", "not_run") or "not_run"
         for row in method_rows
@@ -268,18 +275,22 @@ def render_dtu_summary(
         [
             ("plan", plan_rows[0].get("_plan_path", "") if plan_rows else ""),
             ("method manifest", method_rows[0].get("_manifest_path", "") if method_rows else ""),
+            ("plot manifest", plot_rows[0].get("_manifest_path", "") if plot_rows else ""),
         ],
         output,
     )
     detail_rows = []
     for row in sorted(method_rows, key=lambda item: (item.get("contrast_id", ""), item.get("method", ""))):
         summary = read_first_optional_row(row.get("summary", ""))
+        plot_row = plot_by_key.get((row.get("method", ""), row.get("contrast_id", "")), {})
         links = link_list(
             [
                 ("summary", row.get("summary", "")),
                 ("gene results", row.get("gene_results", "")),
                 ("usage table", row.get("transcript_results", "")),
                 ("standardized", row.get("standardized_results", "")),
+                ("overview plot", plot_row.get("overview_plot", "")),
+                ("usage plot", plot_row.get("usage_plot", "")),
             ],
             output,
         )
@@ -301,7 +312,7 @@ def render_dtu_summary(
         detail_table = (
             "<table><thead><tr>"
             "<th>contrast</th><th>method</th><th>status</th><th>tested genes</th>"
-            "<th>usage transcripts</th><th>standardized rows</th><th>padj&lt;0.05</th><th>tables</th><th>reason</th>"
+            "<th>usage transcripts</th><th>standardized rows</th><th>padj&lt;0.05</th><th>tables and plots</th><th>reason</th>"
             "</tr></thead><tbody>"
             + "".join(detail_rows)
             + "</tbody></table>"
@@ -309,9 +320,9 @@ def render_dtu_summary(
     return f"""
   <section class="dtu-summary">
     <h2>DTU / splicing methods</h2>
-    <p class="note">DRIMSeq tests differential transcript usage at the gene level. The usage table is descriptive transcript-level context; inferential p-values are the gene-level DRIMSeq results.</p>
+    <p class="note">Native DRIMSeq and DEXSeq rows are transcript-usage companion analyses. DRIMSeq tests differential transcript usage at the gene level; the current native DEXSeq path uses transcript features grouped by gene. Exon-bin DEXSeq, SUPPA2, and rMATS need explicit event/count inputs.</p>
     <div class="counts">plan status: {html.escape(plan.get("status", "") or "not_configured")}; candidate methods: {html.escape(plan.get("candidate_methods", "") or plan.get("method", ""))}</div>
-    <div class="counts">method status: {html.escape(format_counts(method_status))}; standardized status: {html.escape(format_counts(standardized_status))}; standardized rows: {standardized_rows}; padj&lt;0.05 rows: {significant_rows}</div>
+    <div class="counts">method status: {html.escape(format_counts(method_status))}; plot status: {html.escape(format_counts(plot_status))}; standardized status: {html.escape(format_counts(standardized_status))}; standardized rows: {standardized_rows}; padj&lt;0.05 rows: {significant_rows}</div>
     <div class="counts">resources: {plan_link}</div>
     {detail_table}
   </section>
@@ -362,6 +373,7 @@ def render_project_resources(
     isoform_switch_plots_pdf: str = "",
     dtu_plan: str = "",
     dtu_method_manifest: str = "",
+    dtu_plot_manifest: str = "",
 ) -> str:
     rows = []
     for name, items, not_requested_detail, missing_detail in [
@@ -392,7 +404,7 @@ def render_project_resources(
         ),
         (
             "DTU / Splicing",
-            [("plan", dtu_plan), ("method manifest", dtu_method_manifest)],
+            [("plan", dtu_plan), ("method manifest", dtu_method_manifest), ("plot manifest", dtu_plot_manifest)],
             "DTU/splicing methods are not configured for this run",
             "DTU/splicing was requested but one or more report outputs are missing",
         ),
@@ -709,8 +721,10 @@ def render_html(
     isoform_switch_plots_pdf: str = "",
     dtu_plan: str = "",
     dtu_method_manifest: str = "",
+    dtu_plot_manifest: str = "",
     dtu_plan_rows: list[dict[str, str]] | None = None,
     dtu_method_rows: list[dict[str, str]] | None = None,
+    dtu_plot_rows: list[dict[str, str]] | None = None,
 ) -> str:
     project_names = sorted({row["project"] for row in rows})
     title = "RNA-seq differential report index"
@@ -731,8 +745,9 @@ def render_html(
         isoform_switch_plots_pdf,
         dtu_plan,
         dtu_method_manifest,
+        dtu_plot_manifest,
     )
-    dtu_summary = render_dtu_summary(dtu_plan_rows or [], dtu_method_rows or [], output)
+    dtu_summary = render_dtu_summary(dtu_plan_rows or [], dtu_method_rows or [], dtu_plot_rows or [], output)
     enrichment_overview_link = file_link("GO/Reactome enrichment overview", enrichment_overview, output)
     enrichment_overview_html = (
         f"; {enrichment_overview_link}" if enrichment_overview_link else ""
@@ -927,6 +942,9 @@ def main() -> int:
     dtu_method_rows = read_optional_table(args.dtu_method_manifest)
     for row in dtu_method_rows:
         row["_manifest_path"] = args.dtu_method_manifest
+    dtu_plot_rows = read_optional_table(args.dtu_plot_manifest)
+    for row in dtu_plot_rows:
+        row["_manifest_path"] = args.dtu_plot_manifest
     output = Path(args.output)
     output.parent.mkdir(parents=True, exist_ok=True)
     enrichment_overview = Path(args.enrichment_overview) if args.enrichment_overview else output.parent / "enrichment/index.html"
@@ -946,8 +964,10 @@ def main() -> int:
             args.isoform_switch_plots_pdf,
             args.dtu_plan,
             args.dtu_method_manifest,
+            args.dtu_plot_manifest,
             dtu_plan_rows,
             dtu_method_rows,
+            dtu_plot_rows,
         ),
         encoding="utf-8",
     )
@@ -961,6 +981,7 @@ def main() -> int:
         ("isoform_switch", "isoform_switch", "plots_pdf", "plot", args.isoform_switch_plots_pdf, "ok"),
         ("dtu", "dtu", "dtu_plan", "table", args.dtu_plan, dtu_plan_rows[0].get("status", "planned") if dtu_plan_rows else "not_configured"),
         ("dtu", "dtu", "dtu_method_manifest", "manifest", args.dtu_method_manifest, "ok" if dtu_method_rows else "not_configured"),
+        ("dtu", "dtu", "dtu_plot_manifest", "manifest", args.dtu_plot_manifest, "ok" if dtu_plot_rows else "not_configured"),
     ]
     for row in dtu_method_rows:
         method = row.get("method", "method") or "method"
@@ -974,6 +995,25 @@ def main() -> int:
                 row.get("standardized_status", "") or row.get("status", ""),
             )
         )
+    for row in dtu_plot_rows:
+        method = row.get("method", "method") or "method"
+        contrast_id = row.get("contrast_id", "")
+        for label, path_text in [
+            ("overview_plot", row.get("overview_plot", "")),
+            ("usage_plot", row.get("usage_plot", "")),
+        ]:
+            if not path_text:
+                continue
+            project_assets.append(
+                (
+                    "dtu",
+                    "dtu",
+                    f"{method}_{contrast_id}_{label}",
+                    "plot",
+                    path_text,
+                    row.get("status", ""),
+                )
+            )
     write_asset_manifest(Path(args.asset_manifest), rows, project_assets)
     write_done(Path(args.done), rows)
     return 0

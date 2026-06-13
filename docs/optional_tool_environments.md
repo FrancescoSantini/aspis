@@ -110,7 +110,7 @@ Externally managed or site-managed tools:
 - `rMATS` or `rMATS-turbo`, because installations often vary by Python,
   compiler, and cluster setup.
 
-Native DRIMSeq DTU is configured under:
+Native DRIMSeq/DEXSeq DTU is configured under:
 
 ```yaml
 rnaseq_dtu:
@@ -126,11 +126,14 @@ rnaseq_dtu:
   min_transcripts_per_gene: 2
   rscript: Rscript
   drimseq_script: workflow/scripts/run_drimseq_dtu.R
+  dexseq_script: workflow/scripts/run_dexseq_dtu.R
 ```
 
-If `Rscript` or `R::DRIMSeq` is missing, the DTU manifest records a blocked
-status. DEXSeq, SUPPA2, and rMATS are still available only as command-template
-methods while their native event/count input contracts remain undecided.
+If `Rscript`, `R::DRIMSeq`, or `R::DEXSeq` is missing, the DTU manifest records a
+blocked status. Native DEXSeq currently runs transcript features grouped by gene;
+true exon-bin DEXSeq still needs an exon-count layer. SUPPA2 and rMATS are still
+available only as command-template methods while their native event/count input
+contracts remain undecided.
 Templates may use `{samples}`, `{aligned_samples}`, `{transcript_counts}`,
 `{transcript_metadata}`, `{annotation_gtf}`, `{outdir}`, `{project}`, and
 `{method}`.

@@ -19,6 +19,8 @@ METHOD_ALIASES = {
     "rmats_turbo": "rMATS",
 }
 
+NATIVE_METHODS = {"DRIMSeq", "DEXSeq"}
+
 COLUMNS = [
     "project",
     "assay",
@@ -195,9 +197,9 @@ def build_rows(args: argparse.Namespace) -> list[dict[str, str]]:
         row = dict(base)
         row.update({"contrast_id": "no_transcripts", "status": "blocked", "reason": "transcript count matrix has no transcript rows"})
         return [row]
-    if multi_gene_rows == 0 and method == "DRIMSeq":
+    if multi_gene_rows == 0 and method in NATIVE_METHODS:
         row = dict(base)
-        row.update({"contrast_id": "no_multi_isoform_genes", "status": "blocked", "reason": "DRIMSeq requires at least one gene with two or more transcript isoforms"})
+        row.update({"contrast_id": "no_multi_isoform_genes", "status": "blocked", "reason": f"{method} requires at least one gene with two or more transcript isoforms"})
         return [row]
 
     grouped: dict[tuple[str, ...], list[dict[str, str]]] = defaultdict(list)
@@ -217,12 +219,13 @@ def build_rows(args: argparse.Namespace) -> list[dict[str, str]]:
             test_rows = tests_by_label[test_label]
             cid = contrast_id(test_label, args.control_label, ",".join(contrast_cols), key)
             contrast_dir = Path(args.output).parent / "contrasts" / cid
+            result_prefix = safe_token(method.lower())
             row = dict(base)
             selected = sorted([*controls, *test_rows], key=lambda item: item.get("library_id", ""))
             missing_counts = [sample["library_id"] for sample in selected if sample["library_id"] not in count_sample_columns]
             reasons: list[str] = []
             status = "ready"
-            if method != "DRIMSeq":
+            if method not in NATIVE_METHODS:
                 status = "planned"
                 reasons.append(f"{method} is not implemented natively yet; configure a command template to execute it")
             if len(controls) < args.min_replicates:
@@ -246,10 +249,10 @@ def build_rows(args: argparse.Namespace) -> list[dict[str, str]]:
                     "n_test": str(len(test_rows)),
                     "samples": ",".join(sample["library_id"] for sample in selected),
                     "contrast_dir": str(contrast_dir),
-                    "gene_results": str(contrast_dir / "drimseq_gene_results.tsv"),
-                    "transcript_results": str(contrast_dir / "drimseq_transcript_results.tsv"),
-                    "summary": str(contrast_dir / "drimseq_summary.tsv"),
-                    "log": str(contrast_dir / "drimseq.log"),
+                    "gene_results": str(contrast_dir / f"{result_prefix}_gene_results.tsv"),
+                    "transcript_results": str(contrast_dir / f"{result_prefix}_transcript_results.tsv"),
+                    "summary": str(contrast_dir / f"{result_prefix}_summary.tsv"),
+                    "log": str(contrast_dir / f"{result_prefix}.log"),
                 }
             )
             rows.append(row)

@@ -211,12 +211,13 @@ rnaseq_dtu:
   min_transcripts_per_gene: 2
 ```
 
-ASPIS plans DRIMSeq one contrast at a time, using the transcript count matrix
-and transcript-to-gene metadata from RNA-seq quantification. Missing `Rscript`,
-missing `R::DRIMSeq`, insufficient replicates, or empty post-filter universes are
-reported as blocked DTU rows rather than silently skipped. DEXSeq, SUPPA2, and
-rMATS remain command-template methods until their event/count input contracts are
-implemented explicitly.
+ASPIS plans DTU one contrast at a time, using the transcript count matrix and
+transcript-to-gene metadata from RNA-seq quantification. Missing `Rscript`,
+missing R packages, insufficient replicates, or empty post-filter universes are
+reported as blocked DTU rows rather than silently skipped. `DRIMSeq` and the
+native `DEXSeq` transcript-feature mode are available from ASPIS-managed inputs.
+True exon-bin DEXSeq, SUPPA2, and rMATS remain future native engines until their
+event/count input contracts are implemented explicitly.
 
 ## Feature-Set Tables
 

@@ -541,35 +541,38 @@ Reason for priority: DTU is expected for transcript-level biology. ASPIS now
 has a validated first native DTU engine. Remaining DTU work is about adding
 event-specific engines deliberately, not about making DRIMSeq usable.
 
-Completed DRIMSeq scope:
+Completed native DTU scope:
 
 - DRIMSeq is the first native DTU engine.
+- DEXSeq is implemented as a native transcript-feature usage engine using
+  transcript features grouped by gene. This is useful with ASPIS transcript-count
+  matrices, but it is not yet true exon-bin DEXSeq.
 - DTU planning is contrast-level and mirrors the DESeq2/isoform-switch split:
   condition comparisons are optionally stratified by `contrast_by` columns such
   as `time_h`.
-- DRIMSeq runs from transcript-level count matrices and transcript-to-gene
-  metadata. It produces contrast-specific gene-level, transcript-level, summary,
-  and standardized result tables.
-- Native DRIMSeq execution is split into one schedulable job per contrast and a
+- Native DRIMSeq and transcript-feature DEXSeq run from transcript-level count
+  matrices and transcript-to-gene metadata. They produce contrast-specific
+  gene-level, transcript/feature-level, summary, and standardized result tables.
+- Native DTU execution is split into one schedulable job per contrast and a
   cheap merged `dtu_method_manifest.tsv`/`dtu_methods.done` aggregation step.
 - BEAS_2B G100 validation completed six DRIMSeq contrasts with completed status
   and standardized result tables.
-- Missing `Rscript`, missing `R::DRIMSeq`, insufficient replicates, missing
-  sample columns, and empty post-filter universes are reported as blocked rather
-  than silently skipped.
+- Missing `Rscript`, missing `R::DRIMSeq`/`R::DEXSeq`, insufficient replicates,
+  missing sample columns, and empty post-filter universes are reported as blocked
+  rather than silently skipped.
 - RNA-seq differential and integrated project reports expose DTU status,
   standardized rows, significant DRIMSeq rows, and links to summary, gene-result,
-  usage, and standardized result tables.
-- DEXSeq, SUPPA2, and rMATS remain command-template methods for now because they
-  require method-specific count/event inputs that should not be guessed from the
-  transcript count matrix.
+  usage, standardized result tables, and DTU overview/usage SVG plots.
+- The local biological integration contract covers DRIMSeq standardization,
+  DEXSeq transcript-feature standardization, and DTU plot/report asset exposure
+  without requiring real R packages.
 
 Remaining code tasks:
 
-- Validate the enhanced DTU report/project summary after refreshing BEAS_2B or
-  HEP_G2 report-only targets.
-- Decide whether DEXSeq should be supported through exon-bin counting or kept as
-  a user-provided command-template method.
+- Validate native DEXSeq with real `R::DEXSeq` on a real-data project once the
+  package is installed in the execution environment.
+- Decide whether true exon-bin DEXSeq should be added through a separate
+  exon-count/bin-count generation layer.
 - Decide whether SUPPA2 and rMATS belong in ASPIS native execution; if so, add
   explicit event-generation inputs instead of inferring events from transcript
   counts.
@@ -579,12 +582,14 @@ Remaining code tasks:
 Acceptance criteria:
 
 - `rnaseq_dtu.run: true` with `method: DRIMSeq` produces real contrast-level DTU
-  tables when DRIMSeq is installed. Validated on BEAS_2B.
-- Missing DRIMSeq dependencies do not break standard RNA-seq analysis; the DTU
-  manifest records a blocked status with a concrete reason.
+  tables and plots when DRIMSeq is installed. Validated on BEAS_2B.
+- `rnaseq_dtu.run: true` with `method: DEXSeq` produces transcript-feature DTU
+  tables and standardized rows when DEXSeq is installed.
+- Missing DRIMSeq/DEXSeq dependencies do not break standard RNA-seq analysis; the
+  DTU manifest records a blocked status with a concrete reason.
 - Reports explain whether each DTU contrast was planned, blocked, failed, or
   completed from the merged per-contrast manifest, with per-contrast links to
-  summary, gene-result, usage, and standardized tables.
+  summary, gene-result, usage, standardized tables, and DTU SVG plots.
 ## P1 - Isoform-Switch Consequence Annotation Hardening
 
 Reason for priority: isoform-switch execution, event pages, exon diagrams, and

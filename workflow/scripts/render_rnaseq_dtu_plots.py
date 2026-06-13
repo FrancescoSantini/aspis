@@ -1,0 +1,275 @@
+#!/usr/bin/env python3
+"""Render lightweight SVG plots for RNA-seq DTU method outputs."""
+
+from __future__ import annotations
+
+import argparse
+import csv
+import html
+import math
+import re
+from pathlib import Path
+
+
+COLUMNS = [
+    "project",
+    "method",
+    "contrast_id",
+    "status",
+    "reason",
+    "source_results",
+    "transcript_results",
+    "overview_plot",
+    "usage_plot",
+    "n_standardized",
+    "n_significant",
+    "top_gene",
+    "top_padj",
+]
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--method-manifest", required=True)
+    parser.add_argument("--outdir", required=True)
+    parser.add_argument("--manifest", required=True)
+    parser.add_argument("--done", required=True)
+    parser.add_argument("--padj", type=float, default=0.05)
+    parser.add_argument("--top-n", type=int, default=20)
+    parser.add_argument("--max-points", type=int, default=2500)
+    return parser.parse_args()
+
+
+def read_tsv(path: Path) -> list[dict[str, str]]:
+    if not path.is_file():
+        return []
+    with path.open(newline="", encoding="utf-8") as handle:
+        reader = csv.DictReader(handle, delimiter="\t")
+        if reader.fieldnames is None:
+            return []
+        return [{key: (value or "").strip() for key, value in row.items()} for row in reader]
+
+
+def write_tsv(path: Path, rows: list[dict[str, str]]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=COLUMNS, delimiter="\t", lineterminator="\n")
+        writer.writeheader()
+        for row in rows:
+            writer.writerow({column: row.get(column, "") for column in COLUMNS})
+
+
+def write_done(path: Path, rows: list[dict[str, str]]) -> None:
+    ok = sum(1 for row in rows if row.get("status") == "ok")
+    blocked = sum(1 for row in rows if row.get("status") == "blocked")
+    failed = sum(1 for row in rows if row.get("status") == "failed")
+    total = len(rows)
+    status = "ok" if ok else "blocked" if blocked else "empty"
+    reason = f"{ok} DTU plot set(s) rendered"
+    if failed:
+        status = "failed"
+        reason = f"{failed} DTU plot set(s) failed"
+    elif blocked and not ok:
+        reason = f"{blocked} DTU plot set(s) blocked"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", encoding="utf-8") as handle:
+        handle.write("status\tplot_ok\tplot_blocked\tplot_failed\ttotal\treason\n")
+        handle.write(f"{status}\t{ok}\t{blocked}\t{failed}\t{total}\t{reason}\n")
+
+
+def safe_float(value: str) -> float | None:
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError):
+        return None
+    if math.isnan(parsed) or math.isinf(parsed):
+        return None
+    return parsed
+
+
+def safe_token(value: str) -> str:
+    token = re.sub(r"[^A-Za-z0-9_.-]+", "_", value.strip())
+    token = re.sub(r"_+", "_", token).strip("_")
+    return token or "contrast"
+
+
+def numeric_p(row: dict[str, str]) -> float | None:
+    return safe_float(row.get("padj", "")) or safe_float(row.get("pvalue", ""))
+
+
+def significant_count(rows: list[dict[str, str]], alpha: float) -> int:
+    count = 0
+    for row in rows:
+        padj = safe_float(row.get("padj", ""))
+        if padj is not None and padj < alpha:
+            count += 1
+    return count
+
+
+def svg_header(width: int, height: int) -> str:
+    return (
+        f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" '
+        f'viewBox="0 0 {width} {height}" role="img">\n'
+        "<style>"
+        "text{font-family:Arial,Helvetica,sans-serif;fill:#24292f}"
+        ".muted{fill:#57606a}.axis{stroke:#24292f;stroke-width:1}"
+        ".grid{stroke:#d0d7de;stroke-width:.7}.sig{fill:#cf222e;opacity:.78}"
+        ".ns{fill:#57606a;opacity:.38}.bar1{fill:#0969da}.bar2{fill:#cf222e}"
+        "</style>\n"
+    )
+
+
+def render_overview_svg(path: Path, rows: list[dict[str, str]], alpha: float, max_points: int) -> None:
+    scored = [(numeric_p(row), row) for row in rows]
+    scored = [(score, row) for score, row in scored if score is not None and score > 0]
+    scored.sort(key=lambda item: item[0])
+    if max_points > 0:
+        scored = scored[:max_points]
+    width, height = 900, 520
+    left, right, top, bottom = 78, 28, 48, 72
+    plot_w = width - left - right
+    plot_h = height - top - bottom
+    ymax = max([-math.log10(score) for score, _row in scored], default=1.0)
+    ymax = max(1.0, math.ceil(ymax))
+    n = max(1, len(scored))
+    parts = [svg_header(width, height)]
+    parts.append('<rect width="100%" height="100%" fill="white"/>\n')
+    parts.append('<text x="24" y="30" font-size="20" font-weight="700">DTU significance overview</text>\n')
+    parts.append(f'<text x="24" y="50" font-size="12" class="muted">Showing top {len(scored)} features by adjusted p-value or p-value</text>\n')
+    for tick in range(0, int(ymax) + 1):
+        y = top + plot_h - (tick / ymax * plot_h)
+        parts.append(f'<line class="grid" x1="{left}" y1="{y:.1f}" x2="{left + plot_w}" y2="{y:.1f}"/>\n')
+        parts.append(f'<text x="{left - 10}" y="{y + 4:.1f}" text-anchor="end" font-size="11">{tick}</text>\n')
+    parts.append(f'<line class="axis" x1="{left}" y1="{top}" x2="{left}" y2="{top + plot_h}"/>\n')
+    parts.append(f'<line class="axis" x1="{left}" y1="{top + plot_h}" x2="{left + plot_w}" y2="{top + plot_h}"/>\n')
+    for idx, (score, row) in enumerate(scored, start=1):
+        yval = -math.log10(score)
+        x = left + ((idx - 1) / max(1, n - 1) * plot_w)
+        y = top + plot_h - (yval / ymax * plot_h)
+        padj = safe_float(row.get("padj", ""))
+        cls = "sig" if padj is not None and padj < alpha else "ns"
+        parts.append(f'<circle class="{cls}" cx="{x:.1f}" cy="{y:.1f}" r="3"/>\n')
+    threshold = -math.log10(alpha) if alpha > 0 else None
+    if threshold is not None and threshold <= ymax:
+        y = top + plot_h - (threshold / ymax * plot_h)
+        parts.append(f'<line x1="{left}" y1="{y:.1f}" x2="{left + plot_w}" y2="{y:.1f}" stroke="#cf222e" stroke-dasharray="5,4"/>\n')
+        parts.append(f'<text x="{left + plot_w - 4}" y="{y - 6:.1f}" text-anchor="end" font-size="11" fill="#cf222e">padj {alpha:g}</text>\n')
+    parts.append(f'<text x="{left + plot_w / 2:.1f}" y="{height - 24}" text-anchor="middle" font-size="13">ranked DTU features</text>\n')
+    parts.append(f'<text transform="translate(20 {top + plot_h / 2:.1f}) rotate(-90)" text-anchor="middle" font-size="13">-log10 adjusted p-value</text>\n')
+    parts.append("</svg>\n")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("".join(parts), encoding="utf-8")
+
+
+def select_top_gene(rows: list[dict[str, str]]) -> str:
+    scored = [(numeric_p(row), row.get("gene_id", "")) for row in rows if row.get("gene_id", "")]
+    scored = [(score, gene) for score, gene in scored if score is not None]
+    scored.sort(key=lambda item: item[0])
+    return scored[0][1] if scored else ""
+
+
+def render_usage_svg(path: Path, usage_rows: list[dict[str, str]], gene_id: str, top_n: int) -> bool:
+    rows = [row for row in usage_rows if row.get("gene_id", "") == gene_id]
+    if not rows:
+        return False
+
+    def abs_delta(row: dict[str, str]) -> float:
+        return abs(safe_float(row.get("delta_usage", "")) or 0.0)
+
+    rows = sorted(rows, key=abs_delta, reverse=True)[:top_n]
+    width = 960
+    row_h = 42
+    height = max(260, 120 + (len(rows) * row_h))
+    left, right, top = 190, 60, 72
+    bar_w = width - left - right
+    parts = [svg_header(width, height)]
+    parts.append('<rect width="100%" height="100%" fill="white"/>\n')
+    parts.append(f'<text x="24" y="30" font-size="20" font-weight="700">Top DTU usage: {html.escape(gene_id)}</text>\n')
+    parts.append('<text x="24" y="52" font-size="12" class="muted">Mean transcript usage by contrast group. Larger shifts are shown first.</text>\n')
+    for tick in [0, 0.25, 0.5, 0.75, 1.0]:
+        x = left + tick * bar_w
+        parts.append(f'<line class="grid" x1="{x:.1f}" y1="{top - 10}" x2="{x:.1f}" y2="{height - 44}"/>\n')
+        parts.append(f'<text x="{x:.1f}" y="{height - 22}" text-anchor="middle" font-size="11">{tick:g}</text>\n')
+    parts.append(f'<text x="{left}" y="{height - 6}" font-size="12" class="muted">blue=control, red=test</text>\n')
+    for idx, row in enumerate(rows):
+        y = top + idx * row_h
+        feature = row.get("feature_id", "")
+        control = min(1.0, max(0.0, safe_float(row.get("mean_usage_control", "")) or 0.0))
+        test = min(1.0, max(0.0, safe_float(row.get("mean_usage_test", "")) or 0.0))
+        label = feature if len(feature) <= 22 else feature[:19] + "..."
+        parts.append(f'<text x="{left - 12}" y="{y + 18}" text-anchor="end" font-size="12">{html.escape(label)}</text>\n')
+        parts.append(f'<rect class="bar1" x="{left}" y="{y + 4}" width="{control * bar_w:.1f}" height="13" rx="2"/>\n')
+        parts.append(f'<rect class="bar2" x="{left}" y="{y + 21}" width="{test * bar_w:.1f}" height="13" rx="2"/>\n')
+        parts.append(f'<text x="{left + bar_w + 8}" y="{y + 25}" font-size="11" class="muted">delta {html.escape(row.get("delta_usage", ""))}</text>\n')
+    parts.append("</svg>\n")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("".join(parts), encoding="utf-8")
+    return True
+
+
+def plot_row(args: argparse.Namespace, row: dict[str, str]) -> dict[str, str]:
+    project = row.get("project", "")
+    method = row.get("method", "")
+    contrast_id = row.get("contrast_id", "")
+    outdir = Path(args.outdir) / safe_token(method.lower()) / safe_token(contrast_id)
+    output = {
+        "project": project,
+        "method": method,
+        "contrast_id": contrast_id,
+        "status": "blocked",
+        "reason": "",
+        "source_results": row.get("standardized_results", ""),
+        "transcript_results": row.get("transcript_results", ""),
+        "overview_plot": str(outdir / "dtu_overview.svg"),
+        "usage_plot": str(outdir / "top_usage.svg"),
+        "n_standardized": "0",
+        "n_significant": "0",
+        "top_gene": "",
+        "top_padj": "",
+    }
+    if row.get("status") != "completed" or row.get("standardized_status") != "ok":
+        output["reason"] = row.get("reason", "") or "DTU method did not complete with standardized results"
+        return output
+    standardized_path = Path(row.get("standardized_results", ""))
+    if not standardized_path.is_file():
+        output["reason"] = f"standardized result table is missing: {standardized_path}"
+        return output
+    standardized = read_tsv(standardized_path)
+    if not standardized:
+        output["reason"] = "standardized result table has no rows"
+        return output
+    output["n_standardized"] = str(len(standardized))
+    output["n_significant"] = str(significant_count(standardized, args.padj))
+    top_gene = select_top_gene(standardized)
+    output["top_gene"] = top_gene
+    scored = [(numeric_p(item), item) for item in standardized]
+    scored = [(score, item) for score, item in scored if score is not None]
+    scored.sort(key=lambda item: item[0])
+    if scored:
+        output["top_padj"] = scored[0][1].get("padj", "") or scored[0][1].get("pvalue", "")
+    render_overview_svg(Path(output["overview_plot"]), standardized, args.padj, args.max_points)
+    usage_path = Path(row.get("transcript_results", ""))
+    if top_gene and usage_path.is_file():
+        rendered = render_usage_svg(Path(output["usage_plot"]), read_tsv(usage_path), top_gene, args.top_n)
+        if not rendered:
+            output["usage_plot"] = ""
+    else:
+        output["usage_plot"] = ""
+    output["status"] = "ok"
+    return output
+
+
+def main() -> int:
+    args = parse_args()
+    method_rows = read_tsv(Path(args.method_manifest))
+    rows = [plot_row(args, row) for row in method_rows]
+    write_tsv(Path(args.manifest), rows)
+    write_done(Path(args.done), rows)
+    failed = [row for row in rows if row.get("status") == "failed"]
+    if failed:
+        raise RuntimeError(f"{len(failed)} DTU plot set(s) failed")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

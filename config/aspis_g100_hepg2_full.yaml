@@ -247,6 +247,10 @@ rnaseq_dtu:
   min_transcripts_per_gene: 2
   rscript: Rscript
   drimseq_script: workflow/scripts/run_drimseq_dtu.R
+  dexseq_script: workflow/scripts/run_dexseq_dtu.R
+  plot_padj: 0.05
+  plot_top_n: 20
+  plot_max_points: 2500
   candidate_methods:
   - DRIMSeq
   - DEXSeq

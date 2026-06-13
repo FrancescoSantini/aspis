@@ -204,8 +204,9 @@ rnaseq_differential:
 
 rnaseq_dtu:
   # Optional differential transcript usage companion layer.
-  # DRIMSeq is the first native engine. DEXSeq, SUPPA2, and rMATS remain
-  # command-template methods until their event/count inputs are explicitly wired.
+  # DRIMSeq and DEXSeq are native transcript-feature usage engines. The native
+  # DEXSeq path uses transcript features grouped by gene; exon-bin DEXSeq,
+  # SUPPA2, and rMATS need explicit event/count inputs or command templates.
   run: false
   method: DRIMSeq
   condition_col: condition
@@ -219,6 +220,10 @@ rnaseq_dtu:
   min_transcripts_per_gene: 2
   rscript: Rscript
   drimseq_script: workflow/scripts/run_drimseq_dtu.R
+  dexseq_script: workflow/scripts/run_dexseq_dtu.R
+  plot_padj: 0.05
+  plot_top_n: 20
+  plot_max_points: 2500
   candidate_methods:
     - DRIMSeq
     - DEXSeq

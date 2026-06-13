@@ -92,6 +92,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--methods", default="DRIMSeq,DEXSeq,SUPPA2,rMATS")
     parser.add_argument("--rscript", default="Rscript")
     parser.add_argument("--drimseq-script", default="workflow/scripts/run_drimseq_dtu.R")
+    parser.add_argument("--dexseq-script", default="workflow/scripts/run_dexseq_dtu.R")
     parser.add_argument("--dtu-min-count", type=int, default=10)
     parser.add_argument("--dtu-min-samples", type=int, default=2)
     parser.add_argument("--dtu-min-proportion", type=float, default=0.05)
@@ -269,7 +270,15 @@ def read_result_rows(path: Path) -> list[dict[str, str]]:
 def is_result_file(path: Path) -> bool:
     if not path.is_file():
         return False
-    if path.name in {"stderr.log", "stdout.log", "standardized_results.tsv", "dtu_counts.tsv", "dtu_coldata.tsv", "drimseq_summary.tsv"}:
+    if path.name in {
+        "stderr.log",
+        "stdout.log",
+        "standardized_results.tsv",
+        "dtu_counts.tsv",
+        "dtu_coldata.tsv",
+        "drimseq_summary.tsv",
+        "dexseq_summary.tsv",
+    }:
         return False
     if path.suffix.lower() in RESULT_SUFFIXES:
         return True
@@ -481,15 +490,20 @@ def executable_exists(command: str) -> bool:
     return bool(shutil.which(command) or Path(command).exists())
 
 
+def result_prefix(method: str) -> str:
+    return method.lower().replace("-", "_")
+
+
 def blocked_row(args: argparse.Namespace, method: str, plan_row: dict[str, str], method_dir: Path, reason: str) -> dict[str, str]:
     row = base_manifest_row(args, method, method_dir, plan_row.get("contrast_id", ""))
+    prefix = result_prefix(method)
     row.update(
         {
             "status": "blocked",
             "reason": reason,
-            "gene_results": str(method_dir / "drimseq_gene_results.tsv"),
-            "transcript_results": str(method_dir / "drimseq_transcript_results.tsv"),
-            "summary": str(method_dir / "drimseq_summary.tsv"),
+            "gene_results": str(method_dir / f"{prefix}_gene_results.tsv"),
+            "transcript_results": str(method_dir / f"{prefix}_transcript_results.tsv"),
+            "summary": str(method_dir / f"{prefix}_summary.tsv"),
         }
     )
     return row
@@ -579,9 +593,93 @@ def run_drimseq_native(args: argparse.Namespace, plan_rows: list[dict[str, str]]
     return [blocked_row(args, "DRIMSeq", {"contrast_id": "no_contrasts"}, method_dir, "DTU plan contains no contrast rows")]
 
 
+def run_dexseq_contrast(args: argparse.Namespace, plan_row: dict[str, str]) -> dict[str, str]:
+    contrast_id = plan_row.get("contrast_id", "contrast")
+    method_dir = Path(args.outdir) / "dexseq" / re.sub(r"[^A-Za-z0-9_.-]+", "_", contrast_id)
+    row = base_manifest_row(args, "DEXSeq", method_dir, contrast_id)
+    row["gene_results"] = str(method_dir / "dexseq_gene_results.tsv")
+    row["transcript_results"] = str(method_dir / "dexseq_transcript_results.tsv")
+    row["summary"] = str(method_dir / "dexseq_summary.tsv")
+    if plan_row.get("status") != "ready":
+        return blocked_row(args, "DEXSeq", plan_row, method_dir, plan_row.get("reason") or "contrast was not ready for DEXSeq")
+    if not executable_exists(args.rscript):
+        return blocked_row(args, "DEXSeq", plan_row, method_dir, f"Rscript executable not found: {args.rscript}")
+    if not Path(args.dexseq_script).exists():
+        return blocked_row(args, "DEXSeq", plan_row, method_dir, f"DEXSeq runner script not found: {args.dexseq_script}")
+    method_dir.mkdir(parents=True, exist_ok=True)
+    stdout = method_dir / "stdout.log"
+    stderr = method_dir / "stderr.log"
+    try:
+        contrast_counts, contrast_coldata = write_drimseq_inputs(args, plan_row, method_dir)
+    except Exception as exc:  # pragma: no cover - defensive manifest conversion
+        return blocked_row(args, "DEXSeq", plan_row, method_dir, str(exc))
+    command = [
+        args.rscript,
+        args.dexseq_script,
+        "--counts",
+        str(contrast_counts),
+        "--coldata",
+        str(contrast_coldata),
+        "--metadata",
+        args.transcript_metadata,
+        "--gene-results",
+        row["gene_results"],
+        "--feature-results",
+        row["transcript_results"],
+        "--summary",
+        row["summary"],
+        "--condition-col",
+        "condition",
+        "--control-label",
+        plan_row.get("control_label") or "control",
+        "--test-label",
+        plan_row.get("test_label") or "treated",
+        "--min-count",
+        str(args.dtu_min_count),
+        "--min-samples",
+        str(args.dtu_min_samples),
+        "--min-gene-count",
+        str(args.dtu_min_gene_count),
+        "--min-transcripts-per-gene",
+        str(args.dtu_min_transcripts_per_gene),
+    ]
+    completed = subprocess.run(command, text=True, capture_output=True, check=False)
+    stdout.write_text(completed.stdout, encoding="utf-8")
+    stderr.write_text(completed.stderr, encoding="utf-8")
+    row["command"] = " ".join(command)
+    row["stdout"] = str(stdout)
+    row["stderr"] = str(stderr)
+    if completed.returncode == 0:
+        row["status"] = "completed"
+        row["reason"] = "DEXSeq transcript-feature usage; true exon-bin DEXSeq requires exon-count inputs"
+        standardized_results, result_count, standardized_status = standardize_method_outputs(
+            args, "DEXSeq", method_dir, contrast_id
+        )
+        row["standardized_results"] = standardized_results
+        row["standardized_result_count"] = str(result_count)
+        row["standardized_status"] = standardized_status
+    elif completed.returncode == DRIMSEQ_BLOCKED_EXIT:
+        row["status"] = "blocked"
+        row["reason"] = (completed.stderr.strip().splitlines() or ["DEXSeq contrast was blocked"])[-1]
+    else:
+        row["status"] = "failed"
+        row["reason"] = f"DEXSeq exited with status {completed.returncode}"
+    return row
+
+
+def run_dexseq_native(args: argparse.Namespace, plan_rows: list[dict[str, str]]) -> list[dict[str, str]]:
+    rows = [run_dexseq_contrast(args, plan_row) for plan_row in plan_rows]
+    if rows:
+        return rows
+    method_dir = Path(args.outdir) / "dexseq"
+    return [blocked_row(args, "DEXSeq", {"contrast_id": "no_contrasts"}, method_dir, "DTU plan contains no contrast rows")]
+
+
 def run_method_rows(args: argparse.Namespace, method: str, plan: Path, plan_rows: list[dict[str, str]]) -> list[dict[str, str]]:
     if method == "DRIMSeq" and not command_for_method(args, method).strip():
         return run_drimseq_native(args, plan_rows)
+    if method == "DEXSeq" and not command_for_method(args, method).strip():
+        return run_dexseq_native(args, plan_rows)
     if args.contrast_id:
         return [run_external_method(args, method, plan, plan_row) for plan_row in plan_rows]
     return [run_external_method(args, method, plan)]
