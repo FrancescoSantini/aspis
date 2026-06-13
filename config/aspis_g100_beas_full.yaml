@@ -227,8 +227,8 @@ rnaseq_differential:
   log2fc: 1.0
   lfc_shrinkage: none
 rnaseq_dtu:
-  run: false
-  method: DRIMSeq
+  run: true
+  method: all
   condition_col: condition
   control_label: control
   contrast_by:
