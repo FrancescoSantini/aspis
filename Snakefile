@@ -6008,10 +6008,10 @@ checkpoint plan_rnaseq_dtu:
             "control_label",
             RNASEQ_DIFFERENTIAL.get("control_label", "control"),
         ),
-        contrast_by=joined_config_values(RNASEQ_DTU.get(
+        contrast_by=optional_shell_arg("--contrast-by", joined_config_values(RNASEQ_DTU.get(
             "contrast_by",
             RNASEQ_DIFFERENTIAL.get("contrast_by", []),
-        )),
+        ))),
         min_replicates=RNASEQ_DTU.get("min_replicates_per_group", 2)
     log:
         "logs/branches/rnaseq/{project}.dtu_plan.log"
@@ -6030,7 +6030,7 @@ checkpoint plan_rnaseq_dtu:
           --candidate-methods {params.candidate_methods:q} \
           --condition-col {params.condition_col:q} \
           --control-label {params.control_label:q} \
-          --contrast-by {params.contrast_by:q} \
+          {params.contrast_by} \
           --min-replicates {params.min_replicates:q} \
           > {log:q} 2>&1
         """
