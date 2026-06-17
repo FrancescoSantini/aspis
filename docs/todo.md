@@ -568,9 +568,15 @@ Completed native DTU scope:
   standardized rows, significant rows, and links to summary, gene-result, usage,
   standardized result tables, and DTU overview/usage SVG plots for both native
   methods.
+- DTU intermediate pruning is implemented as an explicit, auditable target. It
+  removes only re-creatable per-contrast DTU input slices such as
+  `dtu_counts.tsv` and `dtu_coldata.tsv` after DTU plots and the differential
+  report index exist; standardized results, method result tables, summaries, and
+  plot-linked files are preserved.
 - The local biological integration contract covers DRIMSeq standardization,
   DEXSeq transcript-feature standardization, and DTU plot/report asset exposure
   without requiring real R packages.
+- A dedicated local contract covers conservative DTU pruning.
 
 Remaining future/event-based tasks:
 
@@ -597,6 +603,11 @@ Acceptance criteria:
 - Reports explain whether each DTU contrast was planned, blocked, failed, or
   completed from the merged per-contrast manifest, with per-contrast links to
   summary, gene-result, usage, standardized tables, and DTU SVG plots.
+- `rnaseq_dtu.prune_intermediates: true` adds the prune target to full runs, and
+  the prune target can also be run explicitly on an existing completed DTU run.
+  The generated prune manifest records removed, missing, skipped, and failed
+  files plus bytes removed.
+
 ## P1 - Isoform-Switch Consequence Annotation Hardening
 
 Reason for priority: isoform-switch execution, event pages, exon diagrams, and

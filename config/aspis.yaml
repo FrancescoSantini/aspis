@@ -224,6 +224,8 @@ rnaseq_dtu:
   plot_padj: 0.05
   plot_top_n: 20
   plot_max_points: 2500
+  prune_intermediates: false
+  prune_logs: false
   candidate_methods:
     - DRIMSeq
     - DEXSeq

@@ -141,6 +141,11 @@ RNASEQ_DTU_RUN = RNASEQ_QUANTIFICATION.get("run", False) and as_bool(
     RNASEQ_DTU.get("run", False),
     False,
 )
+RNASEQ_DTU_PRUNE_INTERMEDIATES = RNASEQ_DTU_RUN and as_bool(
+    RNASEQ_DTU.get("prune_intermediates", False),
+    False,
+)
+RNASEQ_DTU_PRUNE_LOGS = as_bool(RNASEQ_DTU.get("prune_logs", False), False)
 if RNASEQ_QUANTIFICATION.get("run", False) and not RNASEQ_ALIGNMENT.get("run", False):
     raise ValueError("rnaseq_quantification.run requires rnaseq_alignment.run: true")
 if RNASEQ_DIFFERENTIAL.get("run", False) and not RNASEQ_QUANTIFICATION.get("run", False):
@@ -1018,6 +1023,8 @@ def rnaseq_dtu_report_outputs(project):
         "method_done": f"{base}/dtu_methods.done",
         "plot_manifest": f"{base}/plots/dtu_plot_manifest.tsv",
         "plot_done": f"{base}/plots/dtu_plots.done",
+        "prune_manifest": f"{base}/prune/dtu_prune_manifest.tsv",
+        "prune_done": f"{base}/prune/dtu_prune.done",
     }
 
 
@@ -1313,6 +1320,13 @@ def branch_provenance_inputs(wildcards):
                             f"{base}/differential/dtu/plots/dtu_plots.done",
                         ]
                     )
+                    if RNASEQ_DTU_PRUNE_INTERMEDIATES:
+                        inputs.extend(
+                            [
+                                f"{base}/differential/dtu/prune/dtu_prune_manifest.tsv",
+                                f"{base}/differential/dtu/prune/dtu_prune.done",
+                            ]
+                        )
                 if RNASEQ_SAMPLE_QC_RUN:
                     inputs.extend(
                         [
@@ -1659,6 +1673,13 @@ def planned_branch_targets(wildcards):
                                     f"{BRANCH_DIR}/{assay}/{project}/differential/dtu/plots/dtu_plots.done",
                                 ]
                             )
+                            if RNASEQ_DTU_PRUNE_INTERMEDIATES:
+                                targets.extend(
+                                    [
+                                        f"{BRANCH_DIR}/{assay}/{project}/differential/dtu/prune/dtu_prune_manifest.tsv",
+                                        f"{BRANCH_DIR}/{assay}/{project}/differential/dtu/prune/dtu_prune.done",
+                                    ]
+                                )
                         if RNASEQ_SAMPLE_QC_RUN:
                             targets.extend(
                                 [
@@ -2065,6 +2086,8 @@ def branch_report_inputs(wildcards):
                             f"{base}/differential/dtu/plots/dtu_plots.done",
                         ]
                     )
+                    if RNASEQ_DTU_PRUNE_INTERMEDIATES:
+                        inputs.append(f"{base}/differential/dtu/prune/dtu_prune.done")
                 if RNASEQ_SAMPLE_QC_RUN:
                     inputs.append(f"{base}/quantification/sample_qc/sample_qc.done")
                 if RNASEQ_WARNINGS_RUN:
@@ -2185,7 +2208,7 @@ def workflow_targets(wildcards):
     return targets
 
 
-localrules: all, check_environment, check_execution_config, assay_branch_ready, build_branch_design, build_branch_provenance_bundle, run_gene_deseq2, run_transcript_deseq2, run_isoform_switch, run_mirna_deseq2, render_rnaseq_differential_plots, render_rnaseq_differential_enrichment, render_rnaseq_differential_summaries, render_run_dashboard, render_branch_report_index, render_project_report_index
+localrules: all, check_environment, check_execution_config, assay_branch_ready, build_branch_design, build_branch_provenance_bundle, run_gene_deseq2, run_transcript_deseq2, run_isoform_switch, run_mirna_deseq2, render_rnaseq_differential_plots, render_rnaseq_differential_enrichment, render_rnaseq_differential_summaries, render_run_dashboard, render_branch_report_index, render_project_report_index, prune_rnaseq_dtu_intermediates
 
 
 rule all:
@@ -6148,6 +6171,36 @@ rule render_rnaseq_dtu_plots:
           --padj {params.padj:q} \
           --top-n {params.top_n:q} \
           --max-points {params.max_points:q} \
+          > {log:q} 2>&1
+        """
+
+
+rule prune_rnaseq_dtu_intermediates:
+    input:
+        method_manifest=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/dtu/dtu_method_manifest.tsv",
+        method_done=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/dtu/dtu_methods.done",
+        plot_manifest=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/dtu/plots/dtu_plot_manifest.tsv",
+        plot_done=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/dtu/plots/dtu_plots.done",
+        report_done=lambda wildcards: (
+            [f"{BRANCH_DIR}/rnaseq/{wildcards.project}/differential/reports/report_index.done"]
+            if RNASEQ_DIFFERENTIAL_REPORTS_ENABLED
+            else []
+        )
+    output:
+        manifest=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/dtu/prune/dtu_prune_manifest.tsv",
+        done=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/dtu/prune/dtu_prune.done"
+    params:
+        delete_logs=lambda wildcards: "--delete-logs" if RNASEQ_DTU_PRUNE_LOGS else ""
+    log:
+        "logs/branches/rnaseq/{project}.dtu_prune.log"
+    shell:
+        r"""
+        mkdir -p logs/branches/rnaseq
+        python3 workflow/scripts/prune_rnaseq_dtu_intermediates.py \
+          --method-manifest {input.method_manifest:q} \
+          --manifest {output.manifest:q} \
+          --done {output.done:q} \
+          {params.delete_logs} \
           > {log:q} 2>&1
         """
 
