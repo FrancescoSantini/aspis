@@ -216,8 +216,11 @@ transcript-to-gene metadata from RNA-seq quantification. Missing `Rscript`,
 missing R packages, insufficient replicates, or empty post-filter universes are
 reported as blocked DTU rows rather than silently skipped. `DRIMSeq` and the
 native `DEXSeq` transcript-feature mode are available from ASPIS-managed inputs.
-True exon-bin DEXSeq, SUPPA2, and rMATS remain future native engines until their
-event/count input contracts are implemented explicitly.
+`SUPPA2` transcript-event mode is available when `suppa.py` is installed. ASPIS
+prepares per-contrast transcript expression files from the transcript count
+matrix, then runs SUPPA `generateEvents -f ioi`, `psiPerIsoform`, and
+`diffSplice`. True exon-bin DEXSeq and rMATS remain future native engines until
+their event/count input contracts are implemented explicitly.
 
 ## Feature-Set Tables
 

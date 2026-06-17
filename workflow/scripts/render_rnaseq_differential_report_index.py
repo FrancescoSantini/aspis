@@ -320,7 +320,7 @@ def render_dtu_summary(
     return f"""
   <section class="dtu-summary">
     <h2>DTU / splicing methods</h2>
-    <p class="note">Native DRIMSeq and DEXSeq rows are transcript-usage companion analyses. DRIMSeq tests differential transcript usage at the gene level; the current native DEXSeq path uses transcript features grouped by gene. Exon-bin DEXSeq, SUPPA2, and rMATS need explicit event/count inputs.</p>
+    <p class="note">Native DRIMSeq, DEXSeq, and SUPPA2 rows are transcript-level companion analyses. DRIMSeq tests differential transcript usage at the gene level; the current native DEXSeq path uses transcript features grouped by gene; native SUPPA2 runs transcript-event differential splicing through SUPPA ioi/psi/diffSplice outputs. Exon-bin DEXSeq and rMATS need explicit event/count inputs.</p>
     <div class="counts">plan status: {html.escape(plan.get("status", "") or "not_configured")}; candidate methods: {html.escape(plan.get("candidate_methods", "") or plan.get("method", ""))}</div>
     <div class="counts">method status: {html.escape(format_counts(method_status))}; plot status: {html.escape(format_counts(plot_status))}; standardized status: {html.escape(format_counts(standardized_status))}; standardized rows: {standardized_rows}; padj&lt;0.05 rows: {significant_rows}</div>
     <div class="counts">resources: {plan_link}</div>

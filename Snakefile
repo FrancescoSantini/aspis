@@ -6082,6 +6082,17 @@ rule run_rnaseq_dtu_contrast:
         rscript=RNASEQ_DTU.get("rscript", "Rscript"),
         drimseq_script=RNASEQ_DTU.get("drimseq_script", "workflow/scripts/run_drimseq_dtu.R"),
         dexseq_script=RNASEQ_DTU.get("dexseq_script", "workflow/scripts/run_dexseq_dtu.R"),
+        suppa2_executable=RNASEQ_DTU.get("suppa2_executable", "suppa.py"),
+        suppa2_method=RNASEQ_DTU.get("suppa2_method", "empirical"),
+        suppa2_area=RNASEQ_DTU.get("suppa2_area", 1000),
+        suppa2_lower_bound=RNASEQ_DTU.get("suppa2_lower_bound", 0.05),
+        suppa2_tpm_threshold=RNASEQ_DTU.get("suppa2_tpm_threshold", 0.0),
+        suppa2_nan_threshold=RNASEQ_DTU.get("suppa2_nan_threshold", 0.0),
+        suppa2_gene_correction=lambda wildcards: (
+            "--suppa2-gene-correction"
+            if as_bool(RNASEQ_DTU.get("suppa2_gene_correction", True), True)
+            else "--no-suppa2-gene-correction"
+        ),
         min_count=RNASEQ_DTU.get("min_count", 10),
         min_samples=RNASEQ_DTU.get("min_samples", 2),
         min_proportion=RNASEQ_DTU.get("min_proportion", 0.05),
@@ -6113,6 +6124,13 @@ rule run_rnaseq_dtu_contrast:
           --rscript {params.rscript:q} \
           --drimseq-script {params.drimseq_script:q} \
           --dexseq-script {params.dexseq_script:q} \
+          --suppa2-executable {params.suppa2_executable:q} \
+          --suppa2-method {params.suppa2_method:q} \
+          --suppa2-area {params.suppa2_area:q} \
+          --suppa2-lower-bound {params.suppa2_lower_bound:q} \
+          --suppa2-tpm-threshold {params.suppa2_tpm_threshold:q} \
+          --suppa2-nan-threshold {params.suppa2_nan_threshold:q} \
+          {params.suppa2_gene_correction} \
           --dtu-min-count {params.min_count:q} \
           --dtu-min-samples {params.min_samples:q} \
           --dtu-min-proportion {params.min_proportion:q} \

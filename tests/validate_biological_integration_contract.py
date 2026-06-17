@@ -339,6 +339,36 @@ def exercise_biotype_and_dtu(paths: dict[str, Path]) -> None:
     if dtu_rows[0]["contrast_id"] != "treated_vs_control__time_h_24" or dtu_rows[0]["n_multi_isoform_genes"] != "1":
         raise ValueError(f"unexpected DTU contrast planning: {dtu_rows[0]}")
 
+    run_command(
+        [
+            sys.executable,
+            "workflow/scripts/plan_rnaseq_dtu.py",
+            "--samples",
+            str(paths["rnaseq_samples"]),
+            "--transcript-counts",
+            str(transcript_counts),
+            "--transcript-metadata",
+            str(transcript_metadata),
+            "--annotation-gtf",
+            str(gtf),
+            "--output",
+            str(dtu_dir / "suppa2_plan.tsv"),
+            "--done",
+            str(dtu_dir / "suppa2_plan.done"),
+            "--project",
+            "ASPIS_CONTRACT",
+            "--method",
+            "SUPPA2",
+            "--contrast-by",
+            "time_h",
+            "--min-replicates",
+            "1",
+        ]
+    )
+    suppa2_plan_rows = read_tsv(dtu_dir / "suppa2_plan.tsv", {"status", "method"})
+    if suppa2_plan_rows[0]["status"] != "ready" or suppa2_plan_rows[0]["method"] != "SUPPA2":
+        raise ValueError(f"SUPPA2 should be planned as a native ready method: {suppa2_plan_rows}")
+
     fake_drimseq = INPUT / "fake_drimseq_runner.py"
     fake_drimseq.write_text(
         "\n".join(
@@ -491,6 +521,80 @@ def exercise_biotype_and_dtu(paths: dict[str, Path]) -> None:
     dexseq_standardized = read_tsv(Path(dexseq_rows[0]["standardized_results"]), {"method", "event_type", "feature_id", "gene_id", "pvalue", "padj"})
     if dexseq_standardized[0]["method"] != "DEXSeq" or dexseq_standardized[0]["event_type"] != "transcript_feature_usage":
         raise ValueError(f"standardized DEXSeq row lost method/event type: {dexseq_standardized}")
+
+    fake_suppa = INPUT / "fake_suppa.py"
+    fake_suppa.write_text(
+        "\n".join(
+            [
+                "import sys",
+                "from pathlib import Path",
+                "args = sys.argv[1:]",
+                "cmd = args[0]",
+                "def value(flag):",
+                "    return Path(args[args.index(flag) + 1])",
+                "if cmd == 'generateEvents':",
+                "    out = value('-o')",
+                "    out.parent.mkdir(parents=True, exist_ok=True)",
+                "    Path(str(out) + '.ioi').write_text('gene_id\\tevent_id\\nGENE1\\tGENE1;TX1\\n', encoding='utf-8')",
+                "elif cmd == 'psiPerIsoform':",
+                "    out = value('-o')",
+                "    out.parent.mkdir(parents=True, exist_ok=True)",
+                "    Path(str(out) + '.psi').write_text('event\\ts1\\nGENE1;TX1\\t0.5\\n', encoding='utf-8')",
+                "elif cmd == 'diffSplice':",
+                "    out = value('-o')",
+                "    out.parent.mkdir(parents=True, exist_ok=True)",
+                "    Path(str(out) + '.dpsi').write_text('control_treated_dPSI\\tcontrol_treated_p-val\\nGENE1;TX1\\t0.45\\t0.01\\n', encoding='utf-8')",
+                "else:",
+                "    raise SystemExit(2)",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    suppa2_dir = BASE / "dtu_suppa2"
+    run_command(
+        [
+            sys.executable,
+            "workflow/scripts/run_rnaseq_dtu_methods.py",
+            "--plan",
+            str(dtu_dir / "dtu_plan.tsv"),
+            "--samples",
+            str(paths["rnaseq_samples"]),
+            "--aligned-samples",
+            str(aligned_samples),
+            "--transcript-counts",
+            str(transcript_counts),
+            "--transcript-metadata",
+            str(transcript_metadata),
+            "--annotation-gtf",
+            str(gtf),
+            "--outdir",
+            str(suppa2_dir / "methods"),
+            "--manifest",
+            str(suppa2_dir / "dtu_method_manifest.tsv"),
+            "--done",
+            str(suppa2_dir / "dtu_methods.done"),
+            "--project",
+            "ASPIS_CONTRACT",
+            "--method",
+            "SUPPA2",
+            "--contrast-id",
+            "treated_vs_control__time_h_24",
+            "--suppa2-executable",
+            f"{sys.executable} {fake_suppa}",
+        ]
+    )
+    suppa2_rows = read_tsv(suppa2_dir / "dtu_method_manifest.tsv", {"method", "status", "standardized_results", "standardized_status", "transcript_results"})
+    if suppa2_rows[0]["method"] != "SUPPA2" or suppa2_rows[0]["status"] != "completed" or suppa2_rows[0]["standardized_status"] != "ok":
+        raise ValueError(f"native SUPPA2 DTU was not standardized: {suppa2_rows}")
+    suppa2_standardized = read_tsv(Path(suppa2_rows[0]["standardized_results"]), {"method", "event_type", "feature_id", "gene_id", "delta_psi", "pvalue", "padj"})
+    if suppa2_standardized[0]["method"] != "SUPPA2" or suppa2_standardized[0]["event_type"] != "transcript_event":
+        raise ValueError(f"standardized SUPPA2 row lost method/event type: {suppa2_standardized}")
+    if suppa2_standardized[0]["gene_id"] != "GENE1" or suppa2_standardized[0]["delta_psi"] != "0.45":
+        raise ValueError(f"standardized SUPPA2 row lost identifiers/statistics: {suppa2_standardized}")
+    suppa2_events = read_tsv(Path(suppa2_rows[0]["transcript_results"]), {"event_id", "event_type", "delta_psi", "pvalue"})
+    if suppa2_events[0]["event_id"] != "GENE1;TX1" or suppa2_events[0]["pvalue"] != "0.01":
+        raise ValueError(f"SUPPA2 event result table was not written: {suppa2_events}")
 
     helper = INPUT / "write_fake_rmats.py"
     helper.write_text(

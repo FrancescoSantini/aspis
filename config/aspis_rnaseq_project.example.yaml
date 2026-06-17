@@ -236,8 +236,9 @@ rnaseq_differential:
 rnaseq_dtu:
   # Optional differential transcript usage companion layer.
   # DRIMSeq and DEXSeq are native transcript-feature usage engines. The native
-  # DEXSeq path uses transcript features grouped by gene; exon-bin DEXSeq,
-  # SUPPA2, and rMATS need explicit event/count inputs or command templates.
+  # DEXSeq path uses transcript features grouped by gene. SUPPA2 runs transcript
+  # events from SUPPA-managed ioi/psi/diffSplice files. Exon-bin DEXSeq and
+  # rMATS need explicit event/count inputs or command templates.
   run: false
   method: DRIMSeq
   condition_col: condition
@@ -252,6 +253,13 @@ rnaseq_dtu:
   rscript: Rscript
   drimseq_script: workflow/scripts/run_drimseq_dtu.R
   dexseq_script: workflow/scripts/run_dexseq_dtu.R
+  suppa2_executable: suppa.py
+  suppa2_method: empirical
+  suppa2_area: 1000
+  suppa2_lower_bound: 0.05
+  suppa2_tpm_threshold: 0.0
+  suppa2_nan_threshold: 0.0
+  suppa2_gene_correction: true
   plot_padj: 0.05
   plot_top_n: 20
   plot_max_points: 2500
