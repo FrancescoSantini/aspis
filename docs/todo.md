@@ -42,7 +42,9 @@ technical PDFs, review-bundle packaging, and top-level run dashboards.
 This is not yet a production-complete release, but the active work is now
 narrower and no longer organized as open P0 report/resource plumbing:
 
-- Native DRIMSeq DTU execution is implemented, contract-tested, split into one schedulable job per contrast, and validated on the BEAS_2B G100 real run.
+- Native DRIMSeq and transcript-feature DEXSeq DTU execution is implemented,
+  contract-tested, split into one schedulable job per contrast, and validated
+  on the BEAS_2B G100 real run.
 - Optional isoform-switch consequence annotation paths remain unvalidated for
   open local tools or precomputed user-supplied annotation tables.
 - Resource mapping thresholds for low-but-nonzero mapping rates need calibration
@@ -446,7 +448,7 @@ Closed acceptance evidence:
 
 Future release-breadth candidates, not current blockers:
 
-- optional DTU validation;
+- true exon-bin or event-based alternative-splicing validation;
 - optional isoform-switch consequence annotation validation;
 - non-human or alternate-reference validation;
 - public shareable dataset validation;
@@ -535,18 +537,19 @@ Residual validation:
   and metadata-matched runs produce the expected pairing table and contrast
   matrix labels.
 
-## P1 - DTU Methods
+## Validated - Native DTU Methods
 
 Reason for priority: DTU is expected for transcript-level biology. ASPIS now
-has a validated first native DTU engine. Remaining DTU work is about adding
-event-specific engines deliberately, not about making DRIMSeq usable.
+has validated native transcript-usage DTU engines. Remaining DTU work is about
+adding event-specific engines deliberately, not about making DRIMSeq or the
+current transcript-feature DEXSeq layer usable.
 
 Completed native DTU scope:
 
-- DRIMSeq is the first native DTU engine.
+- DRIMSeq is the first native DTU engine and is validated on BEAS_2B real data.
 - DEXSeq is implemented as a native transcript-feature usage engine using
   transcript features grouped by gene. This is useful with ASPIS transcript-count
-  matrices, but it is not yet true exon-bin DEXSeq.
+  matrices, but it is not true exon-bin DEXSeq.
 - DTU planning is contrast-level and mirrors the DESeq2/isoform-switch split:
   condition comparisons are optionally stratified by `contrast_by` columns such
   as `time_h`.
@@ -555,22 +558,22 @@ Completed native DTU scope:
   gene-level, transcript/feature-level, summary, and standardized result tables.
 - Native DTU execution is split into one schedulable job per contrast and a
   cheap merged `dtu_method_manifest.tsv`/`dtu_methods.done` aggregation step.
-- BEAS_2B G100 validation completed six DRIMSeq contrasts with completed status
-  and standardized result tables.
+- BEAS_2B G100 validation completed six DRIMSeq contrasts and six
+  transcript-feature DEXSeq contrasts with completed status and standardized
+  result tables.
 - Missing `Rscript`, missing `R::DRIMSeq`/`R::DEXSeq`, insufficient replicates,
   missing sample columns, and empty post-filter universes are reported as blocked
   rather than silently skipped.
 - RNA-seq differential and integrated project reports expose DTU status,
-  standardized rows, significant DRIMSeq rows, and links to summary, gene-result,
-  usage, standardized result tables, and DTU overview/usage SVG plots.
+  standardized rows, significant rows, and links to summary, gene-result, usage,
+  standardized result tables, and DTU overview/usage SVG plots for both native
+  methods.
 - The local biological integration contract covers DRIMSeq standardization,
   DEXSeq transcript-feature standardization, and DTU plot/report asset exposure
   without requiring real R packages.
 
-Remaining code tasks:
+Remaining future/event-based tasks:
 
-- Validate native DEXSeq with real `R::DEXSeq` on a real-data project once the
-  package is installed in the execution environment.
 - Decide whether true exon-bin DEXSeq should be added through a separate
   exon-count/bin-count generation layer.
 - Decide whether SUPPA2 and rMATS belong in ASPIS native execution; if so, add
@@ -584,7 +587,11 @@ Acceptance criteria:
 - `rnaseq_dtu.run: true` with `method: DRIMSeq` produces real contrast-level DTU
   tables and plots when DRIMSeq is installed. Validated on BEAS_2B.
 - `rnaseq_dtu.run: true` with `method: DEXSeq` produces transcript-feature DTU
-  tables and standardized rows when DEXSeq is installed.
+  tables, standardized rows, and plots when DEXSeq is installed. Validated on
+  BEAS_2B.
+- `rnaseq_dtu.run: true` with `method: all` and native candidate methods
+  `DRIMSeq,DEXSeq` runs as one schedulable job per contrast, then merges to a
+  12-row method manifest for six BEAS_2B contrasts.
 - Missing DRIMSeq/DEXSeq dependencies do not break standard RNA-seq analysis; the
   DTU manifest records a blocked status with a concrete reason.
 - Reports explain whether each DTU contrast was planned, blocked, failed, or
