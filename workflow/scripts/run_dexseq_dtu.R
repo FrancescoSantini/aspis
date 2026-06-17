@@ -161,7 +161,7 @@ storage.mode(count_matrix) <- "integer"
 rownames(count_matrix) <- make.unique(as.character(merged[[feature_col]]))
 
 tryCatch({
-  dxd <- DEXSeq::DEXSeqDataSetFromMatrix(
+  dxd <- DEXSeq::DEXSeqDataSet(
     countData = count_matrix,
     sampleData = sample_data,
     design = ~ sample + exon + condition:exon,
