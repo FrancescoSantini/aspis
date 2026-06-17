@@ -570,9 +570,9 @@ Completed native DTU scope:
   methods.
 - DTU intermediate pruning is implemented as an explicit, auditable target. It
   removes only re-creatable per-contrast DTU input slices such as
-  `dtu_counts.tsv` and `dtu_coldata.tsv` after DTU plots and the differential
-  report index exist; standardized results, method result tables, summaries, and
-  plot-linked files are preserved.
+  `dtu_counts.tsv` and `dtu_coldata.tsv` after DTU method outputs and DTU plots
+  exist; standardized results, method result tables, summaries, and plot-linked
+  files are preserved.
 - The local biological integration contract covers DRIMSeq standardization,
   DEXSeq transcript-feature standardization, and DTU plot/report asset exposure
   without requiring real R packages.

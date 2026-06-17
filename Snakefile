@@ -6180,12 +6180,7 @@ rule prune_rnaseq_dtu_intermediates:
         method_manifest=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/dtu/dtu_method_manifest.tsv",
         method_done=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/dtu/dtu_methods.done",
         plot_manifest=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/dtu/plots/dtu_plot_manifest.tsv",
-        plot_done=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/dtu/plots/dtu_plots.done",
-        report_done=lambda wildcards: (
-            [f"{BRANCH_DIR}/rnaseq/{wildcards.project}/differential/reports/report_index.done"]
-            if RNASEQ_DIFFERENTIAL_REPORTS_ENABLED
-            else []
-        )
+        plot_done=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/dtu/plots/dtu_plots.done"
     output:
         manifest=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/dtu/prune/dtu_prune_manifest.tsv",
         done=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/dtu/prune/dtu_prune.done"
