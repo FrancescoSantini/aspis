@@ -916,19 +916,48 @@ def rnaseq_isoform_switch_contrast_manifests(wildcards):
     ]
 
 
-def rnaseq_dtu_contrast_manifest(project, contrast_id):
-    return f"{BRANCH_DIR}/rnaseq/{project}/differential/dtu/contrast_manifests/{contrast_id}.manifest.tsv"
+def canonical_dtu_method(method):
+    aliases = {
+        "drimseq": "DRIMSeq",
+        "dexseq": "DEXSeq",
+        "suppa": "SUPPA2",
+        "suppa2": "SUPPA2",
+        "rmats": "rMATS",
+        "rmats-turbo": "rMATS",
+        "rmats_turbo": "rMATS",
+    }
+    return aliases.get(str(method).strip().lower(), str(method).strip())
 
 
-def rnaseq_dtu_contrast_done(project, contrast_id):
-    return f"{BRANCH_DIR}/rnaseq/{project}/differential/dtu/contrast_manifests/{contrast_id}.done"
+def selected_dtu_methods():
+    method = str(RNASEQ_DTU.get("method", "DRIMSeq")).strip()
+    if method.lower() in {"", "all", "auto", "planned"}:
+        raw_methods = joined_config_values(RNASEQ_DTU.get("candidate_methods", "DRIMSeq,DEXSeq,SUPPA2,rMATS"))
+        tokens = [item.strip() for item in raw_methods.split(",") if item.strip()]
+    else:
+        tokens = [method]
+    methods = []
+    for token in tokens:
+        canonical = canonical_dtu_method(token)
+        if canonical and canonical.lower() != "none" and canonical not in methods:
+            methods.append(canonical)
+    return methods or ["DRIMSeq"]
+
+
+def rnaseq_dtu_contrast_manifest(project, method, contrast_id):
+    return f"{BRANCH_DIR}/rnaseq/{project}/differential/dtu/contrast_manifests/{method}/{contrast_id}.manifest.tsv"
+
+
+def rnaseq_dtu_contrast_done(project, method, contrast_id):
+    return f"{BRANCH_DIR}/rnaseq/{project}/differential/dtu/contrast_manifests/{method}/{contrast_id}.done"
 
 
 def rnaseq_dtu_contrast_manifests(wildcards):
     plan_path = checkpoints.plan_rnaseq_dtu.get(project=wildcards.project).output[0]
     return [
-        rnaseq_dtu_contrast_manifest(wildcards.project, contrast_id)
+        rnaseq_dtu_contrast_manifest(wildcards.project, method, contrast_id)
         for contrast_id in contrast_ids_from_plan(plan_path)
+        for method in selected_dtu_methods()
     ]
 
 
@@ -2536,7 +2565,8 @@ checkpoint build_analysis_plan:
 
 wildcard_constraints:
     assay="rnaseq|smallrna",
-    project="[A-Za-z0-9_.-]+"
+    project="[A-Za-z0-9_.-]+",
+    method="DRIMSeq|DEXSeq|SUPPA2|rMATS"
 
 
 rule assay_branch_ready:
@@ -6069,16 +6099,14 @@ rule run_rnaseq_dtu_contrast:
         transcript_metadata=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/counts/transcript_metadata.tsv",
         quantification_done=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/counts/quantification.done"
     output:
-        manifest=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/dtu/contrast_manifests/{contrast_id}.manifest.tsv",
-        done=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/dtu/contrast_manifests/{contrast_id}.done"
+        manifest=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/dtu/contrast_manifests/{method}/{contrast_id}.manifest.tsv",
+        done=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/dtu/contrast_manifests/{method}/{contrast_id}.done"
     params:
         outdir=lambda wildcards: f"{BRANCH_DIR}/rnaseq/{wildcards.project}/differential/dtu/methods",
         annotation_gtf=lambda wildcards: RNASEQ_QUANTIFICATION.get(
             "annotation_gtf",
             RNASEQ_ALIGNMENT.get("annotation_gtf", ""),
         ),
-        method=RNASEQ_DTU.get("method", "DRIMSeq"),
-        candidate_methods=joined_config_values(RNASEQ_DTU.get("candidate_methods", "DRIMSeq,DEXSeq,SUPPA2,rMATS")),
         rscript=RNASEQ_DTU.get("rscript", "Rscript"),
         drimseq_script=RNASEQ_DTU.get("drimseq_script", "workflow/scripts/run_drimseq_dtu.R"),
         dexseq_script=RNASEQ_DTU.get("dexseq_script", "workflow/scripts/run_dexseq_dtu.R"),
@@ -6103,7 +6131,7 @@ rule run_rnaseq_dtu_contrast:
         suppa2_command=shell_arg("--suppa2-command", RNASEQ_DTU.get("suppa2_command", "")),
         rmats_command=shell_arg("--rmats-command", RNASEQ_DTU.get("rmats_command", ""))
     log:
-        "logs/branches/rnaseq/{project}.dtu_methods.{contrast_id}.log"
+        "logs/branches/rnaseq/{project}.dtu_methods.{method}.{contrast_id}.log"
     shell:
         r"""
         mkdir -p logs/branches/rnaseq
@@ -6119,8 +6147,8 @@ rule run_rnaseq_dtu_contrast:
           --done {output.done:q} \
           --project {wildcards.project:q} \
           --contrast-id {wildcards.contrast_id:q} \
-          --method {params.method:q} \
-          --methods {params.candidate_methods:q} \
+          --method {wildcards.method:q} \
+          --methods {wildcards.method:q} \
           --rscript {params.rscript:q} \
           --drimseq-script {params.drimseq_script:q} \
           --dexseq-script {params.dexseq_script:q} \

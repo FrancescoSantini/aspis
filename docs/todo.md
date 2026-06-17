@@ -4,7 +4,7 @@ This is the canonical ASPIS backlog. Older TODO-style notes have been merged
 here so that implementation priorities, validation blockers, and cleanup work
 are tracked in one place.
 
-Last updated: 2026-06-12.
+Last updated: 2026-06-17.
 
 ## How To Read This Backlog
 
@@ -42,9 +42,9 @@ technical PDFs, review-bundle packaging, and top-level run dashboards.
 This is not yet a production-complete release, but the active work is now
 narrower and no longer organized as open P0 report/resource plumbing:
 
-- Native DRIMSeq and transcript-feature DEXSeq DTU execution is implemented,
-  contract-tested, split into one schedulable job per contrast, and validated
-  on the BEAS_2B G100 real run.
+- Native DRIMSeq, transcript-feature DEXSeq, and transcript-event SUPPA2 DTU
+  execution is implemented, contract-tested, split into one schedulable job per
+  contrast/method pair, and partially validated on the BEAS_2B G100 real run.
 - Optional isoform-switch consequence annotation paths remain unvalidated for
   open local tools or precomputed user-supplied annotation tables.
 - Resource mapping thresholds for low-but-nonzero mapping rates need calibration
@@ -561,8 +561,9 @@ Completed native DTU scope:
 - Native DRIMSeq and transcript-feature DEXSeq run from transcript-level count
   matrices and transcript-to-gene metadata. They produce contrast-specific
   gene-level, transcript/feature-level, summary, and standardized result tables.
-- Native DTU execution is split into one schedulable job per contrast and a
-  cheap merged `dtu_method_manifest.tsv`/`dtu_methods.done` aggregation step.
+- Native DTU execution is split into one schedulable job per contrast and per
+  method, followed by a cheap merged `dtu_method_manifest.tsv`/`dtu_methods.done`
+  aggregation step.
 - BEAS_2B G100 validation completed six DRIMSeq contrasts and six
   transcript-feature DEXSeq contrasts with completed status and standardized
   result tables. SUPPA2 transcript-event mode has a local contract and still
@@ -608,8 +609,8 @@ Acceptance criteria:
   differential splicing rows when `suppa.py` is installed. Local contract
   validation uses a fake SUPPA executable; real G100 validation is pending.
 - `rnaseq_dtu.run: true` with `method: all` and native candidate methods
-  `DRIMSeq,DEXSeq,SUPPA2` runs as one schedulable job per contrast, then merges
-  method rows across contrasts.
+  `DRIMSeq,DEXSeq,SUPPA2` runs as one schedulable job per contrast/method pair,
+  then merges method rows across contrasts.
 - Missing DRIMSeq/DEXSeq/SUPPA2 dependencies do not break standard RNA-seq
   analysis; the DTU manifest records a blocked status with a concrete reason.
 - Reports explain whether each DTU contrast was planned, blocked, failed, or

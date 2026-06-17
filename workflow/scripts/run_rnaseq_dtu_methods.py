@@ -774,6 +774,14 @@ def first_existing(paths: list[Path]) -> Path | None:
     return None
 
 
+def first_matching(directory: Path, patterns: list[str]) -> Path | None:
+    for pattern in patterns:
+        matches = sorted(path for path in directory.glob(pattern) if path.is_file())
+        if matches:
+            return matches[0]
+    return None
+
+
 def parse_suppa2_event_id(event_id: str) -> tuple[str, str, str]:
     gene_id, _, feature = event_id.partition(";")
     if not feature:
@@ -906,8 +914,14 @@ def run_suppa2_contrast(args: argparse.Namespace, plan_row: dict[str, str]) -> d
             return row
 
     ioi = first_existing([Path(str(events_prefix) + ".ioi"), events_prefix.with_suffix(".ioi")])
+    if not ioi:
+        ioi = first_matching(events_prefix.parent, [events_prefix.name + "*.ioi", "*.ioi"])
     control_psi = first_existing([Path(str(control_prefix) + ".psi"), control_prefix.with_suffix(".psi")])
+    if not control_psi:
+        control_psi = first_matching(control_prefix.parent, [control_prefix.name + "*.psi", "*.psi"])
     test_psi = first_existing([Path(str(test_prefix) + ".psi"), test_prefix.with_suffix(".psi")])
+    if not test_psi:
+        test_psi = first_matching(test_prefix.parent, [test_prefix.name + "*.psi", "*.psi"])
     if not ioi or not control_psi or not test_psi:
         return blocked_row(args, "SUPPA2", plan_row, method_dir, "SUPPA2 did not produce expected ioi/psi files")
 
@@ -949,6 +963,8 @@ def run_suppa2_contrast(args: argparse.Namespace, plan_row: dict[str, str]) -> d
         return row
 
     dpsi = first_existing([Path(str(diff_prefix) + ".dpsi"), diff_prefix.with_suffix(".dpsi")])
+    if not dpsi:
+        dpsi = first_matching(diff_prefix.parent, [diff_prefix.name + "*.dpsi", "*.dpsi"])
     if not dpsi:
         return blocked_row(args, "SUPPA2", plan_row, method_dir, "SUPPA2 did not produce a dpsi result file")
     event_rows = parse_suppa2_dpsi(dpsi)
