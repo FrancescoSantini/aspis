@@ -543,7 +543,8 @@ def exercise_biotype_and_dtu(paths: dict[str, Path]) -> None:
                 "elif cmd == 'diffSplice':",
                 "    out = value('-o')",
                 "    out.parent.mkdir(parents=True, exist_ok=True)",
-                "    Path(str(out) + '.dpsi').write_text('control_treated_dPSI\\tcontrol_treated_p-val\\nGENE1;TX1\\t0.45\\t0.01\\n', encoding='utf-8')",
+                "    Path(str(out) + '.dpsi.temp.0').write_text('control_treated_dPSI\\tcontrol_treated_p-val\\nGENE1;TX1\\t0.45\\t0.01\\n', encoding='utf-8')",
+                "    Path(str(out) + '.psivec').write_text('s1\\nGENE1;TX1\\t0.5\\n', encoding='utf-8')",
                 "else:",
                 "    raise SystemExit(2)",
             ]

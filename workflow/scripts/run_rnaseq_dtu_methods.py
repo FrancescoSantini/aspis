@@ -782,6 +782,47 @@ def first_matching(directory: Path, patterns: list[str]) -> Path | None:
     return None
 
 
+def is_suppa2_dpsi_header(line: str) -> bool:
+    lowered = line.lower()
+    return "dpsi" in lowered and ("p-val" in lowered or "pvalue" in lowered or "p_value" in lowered)
+
+
+def materialize_suppa2_dpsi(diff_prefix: Path) -> Path | None:
+    dpsi = first_existing([Path(str(diff_prefix) + ".dpsi"), diff_prefix.with_suffix(".dpsi")])
+    if dpsi:
+        return dpsi
+    dpsi = first_matching(diff_prefix.parent, [diff_prefix.name + "*.dpsi", "*.dpsi"])
+    if dpsi:
+        return dpsi
+
+    temp_files = sorted(
+        path
+        for pattern in [diff_prefix.name + ".dpsi.temp.*", "*.dpsi.temp.*"]
+        for path in diff_prefix.parent.glob(pattern)
+        if path.is_file()
+    )
+    if not temp_files:
+        return None
+
+    output = Path(str(diff_prefix) + ".dpsi")
+    output.parent.mkdir(parents=True, exist_ok=True)
+    wrote_any = False
+    with output.open("w", encoding="utf-8") as out_handle:
+        for index, temp_file in enumerate(temp_files):
+            lines = temp_file.read_text(encoding="utf-8", errors="replace").splitlines()
+            if not lines:
+                continue
+            if index > 0 and is_suppa2_dpsi_header(lines[0]):
+                lines = lines[1:]
+            for line in lines:
+                if line.strip():
+                    out_handle.write(line.rstrip("\n") + "\n")
+                    wrote_any = True
+    if wrote_any:
+        return output
+    return None
+
+
 def parse_suppa2_event_id(event_id: str) -> tuple[str, str, str]:
     gene_id, _, feature = event_id.partition(";")
     if not feature:
@@ -962,9 +1003,7 @@ def run_suppa2_contrast(args: argparse.Namespace, plan_row: dict[str, str]) -> d
         row["reason"] = f"SUPPA2 diffSplice exited with status {completed.returncode}"
         return row
 
-    dpsi = first_existing([Path(str(diff_prefix) + ".dpsi"), diff_prefix.with_suffix(".dpsi")])
-    if not dpsi:
-        dpsi = first_matching(diff_prefix.parent, [diff_prefix.name + "*.dpsi", "*.dpsi"])
+    dpsi = materialize_suppa2_dpsi(diff_prefix)
     if not dpsi:
         return blocked_row(args, "SUPPA2", plan_row, method_dir, "SUPPA2 did not produce a dpsi result file")
     event_rows = parse_suppa2_dpsi(dpsi)
