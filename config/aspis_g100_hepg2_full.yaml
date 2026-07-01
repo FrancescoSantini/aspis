@@ -248,16 +248,25 @@ rnaseq_dtu:
   rscript: Rscript
   drimseq_script: workflow/scripts/run_drimseq_dtu.R
   dexseq_script: workflow/scripts/run_dexseq_dtu.R
+  dexseq_exon_script: workflow/scripts/run_dexseq_exon_dtu.R
+  dexseq_prepare_annotation_command: dexseq_prepare_annotation.py
+  dexseq_count_command: dexseq_count.py
+  dexseq_count_strandedness: no
+  dexseq_count_order: pos
+  dexseq_count_mode: union
+  dexseq_count_min_mapq: 10
   plot_padj: 0.05
   plot_top_n: 20
   plot_max_points: 2500
   candidate_methods:
   - DRIMSeq
   - DEXSeq
+  - DEXSeqExon
   - SUPPA2
   - rMATS
   drimseq_command: ''
   dexseq_command: ''
+  dexseq_exon_command: ''
   suppa2_command: ''
   rmats_command: ''
 smallrna:

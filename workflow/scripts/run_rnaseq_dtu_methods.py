@@ -15,6 +15,12 @@ from pathlib import Path
 METHOD_ALIASES = {
     "drimseq": "DRIMSeq",
     "dexseq": "DEXSeq",
+    "dexseqexon": "DEXSeqExon",
+    "dexseq-exon": "DEXSeqExon",
+    "dexseq_exon": "DEXSeqExon",
+    "exon-dexseq": "DEXSeqExon",
+    "exon_bin_dexseq": "DEXSeqExon",
+    "exon-bin-dexseq": "DEXSeqExon",
     "suppa2": "SUPPA2",
     "suppa": "SUPPA2",
     "rmats": "rMATS",
@@ -69,6 +75,9 @@ STANDARD_RESULT_COLUMNS = [
 RESULT_SUFFIXES = {".csv", ".dpsi", ".pvalues", ".tsv", ".txt"}
 RMATS_EVENT_TYPES = {"A3SS", "A5SS", "MXE", "RI", "SE"}
 DRIMSEQ_BLOCKED_EXIT = 20
+METHOD_SLUGS = {
+    "DEXSeqExon": "dexseq_exon",
+}
 
 
 class SafeFormat(dict):
@@ -94,6 +103,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--rscript", default="Rscript")
     parser.add_argument("--drimseq-script", default="workflow/scripts/run_drimseq_dtu.R")
     parser.add_argument("--dexseq-script", default="workflow/scripts/run_dexseq_dtu.R")
+    parser.add_argument("--dexseq-exon-script", default="workflow/scripts/run_dexseq_exon_dtu.R")
+    parser.add_argument("--dexseq-prepare-annotation-command", default="dexseq_prepare_annotation.py")
+    parser.add_argument("--dexseq-count-command", default="dexseq_count.py")
+    parser.add_argument("--dexseq-count-strandedness", default="no")
+    parser.add_argument("--dexseq-count-order", default="pos")
+    parser.add_argument("--dexseq-count-mode", default="union")
+    parser.add_argument("--dexseq-count-min-mapq", type=int, default=10)
     parser.add_argument("--suppa2-executable", default="suppa.py")
     parser.add_argument("--suppa2-method", default="empirical")
     parser.add_argument("--suppa2-area", type=int, default=1000)
@@ -109,6 +125,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--dtu-min-transcripts-per-gene", type=int, default=2)
     parser.add_argument("--drimseq-command", default="")
     parser.add_argument("--dexseq-command", default="")
+    parser.add_argument("--dexseq-exon-command", default="")
     parser.add_argument("--suppa2-command", default="")
     parser.add_argument("--rmats-command", default="")
     return parser.parse_args()
@@ -172,6 +189,7 @@ def command_for_method(args: argparse.Namespace, method: str) -> str:
     commands = {
         "DRIMSeq": args.drimseq_command,
         "DEXSeq": args.dexseq_command,
+        "DEXSeqExon": args.dexseq_exon_command,
         "SUPPA2": args.suppa2_command,
         "rMATS": args.rmats_command,
     }
@@ -281,6 +299,8 @@ def read_result_rows(path: Path) -> list[dict[str, str]]:
 def is_result_file(path: Path) -> bool:
     if not path.is_file():
         return False
+    if path.parent.name == "sample_counts" or path.name.endswith(".dexseq_counts.txt"):
+        return False
     if path.name in {
         "stderr.log",
         "stdout.log",
@@ -289,6 +309,10 @@ def is_result_file(path: Path) -> bool:
         "dtu_coldata.tsv",
         "drimseq_summary.tsv",
         "dexseq_summary.tsv",
+        "dexseq_exon_counts.tsv",
+        "dexseq_exon_coldata.tsv",
+        "dexseq_exon_metadata.tsv",
+        "dexseq_exon_summary.tsv",
         "suppa2_summary.tsv",
         "suppa2_event_results.tsv",
         "suppa2_control_expression.tsv",
@@ -419,7 +443,7 @@ def base_manifest_row(args: argparse.Namespace, method: str, method_dir: Path, c
 
 def run_external_method(args: argparse.Namespace, method: str, plan: Path, plan_row: dict[str, str] | None = None) -> dict[str, str]:
     contrast_id = (plan_row or {}).get("contrast_id", "")
-    method_dir = Path(args.outdir) / method.lower().replace("-", "_")
+    method_dir = Path(args.outdir) / result_prefix(method)
     if contrast_id:
         method_dir = method_dir / re.sub(r"[^A-Za-z0-9_.-]+", "_", contrast_id)
     method_dir.mkdir(parents=True, exist_ok=True)
@@ -513,7 +537,7 @@ def command_prefix_exists(command: str) -> bool:
 
 
 def result_prefix(method: str) -> str:
-    return method.lower().replace("-", "_")
+    return METHOD_SLUGS.get(method, method.lower().replace("-", "_"))
 
 
 def blocked_row(args: argparse.Namespace, method: str, plan_row: dict[str, str], method_dir: Path, reason: str) -> dict[str, str]:
@@ -765,6 +789,319 @@ def run_logged_command(command: list[str], stdout: Path, stderr: Path) -> subpro
         if completed.stderr and not completed.stderr.endswith("\n"):
             handle.write("\n")
     return completed
+
+
+def safe_path_token(value: str) -> str:
+    token = re.sub(r"[^A-Za-z0-9_.-]+", "_", value.strip())
+    token = re.sub(r"_+", "_", token).strip("_")
+    return token or "sample"
+
+
+def parse_gtf_attributes(raw: str) -> dict[str, str]:
+    attrs: dict[str, str] = {}
+    for item in raw.strip().strip(";").split(";"):
+        item = item.strip()
+        if not item:
+            continue
+        if " " in item:
+            key, value = item.split(None, 1)
+        elif "=" in item:
+            key, value = item.split("=", 1)
+        else:
+            continue
+        attrs[key.strip()] = value.strip().strip('"')
+    return attrs
+
+
+def read_dexseq_count_file(path: Path) -> dict[str, str]:
+    counts: dict[str, str] = {}
+    for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
+        if not line.strip() or line.startswith("#"):
+            continue
+        parts = line.split("\t")
+        if len(parts) < 2:
+            parts = line.split()
+        if len(parts) < 2:
+            continue
+        feature_id = parts[0].strip()
+        if not feature_id or feature_id.startswith("__"):
+            continue
+        counts[feature_id] = parts[1].strip()
+    return counts
+
+
+def write_dexseq_exon_matrix(
+    matrix_path: Path,
+    count_files: dict[str, Path],
+) -> tuple[list[str], dict[str, dict[str, str]]]:
+    per_sample = {sample_id: read_dexseq_count_file(path) for sample_id, path in count_files.items()}
+    feature_ids = sorted({feature_id for rows in per_sample.values() for feature_id in rows})
+    if not feature_ids:
+        raise ValueError("DEXSeq exon count files contained no exon-bin rows")
+    sample_ids = list(count_files)
+    matrix_path.parent.mkdir(parents=True, exist_ok=True)
+    with matrix_path.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(
+            handle,
+            fieldnames=["exon_bin_id", *sample_ids],
+            delimiter="\t",
+            lineterminator="\n",
+        )
+        writer.writeheader()
+        for feature_id in feature_ids:
+            writer.writerow(
+                {
+                    "exon_bin_id": feature_id,
+                    **{sample_id: per_sample[sample_id].get(feature_id, "0") for sample_id in sample_ids},
+                }
+            )
+    return feature_ids, per_sample
+
+
+def exon_feature_candidates(attrs: dict[str, str]) -> list[str]:
+    gene_id = attrs.get("aggregate_gene_id") or attrs.get("gene_id") or attrs.get("group_id") or attrs.get("gene")
+    part = attrs.get("exonic_part_number") or attrs.get("exon_number") or attrs.get("feature_id")
+    candidates = []
+    for key in ["ID", "exon_id", "feature_id"]:
+        if attrs.get(key):
+            candidates.append(attrs[key])
+    if gene_id and part:
+        stripped = part.lstrip("E")
+        candidates.extend(
+            [
+                f"{gene_id}:{part}",
+                f"{gene_id}:E{stripped}",
+                f"{gene_id}:E{stripped.zfill(3)}",
+                f"{gene_id}:{stripped}",
+                f"{gene_id}:{stripped.zfill(3)}",
+            ]
+        )
+    return [candidate for candidate in candidates if candidate]
+
+
+def write_dexseq_exon_metadata(flattened_gff: Path, feature_ids: list[str], metadata_path: Path) -> None:
+    feature_set = set(feature_ids)
+    mapped: dict[str, dict[str, str]] = {}
+    if flattened_gff.exists():
+        for line in flattened_gff.read_text(encoding="utf-8", errors="replace").splitlines():
+            if not line.strip() or line.startswith("#"):
+                continue
+            parts = line.split("\t")
+            if len(parts) < 9:
+                continue
+            attrs = parse_gtf_attributes(parts[8])
+            gene_id = attrs.get("aggregate_gene_id") or attrs.get("gene_id") or attrs.get("group_id") or attrs.get("gene")
+            if not gene_id:
+                continue
+            for candidate in exon_feature_candidates(attrs):
+                if candidate in feature_set and candidate not in mapped:
+                    mapped[candidate] = {
+                        "exon_bin_id": candidate,
+                        "gene_id": gene_id,
+                        "chrom": parts[0],
+                        "start": parts[3],
+                        "end": parts[4],
+                        "strand": parts[6],
+                    }
+    rows = []
+    for feature_id in feature_ids:
+        row = mapped.get(feature_id)
+        if row is None:
+            row = {
+                "exon_bin_id": feature_id,
+                "gene_id": feature_id.split(":", 1)[0] if ":" in feature_id else feature_id,
+                "chrom": "",
+                "start": "",
+                "end": "",
+                "strand": "",
+            }
+        rows.append(row)
+    write_tsv(metadata_path, rows, ["exon_bin_id", "gene_id", "chrom", "start", "end", "strand"])
+
+
+def write_dexseq_exon_inputs(
+    args: argparse.Namespace,
+    plan_row: dict[str, str],
+    method_dir: Path,
+    stdout: Path,
+    stderr: Path,
+) -> tuple[Path, Path, Path]:
+    method_dir.mkdir(parents=True, exist_ok=True)
+    sample_rows = selected_samples(read_tsv(Path(args.samples)), plan_row)
+    sample_ids = [row["library_id"] for row in sample_rows]
+    if not sample_ids:
+        raise ValueError(f"contrast {plan_row.get('contrast_id', '')} selected no samples")
+    aligned_by_id = {row.get("library_id", ""): row for row in read_tsv(Path(args.aligned_samples))}
+    condition_col = plan_row.get("condition_col") or "condition"
+    control_label = plan_row.get("control_label") or "control"
+    test_label = plan_row.get("test_label") or "treated"
+
+    flattened_gff = method_dir / "dexseq_exon_bins.gff"
+    prepare_command = [
+        *shlex.split(args.dexseq_prepare_annotation_command),
+        args.annotation_gtf,
+        str(flattened_gff),
+    ]
+    completed = run_logged_command(prepare_command, stdout, stderr)
+    if completed.returncode != 0:
+        raise RuntimeError(f"DEXSeq annotation flattening exited with status {completed.returncode}")
+    if not flattened_gff.exists():
+        raise RuntimeError("DEXSeq annotation flattening did not produce a flattened GFF")
+
+    count_dir = method_dir / "sample_counts"
+    count_dir.mkdir(parents=True, exist_ok=True)
+    count_files: dict[str, Path] = {}
+    coldata_rows: list[dict[str, str]] = []
+    for sample in sample_rows:
+        sample_id = sample["library_id"]
+        aligned = aligned_by_id.get(sample_id, {})
+        bam = aligned.get("bam", "")
+        if not bam:
+            raise ValueError(f"aligned_samples is missing bam for {sample_id}")
+        if not Path(bam).exists():
+            raise FileNotFoundError(f"aligned BAM does not exist for {sample_id}: {bam}")
+        label = sample.get(condition_col, "")
+        if label == control_label:
+            condition = control_label
+        elif label == test_label:
+            condition = test_label
+        else:
+            continue
+        paired = "yes" if (sample.get("layout") or aligned.get("layout")) == "paired" else "no"
+        count_file = count_dir / f"{safe_path_token(sample_id)}.dexseq_counts.txt"
+        command = [
+            *shlex.split(args.dexseq_count_command),
+            "-f",
+            "bam",
+            "-r",
+            args.dexseq_count_order,
+            "-s",
+            args.dexseq_count_strandedness,
+            "-p",
+            paired,
+            "-m",
+            args.dexseq_count_mode,
+        ]
+        if args.dexseq_count_min_mapq > 0:
+            command.extend(["-a", str(args.dexseq_count_min_mapq)])
+        command.extend([str(flattened_gff), bam, str(count_file)])
+        completed = run_logged_command(command, stdout, stderr)
+        if completed.returncode != 0:
+            raise RuntimeError(f"DEXSeq counting exited with status {completed.returncode} for {sample_id}")
+        if not count_file.exists():
+            raise RuntimeError(f"DEXSeq counting did not produce a count file for {sample_id}")
+        count_files[sample_id] = count_file
+        coldata_rows.append(
+            {
+                "sample_id": sample_id,
+                "condition": condition,
+                "bam": bam,
+                "count_file": str(count_file),
+                "layout": sample.get("layout") or aligned.get("layout", ""),
+            }
+        )
+    if not coldata_rows:
+        raise ValueError(f"contrast {plan_row.get('contrast_id', '')} selected no DEXSeqExon control/test samples")
+
+    counts_path = method_dir / "dexseq_exon_counts.tsv"
+    coldata_path = method_dir / "dexseq_exon_coldata.tsv"
+    metadata_path = method_dir / "dexseq_exon_metadata.tsv"
+    feature_ids, _per_sample = write_dexseq_exon_matrix(counts_path, count_files)
+    write_tsv(coldata_path, coldata_rows, ["sample_id", "condition", "bam", "count_file", "layout"])
+    write_dexseq_exon_metadata(flattened_gff, feature_ids, metadata_path)
+    return counts_path, coldata_path, metadata_path
+
+
+def run_dexseq_exon_contrast(args: argparse.Namespace, plan_row: dict[str, str]) -> dict[str, str]:
+    contrast_id = plan_row.get("contrast_id", "contrast")
+    method_dir = Path(args.outdir) / "dexseq_exon" / re.sub(r"[^A-Za-z0-9_.-]+", "_", contrast_id)
+    row = base_manifest_row(args, "DEXSeqExon", method_dir, contrast_id)
+    row["gene_results"] = str(method_dir / "dexseq_exon_gene_results.tsv")
+    row["transcript_results"] = str(method_dir / "dexseq_exon_bin_results.tsv")
+    row["summary"] = str(method_dir / "dexseq_exon_summary.tsv")
+    if plan_row.get("status") != "ready":
+        return blocked_row(args, "DEXSeqExon", plan_row, method_dir, plan_row.get("reason") or "contrast was not ready for DEXSeqExon")
+    if not executable_exists(args.rscript):
+        return blocked_row(args, "DEXSeqExon", plan_row, method_dir, f"Rscript executable not found: {args.rscript}")
+    if not Path(args.dexseq_exon_script).exists():
+        return blocked_row(args, "DEXSeqExon", plan_row, method_dir, f"DEXSeqExon runner script not found: {args.dexseq_exon_script}")
+    if not command_prefix_exists(args.dexseq_prepare_annotation_command):
+        return blocked_row(
+            args,
+            "DEXSeqExon",
+            plan_row,
+            method_dir,
+            f"DEXSeq annotation helper not found: {args.dexseq_prepare_annotation_command}",
+        )
+    if not command_prefix_exists(args.dexseq_count_command):
+        return blocked_row(args, "DEXSeqExon", plan_row, method_dir, f"DEXSeq count helper not found: {args.dexseq_count_command}")
+    method_dir.mkdir(parents=True, exist_ok=True)
+    stdout = method_dir / "stdout.log"
+    stderr = method_dir / "stderr.log"
+    stdout.write_text("", encoding="utf-8")
+    stderr.write_text("", encoding="utf-8")
+    try:
+        exon_counts, exon_coldata, exon_metadata = write_dexseq_exon_inputs(args, plan_row, method_dir, stdout, stderr)
+    except Exception as exc:
+        return blocked_row(args, "DEXSeqExon", plan_row, method_dir, str(exc))
+    command = [
+        args.rscript,
+        args.dexseq_exon_script,
+        "--counts",
+        str(exon_counts),
+        "--coldata",
+        str(exon_coldata),
+        "--metadata",
+        str(exon_metadata),
+        "--gene-results",
+        row["gene_results"],
+        "--feature-results",
+        row["transcript_results"],
+        "--summary",
+        row["summary"],
+        "--condition-col",
+        "condition",
+        "--control-label",
+        plan_row.get("control_label") or "control",
+        "--test-label",
+        plan_row.get("test_label") or "treated",
+        "--min-count",
+        str(args.dtu_min_count),
+        "--min-samples",
+        str(args.dtu_min_samples),
+        "--min-gene-count",
+        str(args.dtu_min_gene_count),
+        "--min-exons-per-gene",
+        str(args.dtu_min_transcripts_per_gene),
+    ]
+    completed = run_logged_command(command, stdout, stderr)
+    row["command"] = " ".join(shlex.quote(part) for part in command)
+    row["stdout"] = str(stdout)
+    row["stderr"] = str(stderr)
+    if completed.returncode == 0:
+        row["status"] = "completed"
+        row["reason"] = "DEXSeq exon-bin usage from flattened annotation and aligned BAM counts"
+        standardized_results, result_count, standardized_status = standardize_method_outputs(
+            args, "DEXSeqExon", method_dir, contrast_id
+        )
+        row["standardized_results"] = standardized_results
+        row["standardized_result_count"] = str(result_count)
+        row["standardized_status"] = standardized_status
+    elif completed.returncode == DRIMSEQ_BLOCKED_EXIT:
+        row["status"] = "blocked"
+        row["reason"] = (completed.stderr.strip().splitlines() or ["DEXSeqExon contrast was blocked"])[-1]
+    else:
+        row["status"] = "failed"
+        row["reason"] = f"DEXSeqExon exited with status {completed.returncode}"
+    return row
+
+
+def run_dexseq_exon_native(args: argparse.Namespace, plan_rows: list[dict[str, str]]) -> list[dict[str, str]]:
+    rows = [run_dexseq_exon_contrast(args, plan_row) for plan_row in plan_rows]
+    if rows:
+        return rows
+    method_dir = Path(args.outdir) / "dexseq_exon"
+    return [blocked_row(args, "DEXSeqExon", {"contrast_id": "no_contrasts"}, method_dir, "DTU plan contains no contrast rows")]
 
 
 def first_existing(paths: list[Path]) -> Path | None:
@@ -1053,6 +1390,8 @@ def run_method_rows(args: argparse.Namespace, method: str, plan: Path, plan_rows
         return run_drimseq_native(args, plan_rows)
     if method == "DEXSeq" and not command_for_method(args, method).strip():
         return run_dexseq_native(args, plan_rows)
+    if method == "DEXSeqExon" and not command_for_method(args, method).strip():
+        return run_dexseq_exon_native(args, plan_rows)
     if method == "SUPPA2" and not command_for_method(args, method).strip():
         return run_suppa2_native(args, plan_rows)
     if args.contrast_id:

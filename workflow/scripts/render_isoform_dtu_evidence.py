@@ -38,6 +38,8 @@ EVIDENCE_COLUMNS = [
     "drimseq_n_significant",
     "dexseq_min_padj",
     "dexseq_n_significant",
+    "dexseq_exon_min_padj",
+    "dexseq_exon_n_significant",
     "suppa2_min_padj",
     "suppa2_n_significant",
     "rmats_min_padj",
@@ -66,10 +68,11 @@ DONE_COLUMNS = [
     "reason",
 ]
 
-KNOWN_METHODS = ["DRIMSeq", "DEXSeq", "SUPPA2", "rMATS"]
+KNOWN_METHODS = ["DRIMSeq", "DEXSeq", "DEXSeqExon", "SUPPA2", "rMATS"]
 METHOD_COLUMN_PREFIX = {
     "DRIMSeq": "drimseq",
     "DEXSeq": "dexseq",
+    "DEXSeqExon": "dexseq_exon",
     "SUPPA2": "suppa2",
     "rMATS": "rmats",
 }

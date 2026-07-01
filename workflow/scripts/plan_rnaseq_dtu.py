@@ -12,6 +12,12 @@ from pathlib import Path
 METHOD_ALIASES = {
     "drimseq": "DRIMSeq",
     "dexseq": "DEXSeq",
+    "dexseqexon": "DEXSeqExon",
+    "dexseq-exon": "DEXSeqExon",
+    "dexseq_exon": "DEXSeqExon",
+    "exon-dexseq": "DEXSeqExon",
+    "exon_bin_dexseq": "DEXSeqExon",
+    "exon-bin-dexseq": "DEXSeqExon",
     "suppa2": "SUPPA2",
     "suppa": "SUPPA2",
     "rmats": "rMATS",
@@ -19,7 +25,7 @@ METHOD_ALIASES = {
     "rmats_turbo": "rMATS",
 }
 
-NATIVE_METHODS = {"DRIMSeq", "DEXSeq", "SUPPA2"}
+NATIVE_METHODS = {"DRIMSeq", "DEXSeq", "DEXSeqExon", "SUPPA2"}
 
 COLUMNS = [
     "project",
@@ -64,7 +70,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--done", required=True)
     parser.add_argument("--project", required=True)
     parser.add_argument("--method", default="DRIMSeq")
-    parser.add_argument("--candidate-methods", default="DRIMSeq,DEXSeq,SUPPA2,rMATS")
+    parser.add_argument("--candidate-methods", default="DRIMSeq,DEXSeq,DEXSeqExon,SUPPA2,rMATS")
     parser.add_argument("--condition-col", default="condition")
     parser.add_argument("--control-label", default="control")
     parser.add_argument("--contrast-by", default="")

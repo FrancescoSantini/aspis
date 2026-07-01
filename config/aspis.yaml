@@ -204,10 +204,11 @@ rnaseq_differential:
 
 rnaseq_dtu:
   # Optional differential transcript usage companion layer.
-  # DRIMSeq and DEXSeq are native transcript-feature usage engines. The native
-  # DEXSeq path uses transcript features grouped by gene. SUPPA2 runs transcript
-  # events from SUPPA-managed ioi/psi/diffSplice files. Exon-bin DEXSeq and
-  # rMATS need explicit event/count inputs or command templates.
+  # DRIMSeq and DEXSeq are native transcript-feature usage engines. DEXSeqExon
+  # is the true exon-bin DEXSeq path: it flattens the GTF with DEXSeq helper
+  # scripts, counts aligned BAMs per exon bin, and runs DEXSeq on those counts.
+  # SUPPA2 runs transcript events from SUPPA-managed ioi/psi/diffSplice files.
+  # rMATS still needs an explicit external command template.
   run: false
   method: DRIMSeq
   condition_col: condition
@@ -222,6 +223,13 @@ rnaseq_dtu:
   rscript: Rscript
   drimseq_script: workflow/scripts/run_drimseq_dtu.R
   dexseq_script: workflow/scripts/run_dexseq_dtu.R
+  dexseq_exon_script: workflow/scripts/run_dexseq_exon_dtu.R
+  dexseq_prepare_annotation_command: dexseq_prepare_annotation.py
+  dexseq_count_command: dexseq_count.py
+  dexseq_count_strandedness: no
+  dexseq_count_order: pos
+  dexseq_count_mode: union
+  dexseq_count_min_mapq: 10
   suppa2_executable: suppa.py
   suppa2_method: empirical
   suppa2_area: 1000
@@ -237,10 +245,12 @@ rnaseq_dtu:
   candidate_methods:
     - DRIMSeq
     - DEXSeq
+    - DEXSeqExon
     - SUPPA2
     - rMATS
   drimseq_command: ""
   dexseq_command: ""
+  dexseq_exon_command: ""
   suppa2_command: ""
   rmats_command: ""
 

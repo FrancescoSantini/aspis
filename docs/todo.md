@@ -42,9 +42,10 @@ technical PDFs, review-bundle packaging, and top-level run dashboards.
 This is not yet a production-complete release, but the active work is now
 narrower and no longer organized as open P0 report/resource plumbing:
 
-- Native DRIMSeq, transcript-feature DEXSeq, and transcript-event SUPPA2 DTU
-  execution is implemented, contract-tested, split into one schedulable job per
-  contrast/method pair, and validated on the BEAS_2B G100 real run.
+- Native DRIMSeq, transcript-feature DEXSeq, true exon-bin DEXSeqExon, and
+  transcript-event SUPPA2 DTU execution is implemented, contract-tested, split
+  into one schedulable job per contrast/method pair, and validated or ready for
+  targeted real-data validation on the BEAS_2B G100 run.
 - Optional isoform-switch consequence annotation paths remain unvalidated for
   open local tools or precomputed user-supplied annotation tables.
 - Resource mapping thresholds for low-but-nonzero mapping rates need calibration
@@ -540,17 +541,23 @@ Residual validation:
 ## Validated - Native DTU Methods
 
 Reason for priority: DTU is expected for transcript-level biology. ASPIS now
-has validated native transcript-usage DTU engines. Remaining DTU work is about
-adding heavier event-specific engines deliberately, not about making DRIMSeq,
-the current transcript-feature DEXSeq layer, or SUPPA2 transcript-event mode
-usable.
+has native transcript-usage, exon-bin, and transcript-event DTU engines.
+Remaining DTU work is about adding heavier event-specific engines deliberately,
+not about making DRIMSeq, transcript-feature DEXSeq, DEXSeqExon, or SUPPA2
+transcript-event mode usable.
 
 Completed native DTU scope:
 
 - DRIMSeq is the first native DTU engine and is validated on BEAS_2B real data.
 - DEXSeq is implemented as a native transcript-feature usage engine using
-  transcript features grouped by gene. This is useful with ASPIS transcript-count
-  matrices, but it is not true exon-bin DEXSeq.
+  transcript features grouped by gene. This remains useful with ASPIS
+  transcript-count matrices, but it is labeled separately from conventional
+  exon-bin DEXSeq.
+- DEXSeqExon is implemented as the native true exon-bin DEXSeq path. ASPIS
+  flattens the configured GTF with `dexseq_prepare_annotation.py`, counts each
+  aligned BAM with `dexseq_count.py`, merges per-sample exon-bin counts, writes
+  exon-bin metadata and contrast coldata, and runs DEXSeq on those exon-bin
+  counts.
 - SUPPA2 is implemented as a native transcript-event mode. ASPIS prepares
   per-contrast transcript expression files from the transcript count matrix,
   calls SUPPA `generateEvents -f ioi`, `psiPerIsoform`, and `diffSplice`, then
@@ -559,8 +566,10 @@ Completed native DTU scope:
   condition comparisons are optionally stratified by `contrast_by` columns such
   as `time_h`.
 - Native DRIMSeq and transcript-feature DEXSeq run from transcript-level count
-  matrices and transcript-to-gene metadata. They produce contrast-specific
-  gene-level, transcript/feature-level, summary, and standardized result tables.
+  matrices and transcript-to-gene metadata. DEXSeqExon runs from aligned BAMs,
+  a flattened exon-bin GFF, and DEXSeq count files. They produce
+  contrast-specific gene-level, feature-level, summary, and standardized result
+  tables.
 - Native DTU execution is split into one schedulable job per contrast and per
   method, followed by a cheap merged `dtu_method_manifest.tsv`/`dtu_methods.done`
   aggregation step.
@@ -569,10 +578,13 @@ Completed native DTU scope:
   result tables. A later BEAS_2B G100 refresh with `suppa.py` available
   completed six SUPPA2 transcript-event contrasts and exposed non-empty
   standardized rows, event counts, and delta-PSI plots in the RNA-seq
-  differential report.
-- Missing `Rscript`, missing `R::DRIMSeq`/`R::DEXSeq`, missing `suppa.py`,
-  insufficient replicates, missing sample columns, and empty post-filter
-  universes are reported as blocked rather than silently skipped.
+  differential report. DEXSeqExon is locally contract-tested and is the next
+  targeted BEAS_2B/HEP_G2 DTU-only refresh item.
+- Missing `Rscript`, missing `R::DRIMSeq`/`R::DEXSeq`, missing
+  `dexseq_prepare_annotation.py`, missing `dexseq_count.py`, missing
+  `suppa.py`, insufficient replicates, missing sample columns, missing aligned
+  BAM paths, and empty post-filter universes are reported as blocked rather than
+  silently skipped.
 - RNA-seq differential and integrated project reports expose DTU status,
   standardized rows, significant rows, and links to summary, gene-result, usage,
   standardized result tables, and DTU overview/usage SVG plots for both native
@@ -584,21 +596,22 @@ Completed native DTU scope:
   files are preserved.
 - Isoform-switch reporting now emits a companion isoform/DTU evidence table
   that links isoform-switch candidate genes to completed DRIMSeq,
-  transcript-feature DEXSeq, SUPPA2, or externally standardized rMATS rows for
-  the same contrast. The table is evidence aggregation for review, not a new
-  statistical test.
+  transcript-feature DEXSeq, DEXSeqExon, SUPPA2, or externally standardized
+  rMATS rows for the same contrast. The table is evidence aggregation for
+  review, not a new statistical test.
 - The local biological integration contract covers DRIMSeq standardization,
   DEXSeq transcript-feature standardization, SUPPA2 transcript-event
   standardization, and DTU plot/report asset exposure without requiring real R
-  packages or the real SUPPA executable.
+  packages or the real SUPPA executable. A dedicated DEXSeqExon contract covers
+  flattened-GFF exon-bin metadata, fake DEXSeq count helper execution,
+  standardized exon-bin usage rows, and DTU plot rendering.
 - A dedicated local contract covers conservative DTU pruning.
 
 Remaining future/event-based tasks:
 
-- Decide whether true exon-bin DEXSeq should be added through a separate
-  exon-count/bin-count generation layer. This is the next native-engine step if
-  ASPIS should claim conventional DEXSeq exon-bin testing instead of the
-  current transcript-feature DEXSeq companion analysis.
+- Validate DEXSeqExon on BEAS_2B and/or HEP_G2 as a targeted DTU-only refresh,
+  then record observed runtime, storage cost, exon-bin counts, standardized row
+  counts, and report/plot quality.
 - Decide whether rMATS belongs in ASPIS native execution; if so, add explicit
   BAM/event input contracts and storage controls instead of inferring events
   from transcript counts. Until then, rMATS remains available only through
@@ -616,13 +629,18 @@ Acceptance criteria:
 - `rnaseq_dtu.run: true` with `method: DEXSeq` produces transcript-feature DTU
   tables, standardized rows, and plots when DEXSeq is installed. Validated on
   BEAS_2B.
+- `rnaseq_dtu.run: true` with `method: DEXSeqExon` produces true exon-bin
+  DEXSeq tables from aligned BAMs, standardized exon-bin usage rows, and plots
+  when DEXSeq plus its helper scripts are installed. Locally contract-tested;
+  targeted G100 validation remains to be run.
 - `rnaseq_dtu.run: true` with `method: SUPPA2` produces transcript-event
   differential splicing rows when `suppa.py` is installed. Validated on BEAS_2B.
 - `rnaseq_dtu.run: true` with `method: all` and native candidate methods
-  `DRIMSeq,DEXSeq,SUPPA2` runs as one schedulable job per contrast/method pair,
-  then merges method rows across contrasts.
-- Missing DRIMSeq/DEXSeq/SUPPA2 dependencies do not break standard RNA-seq
-  analysis; the DTU manifest records a blocked status with a concrete reason.
+  `DRIMSeq,DEXSeq,DEXSeqExon,SUPPA2` runs as one schedulable job per
+  contrast/method pair, then merges method rows across contrasts.
+- Missing DRIMSeq/DEXSeq/DEXSeqExon/SUPPA2 dependencies do not break standard
+  RNA-seq analysis; the DTU manifest records a blocked status with a concrete
+  reason.
 - Reports explain whether each DTU contrast was planned, blocked, failed, or
   completed from the merged per-contrast manifest, with per-contrast links to
   summary, gene-result, usage, standardized tables, and DTU SVG plots.

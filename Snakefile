@@ -920,6 +920,12 @@ def canonical_dtu_method(method):
     aliases = {
         "drimseq": "DRIMSeq",
         "dexseq": "DEXSeq",
+        "dexseqexon": "DEXSeqExon",
+        "dexseq-exon": "DEXSeqExon",
+        "dexseq_exon": "DEXSeqExon",
+        "exon-dexseq": "DEXSeqExon",
+        "exon_bin_dexseq": "DEXSeqExon",
+        "exon-bin-dexseq": "DEXSeqExon",
         "suppa": "SUPPA2",
         "suppa2": "SUPPA2",
         "rmats": "rMATS",
@@ -932,7 +938,7 @@ def canonical_dtu_method(method):
 def selected_dtu_methods():
     method = str(RNASEQ_DTU.get("method", "DRIMSeq")).strip()
     if method.lower() in {"", "all", "auto", "planned"}:
-        raw_methods = joined_config_values(RNASEQ_DTU.get("candidate_methods", "DRIMSeq,DEXSeq,SUPPA2,rMATS"))
+        raw_methods = joined_config_values(RNASEQ_DTU.get("candidate_methods", "DRIMSeq,DEXSeq,DEXSeqExon,SUPPA2,rMATS"))
         tokens = [item.strip() for item in raw_methods.split(",") if item.strip()]
     else:
         tokens = [method]
@@ -6095,7 +6101,7 @@ checkpoint plan_rnaseq_dtu:
             RNASEQ_ALIGNMENT.get("annotation_gtf", ""),
         ),
         method=RNASEQ_DTU.get("method", "DRIMSeq"),
-        candidate_methods=joined_config_values(RNASEQ_DTU.get("candidate_methods", "DRIMSeq,DEXSeq,SUPPA2,rMATS")),
+        candidate_methods=joined_config_values(RNASEQ_DTU.get("candidate_methods", "DRIMSeq,DEXSeq,DEXSeqExon,SUPPA2,rMATS")),
         condition_col=RNASEQ_DTU.get(
             "condition_col",
             RNASEQ_DIFFERENTIAL.get("condition_col", "condition"),
@@ -6153,6 +6159,13 @@ rule run_rnaseq_dtu_contrast:
         rscript=RNASEQ_DTU.get("rscript", "Rscript"),
         drimseq_script=RNASEQ_DTU.get("drimseq_script", "workflow/scripts/run_drimseq_dtu.R"),
         dexseq_script=RNASEQ_DTU.get("dexseq_script", "workflow/scripts/run_dexseq_dtu.R"),
+        dexseq_exon_script=RNASEQ_DTU.get("dexseq_exon_script", "workflow/scripts/run_dexseq_exon_dtu.R"),
+        dexseq_prepare_annotation_command=RNASEQ_DTU.get("dexseq_prepare_annotation_command", "dexseq_prepare_annotation.py"),
+        dexseq_count_command=RNASEQ_DTU.get("dexseq_count_command", "dexseq_count.py"),
+        dexseq_count_strandedness=RNASEQ_DTU.get("dexseq_count_strandedness", "no"),
+        dexseq_count_order=RNASEQ_DTU.get("dexseq_count_order", "pos"),
+        dexseq_count_mode=RNASEQ_DTU.get("dexseq_count_mode", "union"),
+        dexseq_count_min_mapq=RNASEQ_DTU.get("dexseq_count_min_mapq", 10),
         suppa2_executable=RNASEQ_DTU.get("suppa2_executable", "suppa.py"),
         suppa2_method=RNASEQ_DTU.get("suppa2_method", "empirical"),
         suppa2_area=RNASEQ_DTU.get("suppa2_area", 1000),
@@ -6171,6 +6184,7 @@ rule run_rnaseq_dtu_contrast:
         min_transcripts_per_gene=RNASEQ_DTU.get("min_transcripts_per_gene", 2),
         drimseq_command=shell_arg("--drimseq-command", RNASEQ_DTU.get("drimseq_command", "")),
         dexseq_command=shell_arg("--dexseq-command", RNASEQ_DTU.get("dexseq_command", "")),
+        dexseq_exon_command=shell_arg("--dexseq-exon-command", RNASEQ_DTU.get("dexseq_exon_command", "")),
         suppa2_command=shell_arg("--suppa2-command", RNASEQ_DTU.get("suppa2_command", "")),
         rmats_command=shell_arg("--rmats-command", RNASEQ_DTU.get("rmats_command", ""))
     log:
@@ -6195,6 +6209,13 @@ rule run_rnaseq_dtu_contrast:
           --rscript {params.rscript:q} \
           --drimseq-script {params.drimseq_script:q} \
           --dexseq-script {params.dexseq_script:q} \
+          --dexseq-exon-script {params.dexseq_exon_script:q} \
+          --dexseq-prepare-annotation-command {params.dexseq_prepare_annotation_command:q} \
+          --dexseq-count-command {params.dexseq_count_command:q} \
+          --dexseq-count-strandedness {params.dexseq_count_strandedness:q} \
+          --dexseq-count-order {params.dexseq_count_order:q} \
+          --dexseq-count-mode {params.dexseq_count_mode:q} \
+          --dexseq-count-min-mapq {params.dexseq_count_min_mapq:q} \
           --suppa2-executable {params.suppa2_executable:q} \
           --suppa2-method {params.suppa2_method:q} \
           --suppa2-area {params.suppa2_area:q} \
@@ -6209,6 +6230,7 @@ rule run_rnaseq_dtu_contrast:
           --dtu-min-transcripts-per-gene {params.min_transcripts_per_gene:q} \
           {params.drimseq_command} \
           {params.dexseq_command} \
+          {params.dexseq_exon_command} \
           {params.suppa2_command} \
           {params.rmats_command} \
           > {log:q} 2>&1

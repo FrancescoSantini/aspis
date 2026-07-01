@@ -45,6 +45,7 @@ def main() -> int:
     candidates = BASE / "switch_candidates.tsv"
     events = BASE / "switch_event_summary.tsv"
     drimseq = BASE / "drimseq_standardized.tsv"
+    dexseq_exon = BASE / "dexseq_exon_standardized.tsv"
     suppa2 = BASE / "suppa2_standardized.tsv"
     dtu_manifest = BASE / "dtu_method_manifest.tsv"
     output = BASE / "isoform_dtu_evidence.tsv"
@@ -186,6 +187,26 @@ def main() -> int:
         ],
     )
     write_tsv(
+        dexseq_exon,
+        standardized_columns,
+        [
+            {
+                "project": "ASPIS_CONTRACT",
+                "method": "DEXSeqExon",
+                "contrast_id": "treated_vs_control__time_h_24",
+                "feature_id": "GENE1:E001",
+                "gene_id": "GENE1",
+                "gene_name": "Gene One",
+                "event_type": "exon_bin_usage",
+                "log2_fold_change": "-1.2",
+                "pvalue": "0.004",
+                "padj": "0.015",
+                "direction": "decreased_usage",
+                "status": "ok",
+            }
+        ],
+    )
+    write_tsv(
         dtu_manifest,
         ["method", "contrast_id", "status", "standardized_results", "standardized_result_count", "standardized_status"],
         [
@@ -203,6 +224,14 @@ def main() -> int:
                 "status": "completed",
                 "standardized_results": str(suppa2),
                 "standardized_result_count": "2",
+                "standardized_status": "ok",
+            },
+            {
+                "method": "DEXSeqExon",
+                "contrast_id": "treated_vs_control__time_h_24",
+                "status": "completed",
+                "standardized_results": str(dexseq_exon),
+                "standardized_result_count": "1",
                 "standardized_status": "ok",
             },
         ],
@@ -236,16 +265,19 @@ def main() -> int:
             "dtu_methods_significant",
             "best_dtu_method",
             "best_dtu_padj",
+            "dexseq_exon_n_significant",
             "suppa2_n_significant",
         },
     )
     by_event = {row["event_id"]: row for row in evidence}
     if by_event["switch1"]["dtu_evidence_status"] != "supported_significant":
         raise ValueError(f"switch1 should have significant support: {by_event['switch1']}")
-    if by_event["switch1"]["dtu_methods_significant"] != "DRIMSeq,SUPPA2":
+    if by_event["switch1"]["dtu_methods_significant"] != "DRIMSeq,DEXSeqExon,SUPPA2":
         raise ValueError(f"switch1 significant methods were not summarized: {by_event['switch1']}")
     if by_event["switch1"]["best_dtu_method"] != "SUPPA2" or by_event["switch1"]["best_dtu_padj"] != "0.01":
         raise ValueError(f"best DTU evidence was not selected by padj: {by_event['switch1']}")
+    if by_event["switch1"]["dexseq_exon_n_significant"] != "1":
+        raise ValueError(f"DEXSeqExon evidence columns were not populated: {by_event['switch1']}")
     if by_event["switch2"]["dtu_evidence_status"] != "supported_not_significant":
         raise ValueError(f"switch2 should have non-significant support: {by_event['switch2']}")
 
@@ -254,7 +286,7 @@ def main() -> int:
         raise ValueError(f"summary did not reflect linked evidence: {summary_rows}")
 
     done_rows = read_tsv(done, {"status", "dtu_methods_seen"})
-    if done_rows[0]["status"] != "ok" or done_rows[0]["dtu_methods_seen"] != "DRIMSeq,SUPPA2":
+    if done_rows[0]["status"] != "ok" or done_rows[0]["dtu_methods_seen"] != "DRIMSeq,DEXSeqExon,SUPPA2":
         raise ValueError(f"done sentinel did not reflect methods: {done_rows}")
 
     print("isoform/DTU evidence contract ok")
