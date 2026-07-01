@@ -543,7 +543,7 @@ def exercise_biotype_and_dtu(paths: dict[str, Path]) -> None:
                 "elif cmd == 'diffSplice':",
                 "    out = value('-o')",
                 "    out.parent.mkdir(parents=True, exist_ok=True)",
-                "    Path(str(out) + '.dpsi.temp.0').write_text('control_treated_dPSI\\tcontrol_treated_p-val\\nGENE1;TX1\\t0.45\\t0.01\\n', encoding='utf-8')",
+                "    Path(str(out) + '.dpsi.temp.0').write_text('control_treated_dPSI\\tcontrol_treated_p-val\\nGENE1;TX1\\t0.45\\t0.01\\nGENE1;TX1\\t0.45\\t0.01\\n', encoding='utf-8')",
                 "    Path(str(out) + '.psivec').write_text('s1\\nGENE1;TX1\\t0.5\\n', encoding='utf-8')",
                 "else:",
                 "    raise SystemExit(2)",
@@ -585,17 +585,41 @@ def exercise_biotype_and_dtu(paths: dict[str, Path]) -> None:
             f"{sys.executable} {fake_suppa}",
         ]
     )
-    suppa2_rows = read_tsv(suppa2_dir / "dtu_method_manifest.tsv", {"method", "status", "standardized_results", "standardized_status", "transcript_results"})
+    suppa2_rows = read_tsv(suppa2_dir / "dtu_method_manifest.tsv", {"method", "status", "standardized_results", "standardized_status", "transcript_results", "summary"})
     if suppa2_rows[0]["method"] != "SUPPA2" or suppa2_rows[0]["status"] != "completed" or suppa2_rows[0]["standardized_status"] != "ok":
         raise ValueError(f"native SUPPA2 DTU was not standardized: {suppa2_rows}")
     suppa2_standardized = read_tsv(Path(suppa2_rows[0]["standardized_results"]), {"method", "event_type", "feature_id", "gene_id", "delta_psi", "pvalue", "padj"})
+    if len(suppa2_standardized) != 1:
+        raise ValueError(f"SUPPA2 duplicate events were not deduplicated: {suppa2_standardized}")
     if suppa2_standardized[0]["method"] != "SUPPA2" or suppa2_standardized[0]["event_type"] != "transcript_event":
         raise ValueError(f"standardized SUPPA2 row lost method/event type: {suppa2_standardized}")
     if suppa2_standardized[0]["gene_id"] != "GENE1" or suppa2_standardized[0]["delta_psi"] != "0.45":
         raise ValueError(f"standardized SUPPA2 row lost identifiers/statistics: {suppa2_standardized}")
     suppa2_events = read_tsv(Path(suppa2_rows[0]["transcript_results"]), {"event_id", "event_type", "delta_psi", "pvalue"})
-    if suppa2_events[0]["event_id"] != "GENE1;TX1" or suppa2_events[0]["pvalue"] != "0.01":
+    if len(suppa2_events) != 1 or suppa2_events[0]["event_id"] != "GENE1;TX1" or suppa2_events[0]["pvalue"] != "0.01":
         raise ValueError(f"SUPPA2 event result table was not written: {suppa2_events}")
+    suppa2_summary = read_tsv(Path(suppa2_rows[0]["summary"]), {"n_tested_genes", "n_usage_transcripts", "n_events"})
+    if suppa2_summary[0]["n_tested_genes"] != "1" or suppa2_summary[0]["n_usage_transcripts"] != "1" or suppa2_summary[0]["n_events"] != "1":
+        raise ValueError(f"SUPPA2 summary did not expose event counts: {suppa2_summary}")
+    run_command(
+        [
+            sys.executable,
+            "workflow/scripts/render_rnaseq_dtu_plots.py",
+            "--method-manifest",
+            str(suppa2_dir / "dtu_method_manifest.tsv"),
+            "--outdir",
+            str(suppa2_dir / "plots"),
+            "--manifest",
+            str(suppa2_dir / "plots" / "dtu_plot_manifest.tsv"),
+            "--done",
+            str(suppa2_dir / "plots" / "dtu_plots.done"),
+        ]
+    )
+    suppa2_plot_rows = read_tsv(suppa2_dir / "plots" / "dtu_plot_manifest.tsv", {"method", "status", "usage_plot"})
+    suppa2_usage_plot = Path(suppa2_plot_rows[0]["usage_plot"])
+    suppa2_usage_svg = suppa2_usage_plot.read_text(encoding="utf-8")
+    if "Top SUPPA2 delta PSI" not in suppa2_usage_svg or 'width="157.5"' not in suppa2_usage_svg:
+        raise ValueError(f"SUPPA2 delta-PSI usage plot was not rendered correctly: {suppa2_usage_plot}")
 
     helper = INPUT / "write_fake_rmats.py"
     helper.write_text(

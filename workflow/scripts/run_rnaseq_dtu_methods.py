@@ -851,6 +851,7 @@ def parse_suppa2_dpsi(dpsi_path: Path) -> list[dict[str, str]]:
         return []
     header = lines[0].split("\t")
     rows: list[dict[str, str]] = []
+    seen_events: set[str] = set()
     for line in lines[1:]:
         parts = line.split("\t")
         if len(parts) == len(header) + 1:
@@ -861,6 +862,9 @@ def parse_suppa2_dpsi(dpsi_path: Path) -> list[dict[str, str]]:
             values = dict(zip(header[1:], parts[1:]))
         else:
             continue
+        if event_id in seen_events:
+            continue
+        seen_events.add(event_id)
         dpsi_key = next((key for key in values if "dpsi" in key.lower()), "")
         pvalue_key = next((key for key in values if "p-val" in key.lower() or "pvalue" in key.lower() or "p_value" in key.lower()), "")
         gene_id, feature_id, event_type = parse_suppa2_event_id(event_id)
@@ -889,6 +893,8 @@ def write_suppa2_event_results(path: Path, rows: list[dict[str, str]]) -> None:
 
 def write_suppa2_summary(path: Path, status: str, reason: str, event_rows: list[dict[str, str]], plan_row: dict[str, str]) -> None:
     significant = 0
+    tested_genes = {row.get("gene_id", "") for row in event_rows if row.get("gene_id", "")}
+    usage_transcripts = {row.get("feature_id", "") for row in event_rows if row.get("feature_id", "")}
     for row in event_rows:
         padj = parse_float(row.get("padj", ""))
         if padj is not None and padj < 0.05:
@@ -899,6 +905,8 @@ def write_suppa2_summary(path: Path, status: str, reason: str, event_rows: list[
             {
                 "status": status,
                 "reason": reason,
+                "n_tested_genes": str(len(tested_genes)),
+                "n_usage_transcripts": str(len(usage_transcripts)),
                 "n_events": str(len(event_rows)),
                 "n_significant": str(significant),
                 "control_label": plan_row.get("control_label", "control"),
@@ -906,7 +914,17 @@ def write_suppa2_summary(path: Path, status: str, reason: str, event_rows: list[
                 "event_mode": "transcript",
             }
         ],
-        ["status", "reason", "n_events", "n_significant", "control_label", "test_label", "event_mode"],
+        [
+            "status",
+            "reason",
+            "n_tested_genes",
+            "n_usage_transcripts",
+            "n_events",
+            "n_significant",
+            "control_label",
+            "test_label",
+            "event_mode",
+        ],
     )
 
 

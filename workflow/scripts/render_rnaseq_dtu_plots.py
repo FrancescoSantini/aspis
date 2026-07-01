@@ -106,6 +106,24 @@ def significant_count(rows: list[dict[str, str]], alpha: float) -> int:
     return count
 
 
+def dedupe_suppa2_rows(rows: list[dict[str, str]]) -> list[dict[str, str]]:
+    deduped = []
+    seen = set()
+    for row in rows:
+        key = (
+            row.get("gene_id", ""),
+            row.get("feature_id", ""),
+            row.get("event_type", ""),
+            row.get("delta_psi", ""),
+            row.get("pvalue", ""),
+        )
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(row)
+    return deduped
+
+
 def svg_header(width: int, height: int) -> str:
     return (
         f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" '
@@ -207,6 +225,65 @@ def render_usage_svg(path: Path, usage_rows: list[dict[str, str]], gene_id: str,
     return True
 
 
+def render_delta_psi_svg(path: Path, event_rows: list[dict[str, str]], gene_id: str, top_n: int) -> bool:
+    rows = []
+    seen_events = set()
+    for row in event_rows:
+        if row.get("gene_id", "") != gene_id:
+            continue
+        if safe_float(row.get("delta_psi", "")) is None:
+            continue
+        event_key = row.get("event_id", "") or "|".join(
+            [row.get("gene_id", ""), row.get("feature_id", ""), row.get("delta_psi", "")]
+        )
+        if event_key in seen_events:
+            continue
+        seen_events.add(event_key)
+        rows.append(row)
+    if not rows:
+        return False
+
+    rows = sorted(
+        rows,
+        key=lambda row: abs(safe_float(row.get("delta_psi", "")) or 0.0),
+        reverse=True,
+    )[:top_n]
+    width = 980
+    row_h = 42
+    height = max(260, 130 + (len(rows) * row_h))
+    left, right, top = 210, 70, 78
+    bar_w = width - left - right
+    half_w = bar_w / 2
+    center = left + half_w
+    parts = [svg_header(width, height)]
+    parts.append('<rect width="100%" height="100%" fill="white"/>\n')
+    parts.append(f'<text x="24" y="30" font-size="20" font-weight="700">Top SUPPA2 delta PSI: {html.escape(gene_id)}</text>\n')
+    parts.append('<text x="24" y="52" font-size="12" class="muted">Transcript-event inclusion shift from SUPPA2 diffSplice. Blue is decreased in the test group; red is increased.</text>\n')
+    for tick in [-1.0, -0.5, 0.0, 0.5, 1.0]:
+        x = center + tick * half_w
+        parts.append(f'<line class="grid" x1="{x:.1f}" y1="{top - 12}" x2="{x:.1f}" y2="{height - 48}"/>\n')
+        parts.append(f'<text x="{x:.1f}" y="{height - 24}" text-anchor="middle" font-size="11">{tick:g}</text>\n')
+    parts.append(f'<line class="axis" x1="{center:.1f}" y1="{top - 12}" x2="{center:.1f}" y2="{height - 48}"/>\n')
+    parts.append(f'<text x="{center:.1f}" y="{height - 7}" text-anchor="middle" font-size="12" class="muted">delta PSI</text>\n')
+    for idx, row in enumerate(rows):
+        y = top + idx * row_h
+        feature = row.get("feature_id", "") or row.get("event_id", "")
+        delta = max(-1.0, min(1.0, safe_float(row.get("delta_psi", "")) or 0.0))
+        bar_x = center if delta >= 0 else center + delta * half_w
+        bar_width = abs(delta) * half_w
+        css_class = "bar2" if delta >= 0 else "bar1"
+        label = feature if len(feature) <= 24 else feature[:21] + "..."
+        padj = row.get("padj", "")
+        padj_text = f"; padj {padj}" if padj else ""
+        parts.append(f'<text x="{left - 12}" y="{y + 18}" text-anchor="end" font-size="12">{html.escape(label)}</text>\n')
+        parts.append(f'<rect class="{css_class}" x="{bar_x:.1f}" y="{y + 4}" width="{bar_width:.1f}" height="18" rx="2"/>\n')
+        parts.append(f'<text x="{left + bar_w + 8}" y="{y + 19}" font-size="11" class="muted">delta {delta:.3g}{html.escape(padj_text)}</text>\n')
+    parts.append("</svg>\n")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("".join(parts), encoding="utf-8")
+    return True
+
+
 def plot_row(args: argparse.Namespace, row: dict[str, str]) -> dict[str, str]:
     project = row.get("project", "")
     method = row.get("method", "")
@@ -238,6 +315,8 @@ def plot_row(args: argparse.Namespace, row: dict[str, str]) -> dict[str, str]:
     if not standardized:
         output["reason"] = "standardized result table has no rows"
         return output
+    if row.get("method", "").upper() == "SUPPA2":
+        standardized = dedupe_suppa2_rows(standardized)
     output["n_standardized"] = str(len(standardized))
     output["n_significant"] = str(significant_count(standardized, args.padj))
     top_gene = select_top_gene(standardized)
@@ -250,7 +329,11 @@ def plot_row(args: argparse.Namespace, row: dict[str, str]) -> dict[str, str]:
     render_overview_svg(Path(output["overview_plot"]), standardized, args.padj, args.max_points)
     usage_path = Path(row.get("transcript_results", ""))
     if top_gene and usage_path.is_file():
-        rendered = render_usage_svg(Path(output["usage_plot"]), read_tsv(usage_path), top_gene, args.top_n)
+        usage_rows = read_tsv(usage_path)
+        if row.get("method", "").upper() == "SUPPA2":
+            rendered = render_delta_psi_svg(Path(output["usage_plot"]), usage_rows, top_gene, args.top_n)
+        else:
+            rendered = render_usage_svg(Path(output["usage_plot"]), usage_rows, top_gene, args.top_n)
         if not rendered:
             output["usage_plot"] = ""
     else:

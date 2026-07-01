@@ -249,6 +249,24 @@ def read_first_optional_row(path_text: str) -> dict[str, str]:
     return rows[0] if rows else {}
 
 
+def count_unique_tsv_values(path_text: str, column: str) -> int:
+    if not path_text:
+        return 0
+    path = Path(path_text)
+    if not path.is_file():
+        return 0
+    values = set()
+    with path.open(newline="", encoding="utf-8") as handle:
+        reader = csv.DictReader(handle, delimiter="\t")
+        if reader.fieldnames is None or column not in reader.fieldnames:
+            return 0
+        for row in reader:
+            value = (row.get(column, "") or "").strip()
+            if value:
+                values.add(value)
+    return len(values)
+
+
 def render_dtu_summary(
     plan_rows: list[dict[str, str]],
     method_rows: list[dict[str, str]],
@@ -269,8 +287,16 @@ def render_dtu_summary(
         for row in method_rows
         if row.get("standardized_status", "") or row.get("status", "") == "completed"
     )
-    standardized_rows = sum(safe_int(row.get("standardized_result_count", "")) for row in method_rows)
-    significant_rows = sum(count_significant_standardized(row.get("standardized_results", "")) for row in method_rows)
+    standardized_rows = sum(
+        safe_int(plot_by_key.get((row.get("method", ""), row.get("contrast_id", "")), {}).get("n_standardized", ""))
+        or safe_int(row.get("standardized_result_count", ""))
+        for row in method_rows
+    )
+    significant_rows = sum(
+        safe_int(plot_by_key.get((row.get("method", ""), row.get("contrast_id", "")), {}).get("n_significant", ""))
+        or count_significant_standardized(row.get("standardized_results", ""))
+        for row in method_rows
+    )
     plan_link = link_list(
         [
             ("plan", plan_rows[0].get("_plan_path", "") if plan_rows else ""),
@@ -281,16 +307,36 @@ def render_dtu_summary(
     )
     detail_rows = []
     for row in sorted(method_rows, key=lambda item: (item.get("contrast_id", ""), item.get("method", ""))):
+        method = row.get("method", "")
         summary = read_first_optional_row(row.get("summary", ""))
         plot_row = plot_by_key.get((row.get("method", ""), row.get("contrast_id", "")), {})
+        tested_count = summary.get("n_tested_genes", "")
+        if not tested_count and method == "SUPPA2":
+            tested_count = str(count_unique_tsv_values(row.get("transcript_results", ""), "gene_id"))
+        usage_count = summary.get("n_usage_transcripts", "")
+        if not usage_count and method == "SUPPA2":
+            usage_count = str(count_unique_tsv_values(row.get("transcript_results", ""), "feature_id"))
+            if usage_count == "0":
+                usage_count = summary.get("n_events", "") or row.get("standardized_result_count", "")
+        standardized_count = (
+            plot_row.get("n_standardized", "")
+            or row.get("standardized_result_count", "0")
+        )
+        significant_count = (
+            plot_row.get("n_significant", "")
+            or str(count_significant_standardized(row.get("standardized_results", "")))
+        )
+        gene_label = "event results" if method == "SUPPA2" else "gene results"
+        usage_label = "event table" if method == "SUPPA2" else "usage table"
+        usage_plot_label = "delta PSI plot" if method == "SUPPA2" else "usage plot"
         links = link_list(
             [
                 ("summary", row.get("summary", "")),
-                ("gene results", row.get("gene_results", "")),
-                ("usage table", row.get("transcript_results", "")),
+                (gene_label, row.get("gene_results", "")),
+                (usage_label, row.get("transcript_results", "")),
                 ("standardized", row.get("standardized_results", "")),
                 ("overview plot", plot_row.get("overview_plot", "")),
-                ("usage plot", plot_row.get("usage_plot", "")),
+                (usage_plot_label, plot_row.get("usage_plot", "")),
             ],
             output,
         )
@@ -299,10 +345,10 @@ def render_dtu_summary(
             f"<td><code>{html.escape(row.get('contrast_id', ''))}</code></td>"
             f"<td>{html.escape(row.get('method', ''))}</td>"
             f"<td class=\"status {status_class(row.get('status', ''))}\">{html.escape(row.get('status', ''))}</td>"
-            f"<td>{html.escape(summary.get('n_tested_genes', ''))}</td>"
-            f"<td>{html.escape(summary.get('n_usage_transcripts', ''))}</td>"
-            f"<td>{html.escape(row.get('standardized_result_count', '0'))}</td>"
-            f"<td>{count_significant_standardized(row.get('standardized_results', ''))}</td>"
+            f"<td>{html.escape(tested_count)}</td>"
+            f"<td>{html.escape(usage_count)}</td>"
+            f"<td>{html.escape(standardized_count)}</td>"
+            f"<td>{html.escape(significant_count)}</td>"
             f"<td>{links}</td>"
             f"<td>{html.escape(row.get('reason', ''))}</td>"
             "</tr>"
@@ -312,7 +358,7 @@ def render_dtu_summary(
         detail_table = (
             "<table><thead><tr>"
             "<th>contrast</th><th>method</th><th>status</th><th>tested genes</th>"
-            "<th>usage transcripts</th><th>standardized rows</th><th>padj&lt;0.05</th><th>tables and plots</th><th>reason</th>"
+            "<th>usage transcripts/events</th><th>standardized rows</th><th>padj&lt;0.05</th><th>tables and plots</th><th>reason</th>"
             "</tr></thead><tbody>"
             + "".join(detail_rows)
             + "</tbody></table>"
