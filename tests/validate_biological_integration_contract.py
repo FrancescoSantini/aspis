@@ -804,6 +804,60 @@ def exercise_rnaseq_report_dtu_assets(dtu_plan: Path, dtu_manifest: Path, dtu_pl
     write_tsv(report_dir / "plots_manifest.tsv", plots_columns, [base_row])
     write_tsv(report_dir / "enrichment_manifest.tsv", enrichment_columns, [base_row])
     write_tsv(report_dir / "summary_manifest.tsv", summary_columns, [base_row])
+    isoform_dtu_evidence = report_dir / "isoform_dtu_evidence.tsv"
+    isoform_dtu_summary = report_dir / "isoform_dtu_evidence_summary.tsv"
+    write_tsv(
+        isoform_dtu_evidence,
+        [
+            "event_id",
+            "contrast_id",
+            "gene_id",
+            "isoform_id",
+            "dtu_evidence_status",
+            "dtu_methods_detected",
+            "dtu_methods_significant",
+        ],
+        [
+            {
+                "event_id": "switch1",
+                "contrast_id": contrast,
+                "gene_id": "GENE1",
+                "isoform_id": "TX1",
+                "dtu_evidence_status": "supported_significant",
+                "dtu_methods_detected": "DRIMSeq,SUPPA2",
+                "dtu_methods_significant": "DRIMSeq,SUPPA2",
+            }
+        ],
+    )
+    write_tsv(
+        isoform_dtu_summary,
+        [
+            "status",
+            "isoform_candidates",
+            "switch_events",
+            "genes_with_dtu_support",
+            "genes_with_significant_dtu_support",
+            "candidate_rows_with_dtu_support",
+            "candidate_rows_with_significant_dtu_support",
+            "dtu_methods_seen",
+            "dtu_methods_significant",
+            "reason",
+        ],
+        [
+            {
+                "status": "ok",
+                "isoform_candidates": "1",
+                "switch_events": "1",
+                "genes_with_dtu_support": "1",
+                "genes_with_significant_dtu_support": "1",
+                "candidate_rows_with_dtu_support": "1",
+                "candidate_rows_with_significant_dtu_support": "1",
+                "dtu_methods_seen": "DRIMSeq,SUPPA2",
+                "dtu_methods_significant": "DRIMSeq,SUPPA2",
+                "reason": "contract fixture",
+            }
+        ],
+    )
     run_command(
         [
             sys.executable,
@@ -822,6 +876,10 @@ def exercise_rnaseq_report_dtu_assets(dtu_plan: Path, dtu_manifest: Path, dtu_pl
             str(dtu_manifest),
             "--dtu-plot-manifest",
             str(dtu_plot_manifest),
+            "--isoform-dtu-evidence",
+            str(isoform_dtu_evidence),
+            "--isoform-dtu-evidence-summary",
+            str(isoform_dtu_summary),
             "--asset-manifest",
             str(report_dir / "asset_manifest.tsv"),
             "--output",
@@ -840,11 +898,16 @@ def exercise_rnaseq_report_dtu_assets(dtu_plan: Path, dtu_manifest: Path, dtu_pl
         raise ValueError(f"DTU plot manifest was not exposed as a report asset: {dtu_assets}")
     if not any(row["asset_label"].endswith("_overview_plot") for row in dtu_assets):
         raise ValueError(f"DTU overview plots were not exposed as report assets: {dtu_assets}")
+    isoform_assets = [row for row in assets if row["asset_group"] == "isoform_switch"]
+    if not any(row["asset_label"] == "isoform_dtu_evidence" for row in isoform_assets):
+        raise ValueError(f"isoform/DTU evidence was not exposed as a report asset: {isoform_assets}")
     html_text = (report_dir / "index.html").read_text(encoding="utf-8")
     if "DTU / splicing methods" not in html_text or "standardized rows: 1" not in html_text:
         raise ValueError("DTU summary was not rendered in the RNA-seq report index")
     if "padj&lt;0.05 rows: 1" not in html_text or "usage table" not in html_text or "overview plot" not in html_text:
         raise ValueError("DTU contrast table was not rendered in the RNA-seq report index")
+    if "Isoform-switch / DTU evidence" not in html_text or "candidate rows with significant DTU support: 1" not in html_text:
+        raise ValueError("isoform/DTU evidence summary was not rendered in the RNA-seq report index")
 
 
 def main() -> int:

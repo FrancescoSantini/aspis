@@ -1013,6 +1013,9 @@ def rnaseq_isoform_switch_report_outputs(project):
         "functional_annotation_table": f"{base}/functional_annotation_summary.tsv",
         "plot_manifest": f"{base}/switch_plot_manifest.tsv",
         "external_tool_manifest": f"{base}/external_tool_manifest.tsv",
+        "dtu_evidence_table": f"{base}/isoform_dtu_evidence.tsv",
+        "dtu_evidence_summary": f"{base}/isoform_dtu_evidence_summary.tsv",
+        "dtu_evidence_done": f"{base}/isoform_dtu_evidence.done",
         "plots_pdf": f"{base}/switch_plots.pdf",
         "html": f"{base}/index.html",
         "done": f"{base}/report.done",
@@ -1031,6 +1034,9 @@ def rnaseq_isoform_switch_report_inputs(wildcards):
         outputs["functional_annotation_table"],
         outputs["plot_manifest"],
         outputs["external_tool_manifest"],
+        outputs["dtu_evidence_table"],
+        outputs["dtu_evidence_summary"],
+        outputs["dtu_evidence_done"],
         outputs["plots_pdf"],
         outputs["html"],
         outputs["done"],
@@ -1773,6 +1779,9 @@ def planned_branch_targets(wildcards):
                                             outputs["functional_annotation_table"],
                                             outputs["plot_manifest"],
                                             outputs["external_tool_manifest"],
+                                            outputs["dtu_evidence_table"],
+                                            outputs["dtu_evidence_summary"],
+                                            outputs["dtu_evidence_done"],
                                             outputs["plots_pdf"],
                                             outputs["html"],
                                             outputs["done"],
@@ -5737,6 +5746,40 @@ rule render_isoform_switch_report:
         """
 
 
+rule render_isoform_dtu_evidence:
+    input:
+        candidates=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/isoform_switch/report/switch_candidates.tsv",
+        events=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/isoform_switch/report/switch_event_summary.tsv",
+        report_done=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/isoform_switch/report/report.done",
+        dtu=rnaseq_dtu_report_inputs
+    output:
+        evidence=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/isoform_switch/report/isoform_dtu_evidence.tsv",
+        summary=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/isoform_switch/report/isoform_dtu_evidence_summary.tsv",
+        done=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/isoform_switch/report/isoform_dtu_evidence.done"
+    params:
+        dtu_method_manifest=lambda wildcards: (
+            rnaseq_dtu_report_outputs(wildcards.project)["method_manifest"]
+            if RNASEQ_DTU_RUN
+            else ""
+        ),
+        padj=RNASEQ_DTU.get("plot_padj", 0.05)
+    log:
+        "logs/branches/rnaseq/{project}.isoform_dtu_evidence.log"
+    shell:
+        r"""
+        mkdir -p logs/branches/rnaseq
+        python3 workflow/scripts/render_isoform_dtu_evidence.py \
+          --switch-candidates {input.candidates:q} \
+          --switch-events {input.events:q} \
+          --dtu-method-manifest {params.dtu_method_manifest:q} \
+          --output {output.evidence:q} \
+          --summary {output.summary:q} \
+          --done {output.done:q} \
+          --padj {params.padj:q} \
+          > {log:q} 2>&1
+        """
+
+
 
 rule run_gene_deseq2_contrast:
     input:
@@ -6628,6 +6671,16 @@ rule render_rnaseq_differential_report_index:
             "plots_pdf",
             "--isoform-switch-plots-pdf",
         ),
+        isoform_dtu_evidence=lambda wildcards: rnaseq_isoform_switch_report_arg(
+            wildcards,
+            "dtu_evidence_table",
+            "--isoform-dtu-evidence",
+        ),
+        isoform_dtu_evidence_summary=lambda wildcards: rnaseq_isoform_switch_report_arg(
+            wildcards,
+            "dtu_evidence_summary",
+            "--isoform-dtu-evidence-summary",
+        ),
         dtu_plan=lambda wildcards: rnaseq_dtu_report_arg(
             wildcards,
             "plan",
@@ -6665,6 +6718,8 @@ rule render_rnaseq_differential_report_index:
           {params.isoform_switch_ncrna} \
           {params.isoform_switch_plots} \
           {params.isoform_switch_plots_pdf} \
+          {params.isoform_dtu_evidence} \
+          {params.isoform_dtu_evidence_summary} \
           {params.dtu_plan} \
           {params.dtu_method_manifest} \
           {params.dtu_plot_manifest} \

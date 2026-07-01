@@ -109,6 +109,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--isoform-switch-ncrna", default="", help="Optional isoform-switch ncRNA interpretation table")
     parser.add_argument("--isoform-switch-plots", default="", help="Optional isoform-switch plot manifest")
     parser.add_argument("--isoform-switch-plots-pdf", default="", help="Optional isoform-switch multi-page plot PDF")
+    parser.add_argument("--isoform-dtu-evidence", default="", help="Optional isoform-switch plus DTU evidence table")
+    parser.add_argument("--isoform-dtu-evidence-summary", default="", help="Optional isoform-switch plus DTU evidence summary")
     parser.add_argument("--dtu-plan", default="", help="Optional DTU/splicing plan TSV")
     parser.add_argument("--dtu-method-manifest", default="", help="Optional DTU/splicing method manifest TSV")
     parser.add_argument("--dtu-plot-manifest", default="", help="Optional DTU/splicing plot manifest TSV")
@@ -375,6 +377,30 @@ def render_dtu_summary(
 """
 
 
+def render_isoform_dtu_evidence_summary(summary_path: str, evidence_path: str, output: Path) -> str:
+    if not summary_path and not evidence_path:
+        return ""
+    summary_rows = read_optional_table(summary_path)
+    if not summary_rows:
+        return ""
+    row = summary_rows[0]
+    links = link_list(
+        [
+            ("evidence table", evidence_path),
+            ("evidence summary", summary_path),
+        ],
+        output,
+    )
+    return f"""
+  <section class="isoform-dtu-evidence">
+    <h2>Isoform-switch / DTU evidence</h2>
+    <p class="note">This companion table links isoform-switch candidate genes to completed DTU/splicing methods for the same contrast. It is evidence aggregation, not a new statistical test.</p>
+    <div class="counts">status: {html.escape(row.get("status", ""))}; candidates: {html.escape(row.get("isoform_candidates", ""))}; switch events: {html.escape(row.get("switch_events", ""))}; candidate rows with DTU support: {html.escape(row.get("candidate_rows_with_dtu_support", ""))}; candidate rows with significant DTU support: {html.escape(row.get("candidate_rows_with_significant_dtu_support", ""))}</div>
+    <div class="counts">methods seen: {html.escape(row.get("dtu_methods_seen", "")) or "none"}; significant methods: {html.escape(row.get("dtu_methods_significant", "")) or "none"}; {links}</div>
+  </section>
+"""
+
+
 def render_resource_row(
     name: str,
     status: str,
@@ -417,6 +443,8 @@ def render_project_resources(
     isoform_switch_ncrna: str = "",
     isoform_switch_plots: str = "",
     isoform_switch_plots_pdf: str = "",
+    isoform_dtu_evidence: str = "",
+    isoform_dtu_evidence_summary: str = "",
     dtu_plan: str = "",
     dtu_method_manifest: str = "",
     dtu_plot_manifest: str = "",
@@ -442,6 +470,8 @@ def render_project_resources(
                 ("isoform switch candidates", isoform_switch_candidates),
                 ("isoform switch events", isoform_switch_events),
                 ("isoform switch ncRNA interpretation", isoform_switch_ncrna),
+                ("isoform/DTU evidence", isoform_dtu_evidence),
+                ("isoform/DTU evidence summary", isoform_dtu_evidence_summary),
                 ("isoform switch plot manifest", isoform_switch_plots),
                 ("isoform switch PDF", isoform_switch_plots_pdf),
             ],
@@ -765,6 +795,8 @@ def render_html(
     isoform_switch_ncrna: str = "",
     isoform_switch_plots: str = "",
     isoform_switch_plots_pdf: str = "",
+    isoform_dtu_evidence: str = "",
+    isoform_dtu_evidence_summary: str = "",
     dtu_plan: str = "",
     dtu_method_manifest: str = "",
     dtu_plot_manifest: str = "",
@@ -789,11 +821,18 @@ def render_html(
         isoform_switch_ncrna,
         isoform_switch_plots,
         isoform_switch_plots_pdf,
+        isoform_dtu_evidence,
+        isoform_dtu_evidence_summary,
         dtu_plan,
         dtu_method_manifest,
         dtu_plot_manifest,
     )
     dtu_summary = render_dtu_summary(dtu_plan_rows or [], dtu_method_rows or [], dtu_plot_rows or [], output)
+    isoform_dtu_summary = render_isoform_dtu_evidence_summary(
+        isoform_dtu_evidence_summary,
+        isoform_dtu_evidence,
+        output,
+    )
     enrichment_overview_link = file_link("GO/Reactome enrichment overview", enrichment_overview, output)
     enrichment_overview_html = (
         f"; {enrichment_overview_link}" if enrichment_overview_link else ""
@@ -839,6 +878,7 @@ def render_html(
   <div class="counts">contrasts: {len(rows)}; ok: {ok}; blocked: {blocked}; failed: {failed}; <a href="technical_report.pdf">printable technical PDF</a>{enrichment_overview_html}</div>
   {project_resources}
   {dtu_summary}
+  {isoform_dtu_summary}
   <table>
     <thead>
       <tr>
@@ -1008,6 +1048,8 @@ def main() -> int:
             args.isoform_switch_ncrna,
             args.isoform_switch_plots,
             args.isoform_switch_plots_pdf,
+            args.isoform_dtu_evidence,
+            args.isoform_dtu_evidence_summary,
             args.dtu_plan,
             args.dtu_method_manifest,
             args.dtu_plot_manifest,
@@ -1025,6 +1067,8 @@ def main() -> int:
         ("isoform_switch", "isoform_switch", "ncrna_switch_interpretation", "table", args.isoform_switch_ncrna, "ok"),
         ("isoform_switch", "isoform_switch", "plot_manifest", "manifest", args.isoform_switch_plots, "ok"),
         ("isoform_switch", "isoform_switch", "plots_pdf", "plot", args.isoform_switch_plots_pdf, "ok"),
+        ("isoform_switch", "isoform_switch", "isoform_dtu_evidence", "table", args.isoform_dtu_evidence, "ok"),
+        ("isoform_switch", "isoform_switch", "isoform_dtu_evidence_summary", "table", args.isoform_dtu_evidence_summary, "ok"),
         ("dtu", "dtu", "dtu_plan", "table", args.dtu_plan, dtu_plan_rows[0].get("status", "planned") if dtu_plan_rows else "not_configured"),
         ("dtu", "dtu", "dtu_method_manifest", "manifest", args.dtu_method_manifest, "ok" if dtu_method_rows else "not_configured"),
         ("dtu", "dtu", "dtu_plot_manifest", "manifest", args.dtu_plot_manifest, "ok" if dtu_plot_rows else "not_configured"),

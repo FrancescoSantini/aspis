@@ -4,7 +4,7 @@ This is the canonical ASPIS backlog. Older TODO-style notes have been merged
 here so that implementation priorities, validation blockers, and cleanup work
 are tracked in one place.
 
-Last updated: 2026-06-17.
+Last updated: 2026-07-01.
 
 ## How To Read This Backlog
 
@@ -44,7 +44,7 @@ narrower and no longer organized as open P0 report/resource plumbing:
 
 - Native DRIMSeq, transcript-feature DEXSeq, and transcript-event SUPPA2 DTU
   execution is implemented, contract-tested, split into one schedulable job per
-  contrast/method pair, and partially validated on the BEAS_2B G100 real run.
+  contrast/method pair, and validated on the BEAS_2B G100 real run.
 - Optional isoform-switch consequence annotation paths remain unvalidated for
   open local tools or precomputed user-supplied annotation tables.
 - Resource mapping thresholds for low-but-nonzero mapping rates need calibration
@@ -566,8 +566,10 @@ Completed native DTU scope:
   aggregation step.
 - BEAS_2B G100 validation completed six DRIMSeq contrasts and six
   transcript-feature DEXSeq contrasts with completed status and standardized
-  result tables. SUPPA2 transcript-event mode has a local contract and still
-  needs the next G100 refresh with `suppa.py` available.
+  result tables. A later BEAS_2B G100 refresh with `suppa.py` available
+  completed six SUPPA2 transcript-event contrasts and exposed non-empty
+  standardized rows, event counts, and delta-PSI plots in the RNA-seq
+  differential report.
 - Missing `Rscript`, missing `R::DRIMSeq`/`R::DEXSeq`, missing `suppa.py`,
   insufficient replicates, missing sample columns, and empty post-filter
   universes are reported as blocked rather than silently skipped.
@@ -580,6 +582,11 @@ Completed native DTU scope:
   `dtu_counts.tsv` and `dtu_coldata.tsv` after DTU method outputs and DTU plots
   exist; standardized results, method result tables, summaries, and plot-linked
   files are preserved.
+- Isoform-switch reporting now emits a companion isoform/DTU evidence table
+  that links isoform-switch candidate genes to completed DRIMSeq,
+  transcript-feature DEXSeq, SUPPA2, or externally standardized rMATS rows for
+  the same contrast. The table is evidence aggregation for review, not a new
+  statistical test.
 - The local biological integration contract covers DRIMSeq standardization,
   DEXSeq transcript-feature standardization, SUPPA2 transcript-event
   standardization, and DTU plot/report asset exposure without requiring real R
@@ -589,9 +596,13 @@ Completed native DTU scope:
 Remaining future/event-based tasks:
 
 - Decide whether true exon-bin DEXSeq should be added through a separate
-  exon-count/bin-count generation layer.
+  exon-count/bin-count generation layer. This is the next native-engine step if
+  ASPIS should claim conventional DEXSeq exon-bin testing instead of the
+  current transcript-feature DEXSeq companion analysis.
 - Decide whether rMATS belongs in ASPIS native execution; if so, add explicit
-  event-generation inputs instead of inferring events from transcript counts.
+  BAM/event input contracts and storage controls instead of inferring events
+  from transcript counts. Until then, rMATS remains available only through
+  command-template standardization of user-supplied/event-tool outputs.
 - Decide whether native SUPPA2 should be expanded beyond transcript-event
   `ioi` mode to local `ioe` alternative-splicing events (`SE`, `SS`, `MX`,
   `RI`, `FL`) after validating storage/runtime on real data.
@@ -606,8 +617,7 @@ Acceptance criteria:
   tables, standardized rows, and plots when DEXSeq is installed. Validated on
   BEAS_2B.
 - `rnaseq_dtu.run: true` with `method: SUPPA2` produces transcript-event
-  differential splicing rows when `suppa.py` is installed. Local contract
-  validation uses a fake SUPPA executable; real G100 validation is pending.
+  differential splicing rows when `suppa.py` is installed. Validated on BEAS_2B.
 - `rnaseq_dtu.run: true` with `method: all` and native candidate methods
   `DRIMSeq,DEXSeq,SUPPA2` runs as one schedulable job per contrast/method pair,
   then merges method rows across contrasts.
@@ -616,6 +626,8 @@ Acceptance criteria:
 - Reports explain whether each DTU contrast was planned, blocked, failed, or
   completed from the merged per-contrast manifest, with per-contrast links to
   summary, gene-result, usage, standardized tables, and DTU SVG plots.
+- Reports expose the isoform/DTU evidence table and summary whenever
+  isoform-switch reporting and DTU/splicing outputs are both present.
 - `rnaseq_dtu.prune_intermediates: true` adds the prune target to full runs, and
   the prune target can also be run explicitly on an existing completed DTU run.
   The generated prune manifest records removed, missing, skipped, and failed
