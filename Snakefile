@@ -2581,7 +2581,7 @@ checkpoint build_analysis_plan:
 wildcard_constraints:
     assay="rnaseq|smallrna",
     project="[A-Za-z0-9_.-]+",
-    method="DRIMSeq|DEXSeq|SUPPA2|rMATS"
+    method="DRIMSeq|DEXSeq|DEXSeqExon|SUPPA2|rMATS"
 
 
 rule assay_branch_ready:

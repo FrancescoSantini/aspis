@@ -174,6 +174,10 @@ def write_fake_helpers() -> dict[str, Path]:
 
 
 def main() -> int:
+    snakefile = Path("Snakefile").read_text(encoding="utf-8")
+    if 'method="DRIMSeq|DEXSeq|DEXSeqExon|SUPPA2|rMATS"' not in snakefile:
+        raise ValueError("Snakefile method wildcard constraint does not allow DEXSeqExon")
+
     paths = write_common_inputs()
     helpers = write_fake_helpers()
     dtu_dir = BASE / "dtu"
