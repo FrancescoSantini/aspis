@@ -6212,7 +6212,7 @@ rule count_rnaseq_dexseq_exon_library:
         aligned_samples=f"{BRANCH_DIR}" + "/rnaseq/{project}/alignment/aligned_samples.tsv",
         alignment_done=f"{BRANCH_DIR}" + "/rnaseq/{project}/alignment/alignment.done"
     output:
-        count=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/dtu/dexseq_exon_counts/sample_counts/{library_id}.dexseq_counts.txt",
+        counts=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/dtu/dexseq_exon_counts/sample_counts/{library_id}.dexseq_counts.txt",
         done=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/dtu/dexseq_exon_counts/sample_counts/{library_id}.dexseq_counts.done"
     params:
         dexseq_count_command=RNASEQ_DTU.get("dexseq_count_command", "dexseq_count.py"),
@@ -6228,7 +6228,7 @@ rule count_rnaseq_dexseq_exon_library:
           --aligned-samples {input.aligned_samples:q} \
           --library-id {wildcards.library_id:q} \
           --flattened-gff {input.flattened_gff:q} \
-          --count-file {output.count:q} \
+          --count-file {output.counts:q} \
           --done {output.done:q} \
           --dexseq-count-command {params.dexseq_count_command:q} \
           --dexseq-count-strandedness {params.dexseq_count_strandedness:q} \
