@@ -320,6 +320,10 @@ def render_dtu_summary(
             usage_count = str(count_unique_tsv_values(row.get("transcript_results", ""), "feature_id"))
             if usage_count == "0":
                 usage_count = summary.get("n_events", "") or row.get("standardized_result_count", "")
+        if not usage_count and method == "DEXSeqExon":
+            usage_count = str(count_unique_tsv_values(row.get("transcript_results", ""), "feature_id"))
+            if usage_count == "0":
+                usage_count = row.get("standardized_result_count", "")
         standardized_count = (
             plot_row.get("n_standardized", "")
             or row.get("standardized_result_count", "0")
