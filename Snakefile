@@ -967,6 +967,46 @@ def rnaseq_dtu_contrast_manifests(wildcards):
     ]
 
 
+def rnaseq_dexseq_exon_base(project):
+    return f"{BRANCH_DIR}/rnaseq/{project}/differential/dtu/dexseq_exon_counts"
+
+
+def rnaseq_dexseq_exon_annotation_gff(project):
+    return f"{rnaseq_dexseq_exon_base(project)}/dexseq_exon_bins.gff"
+
+
+def rnaseq_dexseq_exon_annotation_done(project):
+    return f"{rnaseq_dexseq_exon_base(project)}/dexseq_exon_annotation.done"
+
+
+def rnaseq_dexseq_exon_count_file(project, library_id):
+    return f"{rnaseq_dexseq_exon_base(project)}/sample_counts/{library_id}.dexseq_counts.txt"
+
+
+def rnaseq_dexseq_exon_count_done(project, library_id):
+    return f"{rnaseq_dexseq_exon_base(project)}/sample_counts/{library_id}.dexseq_counts.done"
+
+
+def rnaseq_dexseq_exon_annotation_inputs(wildcards):
+    if wildcards.method != "DEXSeqExon":
+        return []
+    return [
+        rnaseq_dexseq_exon_annotation_gff(wildcards.project),
+        rnaseq_dexseq_exon_annotation_done(wildcards.project),
+    ]
+
+
+def rnaseq_dexseq_exon_count_inputs(wildcards):
+    if wildcards.method != "DEXSeqExon":
+        return []
+    inputs = []
+    for row in materialized_rows_for_branch("rnaseq", wildcards.project):
+        library_id = row["library_id"]
+        inputs.append(rnaseq_dexseq_exon_count_file(wildcards.project, library_id))
+        inputs.append(rnaseq_dexseq_exon_count_done(wildcards.project, library_id))
+    return inputs
+
+
 def rnaseq_report_item_plan(project, level, contrast_id):
     return f"{BRANCH_DIR}/rnaseq/{project}/differential/reports/items/{level}/{contrast_id}/report_plan.tsv"
 
@@ -6138,6 +6178,66 @@ checkpoint plan_rnaseq_dtu:
         """
 
 
+rule prepare_rnaseq_dexseq_exon_annotation:
+    input:
+        plan=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/dtu/dtu_plan.tsv",
+        plan_done=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/dtu/dtu.done"
+    output:
+        gff=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/dtu/dexseq_exon_counts/dexseq_exon_bins.gff",
+        done=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/dtu/dexseq_exon_counts/dexseq_exon_annotation.done"
+    params:
+        annotation_gtf=lambda wildcards: RNASEQ_QUANTIFICATION.get(
+            "annotation_gtf",
+            RNASEQ_ALIGNMENT.get("annotation_gtf", ""),
+        ),
+        dexseq_prepare_annotation_command=RNASEQ_DTU.get("dexseq_prepare_annotation_command", "dexseq_prepare_annotation.py")
+    log:
+        "logs/branches/rnaseq/{project}.dexseq_exon.annotation.log"
+    shell:
+        r"""
+        mkdir -p logs/branches/rnaseq
+        python3 workflow/scripts/prepare_dexseq_exon_annotation.py \
+          --annotation-gtf {params.annotation_gtf:q} \
+          --flattened-gff {output.gff:q} \
+          --done {output.done:q} \
+          --dexseq-prepare-annotation-command {params.dexseq_prepare_annotation_command:q} \
+          > {log:q} 2>&1
+        """
+
+
+rule count_rnaseq_dexseq_exon_library:
+    input:
+        flattened_gff=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/dtu/dexseq_exon_counts/dexseq_exon_bins.gff",
+        annotation_done=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/dtu/dexseq_exon_counts/dexseq_exon_annotation.done",
+        aligned_samples=f"{BRANCH_DIR}" + "/rnaseq/{project}/alignment/aligned_samples.tsv",
+        alignment_done=f"{BRANCH_DIR}" + "/rnaseq/{project}/alignment/alignment.done"
+    output:
+        count=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/dtu/dexseq_exon_counts/sample_counts/{library_id}.dexseq_counts.txt",
+        done=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/dtu/dexseq_exon_counts/sample_counts/{library_id}.dexseq_counts.done"
+    params:
+        dexseq_count_command=RNASEQ_DTU.get("dexseq_count_command", "dexseq_count.py"),
+        dexseq_count_strandedness=RNASEQ_DTU.get("dexseq_count_strandedness", "no"),
+        dexseq_count_order=RNASEQ_DTU.get("dexseq_count_order", "pos"),
+        dexseq_count_min_mapq=RNASEQ_DTU.get("dexseq_count_min_mapq", 10)
+    log:
+        "logs/branches/rnaseq/{project}.dexseq_exon.count.{library_id}.log"
+    shell:
+        r"""
+        mkdir -p logs/branches/rnaseq
+        python3 workflow/scripts/count_dexseq_exon_library.py \
+          --aligned-samples {input.aligned_samples:q} \
+          --library-id {wildcards.library_id:q} \
+          --flattened-gff {input.flattened_gff:q} \
+          --count-file {output.count:q} \
+          --done {output.done:q} \
+          --dexseq-count-command {params.dexseq_count_command:q} \
+          --dexseq-count-strandedness {params.dexseq_count_strandedness:q} \
+          --dexseq-count-order {params.dexseq_count_order:q} \
+          --dexseq-count-min-mapq {params.dexseq_count_min_mapq:q} \
+          > {log:q} 2>&1
+        """
+
+
 rule run_rnaseq_dtu_contrast:
     input:
         plan=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/dtu/dtu_plan.tsv",
@@ -6146,7 +6246,9 @@ rule run_rnaseq_dtu_contrast:
         aligned_samples=f"{BRANCH_DIR}" + "/rnaseq/{project}/alignment/aligned_samples.tsv",
         transcript_counts=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/counts/transcript_counts.tsv",
         transcript_metadata=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/counts/transcript_metadata.tsv",
-        quantification_done=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/counts/quantification.done"
+        quantification_done=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/counts/quantification.done",
+        dexseq_exon_annotation=rnaseq_dexseq_exon_annotation_inputs,
+        dexseq_exon_counts=rnaseq_dexseq_exon_count_inputs
     output:
         manifest=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/dtu/contrast_manifests/{method}/{contrast_id}.manifest.tsv",
         done=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/dtu/contrast_manifests/{method}/{contrast_id}.done"
@@ -6160,6 +6262,8 @@ rule run_rnaseq_dtu_contrast:
         drimseq_script=RNASEQ_DTU.get("drimseq_script", "workflow/scripts/run_drimseq_dtu.R"),
         dexseq_script=RNASEQ_DTU.get("dexseq_script", "workflow/scripts/run_dexseq_dtu.R"),
         dexseq_exon_script=RNASEQ_DTU.get("dexseq_exon_script", "workflow/scripts/run_dexseq_exon_dtu.R"),
+        dexseq_exon_flattened_gff=lambda wildcards: rnaseq_dexseq_exon_annotation_gff(wildcards.project),
+        dexseq_exon_counts_dir=lambda wildcards: f"{rnaseq_dexseq_exon_base(wildcards.project)}/sample_counts",
         dexseq_prepare_annotation_command=RNASEQ_DTU.get("dexseq_prepare_annotation_command", "dexseq_prepare_annotation.py"),
         dexseq_count_command=RNASEQ_DTU.get("dexseq_count_command", "dexseq_count.py"),
         dexseq_count_strandedness=RNASEQ_DTU.get("dexseq_count_strandedness", "no"),
@@ -6210,6 +6314,8 @@ rule run_rnaseq_dtu_contrast:
           --drimseq-script {params.drimseq_script:q} \
           --dexseq-script {params.dexseq_script:q} \
           --dexseq-exon-script {params.dexseq_exon_script:q} \
+          --dexseq-exon-flattened-gff {params.dexseq_exon_flattened_gff:q} \
+          --dexseq-exon-counts-dir {params.dexseq_exon_counts_dir:q} \
           --dexseq-prepare-annotation-command {params.dexseq_prepare_annotation_command:q} \
           --dexseq-count-command {params.dexseq_count_command:q} \
           --dexseq-count-strandedness {params.dexseq_count_strandedness:q} \

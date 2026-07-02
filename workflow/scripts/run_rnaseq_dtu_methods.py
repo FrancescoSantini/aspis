@@ -106,6 +106,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--dexseq-exon-script", default="workflow/scripts/run_dexseq_exon_dtu.R")
     parser.add_argument("--dexseq-prepare-annotation-command", default="dexseq_prepare_annotation.py")
     parser.add_argument("--dexseq-count-command", default="dexseq_count.py")
+    parser.add_argument("--dexseq-exon-flattened-gff", default="")
+    parser.add_argument("--dexseq-exon-counts-dir", default="")
     parser.add_argument("--dexseq-count-strandedness", default="no")
     parser.add_argument("--dexseq-count-order", default="pos")
     parser.add_argument("--dexseq-count-mode", default="union")
@@ -936,19 +938,24 @@ def write_dexseq_exon_inputs(
     control_label = plan_row.get("control_label") or "control"
     test_label = plan_row.get("test_label") or "treated"
 
-    flattened_gff = method_dir / "dexseq_exon_bins.gff"
-    prepare_command = [
-        *shlex.split(args.dexseq_prepare_annotation_command),
-        args.annotation_gtf,
-        str(flattened_gff),
-    ]
-    completed = run_logged_command(prepare_command, stdout, stderr)
-    if completed.returncode != 0:
-        raise RuntimeError(f"DEXSeq annotation flattening exited with status {completed.returncode}")
-    if not flattened_gff.exists():
-        raise RuntimeError("DEXSeq annotation flattening did not produce a flattened GFF")
+    flattened_gff = Path(args.dexseq_exon_flattened_gff) if args.dexseq_exon_flattened_gff else method_dir / "dexseq_exon_bins.gff"
+    if args.dexseq_exon_flattened_gff:
+        if not flattened_gff.exists() or flattened_gff.stat().st_size == 0:
+            raise FileNotFoundError(f"precomputed DEXSeqExon flattened GFF is missing: {flattened_gff}")
+    else:
+        prepare_command = [
+            *shlex.split(args.dexseq_prepare_annotation_command),
+            args.annotation_gtf,
+            str(flattened_gff),
+        ]
+        completed = run_logged_command(prepare_command, stdout, stderr)
+        if completed.returncode != 0:
+            raise RuntimeError(f"DEXSeq annotation flattening exited with status {completed.returncode}")
+        if not flattened_gff.exists():
+            raise RuntimeError("DEXSeq annotation flattening did not produce a flattened GFF")
 
-    count_dir = method_dir / "sample_counts"
+    precomputed_count_dir = Path(args.dexseq_exon_counts_dir) if args.dexseq_exon_counts_dir else None
+    count_dir = precomputed_count_dir or method_dir / "sample_counts"
     count_dir.mkdir(parents=True, exist_ok=True)
     count_files: dict[str, Path] = {}
     coldata_rows: list[dict[str, str]] = []
@@ -969,27 +976,29 @@ def write_dexseq_exon_inputs(
             continue
         paired = "yes" if (sample.get("layout") or aligned.get("layout")) == "paired" else "no"
         count_file = count_dir / f"{safe_path_token(sample_id)}.dexseq_counts.txt"
-        command = [
-            *shlex.split(args.dexseq_count_command),
-            "-f",
-            "bam",
-            "-r",
-            args.dexseq_count_order,
-            "-s",
-            args.dexseq_count_strandedness,
-            "-p",
-            paired,
-            "-m",
-            args.dexseq_count_mode,
-        ]
-        if args.dexseq_count_min_mapq > 0:
-            command.extend(["-a", str(args.dexseq_count_min_mapq)])
-        command.extend([str(flattened_gff), bam, str(count_file)])
-        completed = run_logged_command(command, stdout, stderr)
-        if completed.returncode != 0:
-            raise RuntimeError(f"DEXSeq counting exited with status {completed.returncode} for {sample_id}")
-        if not count_file.exists():
-            raise RuntimeError(f"DEXSeq counting did not produce a count file for {sample_id}")
+        if precomputed_count_dir is not None:
+            if not count_file.exists() or count_file.stat().st_size == 0:
+                raise FileNotFoundError(f"precomputed DEXSeqExon count file is missing for {sample_id}: {count_file}")
+        else:
+            command = [
+                *shlex.split(args.dexseq_count_command),
+                "-f",
+                "bam",
+                "-r",
+                args.dexseq_count_order,
+                "-s",
+                args.dexseq_count_strandedness,
+                "-p",
+                paired,
+            ]
+            if args.dexseq_count_min_mapq > 0:
+                command.extend(["-a", str(args.dexseq_count_min_mapq)])
+            command.extend([str(flattened_gff), bam, str(count_file)])
+            completed = run_logged_command(command, stdout, stderr)
+            if completed.returncode != 0:
+                raise RuntimeError(f"DEXSeq counting exited with status {completed.returncode} for {sample_id}")
+            if not count_file.exists():
+                raise RuntimeError(f"DEXSeq counting did not produce a count file for {sample_id}")
         count_files[sample_id] = count_file
         coldata_rows.append(
             {
@@ -1025,7 +1034,7 @@ def run_dexseq_exon_contrast(args: argparse.Namespace, plan_row: dict[str, str])
         return blocked_row(args, "DEXSeqExon", plan_row, method_dir, f"Rscript executable not found: {args.rscript}")
     if not Path(args.dexseq_exon_script).exists():
         return blocked_row(args, "DEXSeqExon", plan_row, method_dir, f"DEXSeqExon runner script not found: {args.dexseq_exon_script}")
-    if not command_prefix_exists(args.dexseq_prepare_annotation_command):
+    if not args.dexseq_exon_flattened_gff and not command_prefix_exists(args.dexseq_prepare_annotation_command):
         return blocked_row(
             args,
             "DEXSeqExon",
@@ -1033,7 +1042,7 @@ def run_dexseq_exon_contrast(args: argparse.Namespace, plan_row: dict[str, str])
             method_dir,
             f"DEXSeq annotation helper not found: {args.dexseq_prepare_annotation_command}",
         )
-    if not command_prefix_exists(args.dexseq_count_command):
+    if not args.dexseq_exon_counts_dir and not command_prefix_exists(args.dexseq_count_command):
         return blocked_row(args, "DEXSeqExon", plan_row, method_dir, f"DEXSeq count helper not found: {args.dexseq_count_command}")
     method_dir.mkdir(parents=True, exist_ok=True)
     stdout = method_dir / "stdout.log"
