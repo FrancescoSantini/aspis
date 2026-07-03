@@ -52,6 +52,23 @@ blocked <- function(message, summary_path, gene_results, feature_results) {
   quit(status = blocked_exit)
 }
 
+normalize_dexseq_gene_id <- function(value) {
+  text <- as.character(value)
+  has_quotes <- grepl('"', text, fixed = TRUE)
+  stripped <- gsub('"', "", text, fixed = TRUE)
+  ifelse(has_quotes, stripped, text)
+}
+
+normalize_dexseq_feature_id <- function(value) {
+  text <- as.character(value)
+  has_quotes <- grepl('"', text, fixed = TRUE)
+  stripped <- gsub('"', "", text, fixed = TRUE)
+  has_quoted_pair <- has_quotes & grepl(":", stripped, fixed = TRUE)
+  normalized <- text
+  normalized[has_quoted_pair] <- sub(":", '"', stripped[has_quoted_pair], fixed = TRUE)
+  normalized
+}
+
 opts <- parse_args(commandArgs(trailingOnly = TRUE))
 counts_path <- need(opts, "counts")
 coldata_path <- need(opts, "coldata")
@@ -206,6 +223,8 @@ feature_table <- data.frame(
   status = "ok",
   stringsAsFactors = FALSE
 )
+feature_table$gene_id <- normalize_dexseq_gene_id(feature_table$gene_id)
+feature_table$feature_id <- normalize_dexseq_feature_id(feature_table$feature_id)
 
 usage_counts <- as.data.frame(lapply(merged[, sample_cols, drop = FALSE], as.numeric), check.names = FALSE)
 gene_totals <- usage_counts
@@ -225,8 +244,8 @@ mean_or_na <- function(frame, cols) {
   rowMeans(frame[, cols, drop = FALSE], na.rm = TRUE)
 }
 usage_table <- data.frame(
-  gene_id = merged[[gene_col]],
-  feature_id = merged[[feature_col]],
+  gene_id = normalize_dexseq_gene_id(merged[[gene_col]]),
+  feature_id = normalize_dexseq_feature_id(merged[[feature_col]]),
   mean_usage_control = mean_or_na(usage_props, control_samples),
   mean_usage_test = mean_or_na(usage_props, test_samples),
   delta_usage = mean_or_na(usage_props, test_samples) - mean_or_na(usage_props, control_samples),
