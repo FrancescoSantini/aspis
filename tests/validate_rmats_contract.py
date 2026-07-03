@@ -291,7 +291,7 @@ def main() -> int:
     if plot_rows[0]["method"] != "rMATS" or plot_rows[0]["status"] != "ok":
         raise ValueError(f"rMATS plots were not ok: {plot_rows}")
     usage_svg = Path(plot_rows[0]["usage_plot"]).read_text(encoding="utf-8")
-    if "Selected-gene rMATS event detail" not in usage_svg or "Gene One SE #EVENT1" not in usage_svg:
+    if "Top rMATS genes: event detail" not in usage_svg or "Gene One" not in usage_svg or "SE #EVENT1" not in usage_svg:
         raise ValueError(f"rMATS delta PSI plot was not rendered correctly: {plot_rows}")
     feature_svg = Path(plot_rows[0]["feature_plot"]).read_text(encoding="utf-8")
     if "Ranked rMATS event candidates" not in feature_svg or "SE skipped exon" not in feature_svg:

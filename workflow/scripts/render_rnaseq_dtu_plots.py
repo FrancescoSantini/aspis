@@ -98,6 +98,13 @@ def numeric_p(row: dict[str, str]) -> float | None:
     return safe_float(row.get("padj", "")) or safe_float(row.get("pvalue", ""))
 
 
+def format_number(value: str | float | None, digits: int = 3) -> str:
+    parsed = value if isinstance(value, float) else safe_float(str(value or ""))
+    if parsed is None:
+        return str(value or "")
+    return f"{parsed:.{digits}g}"
+
+
 def significant_count(rows: list[dict[str, str]], alpha: float) -> int:
     count = 0
     for row in rows:
@@ -125,14 +132,32 @@ def dexseq_exon_label(row: dict[str, str]) -> str:
     return feature or "exon bin"
 
 
+def gene_label(row: dict[str, str]) -> str:
+    label = cleaned_identifier(row.get("gene_name", "") or row.get("gene_id", ""))
+    if not label:
+        return "unknown gene"
+    if "+" in label:
+        parts = [part for part in label.split("+") if part]
+        if len(parts) > 1:
+            return f"{parts[0]} +{len(parts) - 1} genes"
+    return label
+
+
+def truncate_label(value: str, max_chars: int) -> str:
+    value = value.strip()
+    if len(value) <= max_chars:
+        return value
+    return value[: max(1, max_chars - 3)] + "..."
+
+
 def event_label(row: dict[str, str], method: str) -> str:
     method_upper = method.upper()
     feature = cleaned_identifier(row.get("feature_id", "") or row.get("event_id", ""))
-    gene = cleaned_identifier(row.get("gene_name", "") or row.get("gene_id", ""))
+    gene = gene_label(row)
     event_type = cleaned_identifier(row.get("event_type", ""))
     if method_upper == "RMATS":
         event = f"{event_type} #{feature}" if event_type and feature else event_type or feature or "event"
-        return f"{gene} {event}".strip() if gene else event
+        return f"{gene} {event}".strip() if gene != "unknown gene" else event
     if method_upper == "SUPPA2":
         return feature or event_type or "event"
     return feature or event_type or "feature"
@@ -176,6 +201,7 @@ def svg_header(width: int, height: int) -> str:
         ".muted{fill:#57606a}.axis{stroke:#24292f;stroke-width:1}"
         ".grid{stroke:#d0d7de;stroke-width:.7}.sig{fill:#cf222e;opacity:.78}"
         ".ns{fill:#57606a;opacity:.38}.bar1{fill:#0969da}.bar2{fill:#cf222e}"
+        ".gene{font-weight:700;fill:#24292f}.rule{stroke:#d8dee4;stroke-width:.8}"
         "</style>\n"
     )
 
@@ -245,7 +271,7 @@ def render_usage_svg(path: Path, usage_rows: list[dict[str, str]], gene_id: str,
     bar_w = width - left - right
     parts = [svg_header(width, height)]
     parts.append('<rect width="100%" height="100%" fill="white"/>\n')
-    parts.append(f'<text x="24" y="30" font-size="20" font-weight="700">Selected-gene DTU usage detail: {html.escape(gene_id)}</text>\n')
+    parts.append(f'<text x="24" y="30" font-size="20" font-weight="700">Top gene DTU usage detail: {html.escape(gene_id)}</text>\n')
     parts.append('<text x="24" y="52" font-size="12" class="muted">One selected top-ranked gene. Mean transcript usage by contrast group; larger shifts are shown first.</text>\n')
     for tick in [0, 0.25, 0.5, 0.75, 1.0]:
         x = left + tick * bar_w
@@ -334,14 +360,14 @@ def render_signed_effect_svg(
 
     max_abs = value_limit or max(abs(safe_float(row.get(value_column, "")) or 0.0) for row in selected_rows)
     max_abs = max(1.0, math.ceil(max_abs * 2) / 2)
-    width = 980
+    width = 1320
     row_h = 42
     legend_lines = [subtitle]
     legend = method_legend(method)
     if legend:
         legend_lines.append(legend)
     height = max(260, 130 + (len(selected_rows) * row_h) + ((len(legend_lines) - 1) * 18))
-    left, right, top = 210, 86, 78
+    left, right, top = 390, 300, 78
     bar_w = width - left - right
     half_w = bar_w / 2
     center = left + half_w
@@ -364,16 +390,142 @@ def render_signed_effect_svg(
         css_class = "bar2" if effect >= 0 else "bar1"
         method_upper = method.upper()
         label = dexseq_exon_label(row) if method_upper == "DEXSEQEXON" else event_label(row, method)
-        if not filter_gene and method_upper != "RMATS" and row.get("gene_name", ""):
-            label = f"{row.get('gene_name', '')} {label}"
-        elif not filter_gene and method_upper != "RMATS" and row.get("gene_id", ""):
-            label = f"{row.get('gene_id', '')} {label}"
-        label = label if len(label) <= 28 else label[:25] + "..."
+        if not filter_gene and method_upper != "RMATS":
+            label = f"{gene_label(row)} {label}"
+        label = truncate_label(label, 48)
         padj = row.get("padj", "")
-        padj_text = f"; padj {padj}" if padj else ""
+        padj_text = f"; padj {format_number(padj)}" if padj else ""
         parts.append(f'<text x="{left - 12}" y="{y + 18}" text-anchor="end" font-size="12">{html.escape(label)}</text>\n')
         parts.append(f'<rect class="{css_class}" x="{bar_x:.1f}" y="{y + 4}" width="{bar_width:.1f}" height="18" rx="2"/>\n')
-        parts.append(f'<text x="{left + bar_w + 8}" y="{y + 19}" font-size="11" class="muted">{html.escape(axis_label)} {effect:.3g}{html.escape(padj_text)}</text>\n')
+        parts.append(f'<text x="{left + bar_w + 12}" y="{y + 19}" font-size="11" class="muted">{html.escape(axis_label)} {format_number(effect)}{html.escape(padj_text)}</text>\n')
+    parts.append("</svg>\n")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("".join(parts), encoding="utf-8")
+    return True
+
+
+def feature_only_label(row: dict[str, str], method: str) -> str:
+    method_upper = method.upper()
+    if method_upper == "DEXSEQEXON":
+        return dexseq_exon_label(row)
+    feature = cleaned_identifier(row.get("feature_id", "") or row.get("event_id", ""))
+    event_type = cleaned_identifier(row.get("event_type", ""))
+    if method_upper == "RMATS":
+        return f"{event_type} #{feature}" if event_type and feature else event_type or feature or "event"
+    if method_upper == "SUPPA2":
+        return feature or event_type or "event"
+    return feature or event_type or "feature"
+
+
+def top_gene_keys(
+    rows: list[dict[str, str]],
+    value_column: str,
+    top_gene_count: int,
+) -> list[str]:
+    scored: dict[str, tuple[float, float, str]] = {}
+    for row in rows:
+        gene = row.get("gene_id", "") or row.get("gene_name", "")
+        if not gene:
+            continue
+        effect = safe_float(row.get(value_column, ""))
+        score = numeric_p(row)
+        if effect is None or score is None:
+            continue
+        current = scored.get(gene)
+        candidate = (score, -abs(effect), gene)
+        if current is None or candidate < current:
+            scored[gene] = candidate
+    return [item[2] for item in sorted(scored.values())[:top_gene_count]]
+
+
+def render_top_genes_signed_effect_svg(
+    path: Path,
+    rows: list[dict[str, str]],
+    method: str,
+    value_column: str,
+    axis_label: str,
+    title: str,
+    subtitle: str,
+    top_n: int,
+    value_limit: float | None = None,
+) -> bool:
+    top_gene_count = min(6, max(2, math.ceil(top_n / 4)))
+    max_features_per_gene = max(2, math.ceil(top_n / top_gene_count))
+    gene_keys = top_gene_keys(rows, value_column, top_gene_count)
+    grouped: list[tuple[str, dict[str, str] | str]] = []
+    selected_rows: list[dict[str, str]] = []
+    for gene in gene_keys:
+        gene_rows = [
+            row
+            for row in rows
+            if (row.get("gene_id", "") or row.get("gene_name", "")) == gene
+            and safe_float(row.get(value_column, "")) is not None
+        ]
+        gene_rows.sort(
+            key=lambda row: (
+                numeric_p(row) if numeric_p(row) is not None else math.inf,
+                -(abs(safe_float(row.get(value_column, "")) or 0.0)),
+                row.get("feature_id", ""),
+            )
+        )
+        gene_rows = gene_rows[:max_features_per_gene]
+        if not gene_rows:
+            continue
+        grouped.append(("gene", gene_label(gene_rows[0])))
+        for row in gene_rows:
+            grouped.append(("row", row))
+            selected_rows.append(row)
+    if not selected_rows:
+        return False
+
+    max_abs = value_limit or max(abs(safe_float(row.get(value_column, "")) or 0.0) for row in selected_rows)
+    max_abs = max(1.0, math.ceil(max_abs * 2) / 2)
+    width = 1320
+    row_h = 38
+    gene_h = 28
+    legend_lines = [subtitle]
+    legend = method_legend(method)
+    if legend:
+        legend_lines.append(legend)
+    content_h = sum(gene_h if kind == "gene" else row_h for kind, _item in grouped)
+    height = max(300, 142 + content_h + ((len(legend_lines) - 1) * 18))
+    left, right, top = 390, 300, 88 + ((len(legend_lines) - 1) * 18)
+    bar_w = width - left - right
+    half_w = bar_w / 2
+    center = left + half_w
+    parts = [svg_header(width, height)]
+    parts.append('<rect width="100%" height="100%" fill="white"/>\n')
+    parts.append(f'<text x="24" y="30" font-size="20" font-weight="700">{html.escape(title)}</text>\n')
+    for idx, line in enumerate(legend_lines):
+        parts.append(f'<text x="24" y="{52 + (idx * 18)}" font-size="12" class="muted">{html.escape(line)}</text>\n')
+    for tick in [-max_abs, -max_abs / 2, 0.0, max_abs / 2, max_abs]:
+        x = center + (tick / max_abs) * half_w
+        parts.append(f'<line class="grid" x1="{x:.1f}" y1="{top - 14}" x2="{x:.1f}" y2="{height - 48}"/>\n')
+        parts.append(f'<text x="{x:.1f}" y="{height - 24}" text-anchor="middle" font-size="11">{tick:g}</text>\n')
+    parts.append(f'<line class="axis" x1="{center:.1f}" y1="{top - 14}" x2="{center:.1f}" y2="{height - 48}"/>\n')
+    parts.append(f'<text x="{center:.1f}" y="{height - 7}" text-anchor="middle" font-size="12" class="muted">{html.escape(axis_label)}</text>\n')
+
+    y = top
+    for kind, item in grouped:
+        if kind == "gene":
+            label = truncate_label(str(item), 55)
+            parts.append(f'<line class="rule" x1="24" y1="{y - 7}" x2="{width - 24}" y2="{y - 7}"/>\n')
+            parts.append(f'<text class="gene" x="24" y="{y + 10}" font-size="12">{html.escape(label)}</text>\n')
+            y += gene_h
+            continue
+        row = item
+        assert isinstance(row, dict)
+        effect = max(-max_abs, min(max_abs, safe_float(row.get(value_column, "")) or 0.0))
+        bar_x = center if effect >= 0 else center + (effect / max_abs) * half_w
+        bar_width = abs(effect / max_abs) * half_w
+        css_class = "bar2" if effect >= 0 else "bar1"
+        label = truncate_label(feature_only_label(row, method), 46)
+        padj = row.get("padj", "")
+        padj_text = f"; padj {format_number(padj)}" if padj else ""
+        parts.append(f'<text x="{left - 12}" y="{y + 18}" text-anchor="end" font-size="12">{html.escape(label)}</text>\n')
+        parts.append(f'<rect class="{css_class}" x="{bar_x:.1f}" y="{y + 4}" width="{bar_width:.1f}" height="18" rx="2"/>\n')
+        parts.append(f'<text x="{left + bar_w + 12}" y="{y + 19}" font-size="11" class="muted">{html.escape(axis_label)} {format_number(effect)}{html.escape(padj_text)}</text>\n')
+        y += row_h
     parts.append("</svg>\n")
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("".join(parts), encoding="utf-8")
@@ -381,16 +533,15 @@ def render_signed_effect_svg(
 
 
 def render_exon_bin_effect_svg(path: Path, exon_rows: list[dict[str, str]], gene_id: str, top_n: int) -> bool:
-    return render_signed_effect_svg(
+    return render_top_genes_signed_effect_svg(
         path,
         exon_rows,
         "DEXSeqExon",
         "log2_fold_change",
         "log2FC",
-        f"Selected-gene DEXSeqExon exon-bin detail: {gene_id}",
-        "One selected top-ranked gene. Each row is one exon bin; blue is lower in test and red is higher.",
+        "Top DEXSeqExon genes: exon-bin detail",
+        "Top-ranked genes by adjusted p-value. Each row is one exon bin; blue is lower in test and red is higher.",
         top_n,
-        filter_gene=gene_id,
     )
 
 
@@ -408,17 +559,16 @@ def render_exon_bin_candidates_svg(path: Path, exon_rows: list[dict[str, str]], 
 
 
 def render_delta_psi_svg(path: Path, event_rows: list[dict[str, str]], gene_id: str, top_n: int, method: str = "SUPPA2") -> bool:
-    return render_signed_effect_svg(
+    return render_top_genes_signed_effect_svg(
         path,
         event_rows,
         method,
         "delta_psi",
         "delta PSI",
-        f"Selected-gene {method} event detail: {gene_id}",
-        "One selected top-ranked gene. Each row is one splicing event; blue is decreased inclusion in test and red is increased.",
+        f"Top {method} genes: event detail",
+        "Top-ranked genes by adjusted p-value. Each row is one splicing event; blue is decreased inclusion in test and red is increased.",
         top_n,
         value_limit=1.0,
-        filter_gene=gene_id,
     )
 
 
