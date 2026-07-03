@@ -160,8 +160,8 @@ def write_fake_helpers() -> dict[str, Path]:
                 "gene.write_text('gene_id\\tn_features\\tmin_pvalue\\tmin_padj\\tstatus\\nGENE1\\t2\\t0.001\\t0.01\\tok\\n', encoding='utf-8')",
                 "feature.write_text(",
                 "    'gene_id\\tfeature_id\\tstatistic\\tlog2_fold_change\\tpvalue\\tpadj\\tevent_type\\tmean_usage_control\\tmean_usage_test\\tdelta_usage\\tstatus\\n'",
-                "    'GENE1\\tGENE1:E001\\t12.5\\t-1.2\\t0.001\\t0.01\\texon_bin_usage\\t0.8\\t0.25\\t-0.55\\tok\\n'",
-                "    'GENE1\\tGENE1:E002\\t11.7\\t1.4\\t0.002\\t0.02\\texon_bin_usage\\t0.2\\t0.75\\t0.55\\tok\\n',",
+                "    'GENE1\\t\"GENE1\"\"E001\"\\t12.5\\t-1.2\\t0.001\\t0.01\\texon_bin_usage\\tNA\\tNA\\tNA\\tok\\n'",
+                "    'GENE1\\t\"GENE1\"\"E002\"\\t11.7\\t1.4\\t0.002\\t0.02\\texon_bin_usage\\tNA\\tNA\\tNA\\tok\\n',",
                 "    encoding='utf-8',",
                 ")",
                 "summary.write_text('status\\treason\\tn_input_exon_bins\\tn_tested_genes\\tn_usage_exon_bins\\tcontrol_label\\ttest_label\\nok\\ttrue exon-bin fake DEXSeq\\t2\\t1\\t2\\tcontrol\\ttreated\\n', encoding='utf-8')",
@@ -249,9 +249,9 @@ def main() -> int:
             "--dexseq-exon-script",
             str(helpers["runner"]),
             "--dexseq-prepare-annotation-command",
-            f"{sys.executable} {helpers['prepare']}",
+            f'"{sys.executable}" "{helpers["prepare"]}"',
             "--dexseq-count-command",
-            f"{sys.executable} {helpers['count']}",
+            f'"{sys.executable}" "{helpers["count"]}"',
             "--dtu-min-count",
             "1",
             "--dtu-min-samples",
@@ -281,7 +281,7 @@ def main() -> int:
         raise ValueError(f"DEXSeqExon metadata did not map exon bins to genes: {metadata}")
     standardized = read_tsv(Path(row["standardized_results"]), {"method", "feature_id", "gene_id", "event_type", "delta_psi", "pvalue", "padj"})
     exon_rows = [item for item in standardized if item["event_type"] == "exon_bin_usage"]
-    if len(exon_rows) != 2 or {item["feature_id"] for item in exon_rows} != {"GENE1:E001", "GENE1:E002"}:
+    if len(exon_rows) != 2 or {item["feature_id"] for item in exon_rows} != {'GENE1"E001', 'GENE1"E002'}:
         raise ValueError(f"standardized DEXSeqExon exon-bin rows were not preserved: {standardized}")
 
     run_command(
@@ -306,8 +306,10 @@ def main() -> int:
     if plot_rows[0]["method"] != "DEXSeqExon" or plot_rows[0]["status"] != "ok":
         raise ValueError(f"DEXSeqExon plots were not ok: {plot_rows}")
     usage_svg = Path(plot_rows[0]["usage_plot"]).read_text(encoding="utf-8")
-    if "Top DTU usage" not in usage_svg or "GENE1:E002" not in usage_svg:
+    if "Top DEXSeqExon exon bins" not in usage_svg or "exon bin E002" not in usage_svg or "log2FC" not in usage_svg:
         raise ValueError(f"DEXSeqExon usage plot did not include exon-bin features: {plot_rows}")
+    if '""' in usage_svg:
+        raise ValueError(f"DEXSeqExon usage plot exposed raw quoted DEXSeq bin identifiers: {plot_rows}")
     print("DEXSeqExon contract ok")
     return 0
 

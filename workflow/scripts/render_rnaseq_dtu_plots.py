@@ -106,6 +106,37 @@ def significant_count(rows: list[dict[str, str]], alpha: float) -> int:
     return count
 
 
+def cleaned_identifier(value: str) -> str:
+    cleaned = (value or "").strip()
+    cleaned = cleaned.replace('"""', '"')
+    if len(cleaned) >= 2 and cleaned.startswith('"') and cleaned.endswith('"'):
+        cleaned = cleaned[1:-1]
+    return cleaned
+
+
+def dexseq_exon_label(row: dict[str, str]) -> str:
+    feature = cleaned_identifier(row.get("feature_id", ""))
+    match = re.fullmatch(r'([^"]+)"+([^"]+)', feature)
+    if match:
+        return f"exon bin {match.group(2)}"
+    if ":" in feature:
+        return f"exon bin {feature.rsplit(':', 1)[1]}"
+    return feature or "exon bin"
+
+
+def event_label(row: dict[str, str], method: str) -> str:
+    method_upper = method.upper()
+    feature = cleaned_identifier(row.get("feature_id", "") or row.get("event_id", ""))
+    gene = cleaned_identifier(row.get("gene_name", "") or row.get("gene_id", ""))
+    event_type = cleaned_identifier(row.get("event_type", ""))
+    if method_upper == "RMATS":
+        event = f"{event_type} #{feature}" if event_type and feature else event_type or feature or "event"
+        return f"{gene} {event}".strip() if gene else event
+    if method_upper == "SUPPA2":
+        return feature or event_type or "event"
+    return feature or event_type or "feature"
+
+
 def dedupe_suppa2_rows(rows: list[dict[str, str]]) -> list[dict[str, str]]:
     deduped = []
     seen = set()
@@ -225,6 +256,61 @@ def render_usage_svg(path: Path, usage_rows: list[dict[str, str]], gene_id: str,
     return True
 
 
+def render_exon_bin_effect_svg(path: Path, exon_rows: list[dict[str, str]], gene_id: str, top_n: int) -> bool:
+    rows = []
+    for row in exon_rows:
+        if row.get("gene_id", "") != gene_id:
+            continue
+        effect = safe_float(row.get("log2_fold_change", ""))
+        if effect is None:
+            continue
+        rows.append(row)
+    if not rows:
+        return False
+
+    rows = sorted(
+        rows,
+        key=lambda row: abs(safe_float(row.get("log2_fold_change", "")) or 0.0),
+        reverse=True,
+    )[:top_n]
+    max_abs = max(abs(safe_float(row.get("log2_fold_change", "")) or 0.0) for row in rows)
+    max_abs = max(1.0, math.ceil(max_abs * 2) / 2)
+    width = 980
+    row_h = 42
+    height = max(260, 130 + (len(rows) * row_h))
+    left, right, top = 210, 86, 78
+    bar_w = width - left - right
+    half_w = bar_w / 2
+    center = left + half_w
+    parts = [svg_header(width, height)]
+    parts.append('<rect width="100%" height="100%" fill="white"/>\n')
+    parts.append(f'<text x="24" y="30" font-size="20" font-weight="700">Top DEXSeqExon exon bins: {html.escape(gene_id)}</text>\n')
+    parts.append('<text x="24" y="52" font-size="12" class="muted">Signed exon-bin log2 fold-change. Blue is lower in the test group; red is higher.</text>\n')
+    for tick in [-max_abs, -max_abs / 2, 0.0, max_abs / 2, max_abs]:
+        x = center + (tick / max_abs) * half_w
+        parts.append(f'<line class="grid" x1="{x:.1f}" y1="{top - 12}" x2="{x:.1f}" y2="{height - 48}"/>\n')
+        parts.append(f'<text x="{x:.1f}" y="{height - 24}" text-anchor="middle" font-size="11">{tick:g}</text>\n')
+    parts.append(f'<line class="axis" x1="{center:.1f}" y1="{top - 12}" x2="{center:.1f}" y2="{height - 48}"/>\n')
+    parts.append(f'<text x="{center:.1f}" y="{height - 7}" text-anchor="middle" font-size="12" class="muted">log2 fold-change</text>\n')
+    for idx, row in enumerate(rows):
+        y = top + idx * row_h
+        effect = max(-max_abs, min(max_abs, safe_float(row.get("log2_fold_change", "")) or 0.0))
+        bar_x = center if effect >= 0 else center + (effect / max_abs) * half_w
+        bar_width = abs(effect / max_abs) * half_w
+        css_class = "bar2" if effect >= 0 else "bar1"
+        label = dexseq_exon_label(row)
+        label = label if len(label) <= 28 else label[:25] + "..."
+        padj = row.get("padj", "")
+        padj_text = f"; padj {padj}" if padj else ""
+        parts.append(f'<text x="{left - 12}" y="{y + 18}" text-anchor="end" font-size="12">{html.escape(label)}</text>\n')
+        parts.append(f'<rect class="{css_class}" x="{bar_x:.1f}" y="{y + 4}" width="{bar_width:.1f}" height="18" rx="2"/>\n')
+        parts.append(f'<text x="{left + bar_w + 8}" y="{y + 19}" font-size="11" class="muted">log2FC {effect:.3g}{html.escape(padj_text)}</text>\n')
+    parts.append("</svg>\n")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("".join(parts), encoding="utf-8")
+    return True
+
+
 def render_delta_psi_svg(path: Path, event_rows: list[dict[str, str]], gene_id: str, top_n: int, method: str = "SUPPA2") -> bool:
     rows = []
     seen_events = set()
@@ -267,7 +353,7 @@ def render_delta_psi_svg(path: Path, event_rows: list[dict[str, str]], gene_id: 
     parts.append(f'<text x="{center:.1f}" y="{height - 7}" text-anchor="middle" font-size="12" class="muted">delta PSI</text>\n')
     for idx, row in enumerate(rows):
         y = top + idx * row_h
-        feature = row.get("feature_id", "") or row.get("event_id", "")
+        feature = event_label(row, method)
         delta = max(-1.0, min(1.0, safe_float(row.get("delta_psi", "")) or 0.0))
         bar_x = center if delta >= 0 else center + delta * half_w
         bar_width = abs(delta) * half_w
@@ -333,6 +419,8 @@ def plot_row(args: argparse.Namespace, row: dict[str, str]) -> dict[str, str]:
         usage_rows = read_tsv(usage_path)
         if method_upper in {"SUPPA2", "RMATS"}:
             rendered = render_delta_psi_svg(Path(output["usage_plot"]), usage_rows, top_gene, args.top_n, row.get("method", ""))
+        elif method_upper == "DEXSEQEXON":
+            rendered = render_exon_bin_effect_svg(Path(output["usage_plot"]), standardized, top_gene, args.top_n)
         else:
             rendered = render_usage_svg(Path(output["usage_plot"]), usage_rows, top_gene, args.top_n)
         if not rendered:

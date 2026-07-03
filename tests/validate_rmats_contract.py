@@ -206,7 +206,7 @@ def main() -> int:
             "--contrast-id",
             contrast_id,
             "--rmats-executable",
-            f"{sys.executable} {fake_rmats}",
+            f'"{sys.executable}" "{fake_rmats}"',
         ]
     )
     blocked_rows = read_tsv(blocked_dir / "dtu_method_manifest.tsv", {"method", "status", "reason"})
@@ -244,7 +244,7 @@ def main() -> int:
             "--contrast-id",
             contrast_id,
             "--rmats-executable",
-            f"{sys.executable} {fake_rmats}",
+            f'"{sys.executable}" "{fake_rmats}"',
             "--rmats-read-length",
             "100",
             "--rmats-lib-type",
@@ -291,7 +291,7 @@ def main() -> int:
     if plot_rows[0]["method"] != "rMATS" or plot_rows[0]["status"] != "ok":
         raise ValueError(f"rMATS plots were not ok: {plot_rows}")
     usage_svg = Path(plot_rows[0]["usage_plot"]).read_text(encoding="utf-8")
-    if "Top rMATS delta PSI" not in usage_svg or "EVENT1" not in usage_svg:
+    if "Top rMATS delta PSI" not in usage_svg or "Gene One SE #EVENT1" not in usage_svg:
         raise ValueError(f"rMATS delta PSI plot was not rendered correctly: {plot_rows}")
     print("rMATS contract ok")
     return 0
