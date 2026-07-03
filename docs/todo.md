@@ -602,8 +602,8 @@ Completed native DTU scope:
 - RNA-seq differential and integrated project reports expose DTU status,
   standardized rows, significant rows, and links to summary, gene-result, usage,
   standardized result tables, and DTU overview SVG plots for completed native
-  methods. Event/exon-bin methods now expose both cross-gene candidate plots and
-  focused top-gene spotlight plots, with rMATS event-code legend text.
+  methods. Event/exon-bin methods now expose both ranked candidate plots across
+  genes and selected-gene detail plots, with rMATS event-code legend text.
 - DTU intermediate pruning is implemented as an explicit, auditable target. It
   removes only re-creatable per-contrast DTU input slices such as
   `dtu_counts.tsv` and `dtu_coldata.tsv` after DTU method outputs and DTU plots
@@ -656,7 +656,7 @@ Acceptance criteria:
 - Reports explain whether each DTU contrast was planned, blocked, failed, or
   completed from the merged per-contrast manifest, with per-contrast links to
   summary, gene-result, usage, standardized tables, overview SVG plots,
-  cross-gene candidate SVG plots, and focused top-gene spotlight SVG plots.
+  ranked candidate SVG plots, and selected-gene detail SVG plots.
 - Reports expose the isoform/DTU evidence table and summary whenever
   isoform-switch reporting and DTU/splicing outputs are both present.
 - `rnaseq_dtu.prune_intermediates: true` adds the prune target to full runs, and

@@ -352,8 +352,8 @@ def dtu_cell(
             optional_row_link(row, "gene_results", "gene results", base_dir),
             optional_row_link(row, "standardized_results", "standardized", base_dir),
             optional_row_link(plot_row, "overview_plot", "overview plot", base_dir),
-            optional_row_link(plot_row, "feature_plot", "candidate plot", base_dir),
-            optional_row_link(plot_row, "usage_plot", "top-gene spotlight", base_dir),
+            optional_row_link(plot_row, "feature_plot", "ranked candidates", base_dir),
+            optional_row_link(plot_row, "usage_plot", "selected-gene detail", base_dir),
         ]
         reason = row.get("reason", "")
         if reason:

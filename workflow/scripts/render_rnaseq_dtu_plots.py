@@ -245,8 +245,8 @@ def render_usage_svg(path: Path, usage_rows: list[dict[str, str]], gene_id: str,
     bar_w = width - left - right
     parts = [svg_header(width, height)]
     parts.append('<rect width="100%" height="100%" fill="white"/>\n')
-    parts.append(f'<text x="24" y="30" font-size="20" font-weight="700">Top-gene DTU usage spotlight: {html.escape(gene_id)}</text>\n')
-    parts.append('<text x="24" y="52" font-size="12" class="muted">Single top-ranked gene. Mean transcript usage by contrast group; larger shifts are shown first.</text>\n')
+    parts.append(f'<text x="24" y="30" font-size="20" font-weight="700">Selected-gene DTU usage detail: {html.escape(gene_id)}</text>\n')
+    parts.append('<text x="24" y="52" font-size="12" class="muted">One selected top-ranked gene. Mean transcript usage by contrast group; larger shifts are shown first.</text>\n')
     for tick in [0, 0.25, 0.5, 0.75, 1.0]:
         x = left + tick * bar_w
         parts.append(f'<line class="grid" x1="{x:.1f}" y1="{top - 10}" x2="{x:.1f}" y2="{height - 44}"/>\n')
@@ -387,8 +387,8 @@ def render_exon_bin_effect_svg(path: Path, exon_rows: list[dict[str, str]], gene
         "DEXSeqExon",
         "log2_fold_change",
         "log2FC",
-        f"Top-gene DEXSeqExon exon-bin spotlight: {gene_id}",
-        "Single top-ranked gene. Signed exon-bin effect: blue is lower in test; red is higher.",
+        f"Selected-gene DEXSeqExon exon-bin detail: {gene_id}",
+        "One selected top-ranked gene. Each row is one exon bin; blue is lower in test and red is higher.",
         top_n,
         filter_gene=gene_id,
     )
@@ -401,8 +401,8 @@ def render_exon_bin_candidates_svg(path: Path, exon_rows: list[dict[str, str]], 
         "DEXSeqExon",
         "log2_fold_change",
         "log2FC",
-        "Top DEXSeqExon exon-bin candidates across genes",
-        "Ranked by adjusted p-value, with at most three exon bins shown per gene.",
+        "Ranked DEXSeqExon exon-bin candidates",
+        "Individual exon bins ranked across genes by adjusted p-value, with at most three bins shown per gene.",
         top_n,
     )
 
@@ -414,8 +414,8 @@ def render_delta_psi_svg(path: Path, event_rows: list[dict[str, str]], gene_id: 
         method,
         "delta_psi",
         "delta PSI",
-        f"Top-gene {method} event spotlight: {gene_id}",
-        "Single top-ranked gene. Blue is decreased inclusion in test; red is increased.",
+        f"Selected-gene {method} event detail: {gene_id}",
+        "One selected top-ranked gene. Each row is one splicing event; blue is decreased inclusion in test and red is increased.",
         top_n,
         value_limit=1.0,
         filter_gene=gene_id,
@@ -429,8 +429,8 @@ def render_delta_psi_candidates_svg(path: Path, event_rows: list[dict[str, str]]
         method,
         "delta_psi",
         "delta PSI",
-        f"Top {method} event candidates across genes",
-        "Ranked by adjusted p-value, with at most three events shown per gene.",
+        f"Ranked {method} event candidates",
+        "Individual splicing events ranked across genes by adjusted p-value, with at most three events shown per gene.",
         top_n,
         value_limit=1.0,
     )
