@@ -4,7 +4,7 @@ This is the canonical ASPIS backlog. Older TODO-style notes have been merged
 here so that implementation priorities, validation blockers, and cleanup work
 are tracked in one place.
 
-Last updated: 2026-07-01.
+Last updated: 2026-07-03.
 
 ## How To Read This Backlog
 
@@ -44,8 +44,9 @@ narrower and no longer organized as open P0 report/resource plumbing:
 
 - Native DRIMSeq, transcript-feature DEXSeq, true exon-bin DEXSeqExon, and
   transcript-event SUPPA2 DTU execution is implemented, contract-tested, split
-  into one schedulable job per contrast/method pair, and validated or ready for
-  targeted real-data validation on the BEAS_2B G100 run.
+  into one schedulable job per contrast/method pair, and validated on the
+  BEAS_2B G100 run. rMATS remains explicitly planned/unconfigured until ASPIS
+  has a native event-input contract for it.
 - Optional isoform-switch consequence annotation paths remain unvalidated for
   open local tools or precomputed user-supplied annotation tables.
 - Resource mapping thresholds for low-but-nonzero mapping rates need calibration
@@ -578,8 +579,13 @@ Completed native DTU scope:
   result tables. A later BEAS_2B G100 refresh with `suppa.py` available
   completed six SUPPA2 transcript-event contrasts and exposed non-empty
   standardized rows, event counts, and delta-PSI plots in the RNA-seq
-  differential report. DEXSeqExon is locally contract-tested and is the next
-  targeted BEAS_2B/HEP_G2 DTU-only refresh item.
+  differential report. A subsequent BEAS_2B DTU refresh validated true
+  exon-bin DEXSeqExon end to end: one shared flattened GFF, 27 shared
+  per-library exon-bin count files, six completed DEXSeqExon contrasts,
+  221,919-244,857 standardized exon-bin rows per contrast, non-empty
+  exon-bin usage plots, and populated DTU summary cells in the refreshed
+  RNA-seq differential report. The inspected local evidence bundle was
+  `g100_beas_full_dtu_review_20260702_2304.tar.gz`.
 - Missing `Rscript`, missing `R::DRIMSeq`/`R::DEXSeq`, missing
   `dexseq_prepare_annotation.py`, missing `dexseq_count.py`, missing
   `suppa.py`, insufficient replicates, missing sample columns, missing aligned
@@ -587,8 +593,8 @@ Completed native DTU scope:
   silently skipped.
 - RNA-seq differential and integrated project reports expose DTU status,
   standardized rows, significant rows, and links to summary, gene-result, usage,
-  standardized result tables, and DTU overview/usage SVG plots for both native
-  methods.
+  standardized result tables, and DTU overview/usage SVG plots for completed
+  native methods.
 - DTU intermediate pruning is implemented as an explicit, auditable target. It
   removes only re-creatable per-contrast DTU input slices such as
   `dtu_counts.tsv` and `dtu_coldata.tsv` after DTU method outputs and DTU plots
@@ -609,9 +615,6 @@ Completed native DTU scope:
 
 Remaining future/event-based tasks:
 
-- Validate DEXSeqExon on BEAS_2B and/or HEP_G2 as a targeted DTU-only refresh,
-  then record observed runtime, storage cost, exon-bin counts, standardized row
-  counts, and report/plot quality.
 - Decide whether rMATS belongs in ASPIS native execution; if so, add explicit
   BAM/event input contracts and storage controls instead of inferring events
   from transcript counts. Until then, rMATS remains available only through
@@ -631,8 +634,7 @@ Acceptance criteria:
   BEAS_2B.
 - `rnaseq_dtu.run: true` with `method: DEXSeqExon` produces true exon-bin
   DEXSeq tables from aligned BAMs, standardized exon-bin usage rows, and plots
-  when DEXSeq plus its helper scripts are installed. Locally contract-tested;
-  targeted G100 validation remains to be run.
+  when DEXSeq plus its helper scripts are installed. Validated on BEAS_2B.
 - `rnaseq_dtu.run: true` with `method: SUPPA2` produces transcript-event
   differential splicing rows when `suppa.py` is installed. Validated on BEAS_2B.
 - `rnaseq_dtu.run: true` with `method: all` and native candidate methods
