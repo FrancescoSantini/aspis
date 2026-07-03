@@ -602,10 +602,11 @@ Completed native DTU scope:
 - RNA-seq differential and integrated project reports expose DTU status,
   standardized rows, significant rows, and links to summary, gene-result, usage,
   standardized result tables, and DTU overview SVG plots for completed native
-  methods. Native DTU methods expose ranked candidate plots across genes and
-  top genes detail plots using the appropriate method unit: transcript-usage
-  features for DRIMSeq/DEXSeq, exon bins for DEXSeqExon, and splicing events
-  for SUPPA2/rMATS, with rMATS event-code legend text.
+  methods. Native DTU methods expose top genes detail plots using the
+  appropriate method unit: transcript-usage features for DRIMSeq/DEXSeq, exon
+  bins for DEXSeqExon, and splicing events for SUPPA2/rMATS. Methods with
+  feature-level statistics also expose ranked candidate plots across genes, with
+  rMATS event-code legend text.
 - DTU intermediate pruning is implemented as an explicit, auditable target. It
   removes only re-creatable per-contrast DTU input slices such as
   `dtu_counts.tsv` and `dtu_coldata.tsv` after DTU method outputs and DTU plots
