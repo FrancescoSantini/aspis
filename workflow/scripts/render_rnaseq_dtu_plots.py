@@ -37,6 +37,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--done", required=True)
     parser.add_argument("--padj", type=float, default=0.05)
     parser.add_argument("--top-n", type=int, default=20)
+    parser.add_argument("--top-gene-count", type=int, default=0)
+    parser.add_argument("--top-features-per-gene", type=int, default=0)
     parser.add_argument("--max-points", type=int, default=2500)
     return parser.parse_args()
 
@@ -255,39 +257,113 @@ def select_top_gene(rows: list[dict[str, str]]) -> str:
     return scored[0][1] if scored else ""
 
 
-def render_usage_svg(path: Path, usage_rows: list[dict[str, str]], gene_id: str, top_n: int) -> bool:
-    rows = [row for row in usage_rows if row.get("gene_id", "") == gene_id]
-    if not rows:
-        return False
+def render_usage_svg(
+    path: Path,
+    usage_rows: list[dict[str, str]],
+    gene_id: str,
+    top_n: int,
+    top_gene_count: int = 0,
+    top_features_per_gene: int = 0,
+) -> bool:
+    return render_top_genes_usage_svg(
+        path,
+        usage_rows,
+        top_n,
+        top_gene_count=top_gene_count,
+        top_features_per_gene=top_features_per_gene,
+    )
 
+
+def display_group_sizes(
+    top_n: int,
+    top_gene_count: int = 0,
+    top_features_per_gene: int = 0,
+) -> tuple[int, int]:
+    if top_gene_count <= 0:
+        top_gene_count = min(10, max(4, math.ceil(max(1, top_n) / 3)))
+    if top_features_per_gene <= 0:
+        top_features_per_gene = max(2, math.ceil(max(1, top_n) / top_gene_count))
+    return top_gene_count, top_features_per_gene
+
+
+def render_top_genes_usage_svg(
+    path: Path,
+    usage_rows: list[dict[str, str]],
+    top_n: int,
+    top_gene_count: int = 0,
+    top_features_per_gene: int = 0,
+) -> bool:
     def abs_delta(row: dict[str, str]) -> float:
         return abs(safe_float(row.get("delta_usage", "")) or 0.0)
 
-    rows = sorted(rows, key=abs_delta, reverse=True)[:top_n]
-    width = 960
+    top_gene_count, top_features_per_gene = display_group_sizes(
+        top_n, top_gene_count, top_features_per_gene
+    )
+    gene_keys = top_gene_keys(usage_rows, "delta_usage", top_gene_count)
+    grouped: list[tuple[str, dict[str, str] | str]] = []
+    selected_rows: list[dict[str, str]] = []
+    for gene in gene_keys:
+        gene_rows = [
+            row
+            for row in usage_rows
+            if (row.get("gene_id", "") or row.get("gene_name", "")) == gene
+            and safe_float(row.get("delta_usage", "")) is not None
+        ]
+        gene_rows.sort(
+            key=lambda row: (
+                numeric_p(row) if numeric_p(row) is not None else math.inf,
+                -abs_delta(row),
+                row.get("feature_id", ""),
+            )
+        )
+        gene_rows = gene_rows[:top_features_per_gene]
+        if not gene_rows:
+            continue
+        grouped.append(("gene", gene_label(gene_rows[0])))
+        for row in gene_rows:
+            grouped.append(("row", row))
+            selected_rows.append(row)
+    if not selected_rows:
+        return False
+
+    width = 1320
     row_h = 42
-    height = max(260, 120 + (len(rows) * row_h))
-    left, right, top = 190, 60, 72
+    gene_h = 28
+    content_h = sum(gene_h if kind == "gene" else row_h for kind, _item in grouped)
+    height = max(300, 142 + content_h)
+    left, right, top = 390, 300, 78
     bar_w = width - left - right
     parts = [svg_header(width, height)]
     parts.append('<rect width="100%" height="100%" fill="white"/>\n')
-    parts.append(f'<text x="24" y="30" font-size="20" font-weight="700">Top gene DTU usage detail: {html.escape(gene_id)}</text>\n')
-    parts.append('<text x="24" y="52" font-size="12" class="muted">One selected top-ranked gene. Mean transcript usage by contrast group; larger shifts are shown first.</text>\n')
+    parts.append('<text x="24" y="30" font-size="20" font-weight="700">Top transcript-usage genes: feature detail</text>\n')
+    parts.append('<text x="24" y="52" font-size="12" class="muted">Top-ranked genes by adjusted p-value. Each row is one transcript feature; blue is mean control usage and red is mean test usage.</text>\n')
     for tick in [0, 0.25, 0.5, 0.75, 1.0]:
         x = left + tick * bar_w
         parts.append(f'<line class="grid" x1="{x:.1f}" y1="{top - 10}" x2="{x:.1f}" y2="{height - 44}"/>\n')
         parts.append(f'<text x="{x:.1f}" y="{height - 22}" text-anchor="middle" font-size="11">{tick:g}</text>\n')
     parts.append(f'<text x="{left}" y="{height - 6}" font-size="12" class="muted">blue=control, red=test</text>\n')
-    for idx, row in enumerate(rows):
-        y = top + idx * row_h
-        feature = row.get("feature_id", "")
+    y = top
+    for kind, item in grouped:
+        if kind == "gene":
+            label = truncate_label(str(item), 55)
+            parts.append(f'<line class="rule" x1="24" y1="{y - 7}" x2="{width - 24}" y2="{y - 7}"/>\n')
+            parts.append(f'<text class="gene" x="24" y="{y + 10}" font-size="12">{html.escape(label)}</text>\n')
+            y += gene_h
+            continue
+        row = item
+        assert isinstance(row, dict)
+        feature = truncate_label(row.get("feature_id", ""), 46)
         control = min(1.0, max(0.0, safe_float(row.get("mean_usage_control", "")) or 0.0))
         test = min(1.0, max(0.0, safe_float(row.get("mean_usage_test", "")) or 0.0))
-        label = feature if len(feature) <= 22 else feature[:19] + "..."
-        parts.append(f'<text x="{left - 12}" y="{y + 18}" text-anchor="end" font-size="12">{html.escape(label)}</text>\n')
+        parts.append(f'<text x="{left - 12}" y="{y + 18}" text-anchor="end" font-size="12">{html.escape(feature)}</text>\n')
         parts.append(f'<rect class="bar1" x="{left}" y="{y + 4}" width="{control * bar_w:.1f}" height="13" rx="2"/>\n')
         parts.append(f'<rect class="bar2" x="{left}" y="{y + 21}" width="{test * bar_w:.1f}" height="13" rx="2"/>\n')
-        parts.append(f'<text x="{left + bar_w + 8}" y="{y + 25}" font-size="11" class="muted">delta {html.escape(row.get("delta_usage", ""))}</text>\n')
+        detail = f"delta usage {format_number(row.get('delta_usage', ''))}"
+        padj = row.get("padj", "")
+        if padj:
+            detail += f"; padj {format_number(padj)}"
+        parts.append(f'<text x="{left + bar_w + 12}" y="{y + 25}" font-size="11" class="muted">{html.escape(detail)}</text>\n')
+        y += row_h
     parts.append("</svg>\n")
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("".join(parts), encoding="utf-8")
@@ -429,8 +505,10 @@ def top_gene_keys(
             continue
         effect = safe_float(row.get(value_column, ""))
         score = numeric_p(row)
-        if effect is None or score is None:
+        if effect is None:
             continue
+        if score is None:
+            score = math.inf
         current = scored.get(gene)
         candidate = (score, -abs(effect), gene)
         if current is None or candidate < current:
@@ -448,9 +526,12 @@ def render_top_genes_signed_effect_svg(
     subtitle: str,
     top_n: int,
     value_limit: float | None = None,
+    top_gene_count: int = 0,
+    top_features_per_gene: int = 0,
 ) -> bool:
-    top_gene_count = min(6, max(2, math.ceil(top_n / 4)))
-    max_features_per_gene = max(2, math.ceil(top_n / top_gene_count))
+    top_gene_count, max_features_per_gene = display_group_sizes(
+        top_n, top_gene_count, top_features_per_gene
+    )
     gene_keys = top_gene_keys(rows, value_column, top_gene_count)
     grouped: list[tuple[str, dict[str, str] | str]] = []
     selected_rows: list[dict[str, str]] = []
@@ -532,7 +613,14 @@ def render_top_genes_signed_effect_svg(
     return True
 
 
-def render_exon_bin_effect_svg(path: Path, exon_rows: list[dict[str, str]], gene_id: str, top_n: int) -> bool:
+def render_exon_bin_effect_svg(
+    path: Path,
+    exon_rows: list[dict[str, str]],
+    gene_id: str,
+    top_n: int,
+    top_gene_count: int = 0,
+    top_features_per_gene: int = 0,
+) -> bool:
     return render_top_genes_signed_effect_svg(
         path,
         exon_rows,
@@ -542,6 +630,8 @@ def render_exon_bin_effect_svg(path: Path, exon_rows: list[dict[str, str]], gene
         "Top DEXSeqExon genes: exon-bin detail",
         "Top-ranked genes by adjusted p-value. Each row is one exon bin; blue is lower in test and red is higher.",
         top_n,
+        top_gene_count=top_gene_count,
+        top_features_per_gene=top_features_per_gene,
     )
 
 
@@ -558,7 +648,29 @@ def render_exon_bin_candidates_svg(path: Path, exon_rows: list[dict[str, str]], 
     )
 
 
-def render_delta_psi_svg(path: Path, event_rows: list[dict[str, str]], gene_id: str, top_n: int, method: str = "SUPPA2") -> bool:
+def render_usage_candidates_svg(path: Path, usage_rows: list[dict[str, str]], top_n: int) -> bool:
+    return render_signed_effect_svg(
+        path,
+        usage_rows,
+        "DTU",
+        "delta_usage",
+        "delta usage",
+        "Ranked transcript-usage candidates",
+        "Individual transcript features ranked across genes by adjusted p-value, with at most three features shown per gene.",
+        top_n,
+        value_limit=1.0,
+    )
+
+
+def render_delta_psi_svg(
+    path: Path,
+    event_rows: list[dict[str, str]],
+    gene_id: str,
+    top_n: int,
+    method: str = "SUPPA2",
+    top_gene_count: int = 0,
+    top_features_per_gene: int = 0,
+) -> bool:
     return render_top_genes_signed_effect_svg(
         path,
         event_rows,
@@ -569,6 +681,8 @@ def render_delta_psi_svg(path: Path, event_rows: list[dict[str, str]], gene_id: 
         "Top-ranked genes by adjusted p-value. Each row is one splicing event; blue is decreased inclusion in test and red is increased.",
         top_n,
         value_limit=1.0,
+        top_gene_count=top_gene_count,
+        top_features_per_gene=top_features_per_gene,
     )
 
 
@@ -635,14 +749,36 @@ def plot_row(args: argparse.Namespace, row: dict[str, str]) -> dict[str, str]:
     if top_gene and usage_path.is_file():
         usage_rows = read_tsv(usage_path)
         if method_upper in {"SUPPA2", "RMATS"}:
-            rendered = render_delta_psi_svg(Path(output["usage_plot"]), usage_rows, top_gene, args.top_n, row.get("method", ""))
+            rendered = render_delta_psi_svg(
+                Path(output["usage_plot"]),
+                usage_rows,
+                top_gene,
+                args.top_n,
+                row.get("method", ""),
+                top_gene_count=args.top_gene_count,
+                top_features_per_gene=args.top_features_per_gene,
+            )
             feature_rendered = render_delta_psi_candidates_svg(Path(output["feature_plot"]), standardized, args.top_n, row.get("method", ""))
         elif method_upper == "DEXSEQEXON":
-            rendered = render_exon_bin_effect_svg(Path(output["usage_plot"]), standardized, top_gene, args.top_n)
+            rendered = render_exon_bin_effect_svg(
+                Path(output["usage_plot"]),
+                standardized,
+                top_gene,
+                args.top_n,
+                top_gene_count=args.top_gene_count,
+                top_features_per_gene=args.top_features_per_gene,
+            )
             feature_rendered = render_exon_bin_candidates_svg(Path(output["feature_plot"]), standardized, args.top_n)
         else:
-            rendered = render_usage_svg(Path(output["usage_plot"]), usage_rows, top_gene, args.top_n)
-            feature_rendered = False
+            rendered = render_usage_svg(
+                Path(output["usage_plot"]),
+                usage_rows,
+                top_gene,
+                args.top_n,
+                top_gene_count=args.top_gene_count,
+                top_features_per_gene=args.top_features_per_gene,
+            )
+            feature_rendered = render_usage_candidates_svg(Path(output["feature_plot"]), usage_rows, args.top_n)
         if not rendered:
             output["usage_plot"] = ""
         if not feature_rendered:

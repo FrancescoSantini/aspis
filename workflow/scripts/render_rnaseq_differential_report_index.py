@@ -345,8 +345,8 @@ def render_dtu_summary(
         else:
             gene_label = "gene results"
             usage_label = "usage table"
-            feature_plot_label = "ranked usage candidates"
-            usage_plot_label = "top gene usage detail"
+            feature_plot_label = "ranked transcript-usage candidates"
+            usage_plot_label = "top genes transcript-usage detail"
         links = link_list(
             [
                 ("summary", row.get("summary", "")),
@@ -386,7 +386,7 @@ def render_dtu_summary(
   <section class="dtu-summary">
     <h2>DTU / splicing methods</h2>
     <p class="note">Native DRIMSeq, DEXSeq, DEXSeqExon, SUPPA2, and rMATS rows are companion analyses. DRIMSeq tests transcript usage at the gene level; DEXSeq uses transcript features grouped by gene; DEXSeqExon builds exon-bin counts from aligned BAMs with DEXSeq helper scripts; SUPPA2 runs transcript-event differential splicing through SUPPA ioi/psi/diffSplice outputs; rMATS runs junction-event differential splicing from aligned BAMs and the configured GTF.</p>
-    <p class="note">DTU plots include a significance overview, a ranked candidate plot, and a top genes detail plot. The ranked candidate plot compares individual tested features across genes: exon bins for DEXSeqExon and splicing events for SUPPA2/rMATS. The top genes detail plot groups several top-ranked genes and shows the strongest bins or events for each gene. Delta PSI is the event inclusion shift from control to test. rMATS event codes: SE skipped exon; RI retained intron; A5SS/A3SS alternative splice sites; MXE mutually exclusive exons.</p>
+    <p class="note">DTU plots include a significance overview, a ranked candidate plot, and a top genes detail plot. The plot layout is shared, but the biological unit differs by method: DRIMSeq/DEXSeq show transcript-usage features, DEXSeqExon shows flattened exon bins, and SUPPA2/rMATS show splicing events. The ranked candidate plot compares individual tested features across genes. The top genes detail plot groups several top-ranked genes and shows the strongest transcript features, exon bins, or splicing events for each gene. Delta PSI is the event inclusion shift from control to test. rMATS event codes: SE skipped exon; RI retained intron; A5SS/A3SS alternative splice sites; MXE mutually exclusive exons.</p>
     <div class="counts">plan status: {html.escape(plan.get("status", "") or "not_configured")}; candidate methods: {html.escape(plan.get("candidate_methods", "") or plan.get("method", ""))}</div>
     <div class="counts">method status: {html.escape(format_counts(method_status))}; plot status: {html.escape(format_counts(plot_status))}; standardized status: {html.escape(format_counts(standardized_status))}; standardized rows: {standardized_rows}; padj&lt;0.05 rows: {significant_rows}</div>
     <div class="counts">resources: {plan_link}</div>

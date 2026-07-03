@@ -451,11 +451,23 @@ def exercise_biotype_and_dtu(paths: dict[str, Path]) -> None:
             "100",
         ]
     )
-    dtu_plot_rows = read_tsv(dtu_dir / "plots" / "dtu_plot_manifest.tsv", {"method", "status", "overview_plot", "usage_plot"})
+    dtu_plot_rows = read_tsv(dtu_dir / "plots" / "dtu_plot_manifest.tsv", {"method", "status", "overview_plot", "usage_plot", "feature_plot"})
     if dtu_plot_rows[0]["status"] != "ok":
         raise ValueError(f"DTU plot rendering was not ok: {dtu_plot_rows}")
-    if not Path(dtu_plot_rows[0]["overview_plot"]).exists() or not Path(dtu_plot_rows[0]["usage_plot"]).exists():
+    if (
+        not dtu_plot_rows[0]["overview_plot"]
+        or not Path(dtu_plot_rows[0]["overview_plot"]).exists()
+        or not dtu_plot_rows[0]["usage_plot"]
+        or not Path(dtu_plot_rows[0]["usage_plot"]).exists()
+    ):
         raise ValueError(f"DTU plot files were not written: {dtu_plot_rows}")
+    usage_svg = Path(dtu_plot_rows[0]["usage_plot"]).read_text(encoding="utf-8")
+    if "Top transcript-usage genes" not in usage_svg:
+        raise ValueError(f"DTU transcript-usage detail plot was not written: {dtu_plot_rows}")
+    if dtu_plot_rows[0]["feature_plot"]:
+        feature_svg = Path(dtu_plot_rows[0]["feature_plot"]).read_text(encoding="utf-8")
+        if "Ranked transcript-usage candidates" not in feature_svg:
+            raise ValueError(f"DTU transcript-usage candidate plot was not written: {dtu_plot_rows}")
 
     fake_dexseq = INPUT / "fake_dexseq_runner.py"
     fake_dexseq.write_text(
@@ -553,6 +565,8 @@ def exercise_biotype_and_dtu(paths: dict[str, Path]) -> None:
         encoding="utf-8",
     )
     suppa2_dir = BASE / "dtu_suppa2"
+    python_executable = Path(sys.executable).as_posix()
+    fake_suppa_path = fake_suppa.as_posix()
     run_command(
         [
             sys.executable,
@@ -582,7 +596,7 @@ def exercise_biotype_and_dtu(paths: dict[str, Path]) -> None:
             "--contrast-id",
             "treated_vs_control__time_h_24",
             "--suppa2-executable",
-            f"{sys.executable} {fake_suppa}",
+            f"{python_executable} {fake_suppa_path}",
         ]
     )
     suppa2_rows = read_tsv(suppa2_dir / "dtu_method_manifest.tsv", {"method", "status", "standardized_results", "standardized_status", "transcript_results", "summary"})
@@ -618,7 +632,7 @@ def exercise_biotype_and_dtu(paths: dict[str, Path]) -> None:
     suppa2_plot_rows = read_tsv(suppa2_dir / "plots" / "dtu_plot_manifest.tsv", {"method", "status", "usage_plot"})
     suppa2_usage_plot = Path(suppa2_plot_rows[0]["usage_plot"])
     suppa2_usage_svg = suppa2_usage_plot.read_text(encoding="utf-8")
-    if "Top SUPPA2 delta PSI" not in suppa2_usage_svg or 'width="157.5"' not in suppa2_usage_svg:
+    if "Top SUPPA2 genes: event detail" not in suppa2_usage_svg or "delta PSI" not in suppa2_usage_svg:
         raise ValueError(f"SUPPA2 delta-PSI usage plot was not rendered correctly: {suppa2_usage_plot}")
 
     helper = INPUT / "write_fake_rmats.py"
