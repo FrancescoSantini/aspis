@@ -6291,7 +6291,7 @@ rule run_rnaseq_dtu_contrast:
             if as_bool(RNASEQ_DTU.get("rmats_variable_read_length", False), False)
             else ""
         ),
-        rmats_extra_args=RNASEQ_DTU.get("rmats_extra_args", ""),
+        rmats_extra_args=optional_shell_arg("--rmats-extra-args", RNASEQ_DTU.get("rmats_extra_args", "")),
         min_count=RNASEQ_DTU.get("min_count", 10),
         min_samples=RNASEQ_DTU.get("min_samples", 2),
         min_proportion=RNASEQ_DTU.get("min_proportion", 0.05),
@@ -6346,7 +6346,7 @@ rule run_rnaseq_dtu_contrast:
           --rmats-nthread {params.rmats_nthread:q} \
           --rmats-tstat {params.rmats_tstat:q} \
           {params.rmats_variable_read_length} \
-          --rmats-extra-args {params.rmats_extra_args:q} \
+          {params.rmats_extra_args} \
           --dtu-min-count {params.min_count:q} \
           --dtu-min-samples {params.min_samples:q} \
           --dtu-min-proportion {params.min_proportion:q} \

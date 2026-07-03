@@ -126,7 +126,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--rmats-nthread", type=int, default=4)
     parser.add_argument("--rmats-tstat", type=int, default=4)
     parser.add_argument("--rmats-variable-read-length", action="store_true", default=False)
-    parser.add_argument("--rmats-extra-args", default="")
+    parser.add_argument("--rmats-extra-args", nargs="?", const="", default="")
     parser.add_argument("--dtu-min-count", type=int, default=10)
     parser.add_argument("--dtu-min-samples", type=int, default=2)
     parser.add_argument("--dtu-min-proportion", type=float, default=0.05)

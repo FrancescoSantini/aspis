@@ -132,6 +132,12 @@ def write_fake_rmats() -> Path:
 
 
 def main() -> int:
+    snakefile = Path("Snakefile").read_text(encoding="utf-8")
+    if "--rmats-extra-args {params.rmats_extra_args:q}" in snakefile:
+        raise ValueError("Snakefile emits --rmats-extra-args even when the configured value is empty")
+    if 'rmats_extra_args=optional_shell_arg("--rmats-extra-args"' not in snakefile:
+        raise ValueError("Snakefile does not guard empty rMATS extra args with optional_shell_arg")
+
     paths = write_common_inputs()
     fake_rmats = write_fake_rmats()
     dtu_dir = BASE / "dtu"
