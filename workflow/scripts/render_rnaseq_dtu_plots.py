@@ -225,7 +225,7 @@ def render_usage_svg(path: Path, usage_rows: list[dict[str, str]], gene_id: str,
     return True
 
 
-def render_delta_psi_svg(path: Path, event_rows: list[dict[str, str]], gene_id: str, top_n: int) -> bool:
+def render_delta_psi_svg(path: Path, event_rows: list[dict[str, str]], gene_id: str, top_n: int, method: str = "SUPPA2") -> bool:
     rows = []
     seen_events = set()
     for row in event_rows:
@@ -257,8 +257,8 @@ def render_delta_psi_svg(path: Path, event_rows: list[dict[str, str]], gene_id: 
     center = left + half_w
     parts = [svg_header(width, height)]
     parts.append('<rect width="100%" height="100%" fill="white"/>\n')
-    parts.append(f'<text x="24" y="30" font-size="20" font-weight="700">Top SUPPA2 delta PSI: {html.escape(gene_id)}</text>\n')
-    parts.append('<text x="24" y="52" font-size="12" class="muted">Transcript-event inclusion shift from SUPPA2 diffSplice. Blue is decreased in the test group; red is increased.</text>\n')
+    parts.append(f'<text x="24" y="30" font-size="20" font-weight="700">Top {html.escape(method)} delta PSI: {html.escape(gene_id)}</text>\n')
+    parts.append(f'<text x="24" y="52" font-size="12" class="muted">Event inclusion shift from {html.escape(method)}. Blue is decreased in the test group; red is increased.</text>\n')
     for tick in [-1.0, -0.5, 0.0, 0.5, 1.0]:
         x = center + tick * half_w
         parts.append(f'<line class="grid" x1="{x:.1f}" y1="{top - 12}" x2="{x:.1f}" y2="{height - 48}"/>\n')
@@ -315,7 +315,8 @@ def plot_row(args: argparse.Namespace, row: dict[str, str]) -> dict[str, str]:
     if not standardized:
         output["reason"] = "standardized result table has no rows"
         return output
-    if row.get("method", "").upper() == "SUPPA2":
+    method_upper = row.get("method", "").upper()
+    if method_upper == "SUPPA2":
         standardized = dedupe_suppa2_rows(standardized)
     output["n_standardized"] = str(len(standardized))
     output["n_significant"] = str(significant_count(standardized, args.padj))
@@ -330,8 +331,8 @@ def plot_row(args: argparse.Namespace, row: dict[str, str]) -> dict[str, str]:
     usage_path = Path(row.get("transcript_results", ""))
     if top_gene and usage_path.is_file():
         usage_rows = read_tsv(usage_path)
-        if row.get("method", "").upper() == "SUPPA2":
-            rendered = render_delta_psi_svg(Path(output["usage_plot"]), usage_rows, top_gene, args.top_n)
+        if method_upper in {"SUPPA2", "RMATS"}:
+            rendered = render_delta_psi_svg(Path(output["usage_plot"]), usage_rows, top_gene, args.top_n, row.get("method", ""))
         else:
             rendered = render_usage_svg(Path(output["usage_plot"]), usage_rows, top_gene, args.top_n)
         if not rendered:

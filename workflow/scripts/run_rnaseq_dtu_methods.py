@@ -120,6 +120,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--suppa2-nan-threshold", type=float, default=0.0)
     parser.add_argument("--suppa2-gene-correction", dest="suppa2_gene_correction", action="store_true", default=True)
     parser.add_argument("--no-suppa2-gene-correction", dest="suppa2_gene_correction", action="store_false")
+    parser.add_argument("--rmats-executable", default="rmats.py")
+    parser.add_argument("--rmats-read-length", type=int, default=0)
+    parser.add_argument("--rmats-lib-type", default="fr-unstranded")
+    parser.add_argument("--rmats-nthread", type=int, default=4)
+    parser.add_argument("--rmats-tstat", type=int, default=4)
+    parser.add_argument("--rmats-variable-read-length", action="store_true", default=False)
+    parser.add_argument("--rmats-extra-args", default="")
     parser.add_argument("--dtu-min-count", type=int, default=10)
     parser.add_argument("--dtu-min-samples", type=int, default=2)
     parser.add_argument("--dtu-min-proportion", type=float, default=0.05)
@@ -319,6 +326,8 @@ def is_result_file(path: Path) -> bool:
         "suppa2_event_results.tsv",
         "suppa2_control_expression.tsv",
         "suppa2_test_expression.tsv",
+        "rmats_summary.tsv",
+        "rmats_event_results.tsv",
     }:
         return False
     if path.suffix.lower() in RESULT_SUFFIXES:
@@ -1274,6 +1283,271 @@ def write_suppa2_summary(path: Path, status: str, reason: str, event_rows: list[
     )
 
 
+def write_rmats_inputs(args: argparse.Namespace, plan_row: dict[str, str], method_dir: Path) -> tuple[Path, Path, Path]:
+    sample_rows = selected_samples(read_tsv(Path(args.samples)), plan_row)
+    aligned_by_id = {row.get("library_id", ""): row for row in read_tsv(Path(args.aligned_samples))}
+    condition_col = plan_row.get("condition_col") or "condition"
+    control_label = plan_row.get("control_label") or "control"
+    test_label = plan_row.get("test_label") or "treated"
+    control_bams: list[str] = []
+    test_bams: list[str] = []
+    coldata_rows: list[dict[str, str]] = []
+    missing: list[str] = []
+
+    for sample in sample_rows:
+        sample_id = sample.get("library_id", "")
+        label = sample.get(condition_col, "")
+        if label not in {control_label, test_label}:
+            continue
+        aligned = aligned_by_id.get(sample_id, {})
+        bam = aligned.get("bam", "")
+        if not bam or not Path(bam).exists():
+            missing.append(sample_id)
+            continue
+        if label == control_label:
+            control_bams.append(bam)
+        else:
+            test_bams.append(bam)
+        coldata_rows.append(
+            {
+                "sample_id": sample_id,
+                "condition": label,
+                "bam": bam,
+                "layout": sample.get("layout") or aligned.get("layout", ""),
+            }
+        )
+
+    if missing:
+        raise ValueError("aligned BAM(s) missing for rMATS sample(s): " + ",".join(missing))
+    if not control_bams or not test_bams:
+        raise ValueError(f"contrast {plan_row.get('contrast_id', '')} selected no rMATS control/test BAMs")
+
+    b1 = method_dir / "b1.txt"
+    b2 = method_dir / "b2.txt"
+    coldata = method_dir / "rmats_samples.tsv"
+    b1.write_text(",".join(control_bams) + "\n", encoding="utf-8")
+    b2.write_text(",".join(test_bams) + "\n", encoding="utf-8")
+    write_tsv(coldata, coldata_rows, ["sample_id", "condition", "bam", "layout"])
+    return b1, b2, coldata
+
+
+def rmats_event_files(output_dir: Path) -> list[Path]:
+    selected: list[Path] = []
+    for event_type in sorted(RMATS_EVENT_TYPES):
+        jc = output_dir / f"{event_type}.MATS.JC.txt"
+        jcec = output_dir / f"{event_type}.MATS.JCEC.txt"
+        if jc.is_file():
+            selected.append(jc)
+        elif jcec.is_file():
+            selected.append(jcec)
+    if selected:
+        return selected
+    return sorted(path for path in output_dir.rglob("*.MATS.*.txt") if path.is_file())
+
+
+def parse_rmats_event_rows(event_files: list[Path]) -> list[dict[str, str]]:
+    rows: list[dict[str, str]] = []
+    seen: set[tuple[str, str]] = set()
+    for path in event_files:
+        event_type = infer_event_type(path, {})
+        for index, raw in enumerate(read_result_rows(path), start=1):
+            feature_id = first_value(raw, ["feature_id", "event_id", "eventID", "ID"])
+            if not feature_id:
+                feature_id = f"{event_type or 'event'}_{index}"
+            key = (event_type, feature_id)
+            if key in seen:
+                continue
+            seen.add(key)
+            rows.append(
+                {
+                    "event_id": feature_id,
+                    "feature_id": feature_id,
+                    "gene_id": first_value(raw, ["gene_id", "geneID", "GeneID", "gene"]),
+                    "gene_name": first_value(raw, ["gene_name", "geneSymbol", "gene_symbol", "symbol"]),
+                    "event_type": event_type,
+                    "delta_psi": first_value(raw, ["delta_psi", "dpsi", "deltaPSI", "IncLevelDifference"]),
+                    "pvalue": first_value(raw, ["pvalue", "p_value", "p.value", "pval", "PValue"]),
+                    "padj": first_value(raw, ["padj", "adjusted_pvalue", "adj_pvalue", "adj.p.value", "qvalue", "qval", "FDR"]),
+                    "status": "ok",
+                    "source_file": str(path),
+                }
+            )
+    return rows
+
+
+def write_rmats_event_results(path: Path, rows: list[dict[str, str]]) -> None:
+    columns = [
+        "event_id",
+        "feature_id",
+        "gene_id",
+        "gene_name",
+        "event_type",
+        "delta_psi",
+        "pvalue",
+        "padj",
+        "status",
+        "source_file",
+    ]
+    write_tsv(path, rows, columns)
+
+
+def write_rmats_summary(
+    path: Path,
+    status: str,
+    reason: str,
+    event_rows: list[dict[str, str]],
+    event_files: list[Path],
+    plan_row: dict[str, str],
+) -> None:
+    significant = 0
+    tested_genes = {row.get("gene_id", "") for row in event_rows if row.get("gene_id", "")}
+    for row in event_rows:
+        padj = parse_float(row.get("padj", ""))
+        if padj is not None and padj < 0.05:
+            significant += 1
+    write_tsv(
+        path,
+        [
+            {
+                "status": status,
+                "reason": reason,
+                "n_tested_genes": str(len(tested_genes)),
+                "n_usage_transcripts": str(len(event_rows)),
+                "n_events": str(len(event_rows)),
+                "n_significant": str(significant),
+                "n_event_files": str(len(event_files)),
+                "control_label": plan_row.get("control_label", "control"),
+                "test_label": plan_row.get("test_label", "treated"),
+                "event_mode": "junction",
+            }
+        ],
+        [
+            "status",
+            "reason",
+            "n_tested_genes",
+            "n_usage_transcripts",
+            "n_events",
+            "n_significant",
+            "n_event_files",
+            "control_label",
+            "test_label",
+            "event_mode",
+        ],
+    )
+
+
+def write_standardized_rmats_results(
+    args: argparse.Namespace,
+    contrast_id: str,
+    source_file: Path,
+    event_rows: list[dict[str, str]],
+) -> tuple[str, int, str]:
+    rows = []
+    for row in event_rows:
+        standardized = standardize_native_row(args, "rMATS", contrast_id, source_file, row)
+        if standardized is not None:
+            rows.append(standardized)
+    if not rows:
+        return "", 0, "no_results_found"
+    output = source_file.parent / "standardized_results.tsv"
+    write_standardized_results(output, rows)
+    return str(output), len(rows), "ok"
+
+
+def run_rmats_contrast(args: argparse.Namespace, plan_row: dict[str, str]) -> dict[str, str]:
+    contrast_id = plan_row.get("contrast_id", "contrast")
+    method_dir = Path(args.outdir) / "rmats" / re.sub(r"[^A-Za-z0-9_.-]+", "_", contrast_id)
+    row = base_manifest_row(args, "rMATS", method_dir, contrast_id)
+    row["gene_results"] = str(method_dir / "rmats_event_results.tsv")
+    row["transcript_results"] = str(method_dir / "rmats_event_results.tsv")
+    row["summary"] = str(method_dir / "rmats_summary.tsv")
+    if plan_row.get("status") != "ready":
+        return blocked_row(args, "rMATS", plan_row, method_dir, plan_row.get("reason") or "contrast was not ready for rMATS")
+    if args.rmats_read_length <= 0:
+        return blocked_row(args, "rMATS", plan_row, method_dir, "rMATS requires rnaseq_dtu.rmats_read_length greater than zero")
+    if not command_prefix_exists(args.rmats_executable):
+        return blocked_row(args, "rMATS", plan_row, method_dir, f"rMATS executable not found: {args.rmats_executable}")
+    if not Path(args.annotation_gtf).exists():
+        return blocked_row(args, "rMATS", plan_row, method_dir, f"annotation GTF not found: {args.annotation_gtf}")
+
+    method_dir.mkdir(parents=True, exist_ok=True)
+    stdout = method_dir / "stdout.log"
+    stderr = method_dir / "stderr.log"
+    stdout.write_text("", encoding="utf-8")
+    stderr.write_text("", encoding="utf-8")
+    try:
+        b1, b2, _coldata = write_rmats_inputs(args, plan_row, method_dir)
+    except Exception as exc:
+        return blocked_row(args, "rMATS", plan_row, method_dir, str(exc))
+
+    output_dir = method_dir / "rmats_output"
+    tmp_dir = method_dir / "tmp"
+    output_dir.mkdir(parents=True, exist_ok=True)
+    tmp_dir.mkdir(parents=True, exist_ok=True)
+    command = [
+        *shlex.split(args.rmats_executable),
+        "--b1",
+        str(b1),
+        "--b2",
+        str(b2),
+        "--gtf",
+        args.annotation_gtf,
+        "--od",
+        str(output_dir),
+        "--tmp",
+        str(tmp_dir),
+        "--readLength",
+        str(args.rmats_read_length),
+        "--nthread",
+        str(args.rmats_nthread),
+        "--tstat",
+        str(args.rmats_tstat),
+    ]
+    if args.rmats_lib_type:
+        command.extend(["--libType", args.rmats_lib_type])
+    if args.rmats_variable_read_length:
+        command.append("--variable-read-length")
+    if args.rmats_extra_args.strip():
+        command.extend(shlex.split(args.rmats_extra_args))
+
+    completed = run_logged_command(command, stdout, stderr)
+    row["command"] = " ".join(shlex.quote(part) for part in command)
+    row["stdout"] = str(stdout)
+    row["stderr"] = str(stderr)
+    if completed.returncode != 0:
+        row["status"] = "failed"
+        row["reason"] = f"rMATS exited with status {completed.returncode}"
+        return row
+
+    event_files = rmats_event_files(output_dir)
+    if not event_files:
+        return blocked_row(args, "rMATS", plan_row, method_dir, "rMATS did not produce any MATS event tables")
+    event_rows = parse_rmats_event_rows(event_files)
+    if not event_rows:
+        return blocked_row(args, "rMATS", plan_row, method_dir, "rMATS event tables had no parseable rows")
+
+    event_results = Path(row["transcript_results"])
+    write_rmats_event_results(event_results, event_rows)
+    write_rmats_summary(Path(row["summary"]), "ok", "", event_rows, event_files, plan_row)
+    row["status"] = "completed"
+    row["reason"] = "rMATS junction-event differential splicing from aligned BAMs"
+    standardized_results, result_count, standardized_status = write_standardized_rmats_results(
+        args, contrast_id, event_results, event_rows
+    )
+    row["standardized_results"] = standardized_results
+    row["standardized_result_count"] = str(result_count)
+    row["standardized_status"] = standardized_status
+    return row
+
+
+def run_rmats_native(args: argparse.Namespace, plan_rows: list[dict[str, str]]) -> list[dict[str, str]]:
+    rows = [run_rmats_contrast(args, plan_row) for plan_row in plan_rows]
+    if rows:
+        return rows
+    method_dir = Path(args.outdir) / "rmats"
+    return [blocked_row(args, "rMATS", {"contrast_id": "no_contrasts"}, method_dir, "DTU plan contains no contrast rows")]
+
+
 def run_suppa2_contrast(args: argparse.Namespace, plan_row: dict[str, str]) -> dict[str, str]:
     contrast_id = plan_row.get("contrast_id", "contrast")
     method_dir = Path(args.outdir) / "suppa2" / re.sub(r"[^A-Za-z0-9_.-]+", "_", contrast_id)
@@ -1403,6 +1677,8 @@ def run_method_rows(args: argparse.Namespace, method: str, plan: Path, plan_rows
         return run_dexseq_exon_native(args, plan_rows)
     if method == "SUPPA2" and not command_for_method(args, method).strip():
         return run_suppa2_native(args, plan_rows)
+    if method == "rMATS" and not command_for_method(args, method).strip():
+        return run_rmats_native(args, plan_rows)
     if args.contrast_id:
         return [run_external_method(args, method, plan, plan_row) for plan_row in plan_rows]
     return [run_external_method(args, method, plan)]

@@ -239,7 +239,8 @@ rnaseq_dtu:
   # is the true exon-bin DEXSeq path: it flattens the GTF with DEXSeq helper
   # scripts, counts aligned BAMs per exon bin, and runs DEXSeq on those counts.
   # SUPPA2 runs transcript events from SUPPA-managed ioi/psi/diffSplice files.
-  # rMATS still needs an explicit external command template.
+  # rMATS runs junction-event differential splicing from aligned BAMs plus GTF.
+  # Set rmats_read_length explicitly; ASPIS blocks native rMATS if it is 0.
   run: false
   method: DRIMSeq
   condition_col: condition
@@ -268,6 +269,13 @@ rnaseq_dtu:
   suppa2_tpm_threshold: 0.0
   suppa2_nan_threshold: 0.0
   suppa2_gene_correction: true
+  rmats_executable: rmats.py
+  rmats_read_length: 0
+  rmats_lib_type: fr-unstranded
+  rmats_nthread: 4
+  rmats_tstat: 4
+  rmats_variable_read_length: false
+  rmats_extra_args: ""
   plot_padj: 0.05
   plot_top_n: 20
   plot_max_points: 2500

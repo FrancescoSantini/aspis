@@ -25,7 +25,7 @@ METHOD_ALIASES = {
     "rmats_turbo": "rMATS",
 }
 
-NATIVE_METHODS = {"DRIMSeq", "DEXSeq", "DEXSeqExon", "SUPPA2"}
+NATIVE_METHODS = {"DRIMSeq", "DEXSeq", "DEXSeqExon", "SUPPA2", "rMATS"}
 
 COLUMNS = [
     "project",

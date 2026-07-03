@@ -313,10 +313,10 @@ def render_dtu_summary(
         summary = read_first_optional_row(row.get("summary", ""))
         plot_row = plot_by_key.get((row.get("method", ""), row.get("contrast_id", "")), {})
         tested_count = summary.get("n_tested_genes", "")
-        if not tested_count and method == "SUPPA2":
+        if not tested_count and method in {"SUPPA2", "rMATS"}:
             tested_count = str(count_unique_tsv_values(row.get("transcript_results", ""), "gene_id"))
         usage_count = summary.get("n_usage_transcripts", "")
-        if not usage_count and method == "SUPPA2":
+        if not usage_count and method in {"SUPPA2", "rMATS"}:
             usage_count = str(count_unique_tsv_values(row.get("transcript_results", ""), "feature_id"))
             if usage_count == "0":
                 usage_count = summary.get("n_events", "") or row.get("standardized_result_count", "")
@@ -332,7 +332,7 @@ def render_dtu_summary(
             plot_row.get("n_significant", "")
             or str(count_significant_standardized(row.get("standardized_results", "")))
         )
-        if method == "SUPPA2":
+        if method in {"SUPPA2", "rMATS"}:
             gene_label = "event results"
             usage_label = "event table"
             usage_plot_label = "delta PSI plot"
@@ -381,7 +381,7 @@ def render_dtu_summary(
     return f"""
   <section class="dtu-summary">
     <h2>DTU / splicing methods</h2>
-    <p class="note">Native DRIMSeq, DEXSeq, DEXSeqExon, and SUPPA2 rows are companion analyses. DRIMSeq tests transcript usage at the gene level; DEXSeq uses transcript features grouped by gene; DEXSeqExon builds exon-bin counts from aligned BAMs with DEXSeq helper scripts; SUPPA2 runs transcript-event differential splicing through SUPPA ioi/psi/diffSplice outputs. rMATS still requires an external command template.</p>
+    <p class="note">Native DRIMSeq, DEXSeq, DEXSeqExon, SUPPA2, and rMATS rows are companion analyses. DRIMSeq tests transcript usage at the gene level; DEXSeq uses transcript features grouped by gene; DEXSeqExon builds exon-bin counts from aligned BAMs with DEXSeq helper scripts; SUPPA2 runs transcript-event differential splicing through SUPPA ioi/psi/diffSplice outputs; rMATS runs junction-event differential splicing from aligned BAMs and the configured GTF.</p>
     <div class="counts">plan status: {html.escape(plan.get("status", "") or "not_configured")}; candidate methods: {html.escape(plan.get("candidate_methods", "") or plan.get("method", ""))}</div>
     <div class="counts">method status: {html.escape(format_counts(method_status))}; plot status: {html.escape(format_counts(plot_status))}; standardized status: {html.escape(format_counts(standardized_status))}; standardized rows: {standardized_rows}; padj&lt;0.05 rows: {significant_rows}</div>
     <div class="counts">resources: {plan_link}</div>

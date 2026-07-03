@@ -222,8 +222,11 @@ counts aligned BAMs with `dexseq_count.py`, and runs DEXSeq on the resulting
 exon-bin matrix. `SUPPA2` transcript-event mode is available when `suppa.py` is
 installed. ASPIS prepares per-contrast transcript expression files from the
 transcript count matrix, then runs SUPPA `generateEvents -f ioi`,
-`psiPerIsoform`, and `diffSplice`. rMATS remains a future native engine until
-its event/count input contract is implemented explicitly.
+`psiPerIsoform`, and `diffSplice`. `rMATS` junction-event mode is available
+when `rmats.py` is installed and `rnaseq_dtu.rmats_read_length` is set.
+ASPIS writes per-contrast control/test BAM lists, runs rMATS against the
+configured GTF, and standardizes the resulting `*.MATS.JC.txt` or
+`*.MATS.JCEC.txt` event tables.
 
 ## Feature-Set Tables
 

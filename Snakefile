@@ -6281,6 +6281,17 @@ rule run_rnaseq_dtu_contrast:
             if as_bool(RNASEQ_DTU.get("suppa2_gene_correction", True), True)
             else "--no-suppa2-gene-correction"
         ),
+        rmats_executable=RNASEQ_DTU.get("rmats_executable", "rmats.py"),
+        rmats_read_length=RNASEQ_DTU.get("rmats_read_length", 0),
+        rmats_lib_type=RNASEQ_DTU.get("rmats_lib_type", "fr-unstranded"),
+        rmats_nthread=RNASEQ_DTU.get("rmats_nthread", 4),
+        rmats_tstat=RNASEQ_DTU.get("rmats_tstat", 4),
+        rmats_variable_read_length=lambda wildcards: (
+            "--rmats-variable-read-length"
+            if as_bool(RNASEQ_DTU.get("rmats_variable_read_length", False), False)
+            else ""
+        ),
+        rmats_extra_args=RNASEQ_DTU.get("rmats_extra_args", ""),
         min_count=RNASEQ_DTU.get("min_count", 10),
         min_samples=RNASEQ_DTU.get("min_samples", 2),
         min_proportion=RNASEQ_DTU.get("min_proportion", 0.05),
@@ -6329,6 +6340,13 @@ rule run_rnaseq_dtu_contrast:
           --suppa2-tpm-threshold {params.suppa2_tpm_threshold:q} \
           --suppa2-nan-threshold {params.suppa2_nan_threshold:q} \
           {params.suppa2_gene_correction} \
+          --rmats-executable {params.rmats_executable:q} \
+          --rmats-read-length {params.rmats_read_length:q} \
+          --rmats-lib-type {params.rmats_lib_type:q} \
+          --rmats-nthread {params.rmats_nthread:q} \
+          --rmats-tstat {params.rmats_tstat:q} \
+          {params.rmats_variable_read_length} \
+          --rmats-extra-args {params.rmats_extra_args:q} \
           --dtu-min-count {params.min_count:q} \
           --dtu-min-samples {params.min_samples:q} \
           --dtu-min-proportion {params.min_proportion:q} \
