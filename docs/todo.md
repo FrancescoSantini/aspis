@@ -591,8 +591,9 @@ Completed native DTU scope:
   per-library exon-bin count files, six completed DEXSeqExon contrasts,
   221,919-244,857 standardized exon-bin rows per contrast, non-empty
   exon-bin usage plots, and populated DTU summary cells in the refreshed
-  RNA-seq differential report. The inspected local evidence bundle was
-  `g100_beas_full_dtu_review_20260702_2304.tar.gz`.
+  RNA-seq differential report. A subsequent rMATS refresh validated six
+  native rMATS contrasts on BEAS_2B aligned BAMs, producing 75,842-88,044
+  standardized junction-event rows per contrast and populated delta-PSI plots.
 - Missing `Rscript`, missing `R::DRIMSeq`/`R::DEXSeq`, missing
   `dexseq_prepare_annotation.py`, missing `dexseq_count.py`, missing
   `suppa.py`, missing `rmats.py`, missing rMATS read length, insufficient
@@ -600,8 +601,9 @@ Completed native DTU scope:
   post-filter universes are reported as blocked rather than silently skipped.
 - RNA-seq differential and integrated project reports expose DTU status,
   standardized rows, significant rows, and links to summary, gene-result, usage,
-  standardized result tables, and DTU overview/usage SVG plots for completed
-  native methods.
+  standardized result tables, and DTU overview SVG plots for completed native
+  methods. Event/exon-bin methods now expose both cross-gene candidate plots and
+  focused top-gene spotlight plots, with rMATS event-code legend text.
 - DTU intermediate pruning is implemented as an explicit, auditable target. It
   removes only re-creatable per-contrast DTU input slices such as
   `dtu_counts.tsv` and `dtu_coldata.tsv` after DTU method outputs and DTU plots
@@ -624,8 +626,6 @@ Completed native DTU scope:
 
 Remaining future/event-based tasks:
 
-- Validate native rMATS on BEAS_2B or another real aligned-BAM run after
-  installing `rmats.py` and setting `rnaseq_dtu.rmats_read_length`.
 - Decide whether native SUPPA2 should be expanded beyond transcript-event
   `ioi` mode to local `ioe` alternative-splicing events (`SE`, `SS`, `MX`,
   `RI`, `FL`) after validating storage/runtime on real data.
@@ -646,8 +646,7 @@ Acceptance criteria:
   differential splicing rows when `suppa.py` is installed. Validated on BEAS_2B.
 - `rnaseq_dtu.run: true` with `method: rMATS` produces junction-event
   differential splicing rows from aligned BAMs when `rmats.py` is installed and
-  `rnaseq_dtu.rmats_read_length` is configured. Contract-tested locally; real
-  G100 validation remains open.
+  `rnaseq_dtu.rmats_read_length` is configured. Validated on BEAS_2B.
 - `rnaseq_dtu.run: true` with `method: all` and native candidate methods
   `DRIMSeq,DEXSeq,DEXSeqExon,SUPPA2,rMATS` runs as one schedulable job per
   contrast/method pair, then merges method rows across contrasts.
@@ -656,7 +655,8 @@ Acceptance criteria:
   a blocked status with a concrete reason.
 - Reports explain whether each DTU contrast was planned, blocked, failed, or
   completed from the merged per-contrast manifest, with per-contrast links to
-  summary, gene-result, usage, standardized tables, and DTU SVG plots.
+  summary, gene-result, usage, standardized tables, overview SVG plots,
+  cross-gene candidate SVG plots, and focused top-gene spotlight SVG plots.
 - Reports expose the isoform/DTU evidence table and summary whenever
   isoform-switch reporting and DTU/splicing outputs are both present.
 - `rnaseq_dtu.prune_intermediates: true` adds the prune target to full runs, and

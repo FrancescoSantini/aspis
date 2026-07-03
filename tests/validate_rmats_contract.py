@@ -287,12 +287,15 @@ def main() -> int:
             "100",
         ]
     )
-    plot_rows = read_tsv(dtu_dir / "plots" / "dtu_plot_manifest.tsv", {"method", "status", "usage_plot"})
+    plot_rows = read_tsv(dtu_dir / "plots" / "dtu_plot_manifest.tsv", {"method", "status", "usage_plot", "feature_plot"})
     if plot_rows[0]["method"] != "rMATS" or plot_rows[0]["status"] != "ok":
         raise ValueError(f"rMATS plots were not ok: {plot_rows}")
     usage_svg = Path(plot_rows[0]["usage_plot"]).read_text(encoding="utf-8")
-    if "Top rMATS delta PSI" not in usage_svg or "Gene One SE #EVENT1" not in usage_svg:
+    if "Top-gene rMATS event spotlight" not in usage_svg or "Gene One SE #EVENT1" not in usage_svg:
         raise ValueError(f"rMATS delta PSI plot was not rendered correctly: {plot_rows}")
+    feature_svg = Path(plot_rows[0]["feature_plot"]).read_text(encoding="utf-8")
+    if "Top rMATS event candidates across genes" not in feature_svg or "SE skipped exon" not in feature_svg:
+        raise ValueError(f"rMATS candidate plot did not explain event types: {plot_rows}")
     print("rMATS contract ok")
     return 0
 

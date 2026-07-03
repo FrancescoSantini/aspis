@@ -21,6 +21,7 @@ COLUMNS = [
     "transcript_results",
     "overview_plot",
     "usage_plot",
+    "feature_plot",
     "n_standardized",
     "n_significant",
     "top_gene",
@@ -137,6 +138,17 @@ def event_label(row: dict[str, str], method: str) -> str:
     return feature or event_type or "feature"
 
 
+def method_legend(method: str) -> str:
+    method_upper = method.upper()
+    if method_upper == "RMATS":
+        return "rMATS event types: SE skipped exon; RI retained intron; A5SS/A3SS alternative splice sites; MXE mutually exclusive exons."
+    if method_upper == "SUPPA2":
+        return "SUPPA2 events are transcript-level splicing events; delta PSI is the inclusion shift from control to test."
+    if method_upper == "DEXSEQEXON":
+        return "DEXSeqExon rows are flattened exon bins; log2FC is the signed exon-bin effect from control to test."
+    return ""
+
+
 def dedupe_suppa2_rows(rows: list[dict[str, str]]) -> list[dict[str, str]]:
     deduped = []
     seen = set()
@@ -233,8 +245,8 @@ def render_usage_svg(path: Path, usage_rows: list[dict[str, str]], gene_id: str,
     bar_w = width - left - right
     parts = [svg_header(width, height)]
     parts.append('<rect width="100%" height="100%" fill="white"/>\n')
-    parts.append(f'<text x="24" y="30" font-size="20" font-weight="700">Top DTU usage: {html.escape(gene_id)}</text>\n')
-    parts.append('<text x="24" y="52" font-size="12" class="muted">Mean transcript usage by contrast group. Larger shifts are shown first.</text>\n')
+    parts.append(f'<text x="24" y="30" font-size="20" font-weight="700">Top-gene DTU usage spotlight: {html.escape(gene_id)}</text>\n')
+    parts.append('<text x="24" y="52" font-size="12" class="muted">Single top-ranked gene. Mean transcript usage by contrast group; larger shifts are shown first.</text>\n')
     for tick in [0, 0.25, 0.5, 0.75, 1.0]:
         x = left + tick * bar_w
         parts.append(f'<line class="grid" x1="{x:.1f}" y1="{top - 10}" x2="{x:.1f}" y2="{height - 44}"/>\n')
@@ -256,118 +268,172 @@ def render_usage_svg(path: Path, usage_rows: list[dict[str, str]], gene_id: str,
     return True
 
 
-def render_exon_bin_effect_svg(path: Path, exon_rows: list[dict[str, str]], gene_id: str, top_n: int) -> bool:
-    rows = []
-    for row in exon_rows:
-        if row.get("gene_id", "") != gene_id:
+def ranked_rows(
+    rows: list[dict[str, str]],
+    value_column: str,
+    top_n: int,
+    max_per_gene: int = 3,
+) -> list[dict[str, str]]:
+    scored = []
+    for row in rows:
+        value = safe_float(row.get(value_column, ""))
+        score = numeric_p(row)
+        if value is None or score is None:
             continue
-        effect = safe_float(row.get("log2_fold_change", ""))
+        scored.append((score, -abs(value), row))
+    scored.sort(key=lambda item: (item[0], item[1], item[2].get("gene_id", ""), item[2].get("feature_id", "")))
+    selected = []
+    per_gene: dict[str, int] = {}
+    for _score, _effect, row in scored:
+        gene = row.get("gene_id", "") or row.get("gene_name", "") or "unknown"
+        if max_per_gene > 0 and per_gene.get(gene, 0) >= max_per_gene:
+            continue
+        selected.append(row)
+        per_gene[gene] = per_gene.get(gene, 0) + 1
+        if len(selected) >= top_n:
+            break
+    return selected
+
+
+def render_signed_effect_svg(
+    path: Path,
+    rows: list[dict[str, str]],
+    method: str,
+    value_column: str,
+    axis_label: str,
+    title: str,
+    subtitle: str,
+    top_n: int,
+    value_limit: float | None = None,
+    filter_gene: str = "",
+    max_per_gene: int = 3,
+) -> bool:
+    selected_rows = []
+    source_rows = rows
+    if filter_gene:
+        source_rows = [row for row in source_rows if row.get("gene_id", "") == filter_gene]
+    if filter_gene:
+        candidates = sorted(
+            [
+                row
+                for row in source_rows
+                if safe_float(row.get(value_column, "")) is not None
+            ],
+            key=lambda row: abs(safe_float(row.get(value_column, "")) or 0.0),
+            reverse=True,
+        )[:top_n]
+    else:
+        candidates = ranked_rows(source_rows, value_column, top_n, max_per_gene=max_per_gene)
+    for row in candidates:
+        effect = safe_float(row.get(value_column, ""))
         if effect is None:
             continue
-        rows.append(row)
-    if not rows:
+        selected_rows.append(row)
+    if not selected_rows:
         return False
 
-    rows = sorted(
-        rows,
-        key=lambda row: abs(safe_float(row.get("log2_fold_change", "")) or 0.0),
-        reverse=True,
-    )[:top_n]
-    max_abs = max(abs(safe_float(row.get("log2_fold_change", "")) or 0.0) for row in rows)
+    max_abs = value_limit or max(abs(safe_float(row.get(value_column, "")) or 0.0) for row in selected_rows)
     max_abs = max(1.0, math.ceil(max_abs * 2) / 2)
     width = 980
     row_h = 42
-    height = max(260, 130 + (len(rows) * row_h))
+    legend_lines = [subtitle]
+    legend = method_legend(method)
+    if legend:
+        legend_lines.append(legend)
+    height = max(260, 130 + (len(selected_rows) * row_h) + ((len(legend_lines) - 1) * 18))
     left, right, top = 210, 86, 78
     bar_w = width - left - right
     half_w = bar_w / 2
     center = left + half_w
     parts = [svg_header(width, height)]
     parts.append('<rect width="100%" height="100%" fill="white"/>\n')
-    parts.append(f'<text x="24" y="30" font-size="20" font-weight="700">Top DEXSeqExon exon bins: {html.escape(gene_id)}</text>\n')
-    parts.append('<text x="24" y="52" font-size="12" class="muted">Signed exon-bin log2 fold-change. Blue is lower in the test group; red is higher.</text>\n')
+    parts.append(f'<text x="24" y="30" font-size="20" font-weight="700">{html.escape(title)}</text>\n')
+    for idx, line in enumerate(legend_lines):
+        parts.append(f'<text x="24" y="{52 + (idx * 18)}" font-size="12" class="muted">{html.escape(line)}</text>\n')
     for tick in [-max_abs, -max_abs / 2, 0.0, max_abs / 2, max_abs]:
         x = center + (tick / max_abs) * half_w
         parts.append(f'<line class="grid" x1="{x:.1f}" y1="{top - 12}" x2="{x:.1f}" y2="{height - 48}"/>\n')
         parts.append(f'<text x="{x:.1f}" y="{height - 24}" text-anchor="middle" font-size="11">{tick:g}</text>\n')
     parts.append(f'<line class="axis" x1="{center:.1f}" y1="{top - 12}" x2="{center:.1f}" y2="{height - 48}"/>\n')
-    parts.append(f'<text x="{center:.1f}" y="{height - 7}" text-anchor="middle" font-size="12" class="muted">log2 fold-change</text>\n')
-    for idx, row in enumerate(rows):
+    parts.append(f'<text x="{center:.1f}" y="{height - 7}" text-anchor="middle" font-size="12" class="muted">{html.escape(axis_label)}</text>\n')
+    for idx, row in enumerate(selected_rows):
         y = top + idx * row_h
-        effect = max(-max_abs, min(max_abs, safe_float(row.get("log2_fold_change", "")) or 0.0))
+        effect = max(-max_abs, min(max_abs, safe_float(row.get(value_column, "")) or 0.0))
         bar_x = center if effect >= 0 else center + (effect / max_abs) * half_w
         bar_width = abs(effect / max_abs) * half_w
         css_class = "bar2" if effect >= 0 else "bar1"
-        label = dexseq_exon_label(row)
+        method_upper = method.upper()
+        label = dexseq_exon_label(row) if method_upper == "DEXSEQEXON" else event_label(row, method)
+        if not filter_gene and method_upper != "RMATS" and row.get("gene_name", ""):
+            label = f"{row.get('gene_name', '')} {label}"
+        elif not filter_gene and method_upper != "RMATS" and row.get("gene_id", ""):
+            label = f"{row.get('gene_id', '')} {label}"
         label = label if len(label) <= 28 else label[:25] + "..."
         padj = row.get("padj", "")
         padj_text = f"; padj {padj}" if padj else ""
         parts.append(f'<text x="{left - 12}" y="{y + 18}" text-anchor="end" font-size="12">{html.escape(label)}</text>\n')
         parts.append(f'<rect class="{css_class}" x="{bar_x:.1f}" y="{y + 4}" width="{bar_width:.1f}" height="18" rx="2"/>\n')
-        parts.append(f'<text x="{left + bar_w + 8}" y="{y + 19}" font-size="11" class="muted">log2FC {effect:.3g}{html.escape(padj_text)}</text>\n')
+        parts.append(f'<text x="{left + bar_w + 8}" y="{y + 19}" font-size="11" class="muted">{html.escape(axis_label)} {effect:.3g}{html.escape(padj_text)}</text>\n')
     parts.append("</svg>\n")
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("".join(parts), encoding="utf-8")
     return True
+
+
+def render_exon_bin_effect_svg(path: Path, exon_rows: list[dict[str, str]], gene_id: str, top_n: int) -> bool:
+    return render_signed_effect_svg(
+        path,
+        exon_rows,
+        "DEXSeqExon",
+        "log2_fold_change",
+        "log2FC",
+        f"Top-gene DEXSeqExon exon-bin spotlight: {gene_id}",
+        "Single top-ranked gene. Signed exon-bin effect: blue is lower in test; red is higher.",
+        top_n,
+        filter_gene=gene_id,
+    )
+
+
+def render_exon_bin_candidates_svg(path: Path, exon_rows: list[dict[str, str]], top_n: int) -> bool:
+    return render_signed_effect_svg(
+        path,
+        exon_rows,
+        "DEXSeqExon",
+        "log2_fold_change",
+        "log2FC",
+        "Top DEXSeqExon exon-bin candidates across genes",
+        "Ranked by adjusted p-value, with at most three exon bins shown per gene.",
+        top_n,
+    )
 
 
 def render_delta_psi_svg(path: Path, event_rows: list[dict[str, str]], gene_id: str, top_n: int, method: str = "SUPPA2") -> bool:
-    rows = []
-    seen_events = set()
-    for row in event_rows:
-        if row.get("gene_id", "") != gene_id:
-            continue
-        if safe_float(row.get("delta_psi", "")) is None:
-            continue
-        event_key = row.get("event_id", "") or "|".join(
-            [row.get("gene_id", ""), row.get("feature_id", ""), row.get("delta_psi", "")]
-        )
-        if event_key in seen_events:
-            continue
-        seen_events.add(event_key)
-        rows.append(row)
-    if not rows:
-        return False
+    return render_signed_effect_svg(
+        path,
+        event_rows,
+        method,
+        "delta_psi",
+        "delta PSI",
+        f"Top-gene {method} event spotlight: {gene_id}",
+        "Single top-ranked gene. Blue is decreased inclusion in test; red is increased.",
+        top_n,
+        value_limit=1.0,
+        filter_gene=gene_id,
+    )
 
-    rows = sorted(
-        rows,
-        key=lambda row: abs(safe_float(row.get("delta_psi", "")) or 0.0),
-        reverse=True,
-    )[:top_n]
-    width = 980
-    row_h = 42
-    height = max(260, 130 + (len(rows) * row_h))
-    left, right, top = 210, 70, 78
-    bar_w = width - left - right
-    half_w = bar_w / 2
-    center = left + half_w
-    parts = [svg_header(width, height)]
-    parts.append('<rect width="100%" height="100%" fill="white"/>\n')
-    parts.append(f'<text x="24" y="30" font-size="20" font-weight="700">Top {html.escape(method)} delta PSI: {html.escape(gene_id)}</text>\n')
-    parts.append(f'<text x="24" y="52" font-size="12" class="muted">Event inclusion shift from {html.escape(method)}. Blue is decreased in the test group; red is increased.</text>\n')
-    for tick in [-1.0, -0.5, 0.0, 0.5, 1.0]:
-        x = center + tick * half_w
-        parts.append(f'<line class="grid" x1="{x:.1f}" y1="{top - 12}" x2="{x:.1f}" y2="{height - 48}"/>\n')
-        parts.append(f'<text x="{x:.1f}" y="{height - 24}" text-anchor="middle" font-size="11">{tick:g}</text>\n')
-    parts.append(f'<line class="axis" x1="{center:.1f}" y1="{top - 12}" x2="{center:.1f}" y2="{height - 48}"/>\n')
-    parts.append(f'<text x="{center:.1f}" y="{height - 7}" text-anchor="middle" font-size="12" class="muted">delta PSI</text>\n')
-    for idx, row in enumerate(rows):
-        y = top + idx * row_h
-        feature = event_label(row, method)
-        delta = max(-1.0, min(1.0, safe_float(row.get("delta_psi", "")) or 0.0))
-        bar_x = center if delta >= 0 else center + delta * half_w
-        bar_width = abs(delta) * half_w
-        css_class = "bar2" if delta >= 0 else "bar1"
-        label = feature if len(feature) <= 24 else feature[:21] + "..."
-        padj = row.get("padj", "")
-        padj_text = f"; padj {padj}" if padj else ""
-        parts.append(f'<text x="{left - 12}" y="{y + 18}" text-anchor="end" font-size="12">{html.escape(label)}</text>\n')
-        parts.append(f'<rect class="{css_class}" x="{bar_x:.1f}" y="{y + 4}" width="{bar_width:.1f}" height="18" rx="2"/>\n')
-        parts.append(f'<text x="{left + bar_w + 8}" y="{y + 19}" font-size="11" class="muted">delta {delta:.3g}{html.escape(padj_text)}</text>\n')
-    parts.append("</svg>\n")
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text("".join(parts), encoding="utf-8")
-    return True
+
+def render_delta_psi_candidates_svg(path: Path, event_rows: list[dict[str, str]], top_n: int, method: str) -> bool:
+    return render_signed_effect_svg(
+        path,
+        event_rows,
+        method,
+        "delta_psi",
+        "delta PSI",
+        f"Top {method} event candidates across genes",
+        "Ranked by adjusted p-value, with at most three events shown per gene.",
+        top_n,
+        value_limit=1.0,
+    )
 
 
 def plot_row(args: argparse.Namespace, row: dict[str, str]) -> dict[str, str]:
@@ -385,6 +451,7 @@ def plot_row(args: argparse.Namespace, row: dict[str, str]) -> dict[str, str]:
         "transcript_results": row.get("transcript_results", ""),
         "overview_plot": str(outdir / "dtu_overview.svg"),
         "usage_plot": str(outdir / "top_usage.svg"),
+        "feature_plot": str(outdir / "top_features.svg"),
         "n_standardized": "0",
         "n_significant": "0",
         "top_gene": "",
@@ -419,14 +486,20 @@ def plot_row(args: argparse.Namespace, row: dict[str, str]) -> dict[str, str]:
         usage_rows = read_tsv(usage_path)
         if method_upper in {"SUPPA2", "RMATS"}:
             rendered = render_delta_psi_svg(Path(output["usage_plot"]), usage_rows, top_gene, args.top_n, row.get("method", ""))
+            feature_rendered = render_delta_psi_candidates_svg(Path(output["feature_plot"]), standardized, args.top_n, row.get("method", ""))
         elif method_upper == "DEXSEQEXON":
             rendered = render_exon_bin_effect_svg(Path(output["usage_plot"]), standardized, top_gene, args.top_n)
+            feature_rendered = render_exon_bin_candidates_svg(Path(output["feature_plot"]), standardized, args.top_n)
         else:
             rendered = render_usage_svg(Path(output["usage_plot"]), usage_rows, top_gene, args.top_n)
+            feature_rendered = False
         if not rendered:
             output["usage_plot"] = ""
+        if not feature_rendered:
+            output["feature_plot"] = ""
     else:
         output["usage_plot"] = ""
+        output["feature_plot"] = ""
     output["status"] = "ok"
     return output
 

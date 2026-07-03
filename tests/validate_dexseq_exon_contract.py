@@ -302,14 +302,17 @@ def main() -> int:
             "100",
         ]
     )
-    plot_rows = read_tsv(dtu_dir / "plots" / "dtu_plot_manifest.tsv", {"method", "status", "overview_plot", "usage_plot"})
+    plot_rows = read_tsv(dtu_dir / "plots" / "dtu_plot_manifest.tsv", {"method", "status", "overview_plot", "usage_plot", "feature_plot"})
     if plot_rows[0]["method"] != "DEXSeqExon" or plot_rows[0]["status"] != "ok":
         raise ValueError(f"DEXSeqExon plots were not ok: {plot_rows}")
     usage_svg = Path(plot_rows[0]["usage_plot"]).read_text(encoding="utf-8")
-    if "Top DEXSeqExon exon bins" not in usage_svg or "exon bin E002" not in usage_svg or "log2FC" not in usage_svg:
+    if "Top-gene DEXSeqExon exon-bin spotlight" not in usage_svg or "exon bin E002" not in usage_svg or "log2FC" not in usage_svg:
         raise ValueError(f"DEXSeqExon usage plot did not include exon-bin features: {plot_rows}")
     if '""' in usage_svg:
         raise ValueError(f"DEXSeqExon usage plot exposed raw quoted DEXSeq bin identifiers: {plot_rows}")
+    feature_svg = Path(plot_rows[0]["feature_plot"]).read_text(encoding="utf-8")
+    if "Top DEXSeqExon exon-bin candidates across genes" not in feature_svg or "exon bin E002" not in feature_svg:
+        raise ValueError(f"DEXSeqExon candidate plot did not include cross-gene exon-bin features: {plot_rows}")
     print("DEXSeqExon contract ok")
     return 0
 
