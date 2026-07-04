@@ -505,9 +505,9 @@ def render_isoform_dtu_evidence_summary(
     return f"""
   <section class="isoform-dtu-evidence">
     <h2>Isoform-switch / DTU interpretation</h2>
-    <p class="note">These companion tables link isoform-switch candidates to completed DTU/splicing methods and gene-level DTU consensus for the same contrast. They are review-oriented evidence aggregation, not a new statistical test.</p>
+    <p class="note">These companion tables link isoform-switch candidates to completed DTU/splicing methods and gene-level DTU consensus for the same contrast. They are review-oriented evidence aggregation, not a new statistical test. Global DTU method significance is summarized in the DTU / splicing methods table above.</p>
     <div class="counts">status: {html.escape(row.get("status", ""))}; candidates: {html.escape(row.get("isoform_candidates", ""))}; switch events: {html.escape(row.get("switch_events", ""))}; candidate rows with DTU support: {html.escape(row.get("candidate_rows_with_dtu_support", ""))}; candidate rows with significant DTU support: {html.escape(row.get("candidate_rows_with_significant_dtu_support", ""))}</div>
-    <div class="counts">methods seen: {html.escape(row.get("dtu_methods_seen", "")) or "none"}; significant methods: {html.escape(row.get("dtu_methods_significant", "")) or "none"}{interpretation_counts}; {links}</div>
+    <div class="counts">methods loaded for isoform evidence: {html.escape(row.get("dtu_methods_seen", "")) or "none"}; methods with significant loaded rows: {html.escape(row.get("dtu_methods_significant", "")) or "none"}{interpretation_counts}; {links}</div>
   </section>
 """
 
