@@ -4,7 +4,7 @@ This is the canonical ASPIS backlog. Older TODO-style notes have been merged
 here so that implementation priorities, validation blockers, and cleanup work
 are tracked in one place.
 
-Last updated: 2026-07-03.
+Last updated: 2026-07-04.
 
 ## How To Read This Backlog
 
@@ -45,11 +45,16 @@ narrower and no longer organized as open P0 report/resource plumbing:
 - Native DRIMSeq, transcript-feature DEXSeq, true exon-bin DEXSeqExon,
   transcript-event SUPPA2, and native rMATS DTU execution is implemented,
   contract-tested, and split into one schedulable job per contrast/method pair.
-  DRIMSeq, DEXSeq, DEXSeqExon, and SUPPA2 are validated on the BEAS_2B G100
-  run; rMATS still needs real G100 validation with `rmats.py` installed and
-  `rnaseq_dtu.rmats_read_length` set.
-- Optional isoform-switch consequence annotation paths remain unvalidated for
-  open local tools or precomputed user-supplied annotation tables.
+  DRIMSeq, DEXSeq, DEXSeqExon, SUPPA2, and rMATS are validated on the BEAS_2B
+  G100 run.
+- Core isoform-switch analysis is functionally closed for the current cycle:
+  IsoformSwitchAnalyzeR execution, sequence export, ncRNA interpretation,
+  DTU/splicing method support, DTU consensus, isoform/DTU evidence linking, and
+  high/medium/low isoform interpretation consensus are implemented and exposed
+  in reports.
+- Optional isoform-switch consequence annotation with external open tools or
+  precomputed user-supplied annotation tables remains future polish, not a
+  blocker for core isoform-switch/DTU interpretation.
 - Resource mapping thresholds for low-but-nonzero mapping rates need calibration
   from more real resource distributions.
 - Report and PDF polish remains useful, but the current report graph, inventory,
@@ -540,12 +545,13 @@ Residual validation:
   and metadata-matched runs produce the expected pairing table and contrast
   matrix labels.
 
-## Validated - Native DTU Methods
+## Validated - Native DTU And Isoform-Switch Interpretation
 
 Reason for priority: DTU is expected for transcript-level biology. ASPIS now
 has native transcript-usage, exon-bin, transcript-event, and junction-event DTU
-engines. Remaining DTU work is now validation and polish rather than core
-method availability.
+engines, plus an isoform-switch interpretation layer that merges switch
+candidates with DTU/splicing support. Core method availability and
+isoform-switch/DTU interpretation are closed for the current cycle.
 
 Completed native DTU scope:
 
@@ -633,6 +639,10 @@ Completed native DTU scope:
   isoform/DTU evidence, and the DTU consensus support class into high/medium/low
   interpretation priorities. This is a human-review merger of observations, not
   a new combined statistical test.
+- BEAS_2B G100 refresh generated 95 isoform interpretation consensus rows:
+  55 high priority, 30 medium priority, 10 low priority, 31 multi-method
+  supported rows, and 52 single-method supported rows. The RNA-seq differential
+  report exposes the interpretation section and links the consensus table.
 - The local biological integration contract covers DRIMSeq standardization,
   DEXSeq transcript-feature standardization, SUPPA2 transcript-event
   standardization, and DTU plot/report asset exposure without requiring real R
@@ -646,13 +656,15 @@ Completed native DTU scope:
   consensus table, and report exposure of consensus tables.
 - A dedicated local contract covers conservative DTU pruning.
 
-Remaining future/event-based tasks:
+Remaining optional/future tasks:
 
 - Decide whether native SUPPA2 should be expanded beyond transcript-event
   `ioi` mode to local `ioe` alternative-splicing events (`SE`, `SS`, `MX`,
   `RI`, `FL`) after validating storage/runtime on real data.
 - Add optional environment checks for future engines only when their native input
   contracts are implemented.
+- Improve human-facing labels and explanatory prose in the interpretation
+  consensus table as report polish, without changing statistical outputs.
 
 Acceptance criteria:
 
@@ -684,16 +696,20 @@ Acceptance criteria:
   multi-method significant support.
 - Reports expose the isoform/DTU evidence table and summary whenever
   isoform-switch reporting and DTU/splicing outputs are both present.
+- Reports expose the isoform interpretation consensus table and summary whenever
+  isoform-switch reporting, DTU/splicing outputs, and DTU consensus outputs are
+  present.
 - `rnaseq_dtu.prune_intermediates: true` adds the prune target to full runs, and
   the prune target can also be run explicitly on an existing completed DTU run.
   The generated prune manifest records removed, missing, skipped, and failed
   files plus bytes removed.
 
-## P1 - Isoform-Switch Consequence Annotation Hardening
+## P1 - Optional Isoform-Switch Consequence Annotation Polish
 
 Reason for priority: isoform-switch execution, event pages, exon diagrams, and
-NT/AA sequence extraction now work on real data. The remaining value comes from
-annotation quality and clearer consequence interpretation.
+NT/AA sequence extraction now work on real data, and the core
+isoform-switch/DTU interpretation layer is closed. The remaining value here is
+annotation quality and clearer optional consequence interpretation.
 
 Remaining code tasks:
 
