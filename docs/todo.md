@@ -921,35 +921,34 @@ Acceptance criteria:
 
 ## P1 - Legacy Quarantine
 
-Reason for priority: legacy files are still useful for comparison, but they can
-mislead new users if they look active.
+Reason for priority: legacy files are still useful for audit and comparison,
+but they can mislead new users if they look active.
 
-Likely legacy/quarantine targets:
+Completed quarantine:
 
-- `workflow/Snakefile`;
-- `workflow/SmallRNA`;
-- `workflow/prefetchSRA`;
-- `workflow/profiles/slurm`;
-- legacy R scripts with hardcoded human assumptions, old covariate names, or
-  hardcoded read length;
-- `config/config.yaml`;
-- `config/sample_sheet.csv`;
-- `config/sample_sheet_tests.csv`.
+- Moved the old workflow entrypoints to `legacy/phdpipe/workflow/`:
+  `Snakefile`, `SmallRNA`, and `prefetchSRA`.
+- Moved the old embedded Slurm profile to
+  `legacy/phdpipe/workflow/profiles/slurm/`.
+- Moved the old sample-sheet configuration to `legacy/phdpipe/config/`:
+  `config.yaml`, `sample_sheet.csv`, and `sample_sheet_tests.csv`.
+- Added `tests/validate_legacy_quarantine_contract.py` to keep legacy
+  entrypoints out of active paths while preserving the archive.
 
 Remaining code tasks:
 
-- Keep legacy files until at least one real legacy-vs-new comparison is
-  documented.
-- Mark legacy files clearly or move them under a legacy/archive namespace after
-  comparison.
-- Remove or quarantine old docs that point users to inactive entrypoints.
-- Keep the root `Snakefile` and current config templates as the only supported
-  workflow entrypoint.
+- Audit legacy-style R helpers under `workflow/scripts/` one by one before
+  moving any of them; some names overlap with currently supported behavior.
+- Remove or quarantine any old docs that point users to inactive entrypoints if
+  such docs reappear.
+- Keep the root `Snakefile` and current `aspis_*.yaml` config templates as the
+  only supported workflow entrypoint and user-facing configuration family.
 
 Acceptance criteria:
 
 - New users cannot confuse legacy material with the supported pipeline.
 - Legacy material remains recoverable for audit.
+- The legacy quarantine contract test passes.
 
 ## P2 - Workflow Architecture
 

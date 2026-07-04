@@ -1,7 +1,7 @@
 # ASPIS first-stage configuration.
 #
-# This file is intentionally separate from config/config.yaml, which still
-# belongs to the legacy long/small RNA workflows.
+# This file is intentionally separate from the archived legacy configuration
+# under legacy/phdpipe/config/.
 
 intake: config/intake.tsv
 
