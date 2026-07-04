@@ -193,8 +193,6 @@ def write_done(path: Path, kind: str, rows: list[dict[str, str]]) -> None:
         with path.open("w", encoding="utf-8") as handle:
             handle.write("status\tcompleted\tplanned\tblocked\tfailed\ttotal\treason\n")
             handle.write(f"{status}\t{completed}\t{planned}\t{blocked}\t{failed}\t{len(rows)}\t{reason}\n")
-        if failed:
-            raise RuntimeError(f"Merged {kind} manifest contains failed item(s): {reason}")
         return
 
     prefix, extra_statuses = DONE_COLUMNS[kind]

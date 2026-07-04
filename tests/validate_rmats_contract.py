@@ -275,6 +275,22 @@ def main() -> int:
     failed_done = read_tsv(failed_dir / "dtu_methods.done", {"status", "failed", "reason"})
     if failed_done[0]["status"] != "failed" or failed_done[0]["failed"] != "1":
         raise ValueError(f"rMATS failed done status was not written: {failed_done}")
+    run_command(
+        [
+            sys.executable,
+            "workflow/scripts/merge_status_manifests.py",
+            "--kind",
+            "dtu",
+            "--manifest",
+            str(failed_dir / "merged_dtu_method_manifest.tsv"),
+            "--done",
+            str(failed_dir / "merged_dtu_methods.done"),
+            str(failed_dir / "dtu_method_manifest.tsv"),
+        ]
+    )
+    merged_done = read_tsv(failed_dir / "merged_dtu_methods.done", {"status", "failed", "reason"})
+    if merged_done[0]["status"] != "failed" or merged_done[0]["failed"] != "1":
+        raise ValueError(f"failed rMATS status was not preserved by DTU merge: {merged_done}")
 
     run_command(
         [
