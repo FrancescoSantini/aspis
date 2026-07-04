@@ -1061,6 +1061,8 @@ def rnaseq_isoform_switch_report_outputs(project):
         "external_tool_manifest": f"{base}/external_tool_manifest.tsv",
         "dtu_evidence_table": f"{base}/isoform_dtu_evidence.tsv",
         "dtu_evidence_summary": f"{base}/isoform_dtu_evidence_summary.tsv",
+        "interpretation_table": f"{base}/isoform_interpretation_consensus.tsv",
+        "interpretation_summary": f"{base}/isoform_interpretation_consensus_summary.tsv",
         "dtu_evidence_done": f"{base}/isoform_dtu_evidence.done",
         "plots_pdf": f"{base}/switch_plots.pdf",
         "html": f"{base}/index.html",
@@ -1082,6 +1084,8 @@ def rnaseq_isoform_switch_report_inputs(wildcards):
         outputs["external_tool_manifest"],
         outputs["dtu_evidence_table"],
         outputs["dtu_evidence_summary"],
+        outputs["interpretation_table"],
+        outputs["interpretation_summary"],
         outputs["dtu_evidence_done"],
         outputs["plots_pdf"],
         outputs["html"],
@@ -1478,6 +1482,11 @@ def branch_provenance_inputs(wildcards):
                                     outputs["functional_annotation_table"],
                                     outputs["plot_manifest"],
                                     outputs["external_tool_manifest"],
+                                    outputs["dtu_evidence_table"],
+                                    outputs["dtu_evidence_summary"],
+                                    outputs["interpretation_table"],
+                                    outputs["interpretation_summary"],
+                                    outputs["dtu_evidence_done"],
                                     outputs["plots_pdf"],
                                     outputs["html"],
                                     outputs["done"],
@@ -1839,6 +1848,8 @@ def planned_branch_targets(wildcards):
                                             outputs["external_tool_manifest"],
                                             outputs["dtu_evidence_table"],
                                             outputs["dtu_evidence_summary"],
+                                            outputs["interpretation_table"],
+                                            outputs["interpretation_summary"],
                                             outputs["dtu_evidence_done"],
                                             outputs["plots_pdf"],
                                             outputs["html"],
@@ -5813,10 +5824,17 @@ rule render_isoform_dtu_evidence:
     output:
         evidence=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/isoform_switch/report/isoform_dtu_evidence.tsv",
         summary=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/isoform_switch/report/isoform_dtu_evidence_summary.tsv",
+        interpretation=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/isoform_switch/report/isoform_interpretation_consensus.tsv",
+        interpretation_summary=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/isoform_switch/report/isoform_interpretation_consensus_summary.tsv",
         done=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/isoform_switch/report/isoform_dtu_evidence.done"
     params:
         dtu_method_manifest=lambda wildcards: (
             rnaseq_dtu_report_outputs(wildcards.project)["method_manifest"]
+            if RNASEQ_DTU_RUN
+            else ""
+        ),
+        dtu_consensus_gene_summary=lambda wildcards: (
+            rnaseq_dtu_report_outputs(wildcards.project)["consensus_gene_summary"]
             if RNASEQ_DTU_RUN
             else ""
         ),
@@ -5830,8 +5848,11 @@ rule render_isoform_dtu_evidence:
           --switch-candidates {input.candidates:q} \
           --switch-events {input.events:q} \
           --dtu-method-manifest {params.dtu_method_manifest:q} \
+          --dtu-consensus-gene-summary {params.dtu_consensus_gene_summary:q} \
           --output {output.evidence:q} \
           --summary {output.summary:q} \
+          --interpretation {output.interpretation:q} \
+          --interpretation-summary {output.interpretation_summary:q} \
           --done {output.done:q} \
           --padj {params.padj:q} \
           > {log:q} 2>&1
@@ -6864,6 +6885,16 @@ rule render_rnaseq_differential_report_index:
             "dtu_evidence_summary",
             "--isoform-dtu-evidence-summary",
         ),
+        isoform_interpretation_consensus=lambda wildcards: rnaseq_isoform_switch_report_arg(
+            wildcards,
+            "interpretation_table",
+            "--isoform-interpretation-consensus",
+        ),
+        isoform_interpretation_consensus_summary=lambda wildcards: rnaseq_isoform_switch_report_arg(
+            wildcards,
+            "interpretation_summary",
+            "--isoform-interpretation-consensus-summary",
+        ),
         dtu_plan=lambda wildcards: rnaseq_dtu_report_arg(
             wildcards,
             "plan",
@@ -6918,6 +6949,8 @@ rule render_rnaseq_differential_report_index:
           {params.isoform_switch_plots_pdf} \
           {params.isoform_dtu_evidence} \
           {params.isoform_dtu_evidence_summary} \
+          {params.isoform_interpretation_consensus} \
+          {params.isoform_interpretation_consensus_summary} \
           {params.dtu_plan} \
           {params.dtu_method_manifest} \
           {params.dtu_consensus_gene_summary} \

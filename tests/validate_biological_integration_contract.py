@@ -855,6 +855,8 @@ def exercise_rnaseq_report_dtu_assets(
     write_tsv(report_dir / "summary_manifest.tsv", summary_columns, [base_row])
     isoform_dtu_evidence = report_dir / "isoform_dtu_evidence.tsv"
     isoform_dtu_summary = report_dir / "isoform_dtu_evidence_summary.tsv"
+    isoform_interpretation = report_dir / "isoform_interpretation_consensus.tsv"
+    isoform_interpretation_summary = report_dir / "isoform_interpretation_consensus_summary.tsv"
     write_tsv(
         isoform_dtu_evidence,
         [
@@ -907,6 +909,64 @@ def exercise_rnaseq_report_dtu_assets(
             }
         ],
     )
+    write_tsv(
+        isoform_interpretation,
+        [
+            "event_id",
+            "contrast_id",
+            "gene_id",
+            "gene_name",
+            "isoform_id",
+            "switch_role",
+            "interpretation_status",
+            "interpretation_priority",
+            "interpretation_label",
+            "review_reason",
+            "dtu_support_class",
+        ],
+        [
+            {
+                "event_id": "switch1",
+                "contrast_id": contrast,
+                "gene_id": "GENE1",
+                "gene_name": "Gene One",
+                "isoform_id": "TX1",
+                "switch_role": "switch_in",
+                "interpretation_status": "supported",
+                "interpretation_priority": "high",
+                "interpretation_label": "isoform switch with multi-method DTU/splicing support",
+                "review_reason": "contract fixture",
+                "dtu_support_class": "multi_method_significant",
+            }
+        ],
+    )
+    write_tsv(
+        isoform_interpretation_summary,
+        [
+            "status",
+            "interpretation_rows",
+            "high_priority_rows",
+            "medium_priority_rows",
+            "low_priority_rows",
+            "multi_method_supported_rows",
+            "single_method_supported_rows",
+            "no_dtu_support_rows",
+            "reason",
+        ],
+        [
+            {
+                "status": "ok",
+                "interpretation_rows": "1",
+                "high_priority_rows": "1",
+                "medium_priority_rows": "0",
+                "low_priority_rows": "0",
+                "multi_method_supported_rows": "1",
+                "single_method_supported_rows": "0",
+                "no_dtu_support_rows": "0",
+                "reason": "contract fixture",
+            }
+        ],
+    )
     run_command(
         [
             sys.executable,
@@ -935,6 +995,10 @@ def exercise_rnaseq_report_dtu_assets(
             str(isoform_dtu_evidence),
             "--isoform-dtu-evidence-summary",
             str(isoform_dtu_summary),
+            "--isoform-interpretation-consensus",
+            str(isoform_interpretation),
+            "--isoform-interpretation-consensus-summary",
+            str(isoform_interpretation_summary),
             "--asset-manifest",
             str(report_dir / "asset_manifest.tsv"),
             "--output",
@@ -960,6 +1024,8 @@ def exercise_rnaseq_report_dtu_assets(
     isoform_assets = [row for row in assets if row["asset_group"] == "isoform_switch"]
     if not any(row["asset_label"] == "isoform_dtu_evidence" for row in isoform_assets):
         raise ValueError(f"isoform/DTU evidence was not exposed as a report asset: {isoform_assets}")
+    if not any(row["asset_label"] == "isoform_interpretation_consensus" for row in isoform_assets):
+        raise ValueError(f"isoform interpretation consensus was not exposed as a report asset: {isoform_assets}")
     html_text = (report_dir / "index.html").read_text(encoding="utf-8")
     if "DTU / splicing methods" not in html_text or "standardized rows: 1" not in html_text:
         raise ValueError("DTU summary was not rendered in the RNA-seq report index")
@@ -967,8 +1033,10 @@ def exercise_rnaseq_report_dtu_assets(
         raise ValueError("DTU contrast table was not rendered in the RNA-seq report index")
     if "Cross-method DTU consensus" not in html_text or "single_method_significant" not in html_text:
         raise ValueError("DTU consensus summary was not rendered in the RNA-seq report index")
-    if "Isoform-switch / DTU evidence" not in html_text or "candidate rows with significant DTU support: 1" not in html_text:
+    if "Isoform-switch / DTU interpretation" not in html_text or "candidate rows with significant DTU support: 1" not in html_text:
         raise ValueError("isoform/DTU evidence summary was not rendered in the RNA-seq report index")
+    if "high priority: 1" not in html_text or "interpretation consensus" not in html_text:
+        raise ValueError("isoform interpretation consensus summary was not rendered in the RNA-seq report index")
 
 
 def main() -> int:

@@ -258,6 +258,7 @@ def build_report_inventory(
                         summary_paths=[base / "differential/isoform_switch/report/switch_event_summary.tsv"],
                         primary_paths=[
                             base / "differential/isoform_switch/report/switch_candidates.tsv",
+                            base / "differential/isoform_switch/report/isoform_interpretation_consensus.tsv",
                             base / "differential/isoform_switch/report/coding_switch_summary.tsv",
                             base / "differential/isoform_switch/report/ncrna_switch_interpretation.tsv",
                         ],

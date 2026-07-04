@@ -111,6 +111,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--isoform-switch-plots-pdf", default="", help="Optional isoform-switch multi-page plot PDF")
     parser.add_argument("--isoform-dtu-evidence", default="", help="Optional isoform-switch plus DTU evidence table")
     parser.add_argument("--isoform-dtu-evidence-summary", default="", help="Optional isoform-switch plus DTU evidence summary")
+    parser.add_argument("--isoform-interpretation-consensus", default="", help="Optional isoform-switch interpretation consensus table")
+    parser.add_argument("--isoform-interpretation-consensus-summary", default="", help="Optional isoform-switch interpretation consensus summary")
     parser.add_argument("--dtu-plan", default="", help="Optional DTU/splicing plan TSV")
     parser.add_argument("--dtu-method-manifest", default="", help="Optional DTU/splicing method manifest TSV")
     parser.add_argument("--dtu-consensus-gene-summary", default="", help="Optional DTU consensus gene summary TSV")
@@ -450,26 +452,44 @@ def render_dtu_summary(
 """
 
 
-def render_isoform_dtu_evidence_summary(summary_path: str, evidence_path: str, output: Path) -> str:
-    if not summary_path and not evidence_path:
+def render_isoform_dtu_evidence_summary(
+    summary_path: str,
+    evidence_path: str,
+    interpretation_path: str,
+    interpretation_summary_path: str,
+    output: Path,
+) -> str:
+    if not summary_path and not evidence_path and not interpretation_path:
         return ""
     summary_rows = read_optional_table(summary_path)
-    if not summary_rows:
+    interpretation_summary_rows = read_optional_table(interpretation_summary_path)
+    if not summary_rows and not interpretation_summary_rows:
         return ""
-    row = summary_rows[0]
+    row = summary_rows[0] if summary_rows else {}
+    interpretation = interpretation_summary_rows[0] if interpretation_summary_rows else {}
     links = link_list(
         [
             ("evidence table", evidence_path),
             ("evidence summary", summary_path),
+            ("interpretation consensus", interpretation_path),
+            ("interpretation summary", interpretation_summary_path),
         ],
         output,
     )
+    interpretation_counts = ""
+    if interpretation:
+        interpretation_counts = (
+            f'; interpretation rows: {html.escape(interpretation.get("interpretation_rows", ""))}; '
+            f'high priority: {html.escape(interpretation.get("high_priority_rows", ""))}; '
+            f'medium priority: {html.escape(interpretation.get("medium_priority_rows", ""))}; '
+            f'low priority: {html.escape(interpretation.get("low_priority_rows", ""))}'
+        )
     return f"""
   <section class="isoform-dtu-evidence">
-    <h2>Isoform-switch / DTU evidence</h2>
-    <p class="note">This companion table links isoform-switch candidate genes to completed DTU/splicing methods for the same contrast. It is evidence aggregation, not a new statistical test.</p>
+    <h2>Isoform-switch / DTU interpretation</h2>
+    <p class="note">These companion tables link isoform-switch candidates to completed DTU/splicing methods and gene-level DTU consensus for the same contrast. They are review-oriented evidence aggregation, not a new statistical test.</p>
     <div class="counts">status: {html.escape(row.get("status", ""))}; candidates: {html.escape(row.get("isoform_candidates", ""))}; switch events: {html.escape(row.get("switch_events", ""))}; candidate rows with DTU support: {html.escape(row.get("candidate_rows_with_dtu_support", ""))}; candidate rows with significant DTU support: {html.escape(row.get("candidate_rows_with_significant_dtu_support", ""))}</div>
-    <div class="counts">methods seen: {html.escape(row.get("dtu_methods_seen", "")) or "none"}; significant methods: {html.escape(row.get("dtu_methods_significant", "")) or "none"}; {links}</div>
+    <div class="counts">methods seen: {html.escape(row.get("dtu_methods_seen", "")) or "none"}; significant methods: {html.escape(row.get("dtu_methods_significant", "")) or "none"}{interpretation_counts}; {links}</div>
   </section>
 """
 
@@ -518,6 +538,8 @@ def render_project_resources(
     isoform_switch_plots_pdf: str = "",
     isoform_dtu_evidence: str = "",
     isoform_dtu_evidence_summary: str = "",
+    isoform_interpretation_consensus: str = "",
+    isoform_interpretation_consensus_summary: str = "",
     dtu_plan: str = "",
     dtu_method_manifest: str = "",
     dtu_consensus_gene_summary: str = "",
@@ -548,6 +570,8 @@ def render_project_resources(
                 ("isoform switch ncRNA interpretation", isoform_switch_ncrna),
                 ("isoform/DTU evidence", isoform_dtu_evidence),
                 ("isoform/DTU evidence summary", isoform_dtu_evidence_summary),
+                ("isoform interpretation consensus", isoform_interpretation_consensus),
+                ("isoform interpretation summary", isoform_interpretation_consensus_summary),
                 ("isoform switch plot manifest", isoform_switch_plots),
                 ("isoform switch PDF", isoform_switch_plots_pdf),
             ],
@@ -880,6 +904,8 @@ def render_html(
     isoform_switch_plots_pdf: str = "",
     isoform_dtu_evidence: str = "",
     isoform_dtu_evidence_summary: str = "",
+    isoform_interpretation_consensus: str = "",
+    isoform_interpretation_consensus_summary: str = "",
     dtu_plan: str = "",
     dtu_method_manifest: str = "",
     dtu_consensus_gene_summary: str = "",
@@ -912,6 +938,8 @@ def render_html(
         isoform_switch_plots_pdf,
         isoform_dtu_evidence,
         isoform_dtu_evidence_summary,
+        isoform_interpretation_consensus,
+        isoform_interpretation_consensus_summary,
         dtu_plan,
         dtu_method_manifest,
         dtu_consensus_gene_summary,
@@ -931,6 +959,8 @@ def render_html(
     isoform_dtu_summary = render_isoform_dtu_evidence_summary(
         isoform_dtu_evidence_summary,
         isoform_dtu_evidence,
+        isoform_interpretation_consensus,
+        isoform_interpretation_consensus_summary,
         output,
     )
     enrichment_overview_link = file_link("GO/Reactome enrichment overview", enrichment_overview, output)
@@ -1159,6 +1189,8 @@ def main() -> int:
             args.isoform_switch_plots_pdf,
             args.isoform_dtu_evidence,
             args.isoform_dtu_evidence_summary,
+            args.isoform_interpretation_consensus,
+            args.isoform_interpretation_consensus_summary,
             args.dtu_plan,
             args.dtu_method_manifest,
             args.dtu_consensus_gene_summary,
@@ -1184,6 +1216,8 @@ def main() -> int:
         ("isoform_switch", "isoform_switch", "plots_pdf", "plot", args.isoform_switch_plots_pdf, "ok"),
         ("isoform_switch", "isoform_switch", "isoform_dtu_evidence", "table", args.isoform_dtu_evidence, "ok"),
         ("isoform_switch", "isoform_switch", "isoform_dtu_evidence_summary", "table", args.isoform_dtu_evidence_summary, "ok"),
+        ("isoform_switch", "isoform_switch", "isoform_interpretation_consensus", "table", args.isoform_interpretation_consensus, "ok"),
+        ("isoform_switch", "isoform_switch", "isoform_interpretation_consensus_summary", "table", args.isoform_interpretation_consensus_summary, "ok"),
         ("dtu", "dtu", "dtu_plan", "table", args.dtu_plan, dtu_plan_rows[0].get("status", "planned") if dtu_plan_rows else "not_configured"),
         ("dtu", "dtu", "dtu_method_manifest", "manifest", args.dtu_method_manifest, "ok" if dtu_method_rows else "not_configured"),
         ("dtu", "dtu", "dtu_consensus_gene_summary", "table", args.dtu_consensus_gene_summary, dtu_consensus_done_rows[0].get("status", "ok") if dtu_consensus_done_rows else "not_configured"),

@@ -510,6 +510,7 @@ def render(args: argparse.Namespace) -> None:
         link(rnaseq_base / "differential/reports/enrichment/index.html", "GO/Reactome enrichment overview", base_dir),
         link(rnaseq_base / "differential/reports/technical_report.pdf", "RNA-seq technical PDF", base_dir),
         link(rnaseq_base / "differential/isoform_switch/report/index.html", "isoform-switch overview", base_dir),
+        table_link(rnaseq_base / "differential/isoform_switch/report/isoform_interpretation_consensus.tsv", "isoform interpretation consensus", base_dir),
         table_link(rnaseq_base / "differential/dtu/dtu_method_manifest.tsv", "DTU method manifest", base_dir),
         table_link(rnaseq_base / "differential/dtu/consensus/dtu_consensus_gene_summary.tsv", "DTU consensus gene summary", base_dir),
         table_link(rnaseq_base / "differential/dtu/consensus/dtu_consensus_method_detail.tsv", "DTU consensus method detail", base_dir),

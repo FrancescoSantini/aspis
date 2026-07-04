@@ -48,8 +48,11 @@ def main() -> int:
     dexseq_exon = BASE / "dexseq_exon_standardized.tsv"
     suppa2 = BASE / "suppa2_standardized.tsv"
     dtu_manifest = BASE / "dtu_method_manifest.tsv"
+    dtu_consensus = BASE / "dtu_consensus_gene_summary.tsv"
     output = BASE / "isoform_dtu_evidence.tsv"
     summary = BASE / "isoform_dtu_evidence_summary.tsv"
+    interpretation = BASE / "isoform_interpretation_consensus.tsv"
+    interpretation_summary = BASE / "isoform_interpretation_consensus_summary.tsv"
     done = BASE / "isoform_dtu_evidence.done"
 
     write_tsv(
@@ -236,6 +239,53 @@ def main() -> int:
             },
         ],
     )
+    write_tsv(
+        dtu_consensus,
+        [
+            "project",
+            "contrast_id",
+            "gene_id",
+            "gene_name",
+            "status",
+            "support_class",
+            "methods_detected",
+            "n_methods_detected",
+            "methods_significant",
+            "n_methods_significant",
+            "n_rows",
+            "n_significant_rows",
+            "best_method",
+            "best_padj",
+            "best_pvalue",
+            "best_feature_id",
+            "best_event_type",
+            "event_types",
+            "directions",
+        ],
+        [
+            {
+                "project": "ASPIS_CONTRACT",
+                "contrast_id": "treated_vs_control__time_h_24",
+                "gene_id": "GENE1",
+                "gene_name": "Gene One",
+                "status": "significant",
+                "support_class": "multi_method_significant",
+                "methods_detected": "DRIMSeq,DEXSeqExon,SUPPA2",
+                "n_methods_detected": "3",
+                "methods_significant": "DRIMSeq,DEXSeqExon,SUPPA2",
+                "n_methods_significant": "3",
+                "n_rows": "4",
+                "n_significant_rows": "3",
+                "best_method": "SUPPA2",
+                "best_padj": "0.01",
+                "best_pvalue": "0.003",
+                "best_feature_id": "GENE1;TX1",
+                "best_event_type": "transcript_event",
+                "event_types": "exon_bin_usage,gene_usage,transcript_event",
+                "directions": "decreased_usage,differential_usage,increased_usage",
+            }
+        ],
+    )
 
     run_command(
         [
@@ -247,10 +297,16 @@ def main() -> int:
             str(events),
             "--dtu-method-manifest",
             str(dtu_manifest),
+            "--dtu-consensus-gene-summary",
+            str(dtu_consensus),
             "--output",
             str(output),
             "--summary",
             str(summary),
+            "--interpretation",
+            str(interpretation),
+            "--interpretation-summary",
+            str(interpretation_summary),
             "--done",
             str(done),
         ]
@@ -284,6 +340,29 @@ def main() -> int:
     summary_rows = read_tsv(summary, {"status", "candidate_rows_with_dtu_support", "candidate_rows_with_significant_dtu_support"})
     if summary_rows[0]["status"] != "ok" or summary_rows[0]["candidate_rows_with_significant_dtu_support"] != "1":
         raise ValueError(f"summary did not reflect linked evidence: {summary_rows}")
+
+    interpretation_rows = read_tsv(
+        interpretation,
+        {
+            "event_id",
+            "interpretation_priority",
+            "interpretation_label",
+            "dtu_support_class",
+            "dtu_methods_significant",
+            "best_dtu_method",
+        },
+    )
+    interpretation_by_event = {row["event_id"]: row for row in interpretation_rows}
+    if interpretation_by_event["switch1"]["interpretation_priority"] != "high":
+        raise ValueError(f"switch1 should be high-priority integrated evidence: {interpretation_by_event['switch1']}")
+    if interpretation_by_event["switch1"]["dtu_support_class"] != "multi_method_significant":
+        raise ValueError(f"switch1 should use DTU consensus support class: {interpretation_by_event['switch1']}")
+    if interpretation_by_event["switch1"]["best_dtu_method"] != "SUPPA2":
+        raise ValueError(f"switch1 should use consensus best DTU method: {interpretation_by_event['switch1']}")
+
+    interpretation_summary_rows = read_tsv(interpretation_summary, {"status", "high_priority_rows", "multi_method_supported_rows"})
+    if interpretation_summary_rows[0]["status"] != "ok" or interpretation_summary_rows[0]["high_priority_rows"] != "1":
+        raise ValueError(f"interpretation summary did not reflect priorities: {interpretation_summary_rows}")
 
     done_rows = read_tsv(done, {"status", "dtu_methods_seen"})
     if done_rows[0]["status"] != "ok" or done_rows[0]["dtu_methods_seen"] != "DRIMSeq,DEXSeqExon,SUPPA2":

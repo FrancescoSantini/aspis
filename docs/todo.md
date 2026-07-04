@@ -627,6 +627,12 @@ Completed native DTU scope:
   transcript-feature DEXSeq, DEXSeqExon, SUPPA2, or rMATS rows for the same
   contrast. The table is evidence aggregation for review, not a new statistical
   test.
+- Isoform-switch reporting now also emits
+  `isoform_interpretation_consensus.tsv`, a review-priority table that merges
+  isoform-switch candidates, switch-event context, isoform consequence fields,
+  isoform/DTU evidence, and the DTU consensus support class into high/medium/low
+  interpretation priorities. This is a human-review merger of observations, not
+  a new combined statistical test.
 - The local biological integration contract covers DRIMSeq standardization,
   DEXSeq transcript-feature standardization, SUPPA2 transcript-event
   standardization, and DTU plot/report asset exposure without requiring real R
@@ -636,8 +642,8 @@ Completed native DTU scope:
   contract covers fake `rmats.py` execution, BAM-list input files, event-table
   standardization, summary counts, and delta-PSI plot rendering.
 - The local biological integration contract covers the DRIMSeq missing ranked
-  candidate reason, the DTU consensus merge, and report exposure of consensus
-  tables.
+  candidate reason, the DTU consensus merge, the isoform-switch interpretation
+  consensus table, and report exposure of consensus tables.
 - A dedicated local contract covers conservative DTU pruning.
 
 Remaining future/event-based tasks:

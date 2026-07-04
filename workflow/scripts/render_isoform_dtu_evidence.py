@@ -59,6 +59,52 @@ SUMMARY_COLUMNS = [
     "reason",
 ]
 
+INTERPRETATION_COLUMNS = [
+    "event_id",
+    "contrast_id",
+    "gene_id",
+    "gene_name",
+    "isoform_id",
+    "switch_role",
+    "interpretation_status",
+    "interpretation_priority",
+    "interpretation_label",
+    "review_reason",
+    "switch_direction",
+    "dIF",
+    "padj_qvalue",
+    "candidate_status",
+    "event_status",
+    "event_reason",
+    "switch_biotype_class",
+    "consequence_summary",
+    "coding_priority_tier",
+    "coding_priority_reasons",
+    "dtu_evidence_status",
+    "dtu_support_class",
+    "dtu_methods_detected",
+    "dtu_methods_significant",
+    "n_dtu_methods_detected",
+    "n_dtu_methods_significant",
+    "best_dtu_method",
+    "best_dtu_padj",
+    "best_dtu_feature_id",
+    "best_dtu_event_type",
+    "best_dtu_effect",
+]
+
+INTERPRETATION_SUMMARY_COLUMNS = [
+    "status",
+    "interpretation_rows",
+    "high_priority_rows",
+    "medium_priority_rows",
+    "low_priority_rows",
+    "multi_method_supported_rows",
+    "single_method_supported_rows",
+    "no_dtu_support_rows",
+    "reason",
+]
+
 DONE_COLUMNS = [
     "status",
     "isoform_candidates",
@@ -83,8 +129,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--switch-candidates", required=True)
     parser.add_argument("--switch-events", required=True)
     parser.add_argument("--dtu-method-manifest", default="")
+    parser.add_argument("--dtu-consensus-gene-summary", default="")
     parser.add_argument("--output", required=True)
     parser.add_argument("--summary", required=True)
+    parser.add_argument("--interpretation", default="")
+    parser.add_argument("--interpretation-summary", default="")
     parser.add_argument("--done", required=True)
     parser.add_argument("--padj", type=float, default=0.05)
     return parser.parse_args()
@@ -213,6 +262,17 @@ def load_dtu_rows(manifest_path: Path, padj_threshold: float) -> tuple[dict[tupl
     return rows_by_key, methods_seen, methods_significant
 
 
+def load_dtu_consensus(path: Path) -> dict[tuple[str, str], dict[str, str]]:
+    rows = read_tsv(path) if str(path) else []
+    indexed = {}
+    for row in rows:
+        contrast_id = row.get("contrast_id", "")
+        gene_id = row.get("gene_id", "")
+        if contrast_id and gene_id:
+            indexed[(contrast_id, gene_id)] = row
+    return indexed
+
+
 def summarize_method(rows: list[dict[str, str]], padj_threshold: float) -> tuple[str, int, dict[str, str] | None]:
     best: dict[str, str] | None = None
     significant_count = 0
@@ -283,6 +343,177 @@ def build_rows(
     return evidence_rows
 
 
+def first_value(*values: str) -> str:
+    for value in values:
+        if value:
+            return value
+    return ""
+
+
+def priority_from(
+    candidate: dict[str, str],
+    event: dict[str, str],
+    evidence: dict[str, object],
+    consensus: dict[str, str],
+) -> tuple[str, str, str, str]:
+    significant_methods = int(str(evidence.get("n_dtu_methods_significant", "") or "0"))
+    detected_methods = int(str(evidence.get("n_dtu_methods_detected", "") or "0"))
+    switch_padj = parse_float(candidate.get("padj_qvalue", ""))
+    switch_dif = abs(parse_float(candidate.get("dIF", "")) or 0.0)
+    consequence = first_value(candidate.get("consequence_summary", ""), event.get("coding_priority_reasons", ""))
+    consensus_support = consensus.get("support_class", "")
+
+    if significant_methods >= 2 or consensus_support == "multi_method_significant":
+        return (
+            "supported",
+            "high",
+            "isoform switch with multi-method DTU/splicing support",
+            "multiple DTU/splicing methods are significant for the same contrast and gene",
+        )
+    if significant_methods == 1 or consensus_support == "single_method_significant":
+        if switch_padj is not None and switch_padj < 0.05 and switch_dif >= 0.1:
+            return (
+                "supported",
+                "high",
+                "isoform switch with significant DTU/splicing support",
+                "isoform-switch candidate passes switch thresholds and one DTU/splicing method is significant",
+            )
+        return (
+            "supported",
+            "medium",
+            "isoform switch with single-method DTU/splicing support",
+            "one DTU/splicing method is significant for the same contrast and gene",
+        )
+    if detected_methods:
+        return (
+            "review",
+            "medium" if consequence else "low",
+            "isoform switch with non-significant DTU/splicing context",
+            "DTU/splicing methods evaluated this gene but did not pass the adjusted-p threshold",
+        )
+    return (
+        "switch_only",
+        "medium" if consequence else "low",
+        "isoform switch without DTU/splicing support",
+        "no completed standardized DTU/splicing row mapped to this contrast and gene",
+    )
+
+
+def build_interpretation_rows(
+    candidate_rows: list[dict[str, str]],
+    event_rows: list[dict[str, str]],
+    evidence_rows: list[dict[str, object]],
+    consensus_by_key: dict[tuple[str, str], dict[str, str]],
+) -> list[dict[str, object]]:
+    events_by_id = {row.get("event_id", ""): row for row in event_rows}
+    evidence_by_candidate = {
+        (str(row.get("event_id", "")), str(row.get("isoform_id", ""))): row
+        for row in evidence_rows
+    }
+    rows: list[dict[str, object]] = []
+    for candidate in candidate_rows:
+        contrast_id = candidate.get("contrast_id", "")
+        gene_id = candidate.get("gene_id", "")
+        event = events_by_id.get(candidate.get("event_id", ""), {})
+        evidence = evidence_by_candidate.get((candidate.get("event_id", ""), candidate.get("isoform_id", "")), {})
+        consensus = consensus_by_key.get((contrast_id, gene_id), {})
+        status, priority, label, reason = priority_from(candidate, event, evidence, consensus)
+        methods_detected = first_value(
+            consensus.get("methods_detected", ""),
+            str(evidence.get("dtu_methods_detected", "")),
+        )
+        methods_significant = first_value(
+            consensus.get("methods_significant", ""),
+            str(evidence.get("dtu_methods_significant", "")),
+        )
+        significant_count_text = first_value(
+            consensus.get("n_methods_significant", ""),
+            str(evidence.get("n_dtu_methods_significant", "")),
+        )
+        try:
+            significant_count = int(float(significant_count_text or "0"))
+        except ValueError:
+            significant_count = 0
+        fallback_support = (
+            "multi_method_significant"
+            if significant_count >= 2
+            else "single_method_significant"
+            if significant_count == 1
+            else str(evidence.get("dtu_evidence_status", ""))
+        )
+        rows.append(
+            {
+                "event_id": candidate.get("event_id", ""),
+                "contrast_id": contrast_id,
+                "gene_id": gene_id,
+                "gene_name": first_value(candidate.get("gene_name", ""), event.get("gene_name", ""), consensus.get("gene_name", "")),
+                "isoform_id": candidate.get("isoform_id", ""),
+                "switch_role": candidate.get("switch_role", ""),
+                "interpretation_status": status,
+                "interpretation_priority": priority,
+                "interpretation_label": label,
+                "review_reason": reason,
+                "switch_direction": candidate.get("switch_direction", ""),
+                "dIF": candidate.get("dIF", ""),
+                "padj_qvalue": candidate.get("padj_qvalue", ""),
+                "candidate_status": candidate.get("candidate_status", ""),
+                "event_status": event.get("status", ""),
+                "event_reason": event.get("reason", ""),
+                "switch_biotype_class": first_value(candidate.get("switch_biotype_class", ""), event.get("switch_biotype_class", "")),
+                "consequence_summary": candidate.get("consequence_summary", ""),
+                "coding_priority_tier": event.get("coding_priority_tier", ""),
+                "coding_priority_reasons": event.get("coding_priority_reasons", ""),
+                "dtu_evidence_status": str(evidence.get("dtu_evidence_status", "")),
+                "dtu_support_class": first_value(consensus.get("support_class", ""), fallback_support),
+                "dtu_methods_detected": methods_detected,
+                "dtu_methods_significant": methods_significant,
+                "n_dtu_methods_detected": first_value(consensus.get("n_methods_detected", ""), str(evidence.get("n_dtu_methods_detected", ""))),
+                "n_dtu_methods_significant": significant_count_text,
+                "best_dtu_method": first_value(consensus.get("best_method", ""), str(evidence.get("best_dtu_method", ""))),
+                "best_dtu_padj": first_value(consensus.get("best_padj", ""), str(evidence.get("best_dtu_padj", ""))),
+                "best_dtu_feature_id": first_value(consensus.get("best_feature_id", ""), str(evidence.get("best_dtu_feature_id", ""))),
+                "best_dtu_event_type": first_value(consensus.get("best_event_type", ""), str(evidence.get("best_dtu_event_type", ""))),
+                "best_dtu_effect": str(evidence.get("best_dtu_effect", "")),
+            }
+        )
+    priority_rank = {"high": 0, "medium": 1, "low": 2}
+    rows.sort(
+        key=lambda row: (
+            str(row.get("contrast_id", "")),
+            priority_rank.get(str(row.get("interpretation_priority", "")), 9),
+            parse_float(str(row.get("padj_qvalue", ""))) if parse_float(str(row.get("padj_qvalue", ""))) is not None else math.inf,
+            str(row.get("event_id", "")),
+            str(row.get("isoform_id", "")),
+        )
+    )
+    return rows
+
+
+def build_interpretation_summary(rows: list[dict[str, object]]) -> dict[str, object]:
+    priority_counts = Counter(str(row.get("interpretation_priority", "")) for row in rows)
+    support_counts = Counter(str(row.get("dtu_support_class", "")) for row in rows)
+    if not rows:
+        status = "no_candidates"
+        reason = "No isoform-switch candidates were available for interpretation"
+    elif priority_counts.get("high", 0):
+        status = "ok"
+        reason = "One or more isoform-switch candidates have high-priority integrated evidence"
+    else:
+        status = "ok"
+        reason = "Isoform-switch candidates were interpreted with available DTU/splicing context"
+    return {
+        "status": status,
+        "interpretation_rows": len(rows),
+        "high_priority_rows": priority_counts.get("high", 0),
+        "medium_priority_rows": priority_counts.get("medium", 0),
+        "low_priority_rows": priority_counts.get("low", 0),
+        "multi_method_supported_rows": support_counts.get("multi_method_significant", 0),
+        "single_method_supported_rows": support_counts.get("single_method_significant", 0),
+        "no_dtu_support_rows": support_counts.get("no_dtu_support", 0) + support_counts.get("", 0),
+        "reason": reason,
+    }
+
+
 def build_summary(
     evidence_rows: list[dict[str, object]],
     candidate_rows: list[dict[str, str]],
@@ -342,11 +573,23 @@ def main() -> int:
         Path(args.dtu_method_manifest),
         args.padj,
     )
+    dtu_consensus_by_key = load_dtu_consensus(Path(args.dtu_consensus_gene_summary))
     evidence_rows = build_rows(candidate_rows, event_rows, dtu_by_key, args.padj)
     evidence_rows.sort(key=lambda row: (str(row.get("contrast_id", "")), str(row.get("event_id", "")), str(row.get("isoform_id", ""))))
+    interpretation_rows = build_interpretation_rows(
+        candidate_rows,
+        event_rows,
+        evidence_rows,
+        dtu_consensus_by_key,
+    )
+    interpretation_summary = build_interpretation_summary(interpretation_rows)
     summary = build_summary(evidence_rows, candidate_rows, event_rows, methods_seen, methods_significant)
     write_tsv(Path(args.output), EVIDENCE_COLUMNS, evidence_rows)
     write_tsv(Path(args.summary), SUMMARY_COLUMNS, [summary])
+    if args.interpretation:
+        write_tsv(Path(args.interpretation), INTERPRETATION_COLUMNS, interpretation_rows)
+    if args.interpretation_summary:
+        write_tsv(Path(args.interpretation_summary), INTERPRETATION_SUMMARY_COLUMNS, [interpretation_summary])
     done = {
         "status": summary["status"],
         "isoform_candidates": summary["isoform_candidates"],
