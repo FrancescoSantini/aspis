@@ -1102,6 +1102,9 @@ def rnaseq_dtu_report_outputs(project):
         "plan_done": f"{base}/dtu.done",
         "method_manifest": f"{base}/dtu_method_manifest.tsv",
         "method_done": f"{base}/dtu_methods.done",
+        "consensus_gene_summary": f"{base}/consensus/dtu_consensus_gene_summary.tsv",
+        "consensus_method_detail": f"{base}/consensus/dtu_consensus_method_detail.tsv",
+        "consensus_done": f"{base}/consensus/dtu_consensus.done",
         "plot_manifest": f"{base}/plots/dtu_plot_manifest.tsv",
         "plot_done": f"{base}/plots/dtu_plots.done",
         "prune_manifest": f"{base}/prune/dtu_prune_manifest.tsv",
@@ -1118,6 +1121,9 @@ def rnaseq_dtu_report_inputs(wildcards):
         outputs["plan_done"],
         outputs["method_manifest"],
         outputs["method_done"],
+        outputs["consensus_gene_summary"],
+        outputs["consensus_method_detail"],
+        outputs["consensus_done"],
         outputs["plot_manifest"],
         outputs["plot_done"],
     ]
@@ -1397,6 +1403,9 @@ def branch_provenance_inputs(wildcards):
                             f"{base}/differential/dtu/dtu.done",
                             f"{base}/differential/dtu/dtu_method_manifest.tsv",
                             f"{base}/differential/dtu/dtu_methods.done",
+                            f"{base}/differential/dtu/consensus/dtu_consensus_gene_summary.tsv",
+                            f"{base}/differential/dtu/consensus/dtu_consensus_method_detail.tsv",
+                            f"{base}/differential/dtu/consensus/dtu_consensus.done",
                             f"{base}/differential/dtu/plots/dtu_plot_manifest.tsv",
                             f"{base}/differential/dtu/plots/dtu_plots.done",
                         ]
@@ -1750,6 +1759,9 @@ def planned_branch_targets(wildcards):
                                     f"{BRANCH_DIR}/{assay}/{project}/differential/dtu/dtu.done",
                                     f"{BRANCH_DIR}/{assay}/{project}/differential/dtu/dtu_method_manifest.tsv",
                                     f"{BRANCH_DIR}/{assay}/{project}/differential/dtu/dtu_methods.done",
+                                    f"{BRANCH_DIR}/{assay}/{project}/differential/dtu/consensus/dtu_consensus_gene_summary.tsv",
+                                    f"{BRANCH_DIR}/{assay}/{project}/differential/dtu/consensus/dtu_consensus_method_detail.tsv",
+                                    f"{BRANCH_DIR}/{assay}/{project}/differential/dtu/consensus/dtu_consensus.done",
                                     f"{BRANCH_DIR}/{assay}/{project}/differential/dtu/plots/dtu_plot_manifest.tsv",
                                     f"{BRANCH_DIR}/{assay}/{project}/differential/dtu/plots/dtu_plots.done",
                                 ]
@@ -6381,6 +6393,31 @@ rule run_rnaseq_dtu_methods:
         """
 
 
+rule merge_rnaseq_dtu_consensus:
+    input:
+        manifest=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/dtu/dtu_method_manifest.tsv",
+        done=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/dtu/dtu_methods.done"
+    output:
+        gene_summary=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/dtu/consensus/dtu_consensus_gene_summary.tsv",
+        method_detail=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/dtu/consensus/dtu_consensus_method_detail.tsv",
+        done=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/dtu/consensus/dtu_consensus.done"
+    params:
+        padj=RNASEQ_DTU.get("plot_padj", 0.05)
+    log:
+        "logs/branches/rnaseq/{project}.dtu_consensus.log"
+    shell:
+        r"""
+        mkdir -p logs/branches/rnaseq
+        python3 workflow/scripts/merge_rnaseq_dtu_consensus.py \
+          --method-manifest {input.manifest:q} \
+          --gene-summary {output.gene_summary:q} \
+          --method-detail {output.method_detail:q} \
+          --done {output.done:q} \
+          --padj {params.padj:q} \
+          > {log:q} 2>&1
+        """
+
+
 rule render_rnaseq_dtu_plots:
     input:
         manifest=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/dtu/dtu_method_manifest.tsv",
@@ -6837,6 +6874,21 @@ rule render_rnaseq_differential_report_index:
             "method_manifest",
             "--dtu-method-manifest",
         ),
+        dtu_consensus_gene_summary=lambda wildcards: rnaseq_dtu_report_arg(
+            wildcards,
+            "consensus_gene_summary",
+            "--dtu-consensus-gene-summary",
+        ),
+        dtu_consensus_method_detail=lambda wildcards: rnaseq_dtu_report_arg(
+            wildcards,
+            "consensus_method_detail",
+            "--dtu-consensus-method-detail",
+        ),
+        dtu_consensus_done=lambda wildcards: rnaseq_dtu_report_arg(
+            wildcards,
+            "consensus_done",
+            "--dtu-consensus-done",
+        ),
         dtu_plot_manifest=lambda wildcards: rnaseq_dtu_report_arg(
             wildcards,
             "plot_manifest",
@@ -6868,6 +6920,9 @@ rule render_rnaseq_differential_report_index:
           {params.isoform_dtu_evidence_summary} \
           {params.dtu_plan} \
           {params.dtu_method_manifest} \
+          {params.dtu_consensus_gene_summary} \
+          {params.dtu_consensus_method_detail} \
+          {params.dtu_consensus_done} \
           {params.dtu_plot_manifest} \
           > {log:q} 2>&1
         python3 workflow/scripts/render_technical_pdf_report.py \

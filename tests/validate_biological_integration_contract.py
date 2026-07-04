@@ -451,7 +451,7 @@ def exercise_biotype_and_dtu(paths: dict[str, Path]) -> None:
             "100",
         ]
     )
-    dtu_plot_rows = read_tsv(dtu_dir / "plots" / "dtu_plot_manifest.tsv", {"method", "status", "overview_plot", "usage_plot", "feature_plot"})
+    dtu_plot_rows = read_tsv(dtu_dir / "plots" / "dtu_plot_manifest.tsv", {"method", "status", "reason", "overview_plot", "usage_plot", "feature_plot"})
     if dtu_plot_rows[0]["status"] != "ok":
         raise ValueError(f"DTU plot rendering was not ok: {dtu_plot_rows}")
     if (
@@ -464,10 +464,35 @@ def exercise_biotype_and_dtu(paths: dict[str, Path]) -> None:
     usage_svg = Path(dtu_plot_rows[0]["usage_plot"]).read_text(encoding="utf-8")
     if "Top transcript-usage genes" not in usage_svg:
         raise ValueError(f"DTU transcript-usage detail plot was not written: {dtu_plot_rows}")
+    if "DRIMSeq reports gene-level significance" not in dtu_plot_rows[0].get("reason", ""):
+        raise ValueError(f"DRIMSeq missing ranked-candidate reason was not recorded: {dtu_plot_rows}")
     if dtu_plot_rows[0]["feature_plot"]:
         feature_svg = Path(dtu_plot_rows[0]["feature_plot"]).read_text(encoding="utf-8")
         if "Ranked transcript-usage candidates" not in feature_svg:
             raise ValueError(f"DTU transcript-usage candidate plot was not written: {dtu_plot_rows}")
+
+    run_command(
+        [
+            sys.executable,
+            "workflow/scripts/merge_rnaseq_dtu_consensus.py",
+            "--method-manifest",
+            str(dtu_dir / "dtu_method_manifest.tsv"),
+            "--gene-summary",
+            str(dtu_dir / "consensus" / "dtu_consensus_gene_summary.tsv"),
+            "--method-detail",
+            str(dtu_dir / "consensus" / "dtu_consensus_method_detail.tsv"),
+            "--done",
+            str(dtu_dir / "consensus" / "dtu_consensus.done"),
+            "--padj",
+            "0.05",
+        ]
+    )
+    consensus_rows = read_tsv(
+        dtu_dir / "consensus" / "dtu_consensus_gene_summary.tsv",
+        {"gene_id", "methods_detected", "methods_significant", "support_class"},
+    )
+    if consensus_rows[0]["gene_id"] != "GENE1" or consensus_rows[0]["methods_significant"] != "DRIMSeq":
+        raise ValueError(f"DTU consensus gene summary was not populated from DRIMSeq: {consensus_rows}")
 
     fake_dexseq = INPUT / "fake_dexseq_runner.py"
     fake_dexseq.write_text(
@@ -697,10 +722,20 @@ def exercise_biotype_and_dtu(paths: dict[str, Path]) -> None:
     exercise_rnaseq_report_dtu_assets(
         dtu_dir / "dtu_plan.tsv",
         dtu_dir / "dtu_method_manifest.tsv",
+        dtu_dir / "consensus" / "dtu_consensus_gene_summary.tsv",
+        dtu_dir / "consensus" / "dtu_consensus_method_detail.tsv",
+        dtu_dir / "consensus" / "dtu_consensus.done",
         dtu_dir / "plots" / "dtu_plot_manifest.tsv",
     )
 
-def exercise_rnaseq_report_dtu_assets(dtu_plan: Path, dtu_manifest: Path, dtu_plot_manifest: Path) -> None:
+def exercise_rnaseq_report_dtu_assets(
+    dtu_plan: Path,
+    dtu_manifest: Path,
+    dtu_consensus_gene_summary: Path,
+    dtu_consensus_method_detail: Path,
+    dtu_consensus_done: Path,
+    dtu_plot_manifest: Path,
+) -> None:
     report_dir = BASE / "rnaseq_report_index"
     contrast = "treated_vs_control__time_h_24"
     base_row = {
@@ -888,6 +923,12 @@ def exercise_rnaseq_report_dtu_assets(dtu_plan: Path, dtu_manifest: Path, dtu_pl
             str(dtu_plan),
             "--dtu-method-manifest",
             str(dtu_manifest),
+            "--dtu-consensus-gene-summary",
+            str(dtu_consensus_gene_summary),
+            "--dtu-consensus-method-detail",
+            str(dtu_consensus_method_detail),
+            "--dtu-consensus-done",
+            str(dtu_consensus_done),
             "--dtu-plot-manifest",
             str(dtu_plot_manifest),
             "--isoform-dtu-evidence",
@@ -910,6 +951,10 @@ def exercise_rnaseq_report_dtu_assets(dtu_plan: Path, dtu_manifest: Path, dtu_pl
         raise ValueError(f"standardized DRIMSeq results were not exposed as report assets: {dtu_assets}")
     if not any(row["asset_label"] == "dtu_plot_manifest" for row in dtu_assets):
         raise ValueError(f"DTU plot manifest was not exposed as a report asset: {dtu_assets}")
+    if not any(row["asset_label"] == "dtu_consensus_gene_summary" for row in dtu_assets):
+        raise ValueError(f"DTU consensus gene summary was not exposed as a report asset: {dtu_assets}")
+    if not any(row["asset_label"] == "dtu_consensus_method_detail" for row in dtu_assets):
+        raise ValueError(f"DTU consensus method detail was not exposed as a report asset: {dtu_assets}")
     if not any(row["asset_label"].endswith("_overview_plot") for row in dtu_assets):
         raise ValueError(f"DTU overview plots were not exposed as report assets: {dtu_assets}")
     isoform_assets = [row for row in assets if row["asset_group"] == "isoform_switch"]
@@ -920,6 +965,8 @@ def exercise_rnaseq_report_dtu_assets(dtu_plan: Path, dtu_manifest: Path, dtu_pl
         raise ValueError("DTU summary was not rendered in the RNA-seq report index")
     if "padj&lt;0.05 rows: 1" not in html_text or "usage table" not in html_text or "overview plot" not in html_text:
         raise ValueError("DTU contrast table was not rendered in the RNA-seq report index")
+    if "Cross-method DTU consensus" not in html_text or "single_method_significant" not in html_text:
+        raise ValueError("DTU consensus summary was not rendered in the RNA-seq report index")
     if "Isoform-switch / DTU evidence" not in html_text or "candidate rows with significant DTU support: 1" not in html_text:
         raise ValueError("isoform/DTU evidence summary was not rendered in the RNA-seq report index")
 

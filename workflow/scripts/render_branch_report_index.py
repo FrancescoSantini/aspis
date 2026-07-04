@@ -134,6 +134,8 @@ def rnaseq_sections(base: Path, base_dir: Path) -> list[str]:
                 file_link(base / "differential/isoform_switch/report/index.html", "isoform-switch report", base_dir, expected=False),
                 table_link(base / "differential/isoform_switch/isoform_switch_manifest.tsv", "isoform-switch manifest", base_dir, expected=False),
                 table_link(base / "differential/dtu/dtu_method_manifest.tsv", "DTU methods", base_dir, expected=False),
+                table_link(base / "differential/dtu/consensus/dtu_consensus_gene_summary.tsv", "DTU consensus gene summary", base_dir, expected=False),
+                table_link(base / "differential/dtu/consensus/dtu_consensus_method_detail.tsv", "DTU consensus method detail", base_dir, expected=False),
                 file_link(base / "biological_warnings/warnings.html", "biological warnings", base_dir, expected=False),
             ],
         ),

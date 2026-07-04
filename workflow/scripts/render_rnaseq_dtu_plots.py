@@ -778,7 +778,15 @@ def plot_row(args: argparse.Namespace, row: dict[str, str]) -> dict[str, str]:
                 top_gene_count=args.top_gene_count,
                 top_features_per_gene=args.top_features_per_gene,
             )
-            feature_rendered = render_usage_candidates_svg(Path(output["feature_plot"]), usage_rows, args.top_n)
+            if method_upper == "DRIMSEQ":
+                feature_rendered = False
+                output["reason"] = (
+                    "DRIMSeq reports gene-level significance; the top-gene detail plot "
+                    "shows transcript-usage proportions, but no separate ranked "
+                    "transcript-feature candidate plot is generated."
+                )
+            else:
+                feature_rendered = render_usage_candidates_svg(Path(output["feature_plot"]), usage_rows, args.top_n)
         if not rendered:
             output["usage_plot"] = ""
         if not feature_rendered:

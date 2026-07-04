@@ -113,6 +113,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--isoform-dtu-evidence-summary", default="", help="Optional isoform-switch plus DTU evidence summary")
     parser.add_argument("--dtu-plan", default="", help="Optional DTU/splicing plan TSV")
     parser.add_argument("--dtu-method-manifest", default="", help="Optional DTU/splicing method manifest TSV")
+    parser.add_argument("--dtu-consensus-gene-summary", default="", help="Optional DTU consensus gene summary TSV")
+    parser.add_argument("--dtu-consensus-method-detail", default="", help="Optional DTU consensus method detail TSV")
+    parser.add_argument("--dtu-consensus-done", default="", help="Optional DTU consensus status TSV")
     parser.add_argument("--dtu-plot-manifest", default="", help="Optional DTU/splicing plot manifest TSV")
     parser.add_argument(
         "--enrichment-overview",
@@ -272,10 +275,13 @@ def count_unique_tsv_values(path_text: str, column: str) -> int:
 def render_dtu_summary(
     plan_rows: list[dict[str, str]],
     method_rows: list[dict[str, str]],
+    consensus_gene_rows: list[dict[str, str]],
+    consensus_detail_rows: list[dict[str, str]],
+    consensus_done_rows: list[dict[str, str]],
     plot_rows: list[dict[str, str]],
     output: Path,
 ) -> str:
-    if not plan_rows and not method_rows and not plot_rows:
+    if not plan_rows and not method_rows and not consensus_gene_rows and not consensus_detail_rows and not plot_rows:
         return ""
     plan = plan_rows[0] if plan_rows else {}
     plot_by_key = {
@@ -382,6 +388,54 @@ def render_dtu_summary(
             + "".join(detail_rows)
             + "</tbody></table>"
         )
+    consensus_html = ""
+    if consensus_gene_rows or consensus_detail_rows or consensus_done_rows:
+        done = consensus_done_rows[0] if consensus_done_rows else {}
+        consensus_links = link_list(
+            [
+                ("gene summary", consensus_gene_rows[0].get("_summary_path", "") if consensus_gene_rows else ""),
+                ("method detail", consensus_detail_rows[0].get("_detail_path", "") if consensus_detail_rows else ""),
+                ("status", consensus_done_rows[0].get("_done_path", "") if consensus_done_rows else ""),
+            ],
+            output,
+        )
+        top_consensus = []
+        for row in sorted(
+            consensus_gene_rows,
+            key=lambda item: (
+                -safe_int(item.get("n_methods_significant", "")),
+                safe_float(item.get("best_padj", "")) if safe_float(item.get("best_padj", "")) is not None else float("inf"),
+                item.get("contrast_id", ""),
+                item.get("gene_id", ""),
+            ),
+        )[:20]:
+            top_consensus.append(
+                "<tr>"
+                f"<td><code>{html.escape(row.get('contrast_id', ''))}</code></td>"
+                f"<td>{html.escape(row.get('gene_name', '') or row.get('gene_id', ''))}</td>"
+                f"<td>{html.escape(row.get('support_class', ''))}</td>"
+                f"<td>{html.escape(row.get('methods_significant', '') or 'none')}</td>"
+                f"<td>{html.escape(row.get('best_method', ''))}</td>"
+                f"<td>{html.escape(row.get('best_padj', ''))}</td>"
+                f"<td>{html.escape(row.get('best_event_type', ''))}</td>"
+                "</tr>"
+            )
+        consensus_table = ""
+        if top_consensus:
+            consensus_table = (
+                "<table><thead><tr>"
+                "<th>contrast</th><th>gene</th><th>support</th><th>significant methods</th>"
+                "<th>best method</th><th>best padj</th><th>best event type</th>"
+                "</tr></thead><tbody>"
+                + "".join(top_consensus)
+                + "</tbody></table>"
+            )
+        consensus_html = f"""
+    <h3>Cross-method DTU consensus</h3>
+    <p class="note">The consensus tables merge completed standardized DTU outputs at gene level. They do not create a new statistical test; they summarize which methods evaluated each gene and which methods reached the configured adjusted-p threshold.</p>
+    <div class="counts">status: {html.escape(done.get("status", "") or "not_run")}; gene rows: {html.escape(done.get("gene_rows", "") or str(len(consensus_gene_rows)))}; significant gene rows: {html.escape(done.get("significant_gene_rows", ""))}; multi-method significant genes: {html.escape(done.get("multi_method_significant_gene_rows", ""))}; resources: {consensus_links}</div>
+    {consensus_table}
+"""
     return f"""
   <section class="dtu-summary">
     <h2>DTU / splicing methods</h2>
@@ -390,6 +444,7 @@ def render_dtu_summary(
     <div class="counts">plan status: {html.escape(plan.get("status", "") or "not_configured")}; candidate methods: {html.escape(plan.get("candidate_methods", "") or plan.get("method", ""))}</div>
     <div class="counts">method status: {html.escape(format_counts(method_status))}; plot status: {html.escape(format_counts(plot_status))}; standardized status: {html.escape(format_counts(standardized_status))}; standardized rows: {standardized_rows}; padj&lt;0.05 rows: {significant_rows}</div>
     <div class="counts">resources: {plan_link}</div>
+    {consensus_html}
     {detail_table}
   </section>
 """
@@ -465,6 +520,9 @@ def render_project_resources(
     isoform_dtu_evidence_summary: str = "",
     dtu_plan: str = "",
     dtu_method_manifest: str = "",
+    dtu_consensus_gene_summary: str = "",
+    dtu_consensus_method_detail: str = "",
+    dtu_consensus_done: str = "",
     dtu_plot_manifest: str = "",
 ) -> str:
     rows = []
@@ -498,7 +556,14 @@ def render_project_resources(
         ),
         (
             "DTU / Splicing",
-            [("plan", dtu_plan), ("method manifest", dtu_method_manifest), ("plot manifest", dtu_plot_manifest)],
+            [
+                ("plan", dtu_plan),
+                ("method manifest", dtu_method_manifest),
+                ("consensus gene summary", dtu_consensus_gene_summary),
+                ("consensus method detail", dtu_consensus_method_detail),
+                ("consensus status", dtu_consensus_done),
+                ("plot manifest", dtu_plot_manifest),
+            ],
             "DTU/splicing methods are not configured for this run",
             "DTU/splicing was requested but one or more report outputs are missing",
         ),
@@ -817,9 +882,15 @@ def render_html(
     isoform_dtu_evidence_summary: str = "",
     dtu_plan: str = "",
     dtu_method_manifest: str = "",
+    dtu_consensus_gene_summary: str = "",
+    dtu_consensus_method_detail: str = "",
+    dtu_consensus_done: str = "",
     dtu_plot_manifest: str = "",
     dtu_plan_rows: list[dict[str, str]] | None = None,
     dtu_method_rows: list[dict[str, str]] | None = None,
+    dtu_consensus_gene_rows: list[dict[str, str]] | None = None,
+    dtu_consensus_detail_rows: list[dict[str, str]] | None = None,
+    dtu_consensus_done_rows: list[dict[str, str]] | None = None,
     dtu_plot_rows: list[dict[str, str]] | None = None,
 ) -> str:
     project_names = sorted({row["project"] for row in rows})
@@ -843,9 +914,20 @@ def render_html(
         isoform_dtu_evidence_summary,
         dtu_plan,
         dtu_method_manifest,
+        dtu_consensus_gene_summary,
+        dtu_consensus_method_detail,
+        dtu_consensus_done,
         dtu_plot_manifest,
     )
-    dtu_summary = render_dtu_summary(dtu_plan_rows or [], dtu_method_rows or [], dtu_plot_rows or [], output)
+    dtu_summary = render_dtu_summary(
+        dtu_plan_rows or [],
+        dtu_method_rows or [],
+        dtu_consensus_gene_rows or [],
+        dtu_consensus_detail_rows or [],
+        dtu_consensus_done_rows or [],
+        dtu_plot_rows or [],
+        output,
+    )
     isoform_dtu_summary = render_isoform_dtu_evidence_summary(
         isoform_dtu_evidence_summary,
         isoform_dtu_evidence,
@@ -1046,6 +1128,15 @@ def main() -> int:
     dtu_method_rows = read_optional_table(args.dtu_method_manifest)
     for row in dtu_method_rows:
         row["_manifest_path"] = args.dtu_method_manifest
+    dtu_consensus_gene_rows = read_optional_table(args.dtu_consensus_gene_summary)
+    for row in dtu_consensus_gene_rows:
+        row["_summary_path"] = args.dtu_consensus_gene_summary
+    dtu_consensus_detail_rows = read_optional_table(args.dtu_consensus_method_detail)
+    for row in dtu_consensus_detail_rows:
+        row["_detail_path"] = args.dtu_consensus_method_detail
+    dtu_consensus_done_rows = read_optional_table(args.dtu_consensus_done)
+    for row in dtu_consensus_done_rows:
+        row["_done_path"] = args.dtu_consensus_done
     dtu_plot_rows = read_optional_table(args.dtu_plot_manifest)
     for row in dtu_plot_rows:
         row["_manifest_path"] = args.dtu_plot_manifest
@@ -1070,9 +1161,15 @@ def main() -> int:
             args.isoform_dtu_evidence_summary,
             args.dtu_plan,
             args.dtu_method_manifest,
+            args.dtu_consensus_gene_summary,
+            args.dtu_consensus_method_detail,
+            args.dtu_consensus_done,
             args.dtu_plot_manifest,
             dtu_plan_rows,
             dtu_method_rows,
+            dtu_consensus_gene_rows,
+            dtu_consensus_detail_rows,
+            dtu_consensus_done_rows,
             dtu_plot_rows,
         ),
         encoding="utf-8",
@@ -1089,6 +1186,9 @@ def main() -> int:
         ("isoform_switch", "isoform_switch", "isoform_dtu_evidence_summary", "table", args.isoform_dtu_evidence_summary, "ok"),
         ("dtu", "dtu", "dtu_plan", "table", args.dtu_plan, dtu_plan_rows[0].get("status", "planned") if dtu_plan_rows else "not_configured"),
         ("dtu", "dtu", "dtu_method_manifest", "manifest", args.dtu_method_manifest, "ok" if dtu_method_rows else "not_configured"),
+        ("dtu", "dtu", "dtu_consensus_gene_summary", "table", args.dtu_consensus_gene_summary, dtu_consensus_done_rows[0].get("status", "ok") if dtu_consensus_done_rows else "not_configured"),
+        ("dtu", "dtu", "dtu_consensus_method_detail", "table", args.dtu_consensus_method_detail, dtu_consensus_done_rows[0].get("status", "ok") if dtu_consensus_done_rows else "not_configured"),
+        ("dtu", "dtu", "dtu_consensus_done", "table", args.dtu_consensus_done, dtu_consensus_done_rows[0].get("status", "ok") if dtu_consensus_done_rows else "not_configured"),
         ("dtu", "dtu", "dtu_plot_manifest", "manifest", args.dtu_plot_manifest, "ok" if dtu_plot_rows else "not_configured"),
     ]
     for row in dtu_method_rows:

@@ -581,6 +581,12 @@ Completed native DTU scope:
 - Native DTU execution is split into one schedulable job per contrast and per
   method, followed by a cheap merged `dtu_method_manifest.tsv`/`dtu_methods.done`
   aggregation step.
+- Native DTU method outputs now have a second, gene-centered consensus merge.
+  `dtu_consensus_gene_summary.tsv` and `dtu_consensus_method_detail.tsv` merge
+  completed standardized DRIMSeq, DEXSeq, DEXSeqExon, SUPPA2, and rMATS rows by
+  project/contrast/gene, report methods detected versus methods significant,
+  preserve best method/p-value/event identifiers, and explicitly avoid creating
+  a new combined statistical test.
 - BEAS_2B G100 validation completed six DRIMSeq contrasts and six
   transcript-feature DEXSeq contrasts with completed status and standardized
   result tables. A later BEAS_2B G100 refresh with `suppa.py` available
@@ -606,7 +612,11 @@ Completed native DTU scope:
   appropriate method unit: transcript-usage features for DRIMSeq/DEXSeq, exon
   bins for DEXSeqExon, and splicing events for SUPPA2/rMATS. Methods with
   feature-level statistics also expose ranked candidate plots across genes, with
-  rMATS event-code legend text.
+  rMATS event-code legend text. The report explains that DRIMSeq significance is
+  gene-level in this output, so its ranked feature-candidate plot is not
+  generated and the reason is recorded in the DTU plot manifest.
+- RNA-seq differential, branch, and integrated project reports link the DTU
+  consensus gene summary and method-detail tables.
 - DTU intermediate pruning is implemented as an explicit, auditable target. It
   removes only re-creatable per-contrast DTU input slices such as
   `dtu_counts.tsv` and `dtu_coldata.tsv` after DTU method outputs and DTU plots
@@ -625,6 +635,9 @@ Completed native DTU scope:
   standardized exon-bin usage rows, and DTU plot rendering. A dedicated rMATS
   contract covers fake `rmats.py` execution, BAM-list input files, event-table
   standardization, summary counts, and delta-PSI plot rendering.
+- The local biological integration contract covers the DRIMSeq missing ranked
+  candidate reason, the DTU consensus merge, and report exposure of consensus
+  tables.
 - A dedicated local contract covers conservative DTU pruning.
 
 Remaining future/event-based tasks:
@@ -660,6 +673,9 @@ Acceptance criteria:
   completed from the merged per-contrast manifest, with per-contrast links to
   summary, gene-result, usage, standardized tables, overview SVG plots,
   ranked candidate SVG plots, and top genes detail SVG plots.
+- Reports expose DTU consensus tables that summarize per-gene support across
+  completed methods, including the distinction between single-method and
+  multi-method significant support.
 - Reports expose the isoform/DTU evidence table and summary whenever
   isoform-switch reporting and DTU/splicing outputs are both present.
 - `rnaseq_dtu.prune_intermediates: true` adds the prune target to full runs, and

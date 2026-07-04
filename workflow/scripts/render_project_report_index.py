@@ -143,6 +143,7 @@ def workflow_status_matrix(base_dir: Path, rnaseq_base: Path, smallrna_base: Pat
         ("RNA-seq", "GO/Reactome overview", rnaseq_base / "differential/reports/enrichment/index.html", False),
         ("RNA-seq", "isoform-switch overview", rnaseq_base / "differential/isoform_switch/report/index.html", False),
         ("RNA-seq", "DTU methods", rnaseq_base / "differential/dtu/dtu_method_manifest.tsv", False),
+        ("RNA-seq", "DTU consensus", rnaseq_base / "differential/dtu/consensus/dtu_consensus_gene_summary.tsv", False),
         ("smallRNA", "branch report", smallrna_base / "report/index.html", True),
         ("smallRNA", "raw QC", smallrna_base / "multiqc/multiqc_report.html", False),
         ("smallRNA", "post-trim QC", smallrna_base / "smallrna/preprocess/multiqc/multiqc_report.html", False),
@@ -440,6 +441,7 @@ def render(args: argparse.Namespace) -> None:
     rnaseq_enrichment = read_table(rnaseq_base / "differential/reports/enrichment/enrichment_manifest.tsv")
     rnaseq_dtu = read_table(rnaseq_base / "differential/dtu/dtu_method_manifest.tsv")
     rnaseq_dtu_plots = read_table(rnaseq_base / "differential/dtu/plots/dtu_plot_manifest.tsv")
+    rnaseq_dtu_consensus = read_table(rnaseq_base / "differential/dtu/consensus/dtu_consensus_gene_summary.tsv")
     smallrna_summary = read_table(smallrna_base / "smallrna/differential/reports/summaries/summary_manifest.tsv")
     isoform_events = read_table(rnaseq_base / "differential/isoform_switch/report/switch_event_summary.tsv")
     mirna_integration = read_table(smallrna_base / "smallrna/differential/mirna_mrna_integration/mirna_mrna_manifest.tsv")
@@ -490,6 +492,7 @@ def render(args: argparse.Namespace) -> None:
     {metric("smallRNA summaries", len(smallrna_summary))}
     {metric("isoform-switch events", len(isoform_events))}
     {metric("DTU methods", len(rnaseq_dtu))}
+    {metric("DTU consensus genes", len(rnaseq_dtu_consensus))}
     {metric("miRNA-mRNA rows", len(mirna_integration))}
     {metric("integrated contrasts", sum(1 for row in mirna_integration if row.get("status") == "ok"))}
     {metric("assay-only contrasts", assay_only_contrast_count(rnaseq_summary, smallrna_summary))}
@@ -508,6 +511,8 @@ def render(args: argparse.Namespace) -> None:
         link(rnaseq_base / "differential/reports/technical_report.pdf", "RNA-seq technical PDF", base_dir),
         link(rnaseq_base / "differential/isoform_switch/report/index.html", "isoform-switch overview", base_dir),
         table_link(rnaseq_base / "differential/dtu/dtu_method_manifest.tsv", "DTU method manifest", base_dir),
+        table_link(rnaseq_base / "differential/dtu/consensus/dtu_consensus_gene_summary.tsv", "DTU consensus gene summary", base_dir),
+        table_link(rnaseq_base / "differential/dtu/consensus/dtu_consensus_method_detail.tsv", "DTU consensus method detail", base_dir),
         table_link(rnaseq_base / "differential/dtu/plots/dtu_plot_manifest.tsv", "DTU plot manifest", base_dir),
         table_link(rnaseq_base / "differential/reports/enrichment/enrichment_manifest.tsv", "RNA-seq ORA/GSEA manifest", base_dir),
         table_link(rnaseq_base / "alignment/strandedness/strandedness_report.tsv", "strandedness report", base_dir),
