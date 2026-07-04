@@ -878,17 +878,33 @@ Acceptance criteria:
 
 ## P1 - Strandedness And Quantification Diagnostics
 
+Status: implemented; real-run report refresh pending.
+
 Reason for priority: strandedness affects featureCounts and StringTie
 interpretation, and real data can silently suffer if assumptions are wrong.
 
-Remaining code tasks:
+Implemented:
 
-- Validate strandedness inference on real RNA-seq libraries.
-- Keep strandedness warnings prominent in branch and differential reports.
-- Surface configured strandedness beside inferred strandedness and tool
-  arguments.
-- Add status when strandedness inference is not configured.
-- Add clear recommendations for rerunning with corrected strandedness.
+- Strandedness inference reports keep the legacy `strandness` column names for
+  compatibility and add corrected `strandedness` aliases plus rerun
+  recommendations.
+- RNA-seq quantification plans now record inference status, configured
+  alignment strandness, featureCounts `-s`, StringTie strand mode, StringTie
+  extra arguments, and DEXSeqExon count strandedness.
+- featureCounts, StringTie assembly, and StringTie quantification manifests now
+  record strand-sensitive arguments and exact command lines.
+- Branch reports include a dedicated Strandedness And Quantification
+  Diagnostics section with configured, inferred, warning, not-configured, and
+  missing states.
+- Differential report indexes include strandedness/quantification diagnostics
+  as a project resource and carry those files in the asset inventory.
+- Biological warnings include the strandedness recommendation when inference
+  detects a conflict or weak evidence.
+
+Remaining operational validation:
+
+- Refresh the BEAS_2B and HEP_G2 report targets on G100 and inspect the new
+  diagnostic sections against the real strandedness reports.
 
 Acceptance criteria:
 

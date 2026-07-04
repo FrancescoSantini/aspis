@@ -318,8 +318,9 @@ def summarize_strandedness(rows: list[dict[str, str]], artifacts: list[Path]) ->
     if not report:
         return
     add_context(rows, "strandedness", "sample_count", len(report), "strandedness_report.tsv")
-    if "inferred_strandness" in report[0]:
-        add_context(rows, "strandedness", "inferred_counts", dict_count(report, "inferred_strandness"), "strandedness_report.tsv")
+    inferred_column = "inferred_strandedness" if "inferred_strandedness" in report[0] else "inferred_strandness"
+    if inferred_column in report[0]:
+        add_context(rows, "strandedness", "inferred_counts", dict_count(report, inferred_column), "strandedness_report.tsv")
     warnings = [record for record in report if record.get("warning")]
     add_context(rows, "strandedness", "warning_count", len(warnings), "strandedness_report.tsv")
     if warnings:

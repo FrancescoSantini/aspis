@@ -31,6 +31,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--done", required=True, help="Completion sentinel")
     parser.add_argument("--featurecounts", default="featureCounts", help="featureCounts executable")
     parser.add_argument("--threads", type=int, default=1, help="Threads per sample")
+    parser.add_argument("--featurecounts-strandedness", default="0", help="featureCounts -s value: 0 unstranded, 1 stranded, 2 reversely stranded")
     parser.add_argument("--single-extra-args", default="", help="Extra args for single-end BAMs")
     parser.add_argument("--paired-extra-args", default="-p --countReadPairs", help="Extra args for paired BAMs")
     parser.add_argument("--extra-args", default="", help="Extra args for every featureCounts run")
@@ -134,6 +135,7 @@ def run_featurecounts(
     outdir: Path,
     featurecounts: str,
     threads: int,
+    featurecounts_strandedness: str,
     single_extra_args: str,
     paired_extra_args: str,
     extra_args: str,
@@ -156,6 +158,8 @@ def run_featurecounts(
         "-o",
         str(raw_output),
     ]
+    if featurecounts_strandedness:
+        command.extend(["-s", str(featurecounts_strandedness)])
     if row["layout"] == "paired":
         command.extend(shlex.split(paired_extra_args))
     else:
@@ -182,6 +186,11 @@ def run_featurecounts(
         "featurecounts_output": str(raw_output),
         "featurecounts_summary": str(summary_path) if summary_path.exists() else "",
         "featurecounts_log": str(log_path),
+        "featurecounts_strandedness": str(featurecounts_strandedness),
+        "featurecounts_single_extra_args": single_extra_args,
+        "featurecounts_paired_extra_args": paired_extra_args,
+        "featurecounts_extra_args": extra_args,
+        "featurecounts_command": shlex.join(command),
         "status": "ok",
         "message": "",
     }
@@ -262,6 +271,11 @@ def write_manifest(path: Path, rows: list[dict[str, str]]) -> None:
         "featurecounts_output",
         "featurecounts_summary",
         "featurecounts_log",
+        "featurecounts_strandedness",
+        "featurecounts_single_extra_args",
+        "featurecounts_paired_extra_args",
+        "featurecounts_extra_args",
+        "featurecounts_command",
         "status",
         "message",
     ]
@@ -298,6 +312,7 @@ def main() -> int:
             outdir,
             featurecounts,
             args.threads,
+            args.featurecounts_strandedness,
             args.single_extra_args,
             args.paired_extra_args,
             args.extra_args,

@@ -349,7 +349,10 @@ def strandedness_warnings(args: argparse.Namespace, warnings: list[dict[str, str
     _columns, rows = read_table(args.strandedness_report, {"library_id", "warning"})
     for row in rows:
         if row.get("warning", ""):
-            add_warning(warnings, args, "warning", "strandedness", row["library_id"], row["warning"], args.strandedness_report)
+            message = row["warning"]
+            if row.get("recommendation", ""):
+                message = f"{message}. Recommendation: {row['recommendation']}"
+            add_warning(warnings, args, "warning", "strandedness", row["library_id"], message, args.strandedness_report)
 
 
 def biotype_warnings(args: argparse.Namespace, warnings: list[dict[str, str]]) -> None:

@@ -18,12 +18,15 @@ REPORT_COLUMNS = [
     "status",
     "configured_strandness",
     "inferred_strandness",
+    "configured_strandedness",
+    "inferred_strandedness",
     "sense_reads",
     "antisense_reads",
     "ambiguous_reads",
     "sense_fraction",
     "antisense_fraction",
     "warning",
+    "recommendation",
 ]
 ATTR_RE = re.compile(r'([A-Za-z0-9_.-]+) "([^"]*)"')
 
@@ -133,6 +136,25 @@ def normalize_config(value: str) -> str:
     return value
 
 
+def recommendation_for(inferred: str, warning: str) -> str:
+    if not warning:
+        return ""
+    if warning.startswith("configured "):
+        return (
+            "Review the library protocol and rerun from RNA-seq quantification with "
+            "consistent rnaseq_alignment.strandness, "
+            "rnaseq_quantification.featurecounts_strandedness, "
+            "rnaseq_quantification.stringtie_strandness, and "
+            "rnaseq_dtu.dexseq_count_strandedness settings."
+        )
+    if inferred == "undetermined":
+        return (
+            "Inspect alignment depth, annotation compatibility, and BAM/GTF chromosome "
+            "names before trusting strand-specific quantification."
+        )
+    return "Inspect strandedness evidence before interpreting strand-sensitive quantification."
+
+
 def run_sample(row: dict[str, str], intervals: dict[str, list[tuple[int, int, str]]], args: argparse.Namespace) -> dict[str, str]:
     samtools = shutil.which(args.samtools)
     if not samtools:
@@ -177,12 +199,15 @@ def run_sample(row: dict[str, str], intervals: dict[str, list[tuple[int, int, st
         "status": "ok",
         "configured_strandness": args.configured_strandness,
         "inferred_strandness": inferred,
+        "configured_strandedness": args.configured_strandness,
+        "inferred_strandedness": inferred,
         "sense_reads": str(counts["sense"]),
         "antisense_reads": str(counts["antisense"]),
         "ambiguous_reads": str(counts["ambiguous"]),
         "sense_fraction": f"{(counts['sense'] / informative if informative else 0.0):.6g}",
         "antisense_fraction": f"{(counts['antisense'] / informative if informative else 0.0):.6g}",
         "warning": warning,
+        "recommendation": recommendation_for(inferred, warning),
     }
 
 

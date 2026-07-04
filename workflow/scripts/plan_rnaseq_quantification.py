@@ -25,6 +25,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--reference-fasta", default="")
     parser.add_argument("--annotation-gtf", default="")
     parser.add_argument("--read-length", default="75")
+    parser.add_argument("--infer-strandedness", default="false")
+    parser.add_argument("--alignment-strandness", default="")
+    parser.add_argument("--featurecounts-strandedness", default="0")
+    parser.add_argument("--featurecounts-extra-args", default="")
+    parser.add_argument("--stringtie-strandness", default="")
+    parser.add_argument("--stringtie-assembly-extra-args", default="")
+    parser.add_argument("--stringtie-quant-extra-args", default="")
+    parser.add_argument("--dexseq-count-strandedness", default="no")
     return parser.parse_args()
 
 
@@ -132,6 +140,14 @@ def build_plan(args: argparse.Namespace) -> dict[str, str]:
         "annotation_gtf": annotation_gtf,
         "reference_fasta": reference_fasta,
         "read_length": read_length,
+        "infer_strandedness": args.infer_strandedness,
+        "alignment_strandness": args.alignment_strandness,
+        "featurecounts_strandedness": args.featurecounts_strandedness,
+        "featurecounts_extra_args": args.featurecounts_extra_args,
+        "stringtie_strandness": args.stringtie_strandness,
+        "stringtie_assembly_extra_args": args.stringtie_assembly_extra_args,
+        "stringtie_quant_extra_args": args.stringtie_quant_extra_args,
+        "dexseq_count_strandedness": args.dexseq_count_strandedness,
     }
 
 
@@ -151,6 +167,14 @@ def write_plan(path: Path, row: dict[str, str]) -> None:
         "annotation_gtf",
         "reference_fasta",
         "read_length",
+        "infer_strandedness",
+        "alignment_strandness",
+        "featurecounts_strandedness",
+        "featurecounts_extra_args",
+        "stringtie_strandness",
+        "stringtie_assembly_extra_args",
+        "stringtie_quant_extra_args",
+        "dexseq_count_strandedness",
     ]
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", newline="", encoding="utf-8") as handle:

@@ -4964,7 +4964,15 @@ rule plan_rnaseq_quantification:
                 RNASEQ_ALIGNMENT.get("annotation_gtf", ""),
             ),
         ),
-        read_length=RNASEQ_QUANTIFICATION.get("read_length", 75)
+        read_length=RNASEQ_QUANTIFICATION.get("read_length", 75),
+        infer_strandedness=str(RNASEQ_STRANDEDNESS_INFERENCE_RUN).lower(),
+        alignment_strandness=RNASEQ_ALIGNMENT.get("strandness", ""),
+        featurecounts_strandedness=RNASEQ_QUANTIFICATION.get("featurecounts_strandedness", "0"),
+        featurecounts_extra_args=RNASEQ_QUANTIFICATION.get("featurecounts_extra_args", ""),
+        stringtie_strandness=RNASEQ_QUANTIFICATION.get("stringtie_strandness", ""),
+        stringtie_assembly_extra_args=RNASEQ_QUANTIFICATION.get("stringtie_assembly_extra_args", ""),
+        stringtie_quant_extra_args=RNASEQ_QUANTIFICATION.get("stringtie_quant_extra_args", ""),
+        dexseq_count_strandedness=RNASEQ_DTU.get("dexseq_count_strandedness", "no")
     log:
         "logs/branches/rnaseq/{project}.quantification_plan.log"
     shell:
@@ -4980,6 +4988,14 @@ rule plan_rnaseq_quantification:
           {params.reference_fasta_flag} \
           {params.annotation_gtf_flag} \
           --read-length {params.read_length:q} \
+          --infer-strandedness {params.infer_strandedness:q} \
+          --alignment-strandness {params.alignment_strandness:q} \
+          --featurecounts-strandedness {params.featurecounts_strandedness:q} \
+          --featurecounts-extra-args {params.featurecounts_extra_args:q} \
+          --stringtie-strandness {params.stringtie_strandness:q} \
+          --stringtie-assembly-extra-args {params.stringtie_assembly_extra_args:q} \
+          --stringtie-quant-extra-args {params.stringtie_quant_extra_args:q} \
+          --dexseq-count-strandedness {params.dexseq_count_strandedness:q} \
           > {log:q} 2>&1
         """
 
@@ -5023,6 +5039,7 @@ rule featurecounts_gene_counts_library:
     params:
         outdir=lambda wildcards: f"{BRANCH_DIR}/rnaseq/{wildcards.project}/quantification/featurecounts/files",
         featurecounts=RNASEQ_QUANTIFICATION.get("featurecounts_command", "featureCounts"),
+        featurecounts_strandedness=RNASEQ_QUANTIFICATION.get("featurecounts_strandedness", "0"),
         single_extra_args_flag=shell_arg(
             "--single-extra-args",
             RNASEQ_QUANTIFICATION.get("featurecounts_single_extra_args", ""),
@@ -5053,6 +5070,7 @@ rule featurecounts_gene_counts_library:
           --done {output.done:q} \
           --featurecounts {params.featurecounts:q} \
           --threads {threads:q} \
+          --featurecounts-strandedness {params.featurecounts_strandedness:q} \
           {params.single_extra_args_flag} \
           {params.paired_extra_args_flag} \
           {params.extra_args_flag} \
@@ -6806,6 +6824,12 @@ rule render_rnaseq_differential_report_index:
         enrichment_done=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/reports/enrichment/enrichment.done",
         summary_manifest=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/reports/summaries/summary_manifest.tsv",
         summary_done=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/reports/summaries/summary.done",
+        quantification_plan=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/quantification_plan.tsv",
+        strandedness_report=lambda wildcards: (
+            [f"{BRANCH_DIR}/rnaseq/{wildcards.project}/alignment/strandedness/strandedness_report.tsv"]
+            if RNASEQ_STRANDEDNESS_INFERENCE_RUN
+            else []
+        ),
         biotype=lambda wildcards: (
             [
                 f"{BRANCH_DIR}/rnaseq/{wildcards.project}/quantification/biotypes/biotype_summary.html",
@@ -6844,6 +6868,16 @@ rule render_rnaseq_differential_report_index:
             rnaseq_biological_warnings_outputs(wildcards.project)["html"]
             if RNASEQ_WARNINGS_RUN
             else "",
+        ),
+        strandedness_report=lambda wildcards: optional_shell_arg(
+            "--strandedness-report",
+            f"{BRANCH_DIR}/rnaseq/{wildcards.project}/alignment/strandedness/strandedness_report.tsv"
+            if RNASEQ_STRANDEDNESS_INFERENCE_RUN
+            else "",
+        ),
+        quantification_plan=lambda wildcards: optional_shell_arg(
+            "--quantification-plan",
+            f"{BRANCH_DIR}/rnaseq/{wildcards.project}/quantification/quantification_plan.tsv",
         ),
         isoform_switch_html=lambda wildcards: rnaseq_isoform_switch_report_arg(
             wildcards,
@@ -6941,6 +6975,8 @@ rule render_rnaseq_differential_report_index:
           --done {output.done:q} \
           {params.biotype_html} \
           {params.warnings_html} \
+          {params.strandedness_report} \
+          {params.quantification_plan} \
           {params.isoform_switch_html} \
           {params.isoform_switch_candidates} \
           {params.isoform_switch_events} \

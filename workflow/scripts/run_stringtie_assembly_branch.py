@@ -160,6 +160,9 @@ def run_stringtie(
         "assembly_gtf": str(gtf),
         "gene_abundances": str(abundances) if abundances.exists() else "",
         "assembly_log": str(log),
+        "stringtie_strandness": strandness,
+        "stringtie_extra_args": extra_args,
+        "stringtie_command": shlex.join(command),
         "status": "ok",
         "message": "",
     }
@@ -173,6 +176,9 @@ def write_manifest(path: Path, rows: list[dict[str, str]]) -> None:
         "assembly_gtf",
         "gene_abundances",
         "assembly_log",
+        "stringtie_strandness",
+        "stringtie_extra_args",
+        "stringtie_command",
         "status",
         "message",
     ]

@@ -103,6 +103,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--summary-manifest", required=True, help="Differential summary manifest TSV")
     parser.add_argument("--biotype-html", default="", help="Optional RNA-seq biotype summary HTML")
     parser.add_argument("--warnings-html", default="", help="Optional biological warnings HTML")
+    parser.add_argument("--strandedness-report", default="", help="Optional strandedness inference TSV")
+    parser.add_argument("--quantification-plan", default="", help="Optional RNA-seq quantification plan TSV")
     parser.add_argument("--isoform-switch-html", default="", help="Optional isoform-switch HTML report")
     parser.add_argument("--isoform-switch-candidates", default="", help="Optional isoform-switch candidate table")
     parser.add_argument("--isoform-switch-events", default="", help="Optional isoform-switch event table")
@@ -546,6 +548,8 @@ def render_project_resources(
     output: Path,
     biotype_html: str = "",
     warnings_html: str = "",
+    strandedness_report: str = "",
+    quantification_plan: str = "",
     isoform_switch_html: str = "",
     isoform_switch_candidates: str = "",
     isoform_switch_events: str = "",
@@ -615,6 +619,38 @@ def render_project_resources(
             missing_detail,
         )
         rows.append(render_resource_row(name, status, links, detail))
+    strandedness_links = link_list(
+        [
+            ("strandedness report", strandedness_report),
+            ("quantification plan", quantification_plan),
+        ],
+        output,
+    )
+    if strandedness_report:
+        strandedness_status = "ok" if Path(strandedness_report).exists() else "missing"
+        strandedness_detail = (
+            "strandedness inference and quantification settings are available"
+            if strandedness_status == "ok"
+            else "strandedness inference was requested but its report is missing"
+        )
+    elif quantification_plan:
+        strandedness_status = "not_configured" if Path(quantification_plan).exists() else "missing"
+        strandedness_detail = (
+            "strandedness inference is not configured; quantification plan still records tool arguments"
+            if strandedness_status == "not_configured"
+            else "quantification plan is missing"
+        )
+    else:
+        strandedness_status = "not_requested"
+        strandedness_detail = "strandedness inference is not configured for this run"
+    rows.append(
+        render_resource_row(
+            "Strandedness / Quantification Diagnostics",
+            strandedness_status,
+            strandedness_links,
+            strandedness_detail,
+        )
+    )
     return "\n".join(
         [
             "<section>",
@@ -723,6 +759,8 @@ def merged_rows(
 def status_class(status: str) -> str:
     if status in {"ok", "completed", "ready"}:
         return "ok"
+    if status in {"not_configured", "not_requested"}:
+        return "not_configured"
     if status == "blocked":
         return "blocked"
     if status == "failed":
@@ -912,6 +950,8 @@ def render_html(
     enrichment_overview: str = "",
     biotype_html: str = "",
     warnings_html: str = "",
+    strandedness_report: str = "",
+    quantification_plan: str = "",
     isoform_switch_html: str = "",
     isoform_switch_candidates: str = "",
     isoform_switch_events: str = "",
@@ -946,6 +986,8 @@ def render_html(
         output,
         biotype_html,
         warnings_html,
+        strandedness_report,
+        quantification_plan,
         isoform_switch_html,
         isoform_switch_candidates,
         isoform_switch_events,
@@ -1021,6 +1063,7 @@ def render_html(
     .status.blocked {{ color: #9a6700; }}
     .status.missing {{ color: #9a6700; }}
     .status.failed {{ color: #cf222e; }}
+    .status.not_configured {{ color: #57606a; }}
     .status.unknown {{ color: #57606a; }}
     .resource-status td:nth-child(3) {{ min-width: 220px; }}
     nav.breadcrumbs {{ color: #57606a; margin-bottom: 1rem; }}
@@ -1211,6 +1254,8 @@ def main() -> int:
             str(enrichment_overview),
             args.biotype_html,
             args.warnings_html,
+            args.strandedness_report,
+            args.quantification_plan,
             args.isoform_switch_html,
             args.isoform_switch_candidates,
             args.isoform_switch_events,
@@ -1238,6 +1283,8 @@ def main() -> int:
     )
     project_assets = [
         ("enrichment", "project", "enrichment_overview", "html", str(enrichment_overview), "ok"),
+        ("diagnostics", "project", "strandedness_report", "table", args.strandedness_report, "ok" if args.strandedness_report else "not_configured"),
+        ("diagnostics", "project", "quantification_plan", "table", args.quantification_plan, "ok" if args.quantification_plan else "not_configured"),
         ("isoform_switch", "isoform_switch", "report_html", "html", args.isoform_switch_html, "ok"),
         ("isoform_switch", "isoform_switch", "candidate_table", "table", args.isoform_switch_candidates, "ok"),
         ("isoform_switch", "isoform_switch", "event_summary", "table", args.isoform_switch_events, "ok"),

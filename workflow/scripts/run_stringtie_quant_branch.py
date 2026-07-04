@@ -165,6 +165,9 @@ def run_stringtie_quant(
         "gene_abundances": str(abundances) if abundances.exists() else "",
         "ballgown_dir": str(ballgown_dir),
         "quant_log": str(log),
+        "stringtie_strandness": strandness,
+        "stringtie_extra_args": extra_args,
+        "stringtie_command": shlex.join(command),
         "status": "ok",
         "message": "",
     }
@@ -179,6 +182,9 @@ def write_manifest(path: Path, rows: list[dict[str, str]]) -> None:
         "gene_abundances",
         "ballgown_dir",
         "quant_log",
+        "stringtie_strandness",
+        "stringtie_extra_args",
+        "stringtie_command",
         "status",
         "message",
     ]

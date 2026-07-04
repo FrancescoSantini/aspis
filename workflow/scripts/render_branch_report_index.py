@@ -87,6 +87,103 @@ def samples_metrics(samples: list[dict[str, str]]) -> str:
     )
 
 
+def first_row(path: Path) -> dict[str, str]:
+    rows = read_table(path)
+    return rows[0] if rows else {}
+
+
+def truthy(value: str) -> bool:
+    return str(value).strip().lower() in {"1", "true", "t", "yes", "y", "on"}
+
+
+def display_value(value: str, fallback: str = "not set") -> str:
+    return value if str(value).strip() else fallback
+
+
+def inferred_counts(rows: list[dict[str, str]]) -> str:
+    counts = Counter(
+        (
+            row.get("inferred_strandedness", "")
+            or row.get("inferred_strandness", "")
+            or "unknown"
+        )
+        for row in rows
+    )
+    return ", ".join(f"{key}: {value}" for key, value in sorted(counts.items())) or "none"
+
+
+def strandedness_diagnostics_section(base: Path, base_dir: Path) -> str:
+    plan_path = base / "quantification/quantification_plan.tsv"
+    report_path = base / "alignment/strandedness/strandedness_report.tsv"
+    featurecounts_path = base / "quantification/featurecounts/featurecounts_manifest.tsv"
+    stringtie_assembly_path = base / "quantification/stringtie/assembly_manifest.tsv"
+    stringtie_quant_path = base / "quantification/stringtie/quant_manifest.tsv"
+    plan = first_row(plan_path)
+    report_rows = read_table(report_path)
+    warning_rows = [row for row in report_rows if row.get("warning", "")]
+    infer_requested = truthy(plan.get("infer_strandedness", "")) or report_path.exists()
+
+    if not plan:
+        status = "missing"
+        recommendation = "Quantification plan is missing; rerun the RNA-seq quantification planning target."
+    elif not infer_requested:
+        status = "not_configured"
+        recommendation = (
+            "Set rnaseq_alignment.infer_strandedness: true to add empirical "
+            "BAM/GTF strand-orientation checks."
+        )
+    elif not report_path.exists():
+        status = "missing"
+        recommendation = "Strandedness inference was configured, but the report is missing; rerun the strandedness target."
+    elif warning_rows:
+        status = "warning"
+        recommendation = (
+            warning_rows[0].get("recommendation", "")
+            or "Review the library protocol and rerun quantification with corrected strand settings."
+        )
+    else:
+        status = "ok"
+        recommendation = "No empirical strandedness warnings detected."
+
+    fields = [
+        ("diagnostic status", status),
+        ("configured inference", "enabled" if infer_requested else "disabled"),
+        ("alignment strandedness setting", display_value(plan.get("alignment_strandness", ""))),
+        ("inferred strandedness", inferred_counts(report_rows) if report_rows else "not available"),
+        ("inference warnings", str(len(warning_rows))),
+        ("first warning", warning_rows[0].get("warning", "") if warning_rows else "none"),
+        ("featureCounts -s", display_value(plan.get("featurecounts_strandedness", ""), "0")),
+        ("featureCounts extra args", display_value(plan.get("featurecounts_extra_args", ""))),
+        ("StringTie stranded mode", display_value(plan.get("stringtie_strandness", ""))),
+        ("StringTie assembly args", display_value(plan.get("stringtie_assembly_extra_args", ""))),
+        ("StringTie quant args", display_value(plan.get("stringtie_quant_extra_args", ""))),
+        ("DEXSeqExon count strandedness", display_value(plan.get("dexseq_count_strandedness", ""), "no")),
+    ]
+    table_rows = "\n".join(
+        "<tr>"
+        f"<th>{html.escape(label)}</th>"
+        f'<td class="status {html.escape(value if label == "diagnostic status" else "")}">{html.escape(value)}</td>'
+        "</tr>"
+        for label, value in fields
+    )
+    resources = [
+        table_link(report_path, "strandedness inference report", base_dir, expected=infer_requested),
+        table_link(plan_path, "quantification plan", base_dir, expected=False),
+        table_link(featurecounts_path, "featureCounts manifest", base_dir, expected=False),
+        table_link(stringtie_assembly_path, "StringTie assembly manifest", base_dir, expected=False),
+        table_link(stringtie_quant_path, "StringTie quantification manifest", base_dir, expected=False),
+    ]
+    return f"""
+<section class="strandedness-diagnostics">
+  <h2>Strandedness And Quantification Diagnostics</h2>
+  <p class="section-note">This table compares empirical strandedness inference with the strand-sensitive settings used by featureCounts, StringTie, and DEXSeqExon. A conflict here can silently change count interpretation and should be resolved before biological interpretation.</p>
+  <table class="diagnostic-table"><tbody>{table_rows}</tbody></table>
+  <p class="recommendation"><strong>Recommendation:</strong> {html.escape(recommendation)}</p>
+  <ul>{''.join(f'<li>{item}</li>' for item in resources)}</ul>
+</section>
+"""
+
+
 def rnaseq_sections(base: Path, base_dir: Path) -> list[str]:
     return [
         section(
@@ -107,9 +204,10 @@ def rnaseq_sections(base: Path, base_dir: Path) -> list[str]:
                 table_link(base / "alignment/aligned_samples.tsv", "aligned samples", base_dir, expected=False),
                 table_link(base / "alignment/qc/alignment_qc_manifest.tsv", "alignment QC manifest", base_dir, expected=False),
                 file_link(base / "alignment/qc/multiqc/multiqc_report.html", "alignment MultiQC", base_dir, expected=False),
-                table_link(base / "alignment/strandedness/strandedness_report.tsv", "strandness inference", base_dir, expected=False),
+                table_link(base / "alignment/strandedness/strandedness_report.tsv", "strandedness inference", base_dir, expected=False),
             ],
         ),
+        strandedness_diagnostics_section(base, base_dir),
         section(
             "Quantification",
             [
@@ -230,6 +328,14 @@ def render(args: argparse.Namespace) -> None:
     .metric {{ border: 1px solid #d0d7de; border-radius: 6px; padding: 0.75rem; }}
     .metric strong {{ display: block; color: #57606a; font-size: 0.85rem; }}
     .metric span {{ display: block; margin-top: 0.25rem; font-size: 1rem; font-weight: 700; }}
+    table {{ border-collapse: collapse; width: 100%; }}
+    th, td {{ border: 1px solid #d0d7de; padding: 7px 9px; text-align: left; vertical-align: top; }}
+    th {{ background: #f6f8fa; }}
+    .diagnostic-table th {{ width: 240px; }}
+    .recommendation {{ background: #f6f8fa; border-left: 4px solid #57606a; padding: 10px 12px; }}
+    .status.ok {{ color: #1a7f37; font-weight: 700; }}
+    .status.warning {{ color: #9a6700; font-weight: 700; }}
+    .status.not_configured {{ color: #57606a; font-weight: 700; }}
     .status.missing {{ color: #9a6700; font-weight: 700; }}
     .status.muted {{ color: #57606a; }}
   </style>
