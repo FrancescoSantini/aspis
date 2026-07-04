@@ -1031,6 +1031,8 @@ def exercise_rnaseq_report_dtu_assets(
         raise ValueError("DTU summary was not rendered in the RNA-seq report index")
     if "padj&lt;0.05 rows: 1" not in html_text or "usage table" not in html_text or "overview plot" not in html_text:
         raise ValueError("DTU contrast table was not rendered in the RNA-seq report index")
+    if "DRIMSeq gene-level differential transcript usage" not in html_text or "link-grid" not in html_text:
+        raise ValueError("DTU method table did not render compact links and fallback method reasons")
     if "Cross-method DTU consensus" not in html_text or "single_method_significant" not in html_text:
         raise ValueError("DTU consensus summary was not rendered in the RNA-seq report index")
     if "Isoform-switch / DTU interpretation" not in html_text or "candidate rows with significant DTU support: 1" not in html_text:

@@ -215,6 +215,14 @@ def link_list(items: list[tuple[str, str]], html_path: Path) -> str:
     return "<br>".join(links)
 
 
+def compact_link_list(items: list[tuple[str, str]], html_path: Path) -> str:
+    links = [file_link(label, path, html_path) for label, path in items]
+    links = [link for link in links if link]
+    if not links:
+        return ""
+    return '<span class="link-grid">' + "".join(f"<span>{link}</span>" for link in links) + "</span>"
+
+
 def safe_int(value: str) -> int:
     try:
         return int(float(value))
@@ -285,6 +293,13 @@ def render_dtu_summary(
 ) -> str:
     if not plan_rows and not method_rows and not consensus_gene_rows and not consensus_detail_rows and not plot_rows:
         return ""
+    method_descriptions = {
+        "DRIMSeq": "DRIMSeq gene-level differential transcript usage from transcript-count matrices",
+        "DEXSeq": "DEXSeq transcript-feature usage; true exon-bin DEXSeq requires exon-count inputs",
+        "DEXSeqExon": "DEXSeq exon-bin usage from flattened annotation and aligned BAM counts",
+        "SUPPA2": "SUPPA2 transcript-event differential splicing from transcript expression",
+        "rMATS": "rMATS junction-event differential splicing from aligned BAMs",
+    }
     plan = plan_rows[0] if plan_rows else {}
     plot_by_key = {
         (row.get("method", ""), row.get("contrast_id", "")): row
@@ -355,7 +370,7 @@ def render_dtu_summary(
             usage_label = "usage table"
             feature_plot_label = "ranked transcript-usage candidates"
             usage_plot_label = "top genes transcript-usage detail"
-        links = link_list(
+        links = compact_link_list(
             [
                 ("summary", row.get("summary", "")),
                 (gene_label, row.get("gene_results", "")),
@@ -367,6 +382,7 @@ def render_dtu_summary(
             ],
             output,
         )
+        reason = row.get("reason", "") or summary.get("reason", "") or method_descriptions.get(method, "")
         detail_rows.append(
             "<tr>"
             f"<td><code>{html.escape(row.get('contrast_id', ''))}</code></td>"
@@ -377,18 +393,18 @@ def render_dtu_summary(
             f"<td>{html.escape(standardized_count)}</td>"
             f"<td>{html.escape(significant_count)}</td>"
             f"<td>{links}</td>"
-            f"<td>{html.escape(row.get('reason', ''))}</td>"
+            f'<td class="method-reason">{html.escape(reason)}</td>'
             "</tr>"
         )
     detail_table = ""
     if detail_rows:
         detail_table = (
-            "<table><thead><tr>"
+            '<div class="table-scroll"><table class="dtu-method-table"><thead><tr>'
             "<th>contrast</th><th>method</th><th>status</th><th>tested genes</th>"
             "<th>usage features/events</th><th>standardized rows</th><th>padj&lt;0.05</th><th>tables and plots</th><th>reason</th>"
             "</tr></thead><tbody>"
             + "".join(detail_rows)
-            + "</tbody></table>"
+            + "</tbody></table></div>"
         )
     consensus_html = ""
     if consensus_gene_rows or consensus_detail_rows or consensus_done_rows:
@@ -986,6 +1002,20 @@ def render_html(
     code {{ font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }}
     a {{ color: #0969da; text-decoration: none; }}
     a:hover {{ text-decoration: underline; }}
+    .table-scroll {{ overflow-x: auto; margin: 12px 0 18px; }}
+    .dtu-method-table {{ min-width: 1420px; table-layout: fixed; }}
+    .dtu-method-table th:nth-child(1), .dtu-method-table td:nth-child(1) {{ width: 280px; }}
+    .dtu-method-table th:nth-child(2), .dtu-method-table td:nth-child(2) {{ width: 90px; }}
+    .dtu-method-table th:nth-child(3), .dtu-method-table td:nth-child(3) {{ width: 90px; }}
+    .dtu-method-table th:nth-child(4), .dtu-method-table td:nth-child(4),
+    .dtu-method-table th:nth-child(5), .dtu-method-table td:nth-child(5),
+    .dtu-method-table th:nth-child(6), .dtu-method-table td:nth-child(6),
+    .dtu-method-table th:nth-child(7), .dtu-method-table td:nth-child(7) {{ width: 86px; }}
+    .dtu-method-table th:nth-child(8), .dtu-method-table td:nth-child(8) {{ width: 330px; }}
+    .dtu-method-table code {{ white-space: nowrap; }}
+    .link-grid {{ display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: flex-start; }}
+    .link-grid a {{ display: inline-block; white-space: nowrap; }}
+    .method-reason {{ min-width: 260px; overflow-wrap: anywhere; }}
     .status {{ font-weight: 700; }}
     .status.ok {{ color: #1a7f37; }}
     .status.blocked {{ color: #9a6700; }}
