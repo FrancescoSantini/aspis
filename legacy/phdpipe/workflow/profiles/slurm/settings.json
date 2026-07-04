@@ -1,5 +1,0 @@
-{
-    "SBATCH_DEFAULTS": "account=ELIX4_sturchio_0 partition=g100_usr_prod cpus-per-task=5 mem=40000 nodes=1 time=\"1h30m\" mail-user=francesco.santini@uniroma1.it mail-type=FAIL",
-    "CLUSTER_NAME": "",
-    "CLUSTER_CONFIG": ""
-}

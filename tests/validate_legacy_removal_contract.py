@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""Validate that legacy workflow entrypoints stay quarantined."""
+"""Validate that legacy workflow entrypoints stay out of the source tree."""
 
 from __future__ import annotations
 
 from pathlib import Path
 
 
-ACTIVE_FORBIDDEN = [
+FORBIDDEN = [
     Path("workflow/Snakefile"),
     Path("workflow/SmallRNA"),
     Path("workflow/prefetchSRA"),
@@ -14,12 +14,10 @@ ACTIVE_FORBIDDEN = [
     Path("config/config.yaml"),
     Path("config/sample_sheet.csv"),
     Path("config/sample_sheet_tests.csv"),
-]
-
-ARCHIVED_REQUIRED = [
     Path("legacy/phdpipe/workflow/Snakefile"),
     Path("legacy/phdpipe/workflow/SmallRNA"),
     Path("legacy/phdpipe/workflow/prefetchSRA"),
+    Path("legacy/phdpipe/workflow/profiles"),
     Path("legacy/phdpipe/workflow/profiles/slurm/config.yaml"),
     Path("legacy/phdpipe/config/config.yaml"),
     Path("legacy/phdpipe/config/sample_sheet.csv"),
@@ -36,12 +34,9 @@ ACTIVE_REQUIRED = [
 
 def main() -> int:
     errors: list[str] = []
-    for path in ACTIVE_FORBIDDEN:
+    for path in FORBIDDEN:
         if path.exists():
-            errors.append(f"legacy path is still active: {path}")
-    for path in ARCHIVED_REQUIRED:
-        if not path.exists():
-            errors.append(f"archived legacy path is missing: {path}")
+            errors.append(f"legacy path is still tracked in the source tree: {path}")
     for path in ACTIVE_REQUIRED:
         if not path.exists():
             errors.append(f"active ASPIS path is missing: {path}")
@@ -51,7 +46,7 @@ def main() -> int:
             print(error)
         return 1
 
-    print("legacy quarantine contract ok")
+    print("legacy removal contract ok")
     return 0
 
 

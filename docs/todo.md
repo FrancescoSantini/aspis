@@ -921,34 +921,33 @@ Acceptance criteria:
 
 ## P1 - Legacy Quarantine
 
-Reason for priority: legacy files are still useful for audit and comparison,
-but they can mislead new users if they look active.
+Status: closed.
 
-Completed quarantine:
+Reason for closure: the current ASPIS reports and validation runs now cover more
+than the old phdpipe-era outputs, so the old entrypoints are no longer needed as
+tracked repository material.
 
-- Moved the old workflow entrypoints to `legacy/phdpipe/workflow/`:
-  `Snakefile`, `SmallRNA`, and `prefetchSRA`.
-- Moved the old embedded Slurm profile to
-  `legacy/phdpipe/workflow/profiles/slurm/`.
-- Moved the old sample-sheet configuration to `legacy/phdpipe/config/`:
-  `config.yaml`, `sample_sheet.csv`, and `sample_sheet_tests.csv`.
-- Added `tests/validate_legacy_quarantine_contract.py` to keep legacy
-  entrypoints out of active paths while preserving the archive.
+Removed legacy tracked files:
 
-Remaining code tasks:
+- old workflow entrypoints: `workflow/Snakefile`, `workflow/SmallRNA`, and
+  `workflow/prefetchSRA`;
+- old embedded Slurm profile: `workflow/profiles/slurm`;
+- old sample-sheet configuration: `config/config.yaml`,
+  `config/sample_sheet.csv`, and `config/sample_sheet_tests.csv`;
+- temporary `legacy/phdpipe/` archive created during migration.
 
-- Audit legacy-style R helpers under `workflow/scripts/` one by one before
-  moving any of them; some names overlap with currently supported behavior.
-- Remove or quarantine any old docs that point users to inactive entrypoints if
-  such docs reappear.
-- Keep the root `Snakefile` and current `aspis_*.yaml` config templates as the
-  only supported workflow entrypoint and user-facing configuration family.
+Current guard:
+
+- `tests/validate_legacy_removal_contract.py` verifies that old entrypoints
+  and the temporary archive paths are absent, while the supported root
+  `Snakefile`, root `profiles/slurm`, and `workflow/scripts` remain present.
 
 Acceptance criteria:
 
 - New users cannot confuse legacy material with the supported pipeline.
-- Legacy material remains recoverable for audit.
-- The legacy quarantine contract test passes.
+- The root `Snakefile` and current `aspis_*.yaml` config templates are the only
+  supported workflow entrypoint and user-facing configuration family.
+- The legacy removal contract test passes.
 
 ## P2 - Workflow Architecture
 
