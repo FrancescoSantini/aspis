@@ -711,31 +711,115 @@ NT/AA sequence extraction now work on real data, and the core
 isoform-switch/DTU interpretation layer is closed. The remaining value here is
 annotation quality and clearer optional consequence interpretation.
 
-Remaining code tasks:
+Implementation workstreams:
 
-- Improve gene-name propagation from StringTie/gffcompare outputs.
-- Map MSTRG and reference transcript IDs to gene symbols, gene IDs, transcript
-  IDs, and biotypes where possible.
-- Classify known, novel-isoform, novel-locus, ambiguous, and likely-artifact
-  events more clearly.
-- Expose why optional consequence annotation is unavailable when open tools or
-  prepared tables are not configured.
-- Validate at least one open conda-managed optional annotation path, such as
-  CPAT/CPC2 or HMMER/Pfam when licensing and local database availability are
-  acceptable.
-- Validate at least one precomputed-table path, such as an InterProScan TSV
-  generated outside ASPIS and imported locally.
-- Summarize events by gene biotype, switch class, event type, sequence status,
-  and optional consequence class.
-- Ensure old event pages are cleared on report refresh, which is now partially
-  implemented and should remain covered by regression tests.
+1. Canonical optional-annotation contract.
+
+   - Define and document the stable input schema accepted by
+     `rnaseq_differential.isoform_switch_functional_annotation_tables` and
+     `rnaseq_differential.isoform_switch_ncrna_annotation_tables`.
+   - Keep native parser support for InterProScan TSV, HMMER/Pfam `domtblout`,
+     CPAT/CPC2-style coding-potential TSVs, and generic TSVs, but normalize
+     all imported rows into `functional_annotation_summary.tsv` with stable
+     source, feature type, feature ID/name, coordinates, score, status, and
+     reason columns.
+   - Define matching priority across `isoform_id`, `transcript_id`,
+     `protein_id`, `gene_id`, and interval overlap so MSTRG and reference
+     transcript IDs can be traced consistently.
+   - Add an annotation QA table reporting input rows, parsed rows, matched rows,
+     unmatched rows, duplicated IDs, unsupported columns, and mapping loss per
+     source.
+
+2. Open/local resource policy.
+
+   - Treat precomputed local tables as the preferred interface for external
+     tools and databases.
+   - Make InterProScan TSV, HMMER/Pfam `domtblout`, and CPAT/CPC2-style tables
+     the open validation path when their databases/model files are present under
+     project provenance.
+   - Keep SignalP, TMHMM/DeepTMHMM, DeepLoc2, NetSurfP, IUPred2A, and similar
+     tools out of the default open validation path unless a site/user explicitly
+     provides a reviewed local table or command and accepts the licensing or
+     model-asset terms.
+   - Ensure the open-resource policy test continues to reject restricted sources
+     in default configs and docs.
+
+3. Optional command-template execution.
+
+   - Harden command-template execution for `interproscan.sh`, `hmmscan`, and
+     CPAT/CPC2 first; direct execution of restricted tools remains non-default.
+   - Record exact command, return code, stdout/stderr logs, produced files,
+     parser status, and blocked/failed reason in `external_tool_manifest.tsv`.
+   - Block with an actionable status when NT/AA FASTA files are empty, the
+     command is missing, a required database/model path is missing, or the
+     command produces no parseable output.
+   - Avoid internet access at workflow runtime; all databases and model files
+     must be local and version/provenance tracked.
+
+4. Consequence interpretation polishing.
+
+   - Improve gene-name propagation from StringTie/gffcompare outputs and
+     transcript metadata into isoform-switch candidate, event, sequence,
+     functional annotation, and interpretation tables.
+   - Map MSTRG and reference transcript IDs to gene symbols, gene IDs,
+     transcript IDs, biotypes, and discovery classes where possible.
+   - Classify known, novel-isoform, novel-locus, ambiguous, and likely-artifact
+     events more clearly without hiding uncertain cases.
+   - Summarize optional consequence changes per event: gained/lost protein
+     domains, coding-potential transitions, ORF-length changes, NMD changes,
+     signal/transmembrane/localization/disorder annotations when explicitly
+     supplied, and ncRNA motif/overlap annotations.
+   - Feed the optional consequence class into
+     `isoform_interpretation_consensus.tsv` as descriptive evidence, without
+     changing switch or DTU p-values.
+
+5. Report and cleanup behavior.
+
+   - Expose annotation-source status, annotation QA, and matched/unmatched row
+     counts in the isoform-switch report and RNA-seq differential report.
+   - Add clear report text for `not_configured`, `blocked`, `failed`, and
+     `ok_no_matches` optional annotation states.
+   - Keep event pages and exon diagrams reachable and readable when annotations
+     are absent, partial, or failed.
+   - Ensure stale event pages and stale optional annotation files are cleared on
+     report refresh, while preserving current successful outputs.
+
+6. Tests and validation.
+
+   - Add local contract fixtures for generic TSV, InterProScan TSV,
+     HMMER/Pfam `domtblout`, CPAT/CPC2 coding-potential TSV, and ncRNA interval
+     annotation imports.
+   - Add local command-template mock tests for successful output, missing
+     command, empty FASTA, missing database/model path, failed command, and
+     unparseable output.
+   - Add regression tests for annotation QA counts, stale file cleanup, and
+     report exposure of annotation status.
+   - Validate one precomputed-table path on a real completed isoform-switch run,
+     preferably with InterProScan or Pfam/HMMER rows generated outside ASPIS and
+     imported locally.
+   - Validate one open conda-managed or site-managed command path only after the
+     required local databases/model files are frozen and provenance recorded.
 
 Acceptance criteria:
 
-- Event pages and exon diagrams are reachable and readable when events exist.
-- NT/AA sequence status is visible and accurate.
-- Optional consequence annotations are imported or reported as unavailable with
-  actionable status.
+- With no optional annotation tables or commands, isoform-switch reports remain
+  complete and explicitly report `not_configured` optional consequence
+  annotation status.
+- With precomputed InterProScan, HMMER/Pfam, and CPAT/CPC2-style fixture tables,
+  ASPIS writes normalized `functional_annotation_summary.tsv`, annotation QA,
+  external-tool/source manifests, and event-level gained/lost/coding-potential
+  consequence summaries.
+- With local command-template mocks, ASPIS records command provenance and
+  distinguishes `ok`, `not_configured`, `blocked`, `failed`, and
+  `ok_no_matches` without breaking the rest of the isoform-switch report.
+- Reports expose optional consequence annotation status and links from the
+  isoform-switch overview, RNA-seq differential index, branch report, and
+  project report.
+- Restricted or license-sensitive tools remain excluded from default open
+  validation unless supplied as reviewed local user/site resources.
+- Event pages, exon diagrams, NT/AA sequence status, and isoform/DTU
+  interpretation consensus remain correct when optional annotations are absent,
+  partial, or failed.
 
 ## P1 - Plot Rendering And Aesthetics
 
