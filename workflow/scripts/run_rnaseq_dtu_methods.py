@@ -137,6 +137,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--dexseq-exon-command", default="")
     parser.add_argument("--suppa2-command", default="")
     parser.add_argument("--rmats-command", default="")
+    parser.add_argument(
+        "--fail-on-method-error",
+        action="store_true",
+        help="Exit non-zero after writing manifests if any configured DTU method command fails.",
+    )
     return parser.parse_args()
 
 
@@ -178,6 +183,34 @@ def write_done(path: Path, rows: list[dict[str, str]]) -> None:
     with path.open("w", encoding="utf-8") as handle:
         handle.write("status\tcompleted\tplanned\tblocked\tfailed\ttotal\treason\n")
         handle.write(f"{status}\t{len(completed)}\t{len(planned)}\t{len(blocked)}\t{len(failed)}\t{len(rows)}\t{reason}\n")
+
+
+def compact_log_tail(path: Path | str, max_lines: int = 12, max_chars: int = 1200) -> str:
+    try:
+        lines = Path(path).read_text(encoding="utf-8", errors="replace").splitlines()
+    except OSError:
+        return ""
+    tail = " | ".join(line.strip() for line in lines[-max_lines:] if line.strip())
+    tail = re.sub(r"\s+", " ", tail).strip()
+    if len(tail) > max_chars:
+        tail = "..." + tail[-max_chars:]
+    return tail
+
+
+def command_failure_reason(label: str, returncode: int, stderr: Path | str) -> str:
+    reason = f"{label} exited with status {returncode}"
+    tail = compact_log_tail(stderr)
+    if tail:
+        reason += f"; stderr tail: {tail}"
+    return reason
+
+
+def failed_method_summary(rows: list[dict[str, str]]) -> str:
+    failed_rows = [row for row in rows if row["status"] == "failed"]
+    return "; ".join(
+        f"{row['method']}:{row.get('contrast_id', '')} ({row.get('reason', 'failed')})"
+        for row in failed_rows
+    )
 
 
 def normalize_methods(method: str, methods: str) -> list[str]:
@@ -487,7 +520,7 @@ def run_external_method(args: argparse.Namespace, method: str, plan: Path, plan_
         row["standardized_status"] = standardized_status
     else:
         row["status"] = "failed"
-        row["reason"] = f"command exited with status {completed.returncode}"
+        row["reason"] = command_failure_reason("command", completed.returncode, stderr)
     return row
 
 
@@ -638,7 +671,7 @@ def run_drimseq_contrast(args: argparse.Namespace, plan_row: dict[str, str]) -> 
         row["reason"] = (completed.stderr.strip().splitlines() or ["DRIMSeq contrast was blocked"])[-1]
     else:
         row["status"] = "failed"
-        row["reason"] = f"DRIMSeq exited with status {completed.returncode}"
+        row["reason"] = command_failure_reason("DRIMSeq", completed.returncode, stderr)
     return row
 
 
@@ -720,7 +753,7 @@ def run_dexseq_contrast(args: argparse.Namespace, plan_row: dict[str, str]) -> d
         row["reason"] = (completed.stderr.strip().splitlines() or ["DEXSeq contrast was blocked"])[-1]
     else:
         row["status"] = "failed"
-        row["reason"] = f"DEXSeq exited with status {completed.returncode}"
+        row["reason"] = command_failure_reason("DEXSeq", completed.returncode, stderr)
     return row
 
 
@@ -1110,7 +1143,7 @@ def run_dexseq_exon_contrast(args: argparse.Namespace, plan_row: dict[str, str])
         row["reason"] = (completed.stderr.strip().splitlines() or ["DEXSeqExon contrast was blocked"])[-1]
     else:
         row["status"] = "failed"
-        row["reason"] = f"DEXSeqExon exited with status {completed.returncode}"
+        row["reason"] = command_failure_reason("DEXSeqExon", completed.returncode, stderr)
     return row
 
 
@@ -1516,7 +1549,7 @@ def run_rmats_contrast(args: argparse.Namespace, plan_row: dict[str, str]) -> di
     row["stderr"] = str(stderr)
     if completed.returncode != 0:
         row["status"] = "failed"
-        row["reason"] = f"rMATS exited with status {completed.returncode}"
+        row["reason"] = command_failure_reason("rMATS", completed.returncode, stderr)
         return row
 
     event_files = rmats_event_files(output_dir)
@@ -1586,7 +1619,7 @@ def run_suppa2_contrast(args: argparse.Namespace, plan_row: dict[str, str]) -> d
         completed = run_logged_command(command, stdout, stderr)
         if completed.returncode != 0:
             row["status"] = "failed"
-            row["reason"] = f"SUPPA2 command exited with status {completed.returncode}"
+            row["reason"] = command_failure_reason("SUPPA2 command", completed.returncode, stderr)
             row["command"] = " && ".join(" ".join(shlex.quote(part) for part in item) for item in commands)
             row["stdout"] = str(stdout)
             row["stderr"] = str(stderr)
@@ -1638,7 +1671,7 @@ def run_suppa2_contrast(args: argparse.Namespace, plan_row: dict[str, str]) -> d
     row["stderr"] = str(stderr)
     if completed.returncode != 0:
         row["status"] = "failed"
-        row["reason"] = f"SUPPA2 diffSplice exited with status {completed.returncode}"
+        row["reason"] = command_failure_reason("SUPPA2 diffSplice", completed.returncode, stderr)
         return row
 
     dpsi = materialize_suppa2_dpsi(diff_prefix)
@@ -1711,9 +1744,10 @@ def main() -> int:
         rows.extend(run_method_rows(args, method, plan, plan_rows))
     write_tsv(Path(args.manifest), rows)
     write_done(Path(args.done), rows)
-    failed = [f"{row['method']}:{row.get('contrast_id', '')}" for row in rows if row["status"] == "failed"]
-    if failed:
-        raise RuntimeError(f"DTU method command(s) failed: {','.join(failed)}")
+    if args.fail_on_method_error:
+        failed = failed_method_summary(rows)
+        if failed:
+            raise RuntimeError(f"DTU method command(s) failed: {failed}")
     return 0
 
 

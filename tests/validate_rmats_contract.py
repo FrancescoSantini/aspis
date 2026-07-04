@@ -131,6 +131,22 @@ def write_fake_rmats() -> Path:
     return helper
 
 
+def write_failing_rmats() -> Path:
+    helper = INPUT / "fake_rmats_fail.py"
+    helper.write_text(
+        "\n".join(
+            [
+                "import sys",
+                "sys.stderr.write('rmats simulated alignment error\\n')",
+                "sys.exit(9)",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    return helper
+
+
 def main() -> int:
     snakefile = Path("Snakefile").read_text(encoding="utf-8")
     if "--rmats-extra-args {params.rmats_extra_args:q}" in snakefile:
@@ -140,6 +156,7 @@ def main() -> int:
 
     paths = write_common_inputs()
     fake_rmats = write_fake_rmats()
+    failing_rmats = write_failing_rmats()
     dtu_dir = BASE / "dtu"
     run_command(
         [
@@ -212,6 +229,52 @@ def main() -> int:
     blocked_rows = read_tsv(blocked_dir / "dtu_method_manifest.tsv", {"method", "status", "reason"})
     if blocked_rows[0]["status"] != "blocked" or "read_length" not in blocked_rows[0]["reason"]:
         raise ValueError(f"rMATS missing read-length was not blocked clearly: {blocked_rows}")
+
+    failed_dir = BASE / "dtu_failed"
+    run_command(
+        [
+            sys.executable,
+            "workflow/scripts/run_rnaseq_dtu_methods.py",
+            "--plan",
+            str(dtu_dir / "dtu_plan.tsv"),
+            "--samples",
+            str(paths["samples"]),
+            "--aligned-samples",
+            str(paths["aligned_samples"]),
+            "--transcript-counts",
+            str(paths["transcript_counts"]),
+            "--transcript-metadata",
+            str(paths["transcript_metadata"]),
+            "--annotation-gtf",
+            str(paths["gtf"]),
+            "--outdir",
+            str(failed_dir / "methods"),
+            "--manifest",
+            str(failed_dir / "dtu_method_manifest.tsv"),
+            "--done",
+            str(failed_dir / "dtu_methods.done"),
+            "--project",
+            "ASPIS_CONTRACT",
+            "--method",
+            "rMATS",
+            "--methods",
+            "rMATS",
+            "--contrast-id",
+            contrast_id,
+            "--rmats-executable",
+            f'"{sys.executable}" "{failing_rmats}"',
+            "--rmats-read-length",
+            "100",
+            "--rmats-lib-type",
+            "fr-unstranded",
+        ]
+    )
+    failed_rows = read_tsv(failed_dir / "dtu_method_manifest.tsv", {"method", "status", "reason", "stderr"})
+    if failed_rows[0]["status"] != "failed" or "rmats simulated alignment error" not in failed_rows[0]["reason"]:
+        raise ValueError(f"rMATS failure was not preserved with stderr context: {failed_rows}")
+    failed_done = read_tsv(failed_dir / "dtu_methods.done", {"status", "failed", "reason"})
+    if failed_done[0]["status"] != "failed" or failed_done[0]["failed"] != "1":
+        raise ValueError(f"rMATS failed done status was not written: {failed_done}")
 
     run_command(
         [
