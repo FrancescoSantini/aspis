@@ -898,20 +898,33 @@ Acceptance criteria:
 
 ## P1 - Optional Tool Environment Strategy
 
-Reason for priority: core ASPIS should stay installable, while optional
-advanced tools can live in separate environments or site-managed modules.
+Status: closed.
 
-Remaining code tasks:
+Reason for closure: this is now an operating policy, not an active P1
+implementation track. ASPIS keeps the core workflow runnable while exposing
+advanced tools through config keys, command templates, environment reports, and
+tool-specific docs.
 
-- Keep required tools fail-fast in environment reports.
-- Keep optional tools visible but non-blocking.
-- Validate optional conda environments listed under `envs/` on at least one
-  machine.
-- Add example environment-report snippets showing missing optional tools in
-  dry-runs.
-- Document site-managed command templates for optional tools.
-- Avoid polluting the core `aspis-smk9` environment with every optional
-  annotation/DTU tool.
+Implemented policy:
+
+- Required tools remain fail-fast in environment reports.
+- Optional tools remain visible but non-blocking, with statuses such as missing,
+  disabled, not configured, failed, or ok.
+- Optional DTU and consequence tools are represented by config keys and command
+  templates rather than forced into every core installation.
+- `docs/optional_tool_environments.md` remains the operational documentation
+  for optional conda layers and site-managed tools.
+- `tests/validate_optional_tool_environment_contract.py` guards the current
+  optional-tool reporting and environment-spec contract.
+
+Future work should live in the relevant feature sections instead of this
+closed strategy bucket:
+
+- DTU-specific installation, runtime, or reporting work belongs under DTU.
+- Isoform-switch consequence annotation tool polish belongs under optional
+  isoform-switch consequence annotation.
+- General environment version/report robustness belongs under environment and
+  preflight checks.
 
 Acceptance criteria:
 
