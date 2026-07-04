@@ -271,6 +271,30 @@ def validate_inference_schema() -> None:
             raise AssertionError(f"inference report schema missing {column}")
 
 
+def validate_snakefile_optional_args() -> None:
+    source = (ROOT / "Snakefile").read_text(encoding="utf-8")
+    forbidden = [
+        "--alignment-strandness {params.alignment_strandness:q}",
+        "--featurecounts-extra-args {params.featurecounts_extra_args:q}",
+        "--stringtie-strandness {params.stringtie_strandness:q}",
+        "--stringtie-assembly-extra-args {params.stringtie_assembly_extra_args:q}",
+        "--stringtie-quant-extra-args {params.stringtie_quant_extra_args:q}",
+    ]
+    for text in forbidden:
+        if text in source:
+            raise AssertionError(f"nullable quantification-plan argument is emitted without optional guard: {text}")
+    required = [
+        "alignment_strandness_flag=optional_shell_arg",
+        "featurecounts_extra_args_flag=optional_shell_arg",
+        "stringtie_strandness_flag=optional_shell_arg",
+        "stringtie_assembly_extra_args_flag=optional_shell_arg",
+        "stringtie_quant_extra_args_flag=optional_shell_arg",
+    ]
+    for text in required:
+        if text not in source:
+            raise AssertionError(f"Snakefile missing optional argument guard: {text}")
+
+
 def main() -> int:
     if OUT.exists():
         shutil.rmtree(OUT)
@@ -279,6 +303,7 @@ def main() -> int:
     report = prepare_differential_inputs(base)
     validate_differential_index(base, report)
     validate_inference_schema()
+    validate_snakefile_optional_args()
     print("strandedness quantification diagnostics contract ok")
     return 0
 

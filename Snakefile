@@ -4966,12 +4966,27 @@ rule plan_rnaseq_quantification:
         ),
         read_length=RNASEQ_QUANTIFICATION.get("read_length", 75),
         infer_strandedness=str(RNASEQ_STRANDEDNESS_INFERENCE_RUN).lower(),
-        alignment_strandness=RNASEQ_ALIGNMENT.get("strandness", ""),
+        alignment_strandness_flag=optional_shell_arg(
+            "--alignment-strandness",
+            RNASEQ_ALIGNMENT.get("strandness", ""),
+        ),
         featurecounts_strandedness=RNASEQ_QUANTIFICATION.get("featurecounts_strandedness", "0"),
-        featurecounts_extra_args=RNASEQ_QUANTIFICATION.get("featurecounts_extra_args", ""),
-        stringtie_strandness=RNASEQ_QUANTIFICATION.get("stringtie_strandness", ""),
-        stringtie_assembly_extra_args=RNASEQ_QUANTIFICATION.get("stringtie_assembly_extra_args", ""),
-        stringtie_quant_extra_args=RNASEQ_QUANTIFICATION.get("stringtie_quant_extra_args", ""),
+        featurecounts_extra_args_flag=optional_shell_arg(
+            "--featurecounts-extra-args",
+            RNASEQ_QUANTIFICATION.get("featurecounts_extra_args", ""),
+        ),
+        stringtie_strandness_flag=optional_shell_arg(
+            "--stringtie-strandness",
+            RNASEQ_QUANTIFICATION.get("stringtie_strandness", ""),
+        ),
+        stringtie_assembly_extra_args_flag=optional_shell_arg(
+            "--stringtie-assembly-extra-args",
+            RNASEQ_QUANTIFICATION.get("stringtie_assembly_extra_args", ""),
+        ),
+        stringtie_quant_extra_args_flag=optional_shell_arg(
+            "--stringtie-quant-extra-args",
+            RNASEQ_QUANTIFICATION.get("stringtie_quant_extra_args", ""),
+        ),
         dexseq_count_strandedness=RNASEQ_DTU.get("dexseq_count_strandedness", "no")
     log:
         "logs/branches/rnaseq/{project}.quantification_plan.log"
@@ -4989,12 +5004,12 @@ rule plan_rnaseq_quantification:
           {params.annotation_gtf_flag} \
           --read-length {params.read_length:q} \
           --infer-strandedness {params.infer_strandedness:q} \
-          --alignment-strandness {params.alignment_strandness:q} \
+          {params.alignment_strandness_flag} \
           --featurecounts-strandedness {params.featurecounts_strandedness:q} \
-          --featurecounts-extra-args {params.featurecounts_extra_args:q} \
-          --stringtie-strandness {params.stringtie_strandness:q} \
-          --stringtie-assembly-extra-args {params.stringtie_assembly_extra_args:q} \
-          --stringtie-quant-extra-args {params.stringtie_quant_extra_args:q} \
+          {params.featurecounts_extra_args_flag} \
+          {params.stringtie_strandness_flag} \
+          {params.stringtie_assembly_extra_args_flag} \
+          {params.stringtie_quant_extra_args_flag} \
           --dexseq-count-strandedness {params.dexseq_count_strandedness:q} \
           > {log:q} 2>&1
         """
