@@ -116,6 +116,10 @@ def write_fake_rmats() -> Path:
                 "def value(flag):",
                 "    return Path(args[args.index(flag) + 1])",
                 "outdir = value('--od')",
+                "tmpdir = value('--tmp')",
+                "if tmpdir.exists() and any(tmpdir.iterdir()):",
+                "    sys.stderr.write('stale rmats temp directory was not cleaned\\n')",
+                "    sys.exit(8)",
                 "outdir.mkdir(parents=True, exist_ok=True)",
                 "(outdir / 'SE.MATS.JC.txt').write_text(",
                 "    'ID\\tGeneID\\tgeneSymbol\\tPValue\\tFDR\\tIncLevelDifference\\n'",
@@ -292,6 +296,13 @@ def main() -> int:
     if merged_done[0]["status"] != "failed" or merged_done[0]["failed"] != "1":
         raise ValueError(f"failed rMATS status was not preserved by DTU merge: {merged_done}")
 
+    method_dir = dtu_dir / "methods" / "rmats" / contrast_id
+    stale_tmp = method_dir / "tmp"
+    stale_tmp.mkdir(parents=True, exist_ok=True)
+    (stale_tmp / "old.rmats").write_text("stale\n", encoding="utf-8")
+    stale_output = method_dir / "rmats_output"
+    stale_output.mkdir(parents=True, exist_ok=True)
+    (stale_output / "old.txt").write_text("stale\n", encoding="utf-8")
     run_command(
         [
             sys.executable,
@@ -339,6 +350,8 @@ def main() -> int:
         raise ValueError(f"rMATS method row was not completed and standardized: {method_rows}")
     if "aligned BAMs" not in row["reason"]:
         raise ValueError(f"rMATS reason did not describe native mode: {row}")
+    if (stale_output / "old.txt").exists():
+        raise ValueError("rMATS stale output directory was not cleaned before rerun")
     standardized = read_tsv(Path(row["standardized_results"]), {"method", "feature_id", "gene_id", "event_type", "delta_psi", "pvalue", "padj", "direction"})
     if len(standardized) != 2 or standardized[0]["method"] != "rMATS":
         raise ValueError(f"standardized rMATS rows were not preserved: {standardized}")

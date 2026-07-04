@@ -1515,8 +1515,10 @@ def run_rmats_contrast(args: argparse.Namespace, plan_row: dict[str, str]) -> di
 
     output_dir = method_dir / "rmats_output"
     tmp_dir = method_dir / "tmp"
-    output_dir.mkdir(parents=True, exist_ok=True)
-    tmp_dir.mkdir(parents=True, exist_ok=True)
+    for directory in [output_dir, tmp_dir]:
+        if directory.exists():
+            shutil.rmtree(directory)
+        directory.mkdir(parents=True, exist_ok=True)
     command = [
         *shlex.split(args.rmats_executable),
         "--b1",
