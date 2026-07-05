@@ -191,25 +191,35 @@ def main() -> int:
         )
         html = html_report.read_text(encoding="utf-8")
         headings = [
-            "Recommended Review Order",
-            "Project Contrast Matrix",
-            "Evidence Layer Entry Points",
-            "Sample And Design Summary",
-            "Workflow Status Matrix",
-            "Raw Contrast Summary",
-            "Unified Report Tree",
+            "Project Evidence Map",
+            "Contrast Evidence Matrix",
+            "Evidence Layers",
+            "QC And Design",
+            "Raw Artifacts",
+            "Status Glossary",
         ]
         positions = [html.index(heading) for heading in headings]
         assert positions == sorted(positions)
         assert "combined project technical PDF" in html
         assert 'aria-label="Report map"' in html
         assert "Report Map" in html
-        assert 'href="#rnaseq-report-tree"' in html
-        assert 'href="#smallrna-report-tree"' in html
-        assert 'href="#matched-evidence-report-tree"' in html
-        assert 'id="rnaseq-report-tree"' in html
-        assert 'id="smallrna-report-tree"' in html
-        assert 'id="matched-evidence-report-tree"' in html
+        assert 'href="#project-evidence-map"' in html
+        assert 'href="#contrast-matrix"' in html
+        assert 'href="#evidence-layers"' in html
+        assert 'href="#layer-rnaseq-de"' in html
+        assert 'href="#layer-enrichment"' in html
+        assert 'href="#layer-dtu"' in html
+        assert 'href="#layer-isoform-switch"' in html
+        assert 'href="#layer-smallrna-de"' in html
+        assert 'href="#layer-mirna-targets"' in html
+        assert 'href="#layer-matched-mirna-mrna"' in html
+        assert 'id="layer-rnaseq-de"' in html
+        assert 'id="layer-dtu"' in html
+        assert 'id="layer-matched-mirna-mrna"' in html
+        assert "deterministic report navigation" in html
+        assert "optional miRNA identifier feature-set manifest" in html
+        assert "Recommended Review Order" not in html
+        assert "Unified Report Tree" not in html
         cwd = Path.cwd()
         try:
             os.chdir(tmp)

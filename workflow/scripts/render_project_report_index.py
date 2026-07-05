@@ -92,6 +92,88 @@ def status_label(path: Path, expected: bool = False) -> str:
     return '<span class="status muted">not present</span>'
 
 
+def as_int(value: str | int | None) -> int:
+    if value is None:
+        return 0
+    text = str(value).strip()
+    if not text:
+        return 0
+    try:
+        return int(float(text))
+    except ValueError:
+        return 0
+
+
+def sum_int(rows: list[dict[str, str]], column: str) -> int:
+    return sum(as_int(row.get(column, "")) for row in rows)
+
+
+def rows_with_status(rows: list[dict[str, str]], *statuses: str) -> int:
+    wanted = set(statuses)
+    return sum(1 for row in rows if (row.get("status", "") or "").strip() in wanted)
+
+
+def evidence_state(rows: list[dict[str, str]], ok_statuses: tuple[str, ...] = ("ok", "completed")) -> tuple[str, str]:
+    if not rows:
+        return "muted", "not present"
+    statuses = [(row.get("status", "") or "unknown").strip() for row in rows]
+    if any(status == "failed" for status in statuses):
+        return "failed", "failed"
+    if any(status == "blocked" for status in statuses):
+        return "blocked", "blocked"
+    if any(status in ok_statuses for status in statuses):
+        return "ok", "available"
+    if all(status == "not_configured" for status in statuses):
+        return "not_configured", "not configured"
+    return "muted", status_counts(rows)
+
+
+def unique_values(rows: list[dict[str, str]], column: str) -> list[str]:
+    return sorted({row.get(column, "") for row in rows if row.get(column, "")})
+
+
+def method_list(rows: list[dict[str, str]]) -> str:
+    return ", ".join(unique_values(rows, "method")) or "none"
+
+
+def evidence_card(
+    title: str,
+    target_id: str,
+    state_class: str,
+    state_label: str,
+    description: str,
+    metrics: list[tuple[str, str | int]],
+    links: list[str],
+) -> str:
+    metric_html = "".join(
+        f'<div class="mini-metric"><strong>{html.escape(label)}</strong><span>{html.escape(str(value))}</span></div>'
+        for label, value in metrics
+    )
+    link_html = " ".join(link_text for link_text in links if link_text)
+    if link_html:
+        link_html = f'<div class="card-links">{link_html}</div>'
+    return (
+        f'<article class="evidence-card" id="{html.escape(target_id)}-card">'
+        f'<h3><a href="#{html.escape(target_id)}">{html.escape(title)}</a></h3>'
+        f'<p><span class="status {html.escape(state_class)}">{html.escape(state_label)}</span></p>'
+        f'<p>{html.escape(description)}</p>'
+        f'<div class="mini-metrics">{metric_html}</div>'
+        f"{link_html}</article>"
+    )
+
+
+def layer_panel(title: str, section_id: str, description: str, items: list[str]) -> str:
+    body = "\n".join(f"<li>{item}</li>" for item in items if item)
+    if not body:
+        body = '<li><span class="status muted">no resources listed</span></li>'
+    return (
+        f'<section class="layer-panel" id="{html.escape(section_id)}">'
+        f"<h3>{html.escape(title)}</h3>"
+        f'<p class="section-note">{html.escape(description)}</p>'
+        f"<ul>{body}</ul></section>"
+    )
+
+
 def design_columns(path: Path) -> str:
     rows = read_table(path)
     if not rows:
@@ -340,31 +422,23 @@ def dtu_cell(
 ) -> str:
     if not rows:
         return '<span class="status muted">not present</span>'
-    blocks = []
-    for row in sorted(rows, key=lambda item: item.get("method", "")):
-        status = row.get("status", "unknown") or "unknown"
-        plot_row = plot_by_key.get((row.get("method", ""), row.get("contrast_id", "")), {})
-        details = [
-            f"<strong>{html.escape(row.get('method', ''))}</strong>",
-            f'<span class="status {html.escape(status)}">{html.escape(status)}</span>',
-            f"{html.escape(row.get('standardized_result_count', '0'))} standardized rows"
-            if row.get("standardized_result_count")
-            else "",
-            f"standardized {html.escape(row.get('standardized_status', ''))}"
-            if row.get("standardized_status")
-            else "",
-            optional_row_link(row, "summary", "summary", base_dir),
-            optional_row_link(row, "gene_results", "gene results", base_dir),
-            optional_row_link(row, "standardized_results", "standardized", base_dir),
-            optional_row_link(plot_row, "overview_plot", "overview plot", base_dir),
-            optional_row_link(plot_row, "feature_plot", "ranked candidates", base_dir),
-            optional_row_link(plot_row, "usage_plot", "top genes detail", base_dir),
-        ]
-        reason = row.get("reason", "")
-        if reason:
-            details.append(f'<span class="status muted">{html.escape(reason)}</span>')
-        blocks.append("<br>".join(part for part in details if part))
-    return "<hr>".join(blocks)
+    statuses = Counter(row.get("status", "unknown") or "unknown" for row in rows)
+    contrast_id = rows[0].get("contrast_id", "")
+    plot_rows = [
+        plot_by_key.get((row.get("method", ""), contrast_id), {})
+        for row in rows
+    ]
+    plot_ok = sum(1 for row in plot_rows if row.get("status") == "ok")
+    standardized = sum_int(rows, "standardized_result_count")
+    status_text = ", ".join(f"{name}:{count}" for name, count in sorted(statuses.items()))
+    details = [
+        f"{len(rows)} method rows ({html.escape(method_list(rows))})",
+        f"{html.escape(status_text)}",
+        f"{standardized} standardized rows" if standardized else "",
+        f"{plot_ok} plot sets" if plot_rows else "",
+        '<a href="#layer-dtu">DTU layer</a>',
+    ]
+    return "<br>".join(part for part in details if part)
 
 
 def contrast_matrix(
@@ -431,6 +505,342 @@ def contrast_matrix(
     )
 
 
+def project_evidence_map(
+    base_dir: Path,
+    rnaseq_base: Path,
+    smallrna_base: Path,
+    rnaseq_summary: list[dict[str, str]],
+    rnaseq_enrichment: list[dict[str, str]],
+    rnaseq_dtu: list[dict[str, str]],
+    rnaseq_dtu_plots: list[dict[str, str]],
+    isoform_events: list[dict[str, str]],
+    isoform_interpretation_summary: list[dict[str, str]],
+    smallrna_summary: list[dict[str, str]],
+    smallrna_targets: list[dict[str, str]],
+    smallrna_target_feature_sets: list[dict[str, str]],
+    mirna_feature_sets: list[dict[str, str]],
+    mirna_integration: list[dict[str, str]],
+    mirna_mrna_feature_sets: list[dict[str, str]],
+) -> str:
+    gene_rows = [row for row in rnaseq_summary if row.get("level") == "gene"]
+    transcript_rows = [row for row in rnaseq_summary if row.get("level") == "transcript"]
+    iso_summary = isoform_interpretation_summary[0] if isoform_interpretation_summary else {}
+    cards = []
+
+    state = evidence_state(rnaseq_summary)
+    cards.append(
+        evidence_card(
+            "RNA-seq differential expression",
+            "layer-rnaseq-de",
+            state[0],
+            state[1],
+            "Gene and transcript DESeq2 summaries by contrast.",
+            [
+                ("gene rows", len(gene_rows)),
+                ("gene significant", sum_int(gene_rows, "n_significant")),
+                ("transcript significant", sum_int(transcript_rows, "n_significant")),
+            ],
+            [
+                link(rnaseq_base / "differential/reports/index.html", "report", base_dir),
+                table_link(rnaseq_base / "differential/reports/summaries/summary_manifest.tsv", "manifest", base_dir),
+            ],
+        )
+    )
+
+    state = evidence_state(rnaseq_enrichment)
+    cards.append(
+        evidence_card(
+            "GO/Reactome enrichment",
+            "layer-enrichment",
+            state[0],
+            state[1],
+            "ORA and ranked feature-set outputs from configured open resources.",
+            [
+                ("contrast rows", len(rnaseq_enrichment)),
+                ("ORA terms", sum_int(rnaseq_enrichment, "n_feature_set_terms")),
+                ("ranked terms", sum_int(rnaseq_enrichment, "n_ranked_feature_set_terms")),
+            ],
+            [
+                link(rnaseq_base / "differential/reports/enrichment/index.html", "overview", base_dir),
+                table_link(rnaseq_base / "differential/reports/enrichment/enrichment_manifest.tsv", "manifest", base_dir),
+            ],
+        )
+    )
+
+    state = evidence_state(rnaseq_dtu, ok_statuses=("completed", "ok"))
+    cards.append(
+        evidence_card(
+            "DTU and splicing methods",
+            "layer-dtu",
+            state[0],
+            state[1],
+            "DRIMSeq, DEXSeq, DEXSeqExon, SUPPA2, and rMATS method outputs when configured.",
+            [
+                ("method rows", len(rnaseq_dtu)),
+                ("completed", rows_with_status(rnaseq_dtu, "completed")),
+                ("plot rows", rows_with_status(rnaseq_dtu_plots, "ok")),
+            ],
+            [
+                table_link(rnaseq_base / "differential/dtu/dtu_method_manifest.tsv", "method manifest", base_dir),
+                table_link(rnaseq_base / "differential/dtu/plots/dtu_plot_manifest.tsv", "plot manifest", base_dir),
+            ],
+        )
+    )
+
+    iso_rows = isoform_interpretation_summary or isoform_events
+    state = evidence_state(iso_rows)
+    cards.append(
+        evidence_card(
+            "Isoform switch and DTU support",
+            "layer-isoform-switch",
+            state[0],
+            state[1],
+            "Isoform-switch candidates linked to DTU and splicing evidence for the same contrast and gene.",
+            [
+                ("switch events", len(isoform_events)),
+                ("high priority", iso_summary.get("high_priority_rows", 0)),
+                ("multi-method", iso_summary.get("multi_method_supported_rows", 0)),
+            ],
+            [
+                link(rnaseq_base / "differential/isoform_switch/report/index.html", "overview", base_dir),
+                table_link(
+                    rnaseq_base / "differential/isoform_switch/report/isoform_interpretation_consensus.tsv",
+                    "consensus",
+                    base_dir,
+                ),
+            ],
+        )
+    )
+
+    state = evidence_state(smallrna_summary)
+    cards.append(
+        evidence_card(
+            "smallRNA differential expression",
+            "layer-smallrna-de",
+            state[0],
+            state[1],
+            "miRNA differential expression summaries by contrast.",
+            [
+                ("miRNA rows", len(smallrna_summary)),
+                ("significant", sum_int(smallrna_summary, "n_significant")),
+                ("up/down", f"{sum_int(smallrna_summary, 'n_up')}/{sum_int(smallrna_summary, 'n_down')}"),
+            ],
+            [
+                link(smallrna_base / "smallrna/differential/reports/index.html", "report", base_dir),
+                table_link(smallrna_base / "smallrna/differential/reports/summaries/summary_manifest.tsv", "manifest", base_dir),
+            ],
+        )
+    )
+
+    target_rows = smallrna_targets + smallrna_target_feature_sets
+    state = evidence_state(target_rows)
+    mirna_feature_state = "available" if mirna_feature_sets else "optional/not configured"
+    cards.append(
+        evidence_card(
+            "miRNA targets and target feature sets",
+            "layer-mirna-targets",
+            state[0],
+            state[1],
+            "Target-gene enrichment and target-gene feature sets; miRNA identifier feature sets are optional.",
+            [
+                ("target rows", len(smallrna_targets)),
+                ("target-set rows", len(smallrna_target_feature_sets)),
+                ("miRNA-ID sets", mirna_feature_state),
+            ],
+            [
+                link(smallrna_base / "smallrna/differential/reports/targets/index.html", "overview", base_dir),
+                table_link(smallrna_base / "smallrna/differential/target_enrichment/target_manifest.tsv", "target manifest", base_dir),
+            ],
+        )
+    )
+
+    matched_rows = mirna_integration + mirna_mrna_feature_sets
+    state = evidence_state(matched_rows)
+    cards.append(
+        evidence_card(
+            "Matched miRNA-mRNA evidence",
+            "layer-matched-mirna-mrna",
+            state[0],
+            state[1],
+            "Cross-assay pairing, inverse miRNA-target evidence, and inverse target feature sets.",
+            [
+                ("integration rows", len(mirna_integration)),
+                ("integrated", rows_with_status(mirna_integration, "ok")),
+                ("feature-set rows", len(mirna_mrna_feature_sets)),
+            ],
+            [
+                table_link(
+                    smallrna_base / "smallrna/differential/mirna_mrna_integration/mirna_mrna_manifest.tsv",
+                    "integration manifest",
+                    base_dir,
+                ),
+                table_link(
+                    smallrna_base / "smallrna/differential/mirna_mrna_target_feature_sets/target_feature_set_manifest.tsv",
+                    "inverse target sets",
+                    base_dir,
+                ),
+            ],
+        )
+    )
+    return '<div class="evidence-grid">' + "".join(cards) + "</div>"
+
+
+def evidence_layer_sections(base_dir: Path, rnaseq_base: Path, smallrna_base: Path) -> str:
+    return "\n".join(
+        [
+            layer_panel(
+                "RNA-seq differential expression",
+                "layer-rnaseq-de",
+                "Start here for gene- and transcript-level DESeq2 status, summary pages, and source tables.",
+                [
+                    link(rnaseq_base / "differential/reports/index.html", "RNA-seq differential report", base_dir),
+                    table_link(rnaseq_base / "differential/reports/summaries/summary_manifest.tsv", "summary manifest", base_dir),
+                    table_link(rnaseq_base / "differential/gene_deseq2/deseq2_manifest.tsv", "gene DESeq2 manifest", base_dir),
+                    table_link(rnaseq_base / "differential/transcript_deseq2/deseq2_manifest.tsv", "transcript DESeq2 manifest", base_dir),
+                    link(rnaseq_base / "differential/reports/technical_report.pdf", "RNA-seq technical PDF", base_dir),
+                ],
+            ),
+            layer_panel(
+                "GO/Reactome enrichment",
+                "layer-enrichment",
+                "Use this layer to check which feature-set resources were loaded and which ORA/ranked outputs were produced.",
+                [
+                    link(rnaseq_base / "differential/reports/enrichment/index.html", "GO/Reactome overview", base_dir),
+                    table_link(rnaseq_base / "differential/reports/enrichment/enrichment_manifest.tsv", "enrichment manifest", base_dir),
+                    table_link(rnaseq_base / "differential/reports/feature_set_resources.tsv", "feature-set resources", base_dir),
+                ],
+            ),
+            layer_panel(
+                "DTU and splicing methods",
+                "layer-dtu",
+                "Use this layer for method-level DTU/splicing outputs. The project report aggregates status; method tables remain the source data.",
+                [
+                    table_link(rnaseq_base / "differential/dtu/dtu_method_manifest.tsv", "method manifest", base_dir),
+                    table_link(rnaseq_base / "differential/dtu/plots/dtu_plot_manifest.tsv", "plot manifest", base_dir),
+                    table_link(rnaseq_base / "differential/dtu/consensus/dtu_consensus_gene_summary.tsv", "consensus gene summary", base_dir),
+                    table_link(rnaseq_base / "differential/dtu/consensus/dtu_consensus_method_detail.tsv", "consensus method detail", base_dir),
+                ],
+            ),
+            layer_panel(
+                "Isoform switch and DTU support",
+                "layer-isoform-switch",
+                "Use this layer for isoform-switch candidates, sequence/consequence assets, and deterministic DTU evidence joins.",
+                [
+                    link(rnaseq_base / "differential/isoform_switch/report/index.html", "isoform-switch overview", base_dir),
+                    table_link(rnaseq_base / "differential/isoform_switch/report/switch_candidates.tsv", "switch candidates", base_dir),
+                    table_link(rnaseq_base / "differential/isoform_switch/report/switch_event_summary.tsv", "switch event summary", base_dir),
+                    table_link(rnaseq_base / "differential/isoform_switch/report/isoform_dtu_evidence.tsv", "isoform DTU evidence", base_dir),
+                    table_link(
+                        rnaseq_base / "differential/isoform_switch/report/isoform_interpretation_consensus.tsv",
+                        "isoform DTU consensus",
+                        base_dir,
+                    ),
+                ],
+            ),
+            layer_panel(
+                "smallRNA differential expression",
+                "layer-smallrna-de",
+                "Use this layer for miRNA differential-expression summaries and source tables.",
+                [
+                    link(smallrna_base / "smallrna/differential/reports/index.html", "smallRNA differential report", base_dir),
+                    table_link(smallrna_base / "smallrna/differential/reports/summaries/summary_manifest.tsv", "summary manifest", base_dir),
+                    table_link(smallrna_base / "smallrna/differential/mirna_deseq2/deseq2_manifest.tsv", "miRNA DESeq2 manifest", base_dir),
+                    link(smallrna_base / "smallrna/differential/reports/technical_report.pdf", "smallRNA technical PDF", base_dir),
+                ],
+            ),
+            layer_panel(
+                "miRNA targets and target feature sets",
+                "layer-mirna-targets",
+                "Use this layer for target-gene enrichment and target-gene feature sets. miRNA identifier feature sets are optional and separate.",
+                [
+                    link(smallrna_base / "smallrna/differential/reports/targets/index.html", "target and integration overview", base_dir),
+                    table_link(smallrna_base / "smallrna/differential/target_enrichment/target_manifest.tsv", "target enrichment manifest", base_dir),
+                    table_link(
+                        smallrna_base / "smallrna/differential/target_feature_sets/target_feature_set_manifest.tsv",
+                        "target feature-set manifest",
+                        base_dir,
+                    ),
+                    table_link(
+                        smallrna_base / "smallrna/differential/mirna_feature_sets/mirna_feature_set_manifest.tsv",
+                        "optional miRNA identifier feature-set manifest",
+                        base_dir,
+                    ),
+                ],
+            ),
+            layer_panel(
+                "Matched miRNA-mRNA evidence",
+                "layer-matched-mirna-mrna",
+                "Use this layer for paired assay evidence: sample matching, inverse miRNA-target pairs, and inverse target feature sets.",
+                [
+                    table_link(
+                        smallrna_base / "smallrna/differential/mirna_mrna_integration/mirna_mrna_manifest.tsv",
+                        "miRNA-mRNA integration manifest",
+                        base_dir,
+                    ),
+                    table_link(
+                        smallrna_base / "smallrna/differential/mirna_mrna_target_feature_sets/target_feature_set_manifest.tsv",
+                        "inverse target feature-set manifest",
+                        base_dir,
+                    ),
+                    table_link(rnaseq_base / "differential/reports/summaries/summary_manifest.tsv", "RNA-seq summary manifest", base_dir),
+                    table_link(smallrna_base / "smallrna/differential/reports/summaries/summary_manifest.tsv", "smallRNA summary manifest", base_dir),
+                ],
+            ),
+        ]
+    )
+
+
+def raw_artifact_sections(base_dir: Path, rnaseq_base: Path, smallrna_base: Path, technical_pdf: str) -> str:
+    pdf_target = Path(technical_pdf) if technical_pdf else Path("")
+    return "\n".join(
+        [
+            layer_panel(
+                "Project and assay entry pages",
+                "raw-project-pages",
+                "Stable HTML/PDF entry points for the complete project and each assay branch.",
+                [
+                    link(pdf_target, "combined project technical PDF", base_dir) if technical_pdf else "",
+                    link(rnaseq_base / "report/index.html", "RNA-seq branch report", base_dir),
+                    link(smallrna_base / "report/index.html", "smallRNA branch report", base_dir),
+                    link(rnaseq_base / "differential/reports/index.html", "RNA-seq differential index", base_dir),
+                    link(smallrna_base / "smallrna/differential/reports/index.html", "smallRNA differential index", base_dir),
+                ],
+            ),
+            layer_panel(
+                "QC and design source files",
+                "raw-qc-design",
+                "Machine-readable files used to audit sample metadata, FASTQ inspection, QC, alignment, and strandedness.",
+                [
+                    table_link(rnaseq_base / "samples.tsv", "RNA-seq samples", base_dir),
+                    table_link(rnaseq_base / "design.tsv", "RNA-seq design", base_dir),
+                    table_link(rnaseq_base / "fastq_inspection.tsv", "RNA-seq FASTQ inspection", base_dir),
+                    table_link(rnaseq_base / "alignment/strandedness/strandedness_report.tsv", "RNA-seq strandedness", base_dir),
+                    table_link(smallrna_base / "samples.tsv", "smallRNA samples", base_dir),
+                    table_link(smallrna_base / "design.tsv", "smallRNA design", base_dir),
+                    table_link(smallrna_base / "fastq_inspection.tsv", "smallRNA FASTQ inspection", base_dir),
+                    link(smallrna_base / "smallrna/length_qc/length_distribution.svg", "smallRNA length distribution", base_dir),
+                ],
+            ),
+            layer_panel(
+                "Raw summary manifests",
+                "raw-summary-manifests",
+                "Wide TSV manifests are kept here so the evidence map can stay readable while source rows remain one click away.",
+                [
+                    table_link(rnaseq_base / "differential/reports/summaries/summary_manifest.tsv", "RNA-seq summary manifest", base_dir),
+                    table_link(rnaseq_base / "differential/reports/enrichment/enrichment_manifest.tsv", "RNA-seq enrichment manifest", base_dir),
+                    table_link(rnaseq_base / "differential/dtu/dtu_method_manifest.tsv", "DTU method manifest", base_dir),
+                    table_link(smallrna_base / "smallrna/differential/reports/summaries/summary_manifest.tsv", "smallRNA summary manifest", base_dir),
+                    table_link(
+                        smallrna_base / "smallrna/differential/mirna_mrna_integration/mirna_mrna_manifest.tsv",
+                        "miRNA-mRNA integration manifest",
+                        base_dir,
+                    ),
+                ],
+            ),
+        ]
+    )
+
+
 def project_report_map(
     project: str,
     base_dir: Path,
@@ -444,54 +854,25 @@ def project_report_map(
         report_map_item(
             "Project report",
             children=[
-                report_map_item("Review order", "#review-order"),
-                report_map_item("Contrast matrix", "#contrast-matrix"),
-                report_map_item("Evidence entry points", "#evidence-entry-points"),
-                report_map_item("Sample and design", "#sample-design"),
-                report_map_item("Workflow status", "#workflow-status"),
-                report_map_item("Raw contrast summary", "#raw-contrast-summary"),
-                report_map_item("Unified report tree", "#unified-report-tree"),
+                report_map_item("Project evidence map", "#project-evidence-map"),
+                report_map_item("Contrast evidence matrix", "#contrast-matrix"),
+                report_map_item("Evidence layers", "#evidence-layers"),
+                report_map_item("QC and design", "#qc-and-design"),
+                report_map_item("Raw artifacts", "#raw-artifacts"),
                 report_map_item("Combined technical PDF", pdf_target, planned=bool(technical_pdf)),
             ],
         ),
         report_map_item(
-            "RNA-seq",
-            "#rnaseq-report-tree",
+            "Evidence layers",
+            "#evidence-layers",
             children=[
-                report_map_item("Branch report", rnaseq_base / "report/index.html"),
-                report_map_item("Differential index", rnaseq_base / "differential/reports/index.html"),
-                report_map_item("GO/Reactome overview", rnaseq_base / "differential/reports/enrichment/index.html"),
-                report_map_item("DTU method manifest", rnaseq_base / "differential/dtu/dtu_method_manifest.tsv"),
-                report_map_item("Isoform-switch overview", rnaseq_base / "differential/isoform_switch/report/index.html"),
-                report_map_item("RNA-seq technical PDF", rnaseq_base / "differential/reports/technical_report.pdf"),
-            ],
-        ),
-        report_map_item(
-            "smallRNA",
-            "#smallrna-report-tree",
-            children=[
-                report_map_item("Branch report", smallrna_base / "report/index.html"),
-                report_map_item("Differential index", smallrna_base / "smallrna/differential/reports/index.html"),
-                report_map_item("Target/integration overview", smallrna_base / "smallrna/differential/reports/targets/index.html"),
-                report_map_item("smallRNA technical PDF", smallrna_base / "smallrna/differential/reports/technical_report.pdf"),
-            ],
-        ),
-        report_map_item(
-            "Matched evidence",
-            "#matched-evidence-report-tree",
-            children=[
-                report_map_item(
-                    "miRNA-mRNA integration",
-                    smallrna_base / "smallrna/differential/mirna_mrna_integration/mirna_mrna_manifest.tsv",
-                ),
-                report_map_item(
-                    "Inverse target feature sets",
-                    smallrna_base / "smallrna/differential/mirna_mrna_target_feature_sets/target_feature_set_manifest.tsv",
-                ),
-                report_map_item(
-                    "Isoform/DTU consensus",
-                    rnaseq_base / "differential/isoform_switch/report/isoform_interpretation_consensus.tsv",
-                ),
+                report_map_item("RNA-seq DE", "#layer-rnaseq-de"),
+                report_map_item("GO/Reactome", "#layer-enrichment"),
+                report_map_item("DTU/splicing", "#layer-dtu"),
+                report_map_item("Isoform switch", "#layer-isoform-switch"),
+                report_map_item("smallRNA DE", "#layer-smallrna-de"),
+                report_map_item("miRNA targets", "#layer-mirna-targets"),
+                report_map_item("Matched miRNA-mRNA", "#layer-matched-mirna-mrna"),
             ],
         ),
     ]
@@ -514,7 +895,20 @@ def render(args: argparse.Namespace) -> None:
     rnaseq_dtu_consensus = read_table(rnaseq_base / "differential/dtu/consensus/dtu_consensus_gene_summary.tsv")
     smallrna_summary = read_table(smallrna_base / "smallrna/differential/reports/summaries/summary_manifest.tsv")
     isoform_events = read_table(rnaseq_base / "differential/isoform_switch/report/switch_event_summary.tsv")
+    isoform_interpretation_summary = read_table(
+        rnaseq_base / "differential/isoform_switch/report/isoform_interpretation_consensus_summary.tsv"
+    )
+    smallrna_targets = read_table(smallrna_base / "smallrna/differential/target_enrichment/target_manifest.tsv")
+    smallrna_target_feature_sets = read_table(
+        smallrna_base / "smallrna/differential/target_feature_sets/target_feature_set_manifest.tsv"
+    )
+    mirna_feature_sets = read_table(
+        smallrna_base / "smallrna/differential/mirna_feature_sets/mirna_feature_set_manifest.tsv"
+    )
     mirna_integration = read_table(smallrna_base / "smallrna/differential/mirna_mrna_integration/mirna_mrna_manifest.tsv")
+    mirna_mrna_feature_sets = read_table(
+        smallrna_base / "smallrna/differential/mirna_mrna_target_feature_sets/target_feature_set_manifest.tsv"
+    )
     technical_pdf_link = (
         f'<a href="{html.escape(rel_href(Path(args.technical_pdf), base_dir))}">combined project technical PDF</a>'
         if args.technical_pdf
@@ -540,8 +934,17 @@ def render(args: argparse.Namespace) -> None:
     .metric {{ border: 1px solid #d0d7de; border-radius: 6px; padding: 0.75rem; }}
     .metric strong {{ display: block; color: #57606a; font-size: 0.85rem; }}
     .metric span {{ display: block; margin-top: 0.25rem; font-size: 1.25rem; font-weight: 700; }}
-    .grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1rem; }}
+    .grid, .evidence-grid, .layer-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1rem; }}
+    .evidence-grid {{ grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); }}
+    .evidence-card, .layer-panel {{ border: 1px solid #d0d7de; border-radius: 6px; padding: 0.85rem 1rem; background: #fff; }}
+    .evidence-card h3, .layer-panel h3 {{ margin-top: 0; }}
+    .mini-metrics {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 0.55rem; margin-top: 0.75rem; }}
+    .mini-metric {{ background: #f6f8fa; border: 1px solid #d8dee4; border-radius: 6px; padding: 0.45rem 0.55rem; }}
+    .mini-metric strong {{ display: block; color: #57606a; font-size: 0.78rem; }}
+    .mini-metric span {{ display: block; font-weight: 700; margin-top: 0.2rem; overflow-wrap: anywhere; }}
+    .card-links {{ margin-top: 0.75rem; display: flex; flex-wrap: wrap; gap: 0.55rem; }}
     section {{ border: 1px solid #d0d7de; border-radius: 6px; padding: 0 1rem 1rem; }}
+    section.layer-panel {{ padding: 0.85rem 1rem; }}
     .section-note {{ color: #57606a; }}
     table {{ border-collapse: collapse; width: 100%; font-size: 0.93rem; }}
     th, td {{ border: 1px solid #d0d7de; padding: 0.45rem; text-align: left; vertical-align: top; }}
@@ -553,8 +956,9 @@ def render(args: argparse.Namespace) -> None:
     .status.not_configured, .status.muted {{ color: #57606a; font-weight: 400; }}
     .status.blocked, .status.missing {{ color: #9a6700; }}
     .status.failed {{ color: #cf222e; }}
-    .contrast-matrix td {{ min-width: 140px; }}
+    .contrast-matrix td {{ min-width: 130px; }}
     .contrast-matrix td:first-child {{ min-width: 220px; }}
+    .contrast-matrix td:nth-child(5) {{ min-width: 190px; }}
     hr {{ border: 0; border-top: 1px solid #d0d7de; margin: 0.55rem 0; }}
     nav.breadcrumbs {{ color: #57606a; margin-bottom: 1rem; }}
     .controls {{ display: flex; flex-wrap: wrap; gap: 0.75rem; margin: 1rem 0; }}
@@ -582,95 +986,33 @@ def render(args: argparse.Namespace) -> None:
     {metric("integrated contrasts", sum(1 for row in mirna_integration if row.get("status") == "ok"))}
     {metric("assay-only contrasts", assay_only_contrast_count(rnaseq_summary, smallrna_summary))}
   </div>
-  <h2 id="review-order">Recommended Review Order</h2>
-  <ol class="review-order">
-    <li><strong>Run dashboard</strong>: confirm the intended branches, environment, execution report, QC overview, and report inventory.</li>
-    <li><strong>Project contrast matrix</strong>: review each biological contrast across gene, transcript, DTU, miRNA, enrichment, target, and integration layers.</li>
-    <li><strong>Evidence layer entry points</strong>: open the assay-specific branch or specialized overview only when a matrix cell needs deeper inspection.</li>
-    <li><strong>Sample/design and workflow status</strong>: verify the metadata, QC, and optional-layer availability that explain the matrix.</li>
-    <li><strong>Raw contrast summaries and TSV artifacts</strong>: use these for audit, export, and exact machine-readable values.</li>
-  </ol>
-  <h2 id="contrast-matrix">Project Contrast Matrix</h2>
+  <h2 id="project-evidence-map">Project Evidence Map</h2>
+  <p class="section-note">This map is the report tree for the project. It groups the run outputs by evidence layer, shows deterministic status/count summaries from source manifests, and links to the first table or page to open for each layer.</p>
+  {project_evidence_map(base_dir, rnaseq_base, smallrna_base, rnaseq_summary, rnaseq_enrichment, rnaseq_dtu, rnaseq_dtu_plots, isoform_events, isoform_interpretation_summary, smallrna_summary, smallrna_targets, smallrna_target_feature_sets, mirna_feature_sets, mirna_integration, mirna_mrna_feature_sets)}
+  <h2 id="contrast-matrix">Contrast Evidence Matrix</h2>
   <p class="section-note">This matrix puts gene, transcript, DTU/splicing, and miRNA contrasts on the same row when assays share the same project and contrast labels. The cross-assay state marks integrated contrasts, RNA-seq-only contrasts, smallRNA-only contrasts, and shared contrasts where integration is not present.</p>
   <div class="controls"><input id="contrastFilter" placeholder="Filter contrasts"></div>
   {contrast_matrix(base_dir, rnaseq_summary, smallrna_summary, rnaseq_enrichment, mirna_integration, rnaseq_dtu, rnaseq_dtu_plots)}
-  <h2 id="evidence-entry-points">Evidence Layer Entry Points</h2>
-  <p class="section-note">Use these links only after the contrast matrix has identified the layer worth inspecting. The project PDF is the email-friendly single-file export; HTML and TSV links remain the complete source of truth.</p>
-  <div class="grid">
-    {section("RNA-seq", "Gene, transcript, quantification, differential expression, enrichment, and isoform-switch outputs.", [
-        link(rnaseq_base / "report/index.html", "RNA-seq branch report", base_dir),
-        link(rnaseq_base / "differential/reports/index.html", "RNA-seq differential report", base_dir),
-        link(rnaseq_base / "differential/reports/enrichment/index.html", "GO/Reactome enrichment overview", base_dir),
-        link(rnaseq_base / "differential/reports/technical_report.pdf", "RNA-seq technical PDF", base_dir),
-        link(rnaseq_base / "differential/isoform_switch/report/index.html", "isoform-switch overview", base_dir),
-        table_link(rnaseq_base / "differential/isoform_switch/report/isoform_interpretation_consensus.tsv", "isoform interpretation consensus", base_dir),
-        table_link(rnaseq_base / "differential/dtu/dtu_method_manifest.tsv", "DTU method manifest", base_dir),
-        table_link(rnaseq_base / "differential/dtu/consensus/dtu_consensus_gene_summary.tsv", "DTU consensus gene summary", base_dir),
-        table_link(rnaseq_base / "differential/dtu/consensus/dtu_consensus_method_detail.tsv", "DTU consensus method detail", base_dir),
-        table_link(rnaseq_base / "differential/dtu/plots/dtu_plot_manifest.tsv", "DTU plot manifest", base_dir),
-        table_link(rnaseq_base / "differential/reports/enrichment/enrichment_manifest.tsv", "RNA-seq ORA/GSEA manifest", base_dir),
-        table_link(rnaseq_base / "alignment/strandedness/strandedness_report.tsv", "strandedness report", base_dir),
-    ])}
-    {section("smallRNA", "miRNA preprocessing, length QC, miRNA quantification, miRNA differential expression, target enrichment, and reports.", [
-        link(smallrna_base / "report/index.html", "smallRNA branch report", base_dir),
-        link(smallrna_base / "smallrna/differential/reports/index.html", "smallRNA differential report", base_dir),
-        link(smallrna_base / "smallrna/differential/reports/targets/index.html", "target and integration overview", base_dir),
-        link(smallrna_base / "smallrna/differential/reports/technical_report.pdf", "smallRNA technical PDF", base_dir),
-        table_link(smallrna_base / "smallrna/differential/mirna_deseq2/deseq2_manifest.tsv", "miRNA DESeq2 manifest", base_dir),
-        table_link(smallrna_base / "smallrna/differential/target_enrichment/target_manifest.tsv", "miRNA target enrichment", base_dir),
-        table_link(smallrna_base / "smallrna/differential/mirna_feature_sets/mirna_feature_set_manifest.tsv", "miRNA feature sets", base_dir),
-    ])}
-    {section("Matched miRNA-mRNA", "Integration layers that require both RNA-seq and smallRNA branches from the same project.", [
-        link(smallrna_base / "smallrna/differential/reports/targets/index.html", "target and integration overview", base_dir),
-        table_link(smallrna_base / "smallrna/differential/mirna_mrna_integration/mirna_mrna_manifest.tsv", "miRNA-mRNA integration manifest", base_dir),
-        table_link(smallrna_base / "smallrna/differential/mirna_mrna_target_feature_sets/target_feature_set_manifest.tsv", "inverse target feature sets", base_dir),
-        table_link(rnaseq_base / "differential/reports/summaries/summary_manifest.tsv", "RNA-seq summary manifest", base_dir),
-        table_link(smallrna_base / "smallrna/differential/reports/summaries/summary_manifest.tsv", "smallRNA summary manifest", base_dir),
-    ])}
+  <h2 id="evidence-layers">Evidence Layers</h2>
+  <p class="section-note">These panels define what each layer contains and where the source manifests live. They are deterministic report navigation, not automated biological interpretation.</p>
+  <div class="layer-grid">
+    {evidence_layer_sections(base_dir, rnaseq_base, smallrna_base)}
   </div>
-  <h2 id="sample-design">Sample And Design Summary</h2>
-  <p class="section-note">This table gives the basic assay-level sample/design shape used by the project reports. It does not judge the biological design; it shows which metadata columns and sample tables are available for review.</p>
+  <h2 id="qc-and-design">QC And Design</h2>
+  <p class="section-note">These tables show the sample/design shape and report availability that explain the evidence layers above.</p>
+  <h3 id="sample-design">Sample And Design Summary</h3>
   {assay_sample_summary(base_dir, rnaseq_base, smallrna_base)}
-  <h2 id="workflow-status">Workflow Status Matrix</h2>
-  <p class="section-note">This matrix separates expected branch artifacts from optional layers. Missing required branch pages need attention; optional layers can be not present when they were not configured.</p>
+  <h3 id="workflow-status">Workflow Status Matrix</h3>
   {workflow_status_matrix(base_dir, rnaseq_base, smallrna_base)}
-  <h2 id="raw-contrast-summary">Raw Contrast Summary</h2>
+  <h2 id="raw-artifacts">Raw Artifacts</h2>
+  <p class="section-note">Raw artifacts are grouped last so the main report remains readable while all source files stay reachable.</p>
+  <div class="layer-grid">
+    {raw_artifact_sections(base_dir, rnaseq_base, smallrna_base, args.technical_pdf)}
+  </div>
+  <h3 id="raw-contrast-summary">Raw Contrast Summary</h3>
   <p class="section-note">This lower table preserves the assay-specific summary rows used to build the matrix above.</p>
   {summary_table(base_dir, rnaseq_base, smallrna_base)}
-  <h2 id="unified-report-tree">Unified Report Tree</h2>
-  <p class="section-note">This tree is the body-level counterpart of the sticky report map. It makes the assay branches and matched-evidence layers explicit inside the integrated project report, so the project page remains a single review surface rather than only a launch page.</p>
-  <div class="grid report-tree-grid">
-    {section("RNA-seq", "Gene, transcript, enrichment, DTU/splicing, isoform-switch, strandedness, and RNA-seq PDF layers for this project.", [
-        link(rnaseq_base / "report/index.html", "branch report", base_dir),
-        link(rnaseq_base / "differential/reports/index.html", "differential report index", base_dir),
-        link(rnaseq_base / "differential/reports/enrichment/index.html", "GO/Reactome enrichment overview", base_dir),
-        link(rnaseq_base / "differential/isoform_switch/report/index.html", "isoform-switch overview", base_dir),
-        table_link(rnaseq_base / "differential/isoform_switch/report/isoform_interpretation_consensus.tsv", "isoform-switch / DTU interpretation consensus", base_dir),
-        table_link(rnaseq_base / "differential/dtu/dtu_method_manifest.tsv", "DTU/splicing method manifest", base_dir),
-        table_link(rnaseq_base / "differential/dtu/consensus/dtu_consensus_gene_summary.tsv", "DTU consensus gene summary", base_dir),
-        table_link(rnaseq_base / "alignment/strandedness/strandedness_report.tsv", "strandedness diagnostics", base_dir),
-        link(rnaseq_base / "differential/reports/technical_report.pdf", "RNA-seq technical PDF", base_dir),
-    ], "rnaseq-report-tree")}
-    {section("smallRNA", "miRNA differential expression, target enrichment, target feature sets, length/read-fate QC, and smallRNA PDF layers for this project.", [
-        link(smallrna_base / "report/index.html", "branch report", base_dir),
-        link(smallrna_base / "smallrna/differential/reports/index.html", "differential report index", base_dir),
-        link(smallrna_base / "smallrna/differential/reports/targets/index.html", "target and integration overview", base_dir),
-        table_link(smallrna_base / "smallrna/differential/mirna_deseq2/deseq2_manifest.tsv", "miRNA DESeq2 manifest", base_dir),
-        table_link(smallrna_base / "smallrna/differential/target_enrichment/target_manifest.tsv", "target enrichment manifest", base_dir),
-        table_link(smallrna_base / "smallrna/differential/target_feature_sets/target_feature_set_manifest.tsv", "target feature-set manifest", base_dir),
-        table_link(smallrna_base / "smallrna/differential/mirna_feature_sets/mirna_feature_set_manifest.tsv", "miRNA feature-set manifest", base_dir),
-        link(smallrna_base / "smallrna/differential/reports/technical_report.pdf", "smallRNA technical PDF", base_dir),
-    ], "smallrna-report-tree")}
-    {section("Matched evidence", "Cross-assay interpretation layers that require both RNA-seq and smallRNA evidence from the same biological project and contrast labels.", [
-        link(smallrna_base / "smallrna/differential/reports/targets/index.html", "target and integration overview", base_dir),
-        table_link(smallrna_base / "smallrna/differential/mirna_mrna_integration/mirna_mrna_manifest.tsv", "miRNA-mRNA integration manifest", base_dir),
-        table_link(smallrna_base / "smallrna/differential/mirna_mrna_target_feature_sets/target_feature_set_manifest.tsv", "inverse target feature-set manifest", base_dir),
-        table_link(rnaseq_base / "differential/isoform_switch/report/isoform_dtu_evidence.tsv", "isoform-switch / DTU evidence table", base_dir),
-        table_link(rnaseq_base / "differential/isoform_switch/report/isoform_interpretation_consensus.tsv", "isoform-switch / DTU interpretation consensus", base_dir),
-        table_link(rnaseq_base / "differential/dtu/consensus/dtu_consensus_method_detail.tsv", "DTU consensus method detail", base_dir),
-    ], "matched-evidence-report-tree")}
-  </div>
-  <h2>Status Glossary</h2>
+  <h2 id="status-glossary">Status Glossary</h2>
   <p class="note"><strong>ok</strong> means the artifact exists or the source manifest says the layer completed. <strong>not present</strong> means an optional layer was not configured or did not apply. <strong>missing</strong> means an expected linked artifact is absent. Biological interpretation still requires reviewing the linked source tables and plots.</p>
   <script>
     const contrastInput = document.getElementById('contrastFilter');

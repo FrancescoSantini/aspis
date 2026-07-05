@@ -258,24 +258,28 @@ Completed hardening slice:
   overview that groups raw FastQC/MultiQC, post-trim QC, RNA-seq alignment QC,
   RNA-seq sample/biotype/warning inputs, and smallRNA length/read-fate outputs
   while leaving the source files in their normal branch directories.
-- Integrated project reports now include a sample/design summary for RNA-seq
-  and smallRNA, a workflow status matrix by assay and analysis layer, contrast
-  filtering, and a status glossary. The contrast matrix remains the main
-  biological navigation layer for matched gene, transcript, miRNA,
-  GO/Reactome, target, and miRNA-mRNA integration outputs.
-- Integrated project reports now enforce the canonical review order directly
-  on the page: run dashboard, project contrast matrix, evidence-layer entry
-  points, sample/design and workflow status, then raw contrast summaries and
-  TSV artifacts.
+- Integrated project reports now start with a deterministic `Project Evidence
+  Map`. It groups outputs by evidence layer, exposes status/count cards for
+  RNA-seq DE, GO/Reactome, DTU/splicing, isoform-switch support, smallRNA DE,
+  miRNA targets, and matched miRNA-mRNA evidence, and keeps source manifests one
+  click away without adding automated biological interpretation.
+- Integrated project reports now include a contrast evidence matrix,
+  sample/design summary, workflow status matrix by assay and analysis layer,
+  contrast filtering, raw artifact groupings, and a status glossary. The matrix
+  remains the main per-contrast navigation layer for matched gene, transcript,
+  miRNA, GO/Reactome, target, DTU/splicing, and miRNA-mRNA integration outputs.
+- Integrated project reports now enforce the canonical page order directly:
+  project evidence map, contrast evidence matrix, evidence-layer details,
+  QC/design, raw artifacts, then status glossary.
 - Main navigational HTML pages now expose a sticky side `Report Map` so users
   can see the run, project, assay, evidence-layer, PDF, and raw-artifact tree
   while scrolling wide report tables. The map is applied to the run dashboard,
   integrated project report, RNA-seq differential index, RNA-seq GO/Reactome
   overview, smallRNA differential index, smallRNA target/integration overview,
   and isoform-switch overview.
-- The integrated project report also includes an in-page `Unified Report Tree`
-  after the raw contrast summary, with anchored RNA-seq, smallRNA, and matched
-  evidence sections so the sticky map headings resolve to visible body content.
+- The former duplicate `Unified Report Tree` was replaced by the evidence map
+  and evidence-layer detail panels, so the sticky map and the body use the same
+  structure instead of presenting two competing navigation models.
 - Each integrated project report now emits a combined project-level technical
   PDF beside the HTML page. This PDF is the email-friendly single-file export
   for the project and includes RNA-seq, smallRNA, enrichment, target,
