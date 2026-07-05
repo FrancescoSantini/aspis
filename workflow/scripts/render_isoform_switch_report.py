@@ -3178,6 +3178,7 @@ def render_project_html(
         class_counts = Counter(row.get("switch_biotype_class", "unknown") or "unknown" for row in event_rows)
         status_counts = Counter(row.get("status", "unknown") or "unknown" for row in manifest_rows)
         annotation_status_counts = Counter(row.get("status", "unknown") or "unknown" for row in annotation_qa_rows)
+        annotation_attention_count = annotation_status_counts.get("blocked", 0) + annotation_status_counts.get("failed", 0)
         source_links = table_source_links()
         metric_html = "".join(
             [
@@ -3188,13 +3189,9 @@ def render_project_html(
                 metric_card("contrasts ok", status_counts.get("ok", 0)),
                 metric_card("contrasts blocked/failed", status_counts.get("blocked", 0) + status_counts.get("failed", 0)),
                 metric_card("annotation sources ok", annotation_status_counts.get("ok", 0)),
-                metric_card(
-                    "annotation sources pending",
-                    annotation_status_counts.get("not_configured", 0)
-                    + annotation_status_counts.get("ok_no_matches", 0)
-                    + annotation_status_counts.get("blocked", 0)
-                    + annotation_status_counts.get("failed", 0),
-                ),
+                metric_card("annotation not configured", annotation_status_counts.get("not_configured", 0)),
+                metric_card("annotation no matches", annotation_status_counts.get("ok_no_matches", 0)),
+                metric_card("annotation blocked/failed", annotation_attention_count),
             ]
         )
         source_block = f'<p class="asset-links">{source_links}</p>' if source_links else ""
@@ -3355,8 +3352,9 @@ def render_project_html(
   <style>
     body {{ font-family: system-ui, -apple-system, Segoe UI, sans-serif; margin: 24px; max-width: 1440px; }}
     table {{ border-collapse: collapse; width: 100%; }}
-    th, td {{ border: 1px solid #d0d7de; padding: 6px 8px; text-align: left; vertical-align: top; }}
+    th, td {{ border: 1px solid #d0d7de; padding: 6px 8px; text-align: left; vertical-align: top; overflow-wrap: anywhere; }}
     th {{ background: #f6f8fa; }}
+    code {{ white-space: normal; }}
     a {{ color: #0969da; text-decoration: none; }}
     a:hover {{ text-decoration: underline; }}
     .note {{ background: #f6f8fa; border-left: 4px solid #57606a; margin: 12px 0 18px; padding: 10px 12px; }}
@@ -3369,9 +3367,12 @@ def render_project_html(
     .event-card h3 {{ margin: 0 0 0.35rem; font-size: 1rem; }}
     .event-card p {{ margin: 0.25rem 0; }}
     .asset-links {{ color: #57606a; font-size: 0.92rem; }}
+    .asset-links a {{ display: inline-block; margin-right: 0.75rem; }}
     .muted {{ color: #57606a; }}
     .status {{ font-weight: 700; }}
     .status.ok {{ color: #1a7f37; }}
+    .status.not_configured {{ color: #57606a; }}
+    .status.ok_no_matches {{ color: #57606a; }}
     .status.blocked {{ color: #9a6700; }}
     .status.failed {{ color: #cf222e; }}
     table {{ display: block; overflow-x: auto; }}

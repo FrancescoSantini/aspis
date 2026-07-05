@@ -446,6 +446,11 @@ def main() -> int:
         assert (outdir / "external_tool_manifest.tsv").exists()
         assert (outdir / "functional_annotation_qa.tsv").exists()
         assert (outdir / "index.html").exists()
+        index_html = (outdir / "index.html").read_text(encoding="utf-8")
+        assert "annotation sources pending" not in index_html
+        assert "annotation not configured" in index_html
+        assert "annotation no matches" in index_html
+        assert "annotation blocked/failed" in index_html
         assert (outdir / "report.done").exists()
     print("isoform_switch_report\tok\tcandidate, sequence, annotation, SVG, and HTML outputs present")
     return 0

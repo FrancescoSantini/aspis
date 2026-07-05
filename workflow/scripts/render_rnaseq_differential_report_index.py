@@ -542,7 +542,7 @@ def resource_links_and_status(
     if not provided:
         return "not_requested", "", not_requested_detail
     existing = [(label, path) for label, path in provided if Path(path).exists()]
-    links = link_list(provided, output)
+    links = compact_link_list(provided, output)
     if len(existing) == len(provided):
         return "ok", links, f"{len(existing)}/{len(provided)} expected files present"
     return "missing", links, f"{missing_detail}; {len(existing)}/{len(provided)} expected files present"
@@ -1059,7 +1059,7 @@ def render_html(
     .counts {{ color: #57606a; margin-bottom: 20px; }}
     section {{ margin: 24px 0; }}
     table {{ border-collapse: collapse; width: 100%; }}
-    th, td {{ border: 1px solid #d0d7de; padding: 7px 9px; text-align: left; vertical-align: top; }}
+    th, td {{ border: 1px solid #d0d7de; padding: 7px 9px; text-align: left; vertical-align: top; overflow-wrap: anywhere; }}
     th {{ background: #f6f8fa; position: sticky; top: 0; }}
     code {{ font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }}
     a {{ color: #0969da; text-decoration: none; }}
@@ -1074,7 +1074,7 @@ def render_html(
     .dtu-method-table th:nth-child(6), .dtu-method-table td:nth-child(6),
     .dtu-method-table th:nth-child(7), .dtu-method-table td:nth-child(7) {{ width: 86px; }}
     .dtu-method-table th:nth-child(8), .dtu-method-table td:nth-child(8) {{ width: 330px; }}
-    .dtu-method-table code {{ white-space: nowrap; }}
+    .dtu-method-table code {{ white-space: normal; }}
     .link-grid {{ display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: flex-start; }}
     .link-grid a {{ display: inline-block; white-space: nowrap; }}
     .method-reason {{ min-width: 260px; overflow-wrap: anywhere; }}
@@ -1085,7 +1085,11 @@ def render_html(
     .status.failed {{ color: #cf222e; }}
     .status.not_configured {{ color: #57606a; }}
     .status.unknown {{ color: #57606a; }}
-    .resource-status td:nth-child(3) {{ min-width: 220px; }}
+    .resource-status {{ min-width: 1020px; table-layout: fixed; }}
+    .resource-status th:nth-child(1), .resource-status td:nth-child(1) {{ width: 220px; }}
+    .resource-status th:nth-child(2), .resource-status td:nth-child(2) {{ width: 120px; }}
+    .resource-status th:nth-child(3), .resource-status td:nth-child(3) {{ width: 420px; }}
+    .resource-status th:nth-child(4), .resource-status td:nth-child(4) {{ width: 260px; }}
     nav.breadcrumbs {{ color: #57606a; margin-bottom: 1rem; }}
   </style>
 </head>

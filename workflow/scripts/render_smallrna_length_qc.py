@@ -18,7 +18,10 @@ LENGTH_COLUMNS = ["stage", "library_id", "length", "reads", "fraction"]
 STAGE_COLUMNS = [
     "stage",
     "library_id",
+    "reads_inspected",
     "total_reads",
+    "limit_reached",
+    "max_reads",
     "modal_length",
     "mean_length",
     "min_length",
@@ -122,7 +125,7 @@ def length_rows(all_counts: dict[str, dict[str, Counter[int]]]) -> list[dict[str
     return rows
 
 
-def stage_summary_rows(all_counts: dict[str, dict[str, Counter[int]]]) -> list[dict[str, str]]:
+def stage_summary_rows(all_counts: dict[str, dict[str, Counter[int]]], max_reads: int) -> list[dict[str, str]]:
     rows = []
     for stage, by_library in all_counts.items():
         for library_id, counts in by_library.items():
@@ -138,7 +141,10 @@ def stage_summary_rows(all_counts: dict[str, dict[str, Counter[int]]]) -> list[d
                 {
                     "stage": stage,
                     "library_id": library_id,
+                    "reads_inspected": str(total),
                     "total_reads": str(total),
+                    "limit_reached": str(total >= max_reads).lower(),
+                    "max_reads": str(max_reads),
                     "modal_length": str(modal_length),
                     "mean_length": f"{float(mean_length):.6g}",
                     "min_length": str(min_length),
@@ -318,7 +324,7 @@ def main() -> int:
         all_counts[stage] = stage_counts(stage, rows, column, args.max_reads)
 
     length = length_rows(all_counts)
-    stage_summary = stage_summary_rows(all_counts)
+    stage_summary = stage_summary_rows(all_counts, args.max_reads)
     arm = arm_summary_rows(Path(args.mirna_counts))
     isomir_lengths = isomir_length_rows(all_counts)
     write_table(Path(args.length_distribution), LENGTH_COLUMNS, length)

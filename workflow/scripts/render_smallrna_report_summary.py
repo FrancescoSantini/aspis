@@ -324,10 +324,17 @@ def html_link(path_text: str, label: str, base_dir: Path) -> str:
     return f'<a href="{escaped}">{html.escape(label)}</a>'
 
 
+HEADER_LABELS = {
+    "reads_inspected": "reads inspected",
+    "limit_reached": "inspection limit reached",
+    "max_reads": "inspection limit",
+}
+
+
 def html_table(rows: list[dict[str, str]], columns: list[str]) -> str:
     if not rows:
         return "<p>No rows.</p>"
-    header = "".join(f"<th>{html.escape(column)}</th>" for column in columns)
+    header = "".join(f"<th>{html.escape(HEADER_LABELS.get(column, column))}</th>" for column in columns)
     body = []
     for row in rows:
         cells = "".join(f"<td>{html.escape(row.get(column, ''))}</td>" for column in columns)
@@ -693,9 +700,25 @@ def render_html(
     ]
     length_stage_columns = [
         column
-        for column in ["stage", "library_id", "total_reads", "modal_length", "mean_length", "min_length", "max_length"]
+        for column in [
+            "stage",
+            "library_id",
+            "reads_inspected",
+            "limit_reached",
+            "max_reads",
+            "modal_length",
+            "mean_length",
+            "min_length",
+            "max_length",
+        ]
         if length_stage_summary and column in length_stage_summary[0]
     ]
+    if not length_stage_columns:
+        length_stage_columns = [
+            column
+            for column in ["stage", "library_id", "total_reads", "modal_length", "mean_length", "min_length", "max_length"]
+            if length_stage_summary and column in length_stage_summary[0]
+        ]
     arm_columns = [
         column for column in ["arm", "detected_mirnas", "total_count", "fraction"] if arm_summary and column in arm_summary[0]
     ]

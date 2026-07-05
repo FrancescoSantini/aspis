@@ -124,7 +124,14 @@ def exercise_smallrna_length_qc() -> dict[str, Path]:
             "100",
         ]
     )
-    stages = {row["stage"] for row in read_tsv(outputs["stage_summary"], {"stage", "modal_length"})}
+    stage_rows = read_tsv(
+        outputs["stage_summary"],
+        {"stage", "modal_length", "reads_inspected", "limit_reached", "max_reads", "total_reads"},
+    )
+    stages = {row["stage"] for row in stage_rows}
+    raw_stage = next(row for row in stage_rows if row["stage"] == "raw")
+    if raw_stage["reads_inspected"] != raw_stage["total_reads"] or raw_stage["max_reads"] != "100":
+        raise ValueError(f"smallRNA length summary did not expose capped inspection fields: {raw_stage}")
     arms = {row["arm"] for row in read_tsv(outputs["arm_summary"], {"arm", "fraction"})}
     if not {"raw", "trimmed", "depleted", "mirbase_unmapped"} <= stages:
         raise ValueError(f"length QC did not cover all stages: {stages}")

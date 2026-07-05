@@ -797,23 +797,43 @@ Acceptance criteria:
   captions.
 - Source plots remain available for detailed inspection.
 
-## P1 - Summary Table Hygiene
+## Validated - Summary Table Hygiene
 
 Reason for priority: current summaries are useful but sometimes feel chaotic
 because machine manifests and human interpretation are mixed.
 
-Remaining code tasks:
+Status: closed for the current cycle. The high-traffic human reports now keep
+compact, readable overview tables while preserving wide TSV manifests for
+automation and provenance.
 
-- Split compact human summaries from wide machine manifests.
-- Rename capped inspection counts such as smallRNA length `total_reads` to
-  `reads_inspected`, or add `limit_reached` and `max_records` columns.
-- Display `RNA-seq` and `small RNA-seq` in human reports while keeping internal
-  assay codes as `rnaseq` and `smallrna`.
-- Add short interpretation notes to old-vs-ASPIS comparison reports.
-- Standardize `dose` and `dose_unit` handling without assuming micromolar
-  units.
-- Add stable summary-level inventories so users know which tables are primary,
-  secondary, or provenance-only.
+Implemented:
+
+- Isoform-switch annotation QA metrics now distinguish configured, not
+  configured, no-match, and blocked/failed states instead of collapsing optional
+  not-configured resources into a misleading pending count.
+- Isoform-switch summary tables wrap long contrast, source, and reason fields
+  without hiding the full identifiers used in machine TSVs.
+- RNA-seq differential project-resource rows use compact wrapped link groups,
+  so isoform-switch, DTU, annotation QA, and diagnostics resources remain
+  readable when many companion files are present.
+- DTU/splicing method summary rows retain full machine paths and method reasons
+  in TSVs, while the HTML table wraps long contrast identifiers and keeps link
+  groups scannable.
+- smallRNA length QC stage summaries now expose `reads_inspected`,
+  `limit_reached`, and `max_reads` alongside the backwards-compatible
+  `total_reads` alias, making capped read-inspection summaries explicit.
+- Human reports already use user-facing labels such as `RNA-seq` and
+  `small RNA-seq` where assay names are presented; internal TSV codes remain
+  stable as `rnaseq` and `smallrna`.
+- Run-level report inventory and validation tables provide stable primary,
+  summary, manifest, and provenance file categories for dashboard navigation.
+
+Deferred outside this section:
+
+- `dose`/`dose_unit` semantic normalization is a sample-metadata model task, not
+  a summary-table rendering blocker.
+- Old-vs-ASPIS comparison notes are no longer a P1 table-hygiene blocker after
+  the legacy code path was quarantined from the active workflow.
 
 Acceptance criteria:
 

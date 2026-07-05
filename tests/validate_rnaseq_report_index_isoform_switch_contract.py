@@ -213,7 +213,8 @@ def main() -> int:
             return completed.returncode
         index_html = (tmp / "index.html").read_text(encoding="utf-8")
         asset_text = (tmp / "asset_manifest.tsv").read_text(encoding="utf-8")
-        assert "isoform switch report" in index_html
+        assert "isoform switch overview" in index_html
+        assert 'class="link-grid"' in index_html
         assert "switch_candidates.tsv" in index_html
         assert "ncrna_switch_interpretation.tsv" in index_html
         assert "switch_plots.pdf" in index_html
