@@ -88,9 +88,14 @@ def main() -> int:
         result_table = tmp / "tables" / "results.tsv"
         filtered_table = tmp / "tables" / "filtered.tsv"
         dtu_table = tmp / "tables" / "dtu_consensus.tsv"
+        plot_svg = tmp / "plots" / "plot.svg"
+        event_html = tmp / "plots" / "event.html"
         write_tsv(result_table, [{"feature_id": "geneA", "log2FoldChange": "1.2", "padj": "0.01"}])
         write_tsv(filtered_table, [{"feature_id": "geneA", "log2FoldChange": "1.2", "padj": "0.01"}])
         write_tsv(dtu_table, [{"gene_id": "geneA", "method": "DRIMSeq", "padj": "0.01"}])
+        plot_svg.parent.mkdir(parents=True, exist_ok=True)
+        plot_svg.write_text("<svg></svg>", encoding="utf-8")
+        event_html.write_text("<html><body>event</body></html>", encoding="utf-8")
         summary_html = tmp / "tables" / "summary.html"
         summary_html.write_text("<html><body>summary</body></html>", encoding="utf-8")
 
@@ -148,6 +153,63 @@ def main() -> int:
             ],
         )
         write_tsv(
+            rnaseq / "differential" / "reports" / "enrichment" / "enrichment_manifest.tsv",
+            [
+                {
+                    "project": project,
+                    "level": "gene",
+                    "contrast_id": "treated_vs_control",
+                    "status": "ok",
+                    "reason": "",
+                    "feature_set_plot": plot_svg.as_posix(),
+                    "ranked_feature_set_plot": plot_svg.as_posix(),
+                    "feature_set_results": result_table.as_posix(),
+                    "ranked_feature_set_results": result_table.as_posix(),
+                    "n_feature_set_terms": "2",
+                    "n_ranked_feature_set_terms": "3",
+                }
+            ],
+        )
+        write_tsv(
+            rnaseq / "differential" / "dtu" / "plots" / "dtu_plot_manifest.tsv",
+            [
+                {
+                    "project": project,
+                    "method": "DRIMSeq",
+                    "contrast_id": "treated_vs_control",
+                    "status": "ok",
+                    "reason": "",
+                    "source_results": result_table.as_posix(),
+                    "transcript_results": result_table.as_posix(),
+                    "overview_plot": plot_svg.as_posix(),
+                    "usage_plot": plot_svg.as_posix(),
+                    "feature_plot": plot_svg.as_posix(),
+                    "n_standardized": "12",
+                    "n_significant": "2",
+                    "top_gene": "geneA",
+                    "top_padj": "0.01",
+                }
+            ],
+        )
+        write_tsv(
+            rnaseq / "differential" / "isoform_switch" / "report" / "switch_event_summary.tsv",
+            [
+                {
+                    "event_id": "eventA",
+                    "contrast_id": "treated_vs_control",
+                    "gene_id": "geneA",
+                    "switch_interpretation_label": "coding_switch",
+                    "switch_rank": "1",
+                    "switch_in_isoform": "tx1",
+                    "switch_out_isoform": "tx2",
+                    "plot_svg": plot_svg.as_posix(),
+                    "event_html": event_html.as_posix(),
+                    "event_nt_fasta": result_table.as_posix(),
+                    "event_aa_fasta": filtered_table.as_posix(),
+                }
+            ],
+        )
+        write_tsv(
             smallrna / "differential" / "reports" / "asset_manifest.tsv",
             [
                 {
@@ -192,6 +254,7 @@ def main() -> int:
         html = html_report.read_text(encoding="utf-8")
         headings = [
             "Project Evidence Map",
+            "Plot Atlas",
             "Contrast Evidence Matrix",
             "Evidence Layers",
             "QC And Design",
@@ -204,6 +267,9 @@ def main() -> int:
         assert 'aria-label="Report map"' in html
         assert "Report Map" in html
         assert 'href="#project-evidence-map"' in html
+        assert 'href="#plot-atlas"' in html
+        assert 'href="#plot-atlas-dtu"' in html
+        assert 'href="#plot-atlas-isoform-switch"' in html
         assert 'href="#contrast-matrix"' in html
         assert 'href="#evidence-layers"' in html
         assert 'href="#layer-rnaseq-de"' in html
@@ -216,6 +282,11 @@ def main() -> int:
         assert 'id="layer-rnaseq-de"' in html
         assert 'id="layer-dtu"' in html
         assert 'id="layer-matched-mirna-mrna"' in html
+        assert "DTU method plot atlas" in html
+        assert "Isoform-switch event plots" in html
+        assert "overview plot" in html
+        assert "ranked candidate plot" in html
+        assert "switch plot" in html
         assert "deterministic report navigation" in html
         assert "optional miRNA identifier feature-set manifest" in html
         assert "Recommended Review Order" not in html

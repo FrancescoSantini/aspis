@@ -263,6 +263,11 @@ Completed hardening slice:
   RNA-seq DE, GO/Reactome, DTU/splicing, isoform-switch support, smallRNA DE,
   miRNA targets, and matched miRNA-mRNA evidence, and keeps source manifests one
   click away without adding automated biological interpretation.
+- Integrated project reports now include a first-class `Plot Atlas` immediately
+  after the evidence map. It restores direct graph navigation for RNA-seq
+  summary pages, GO/Reactome plots, DTU/splicing method plots, isoform-switch
+  event plots, and smallRNA/target/integration plots without requiring users to
+  open manifest TSVs to find method graphs.
 - Integrated project reports now include a contrast evidence matrix,
   sample/design summary, workflow status matrix by assay and analysis layer,
   contrast filtering, raw artifact groupings, and a status glossary. The matrix
