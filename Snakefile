@@ -2343,7 +2343,7 @@ def workflow_targets(wildcards):
     return targets
 
 
-localrules: all, check_environment, check_execution_config, assay_branch_ready, build_branch_design, build_branch_provenance_bundle, run_gene_deseq2, run_transcript_deseq2, run_isoform_switch, run_mirna_deseq2, render_rnaseq_differential_plots, render_rnaseq_differential_enrichment, render_rnaseq_differential_summaries, render_run_dashboard, render_branch_report_index, render_project_report_index, prune_rnaseq_dtu_intermediates
+localrules: all, check_environment, check_execution_config, assay_branch_ready, build_branch_design, build_branch_provenance_bundle, run_gene_deseq2, run_transcript_deseq2, run_isoform_switch, run_mirna_deseq2, render_rnaseq_differential_plots, render_rnaseq_differential_enrichment, render_rnaseq_differential_summaries, render_run_dashboard, render_branch_report_index, prune_rnaseq_dtu_intermediates
 
 
 rule all:
@@ -2405,6 +2405,10 @@ rule render_project_report_index:
         rnaseq_asset_manifest=lambda wildcards: f"{BRANCH_DIR}/rnaseq/{wildcards.project}/differential/reports/asset_manifest.tsv",
         smallrna_summary_manifest=lambda wildcards: f"{BRANCH_DIR}/smallrna/{wildcards.project}/smallrna/differential/reports/summaries/summary_manifest.tsv",
         smallrna_asset_manifest=lambda wildcards: f"{BRANCH_DIR}/smallrna/{wildcards.project}/smallrna/differential/reports/asset_manifest.tsv"
+    resources:
+        runtime=180,
+        mem_mb=32000,
+        disk_mb=100000
     log:
         "logs/projects/{project}.report_index.log"
     shell:

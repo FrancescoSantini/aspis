@@ -248,6 +248,10 @@ def read_tsv(path: Path) -> list[dict[str, str]]:
         return [{key: (value or "").strip() for key, value in row.items()} for row in reader]
 
 
+def log_step(message: str) -> None:
+    print(f"[technical-pdf] {message}", flush=True)
+
+
 def path_if_exists(path_text: str) -> Path | None:
     if not path_text:
         return None
@@ -1159,6 +1163,7 @@ def render_report(args: argparse.Namespace) -> int:
 
 
 def render_project_report(args: argparse.Namespace) -> int:
+    log_step(f"loading project manifests for {args.project or 'ASPIS'}")
     rnaseq_rows = read_tsv(Path(args.rnaseq_summary_manifest)) if args.rnaseq_summary_manifest else []
     smallrna_rows = read_tsv(Path(args.smallrna_summary_manifest)) if args.smallrna_summary_manifest else []
     rows = rnaseq_rows + smallrna_rows
@@ -1166,6 +1171,10 @@ def render_project_report(args: argparse.Namespace) -> int:
     rnaseq_assets = read_tsv(Path(args.rnaseq_asset_manifest)) if args.rnaseq_asset_manifest else []
     smallrna_assets = read_tsv(Path(args.smallrna_asset_manifest)) if args.smallrna_asset_manifest else []
     assets = rnaseq_assets + smallrna_assets
+    log_step(
+        f"loaded {len(rnaseq_rows)} RNA-seq row(s), {len(smallrna_rows)} smallRNA row(s), "
+        f"{len(assets)} asset row(s)"
+    )
     styles = stylesheet()
     project = args.project or ", ".join(sorted({row.get("project", "") for row in rows if row.get("project", "")})) or "ASPIS"
     status_counts = Counter(row.get("status", "unknown") or "unknown" for row in rows)
@@ -1238,6 +1247,7 @@ def render_project_report(args: argparse.Namespace) -> int:
     story.append(contrast_overview_table(rnaseq_rows, smallrna_rows, styles))
 
     if rnaseq_rows:
+        log_step("building RNA-seq contrast PDF sections")
         section_page(
             story,
             "RNA-seq Contrast Sections",
@@ -1248,6 +1258,7 @@ def render_project_report(args: argparse.Namespace) -> int:
             render_contrast(story, row, "rnaseq", styles, args.top_table_rows, vector_pdf_placements)
 
     if smallrna_rows:
+        log_step("building smallRNA contrast PDF sections")
         section_page(
             story,
             "smallRNA Contrast Sections",
@@ -1258,12 +1269,14 @@ def render_project_report(args: argparse.Namespace) -> int:
             render_contrast(story, row, "smallrna", styles, args.top_table_rows, vector_pdf_placements)
 
     if assets:
+        log_step("building selected asset PDF sections")
         draw_selected_asset_plots(story, assets, styles, vector_pdf_placements, args.max_asset_rows)
         draw_selected_asset_tables(story, assets, styles, args.top_table_rows, args.max_asset_rows)
         draw_asset_inventory(story, assets, styles, args.max_asset_rows)
 
     output = Path(args.output)
     output.parent.mkdir(parents=True, exist_ok=True)
+    log_step(f"writing PDF to {output}")
     counter = PageCounter()
     doc = SimpleDocTemplate(
         str(output),
@@ -1276,6 +1289,7 @@ def render_project_report(args: argparse.Namespace) -> int:
         author="ASPIS",
     )
     doc.build(story, onFirstPage=footer(counter), onLaterPages=footer(counter))
+    log_step(f"applying {len(vector_pdf_placements)} vector plot overlay(s)")
     apply_vector_pdf_overlays(output, vector_pdf_placements)
 
     done = Path(args.done)
@@ -1286,6 +1300,7 @@ def render_project_report(args: argparse.Namespace) -> int:
             f"{row_status(rows)}\t{project}\t{len(rnaseq_rows)}\t{len(smallrna_rows)}\t"
             f"{len(assets)}\t{counter.pages}\n"
         )
+    log_step(f"finished project PDF with {counter.pages} page(s)")
     return counter.pages
 
 

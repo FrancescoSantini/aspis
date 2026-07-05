@@ -194,7 +194,7 @@ fi
     run_mirna_deseq2_contrast:mem_mb=16000 \
     render_rnaseq_differential_enrichment:runtime=60 \
     render_rnaseq_differential_enrichment:mem_mb=8000 \
-    render_project_report_index:runtime=30 \
-    render_project_report_index:mem_mb=4000 \
+    render_project_report_index:runtime=180 \
+    render_project_report_index:mem_mb=32000 \
     render_run_dashboard:runtime=30 \
     render_run_dashboard:mem_mb=4000
