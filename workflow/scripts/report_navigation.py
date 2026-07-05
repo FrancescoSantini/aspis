@@ -53,18 +53,31 @@ def _rel_href(path: Path, base_dir: Path) -> str:
     return path.as_posix()
 
 
+def _relative_target_href(path: Path, base_dir: Path) -> tuple[str, bool]:
+    base_relative = base_dir / path
+    if base_relative.exists():
+        return path.as_posix(), True
+    if path.exists():
+        return os.path.relpath(path, start=base_dir).replace(os.sep, "/"), True
+    return path.as_posix(), False
+
+
 def _target_href(target: str | Path, base_dir: Path) -> tuple[str, bool, bool]:
     if not target:
         return "", False, False
     if isinstance(target, Path):
-        exists = target.exists() if target.is_absolute() else (base_dir / target).exists()
-        return _rel_href(target, base_dir), exists, True
+        if target.is_absolute():
+            return _rel_href(target, base_dir), target.exists(), True
+        href, exists = _relative_target_href(target, base_dir)
+        return href, exists, True
     target_text = str(target)
     if target_text.startswith("#") or "://" in target_text:
         return target_text, True, False
     path = Path(target_text)
-    exists = path.exists() if path.is_absolute() else (base_dir / path).exists()
-    return _rel_href(path, base_dir), exists, True
+    if path.is_absolute():
+        return _rel_href(path, base_dir), path.exists(), True
+    href, exists = _relative_target_href(path, base_dir)
+    return href, exists, True
 
 
 def _render_item(item: ReportMapItem, base_dir: Path) -> str:

@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import csv
 import importlib.util
+import os
 import subprocess
 import sys
 import tempfile
@@ -60,6 +61,9 @@ def summary_row(
 
 def main() -> int:
     repo = Path(__file__).resolve().parents[1]
+    sys.path.insert(0, str(repo / "workflow" / "scripts"))
+    from report_navigation import report_map_item, report_map_sidebar
+
     project = "TEST_PROJECT"
     with tempfile.TemporaryDirectory(prefix="aspis_project_report_") as tmp_text:
         tmp = Path(tmp_text)
@@ -206,6 +210,21 @@ def main() -> int:
         assert 'id="rnaseq-report-tree"' in html
         assert 'id="smallrna-report-tree"' in html
         assert 'id="matched-evidence-report-tree"' in html
+        cwd = Path.cwd()
+        try:
+            os.chdir(tmp)
+            sidebar_target = Path("results/branches/rnaseq") / project / "report/index.html"
+            sidebar_target.parent.mkdir(parents=True, exist_ok=True)
+            sidebar_target.write_text("<html></html>", encoding="utf-8")
+            sidebar_html = report_map_sidebar(
+                "Report Map",
+                [report_map_item("RNA-seq branch report", sidebar_target)],
+                Path("results/projects") / project,
+            )
+        finally:
+            os.chdir(cwd)
+        assert 'href="../../branches/rnaseq/TEST_PROJECT/report/index.html"' in sidebar_html
+        assert "nav-missing" not in sidebar_html
 
         if importlib.util.find_spec("reportlab") is None or importlib.util.find_spec("pypdf") is None:
             print("project report PDF contract skipped: missing reportlab or pypdf")
