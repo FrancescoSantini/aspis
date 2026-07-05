@@ -112,6 +112,10 @@ SUMMARY_COLUMNS = [
     "n_residual_genome_aligned_reads",
     "n_residual_genome_unmapped_reads",
     "n_residual_biotypes",
+    "plot_qa_status",
+    "plot_qa_reason",
+    "plot_source_count",
+    "plot_preview_count",
 ]
 STAT_COLUMNS = {"baseMean", "log2FoldChange", "lfcSE", "stat", "pvalue", "padj"}
 PCA_INTERPRETATION_NOTE = (
@@ -266,6 +270,47 @@ def render_pdf_previews(row: dict[str, str], summary_path: Path) -> dict[str, st
         "pca_preview": render_pdf_preview(row.get("pca_pdf", ""), summary_path, "pca"),
         "sample_distance_preview": render_pdf_preview(row.get("sample_distance_pdf", ""), summary_path, "sample_distance"),
         "heatmap_preview": render_pdf_preview(row.get("heatmap_pdf", ""), summary_path, "heatmap"),
+    }
+
+
+PLOT_QA_PAIRS = [
+    ("volcano", "volcano_pdf", "volcano_preview"),
+    ("MA", "ma_pdf", "ma_preview"),
+    ("PCA", "pca_pdf", "pca_preview"),
+    ("sample distance", "sample_distance_pdf", "sample_distance_preview"),
+    ("heatmap", "heatmap_pdf", "heatmap_preview"),
+]
+
+
+def plot_qa_fields(row: dict[str, str], preview_paths: dict[str, str]) -> dict[str, str]:
+    expected = [(label, source_key, preview_key) for label, source_key, preview_key in PLOT_QA_PAIRS if row.get(source_key, "")]
+    missing_sources = [label for label, source_key, _preview_key in expected if not Path(row[source_key]).exists()]
+    available_sources = [
+        (label, preview_key)
+        for label, source_key, preview_key in expected
+        if row.get(source_key, "") and Path(row[source_key]).exists()
+    ]
+    missing_previews = [
+        label
+        for label, preview_key in available_sources
+        if not preview_paths.get(preview_key, "") or not Path(preview_paths[preview_key]).exists()
+    ]
+    source_count = len(available_sources)
+    preview_count = source_count - len(missing_previews)
+    if missing_sources:
+        status = "missing_source"
+        reason = "missing source plot(s): " + ", ".join(missing_sources)
+    elif missing_previews:
+        status = "warning"
+        reason = "browser preview not generated for: " + ", ".join(missing_previews)
+    else:
+        status = "ok"
+        reason = f"{preview_count}/{source_count} source plot previews available"
+    return {
+        "plot_qa_status": status,
+        "plot_qa_reason": reason,
+        "plot_source_count": str(source_count),
+        "plot_preview_count": str(preview_count),
     }
 
 
@@ -730,20 +775,26 @@ def render_html(
     residual_biotype_columns = list(residual_biotype_preview[0]) if residual_biotype_preview else []
     residual_feature_columns = list(residual_feature_preview[0]) if residual_feature_preview else []
     title = f"{plan_row['project']} {plan_row['contrast_id']} miRNA differential report"
+    report_index = summary_path.parent.parent.parent / "index.html"
     content = f"""<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
   <title>{html.escape(title)}</title>
   <style>
-    body {{ font-family: Arial, sans-serif; margin: 2rem; color: #222; }}
+    body {{ font-family: system-ui, -apple-system, Segoe UI, sans-serif; margin: 2rem; color: #222; }}
     h1, h2 {{ line-height: 1.2; }}
     .metrics {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 0.75rem; margin: 1rem 0; }}
     .metrics div {{ border: 1px solid #ddd; padding: 0.75rem; border-radius: 4px; }}
     .metrics span {{ display: block; margin-top: 0.35rem; font-size: 1.3rem; }}
     table {{ border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: 0.92rem; }}
-    th, td {{ border: 1px solid #ddd; padding: 0.45rem; text-align: left; vertical-align: top; }}
+    th, td {{ border: 1px solid #ddd; padding: 0.45rem; text-align: left; vertical-align: top; overflow-wrap: anywhere; }}
     th {{ background: #f2f2f2; }}
+    a {{ color: #0969da; text-decoration: none; }}
+    a:hover {{ text-decoration: underline; }}
+    .breadcrumbs {{ color: #57606a; margin-bottom: 1rem; }}
+    .toc {{ display: flex; flex-wrap: wrap; gap: 0.5rem 0.85rem; margin: 1rem 0 1.25rem; }}
+    .toc a {{ border: 1px solid #d0d7de; border-radius: 999px; padding: 0.25rem 0.65rem; }}
     .note {{ background: #f6f8fa; border-left: 4px solid #666; margin: 1rem 0; padding: 0.75rem; }}
     .links {{ margin: 1rem 0; }}
     .plots {{ display: grid; gap: 28px; grid-template-columns: 1fr; }}
@@ -753,17 +804,27 @@ def render_html(
   </style>
 </head>
 <body>
+  <nav class="breadcrumbs"><a href="{html.escape(local_href(str(report_index), summary_path.parent))}">smallRNA differential report</a> / {html.escape(plan_row['contrast_id'])}</nav>
   <h1>{html.escape(title)}</h1>
+  <nav class="toc" aria-label="Page sections">
+    <a href="#metrics">Metrics</a>
+    <a href="#plots">Plots</a>
+    <a href="#mirnas">Top miRNAs</a>
+    <a href="#integration">miRNA-mRNA integration</a>
+    <a href="#length-qc">Length QC</a>
+    <a href="#targets">Targets and feature sets</a>
+    <a href="#residuals">Residual read fate</a>
+  </nav>
   <p class="links">{links_html}</p>
-  <section class="metrics">{metric_html}</section>
+  <section id="metrics" class="metrics">{metric_html}</section>
   <p class="note">The metrics above summarize the miRNA differential run, target lookup, optional miRNA-mRNA integration, optional feature-set enrichment, and smallRNA-specific QC layers for this contrast.</p>
   <p class="note">{html.escape(PCA_INTERPRETATION_NOTE)}</p>
-  <h2>Plots</h2>
+  <h2 id="plots">Plots</h2>
   <p class="note">These plots summarize statistical signal, abundance behavior, sample structure, and selected-miRNA expression patterns for the same contrast.</p>
   <div class="plots">
 {plot_panels}
   </div>
-  <h2>Top significant miRNAs</h2>
+  <h2 id="mirnas">Top significant miRNAs</h2>
   <p class="note">This table previews the strongest filtered miRNAs. The full differential table should be used for complete ranking, filtering, and downstream analysis.</p>
   {html_table(significant, significant_columns)}
   <h2>Target summary</h2>
@@ -771,7 +832,7 @@ def render_html(
   {html_table(target_summary, summary_columns)}
   <h2>Target source summary</h2>
   {html_table(target_source_summary, source_summary_columns)}
-  <h2>miRNA-mRNA integration</h2>
+  <h2 id="integration">miRNA-mRNA integration</h2>
   <p class="note">This section joins differential miRNAs to matched RNA-seq target-gene results when available. Inverse direction is biologically suggestive for canonical repression, but it should be interpreted with target-source confidence and sample design in mind.</p>
   {embedded_svg(plan_row.get("mirna_mrna_plot", ""))}
   {html_table(integration_summary, integration_summary_columns)}
@@ -786,13 +847,13 @@ def render_html(
   <p class="note">Ranked target feature-set enrichment ranks matched RNA-seq target genes by the target DE statistic when available, then by signed p-value or log2 fold change. This is a GSEA-style running-score summary, not a permutation-based fgsea p-value.</p>
   {embedded_svg(plan_row.get("mirna_mrna_target_ranked_feature_set_plot", ""))}
   {html_table(mirna_mrna_ranked_feature_set_preview, mirna_mrna_ranked_feature_set_columns)}
-  <h2>Read-length and arm QC</h2>
+  <h2 id="length-qc">Read-length and arm QC</h2>
   <p class="note">These tables and plots summarize whether retained reads have expected smallRNA lengths and whether miRNA arm assignments look plausible after preprocessing, alignment, and quantification.</p>
   {embedded_svg(plan_row.get("smallrna_length_plot", ""))}
   {html_table(length_stage_summary, length_stage_columns)}
   {html_table(arm_summary, arm_columns)}
   {html_table(isomir_length_summary, isomir_columns)}
-  <h2>Potentially regulated target processes</h2>
+  <h2 id="targets">Potentially regulated target processes</h2>
   <p class="note">Target-gene enrichment summarizes processes associated with database targets of differential miRNAs. It is not direct evidence of pathway activation or repression unless matched RNA-seq target expression supports the direction.</p>
   {embedded_svg(plan_row.get("target_enrichment_plot", ""))}
   {html_table(enrichment_preview, enrichment_columns)}
@@ -807,7 +868,7 @@ def render_html(
   <p class="note">Ranked miRNA-ID feature-set enrichment ranks tested miRNAs by the DESeq2 statistic when available, then by signed p-value or log2 fold change. This is a GSEA-style running-score summary, not a permutation-based fgsea p-value.</p>
   {embedded_svg(plan_row.get("mirna_ranked_feature_set_plot", ""))}
   {html_table(mirna_ranked_feature_set_preview, mirna_ranked_feature_set_columns)}
-  <h2>Residual genome read fate</h2>
+  <h2 id="residuals">Residual genome read fate</h2>
   <p class="note">Residual-read summaries describe genome-aligned reads that were not assigned to the main miRNA quantification layer. They help diagnose contamination, other smallRNA classes, degradation products, or annotation gaps.</p>
   {html_table(residual_biotype_preview, residual_biotype_columns)}
   <h2>Top residual annotated features</h2>
@@ -977,6 +1038,7 @@ def render_row(row: dict[str, str], top_n: int) -> dict[str, str]:
             top_n,
         )
         preview_paths = render_pdf_previews(row, Path(row["summary_html"]))
+        qa_fields = plot_qa_fields(row, preview_paths)
         n_up = sum(1 for item in filtered_rows if direction(item) == "up")
         n_down = sum(1 for item in filtered_rows if direction(item) == "down")
         residual_input_reads = sum(int(item.get("input_reads", "0") or 0) for item in residual_manifest)
@@ -1090,6 +1152,7 @@ def render_row(row: dict[str, str], top_n: int) -> dict[str, str]:
             "n_residual_genome_aligned_reads": str(residual_aligned_reads),
             "n_residual_genome_unmapped_reads": str(residual_unmapped_reads),
             "n_residual_biotypes": str(len(residual_biotypes)),
+            **qa_fields,
         }
     except Exception as exc:
         failed = blocked_summary(row)

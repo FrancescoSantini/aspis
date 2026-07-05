@@ -596,6 +596,9 @@ def validate_outputs(paths: dict[str, Path]) -> None:
             "heatmap_pdf",
             "heatmap_panel_tsv",
             "vst_tsv",
+            "plot_qa_status",
+            "plot_source_count",
+            "plot_preview_count",
         },
     )
     if len(summary_rows) != 1 or summary_rows[0]["status"] != "ok":
@@ -609,6 +612,8 @@ def validate_outputs(paths: dict[str, Path]) -> None:
         raise ValueError(f"Expected target feature-set terms in summary row, got {row}")
     if int(row["n_mirna_feature_set_terms"]) < 1 or int(row["n_mirna_ranked_feature_set_terms"]) < 1:
         raise ValueError(f"Expected miRNA-ID feature-set terms in summary row, got {row}")
+    if row["plot_qa_status"] not in {"ok", "warning", "missing_source"}:
+        raise ValueError(f"SmallRNA summary row lacks plot QA status: {row}")
     summary_html = Path(row["summary_html"])
     if not summary_html.exists():
         raise FileNotFoundError(f"Missing summary HTML: {summary_html}")
@@ -620,8 +625,10 @@ def validate_outputs(paths: dict[str, Path]) -> None:
         or "miRNA-ID feature sets" not in text
         or "target_evidence_type" not in text
         or "volcano plot" not in text
+        or "smallRNA differential report" not in text
+        or 'aria-label="Page sections"' not in text
     ):
-        raise ValueError("Summary HTML lacks expected miRNA, target-enrichment, feature-set, or plot content")
+        raise ValueError("Summary HTML lacks expected navigation, miRNA, target-enrichment, feature-set, or plot content")
     index_text = paths["index"].read_text(encoding="utf-8")
     if (
         "treated_vs_control__time_h_24" not in index_text

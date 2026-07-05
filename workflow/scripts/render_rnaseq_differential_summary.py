@@ -57,6 +57,10 @@ MANIFEST_COLUMNS = [
     "n_significant",
     "n_up",
     "n_down",
+    "plot_qa_status",
+    "plot_qa_reason",
+    "plot_source_count",
+    "plot_preview_count",
 ]
 NOVELTY_SUMMARY_COLUMNS = [
     "project",
@@ -187,6 +191,47 @@ def render_pdf_previews(row: dict[str, str], html_path: Path) -> dict[str, str]:
         "pca_preview": render_pdf_preview(row.get("pca_pdf", ""), html_path, "pca"),
         "sample_distance_preview": render_pdf_preview(row.get("sample_distance_pdf", ""), html_path, "sample_distance"),
         "heatmap_preview": render_pdf_preview(row.get("heatmap_pdf", ""), html_path, "heatmap"),
+    }
+
+
+PLOT_QA_PAIRS = [
+    ("volcano", "volcano_pdf", "volcano_preview"),
+    ("MA", "ma_pdf", "ma_preview"),
+    ("PCA", "pca_pdf", "pca_preview"),
+    ("sample distance", "sample_distance_pdf", "sample_distance_preview"),
+    ("heatmap", "heatmap_pdf", "heatmap_preview"),
+]
+
+
+def plot_qa_fields(row: dict[str, str], preview_paths: dict[str, str]) -> dict[str, str]:
+    expected = [(label, source_key, preview_key) for label, source_key, preview_key in PLOT_QA_PAIRS if row.get(source_key, "")]
+    missing_sources = [label for label, source_key, _preview_key in expected if not Path(row[source_key]).exists()]
+    available_sources = [
+        (label, preview_key)
+        for label, source_key, preview_key in expected
+        if row.get(source_key, "") and Path(row[source_key]).exists()
+    ]
+    missing_previews = [
+        label
+        for label, preview_key in available_sources
+        if not preview_paths.get(preview_key, "") or not Path(preview_paths[preview_key]).exists()
+    ]
+    source_count = len(available_sources)
+    preview_count = source_count - len(missing_previews)
+    if missing_sources:
+        status = "missing_source"
+        reason = "missing source plot(s): " + ", ".join(missing_sources)
+    elif missing_previews:
+        status = "warning"
+        reason = "browser preview not generated for: " + ", ".join(missing_previews)
+    else:
+        status = "ok"
+        reason = f"{preview_count}/{source_count} source plot previews available"
+    return {
+        "plot_qa_status": status,
+        "plot_qa_reason": reason,
+        "plot_source_count": str(source_count),
+        "plot_preview_count": str(preview_count),
     }
 
 
@@ -557,6 +602,7 @@ def render_html(
         for label, path in artifacts
         if path
     )
+    report_index = output.parent.parent.parent / "index.html"
     return f"""<!doctype html>
 <html lang="en">
 <head>
@@ -565,8 +611,13 @@ def render_html(
   <style>
     body {{ font-family: system-ui, -apple-system, Segoe UI, sans-serif; margin: 24px; max-width: 1200px; }}
     table {{ border-collapse: collapse; margin: 16px 0; width: 100%; }}
-    th, td {{ border: 1px solid #d0d7de; padding: 6px 8px; text-align: left; }}
+    th, td {{ border: 1px solid #d0d7de; padding: 6px 8px; text-align: left; vertical-align: top; overflow-wrap: anywhere; }}
     th {{ background: #f6f8fa; }}
+    a {{ color: #0969da; text-decoration: none; }}
+    a:hover {{ text-decoration: underline; }}
+    .breadcrumbs {{ color: #57606a; margin-bottom: 1rem; }}
+    .toc {{ display: flex; flex-wrap: wrap; gap: 0.5rem 0.85rem; margin: 1rem 0 1.25rem; }}
+    .toc a {{ border: 1px solid #d0d7de; border-radius: 999px; padding: 0.25rem 0.65rem; }}
     .note {{ background: #f6f8fa; border-left: 4px solid #57606a; margin: 12px 0 18px; padding: 10px 12px; }}
     .plots {{ display: grid; gap: 28px; grid-template-columns: 1fr; }}
     .plot img {{ border: 1px solid #d0d7de; display: block; height: auto; max-width: 100%; }}
@@ -577,26 +628,34 @@ def render_html(
   </style>
 </head>
 <body>
+  <nav class="breadcrumbs"><a href="{html.escape(relative_link(report_index, output))}">RNA-seq differential report</a> / {html.escape(row['level'])} / {html.escape(row['contrast_id'])}</nav>
   <h1>{html.escape(title)}</h1>
-  <h2>Metrics</h2>
+  <nav class="toc" aria-label="Page sections">
+    <a href="#metrics">Metrics</a>
+    <a href="#plots">Plots</a>
+    <a href="#enrichment">Feature-set status</a>
+    <a href="#features">Top features</a>
+    <a href="#files">Files</a>
+  </nav>
+  <h2 id="metrics">Metrics</h2>
   <p class="note">These values summarize the contrast-level differential-expression run: how many features were tested, how many passed the configured significance filters, and how many changed upward or downward in the test group relative to the control group.</p>
   <table>
 {metric_rows}
   </table>
   {transcript_novelty_section(row['level'], novelty_rows)}
-  <h2>Plots</h2>
+  <h2 id="plots">Plots</h2>
   <p class="note">These plots are diagnostic summaries of the same contrast from different angles: statistical signal, abundance behavior, sample structure, and selected-feature expression patterns.</p>
   <p class="note">{html.escape(PCA_INTERPRETATION_NOTE)}</p>
   <div class="plots">
 {plots}
   </div>
-  <h2>Feature-Set Enrichment Status</h2>
+  <h2 id="enrichment">Feature-Set Enrichment Status</h2>
   <p class="note">This section records whether optional ORA/GSEA-style feature-set resources were configured, whether enough features mapped to them, and where the resulting tables or plots were written. If resources are not configured, no enrichment dotplot can be generated.</p>
   {enrichment_status_table(resources, output)}
-  <h2>Top Significant Features</h2>
+  <h2 id="features">Top Significant Features</h2>
   <p class="note">This table lists the strongest filtered features by adjusted p-value and fold change. It is a compact preview; the complete DESeq2 output remains in the linked files below.</p>
   {top_feature_table(filtered_rows, top_n)}
-  <h2>Files</h2>
+  <h2 id="files">Files</h2>
   <p class="note">These links point to the machine-readable files used to build this page. Use them for downstream analysis, reproducibility checks, or manual inspection.</p>
   <ul>
 {artifact_rows}
@@ -646,8 +705,9 @@ def render_ready_row(row: dict[str, str], top_n: int) -> dict[str, str]:
 
     output = Path(row["summary_html"])
     output.parent.mkdir(parents=True, exist_ok=True)
-    output.write_text(render_html(row, metrics, filtered_rows, resources, novelty_rows, top_n), encoding="utf-8")
     preview_paths = render_pdf_previews(row, output)
+    output.write_text(render_html(row, metrics, filtered_rows, resources, novelty_rows, top_n), encoding="utf-8")
+    qa_fields = plot_qa_fields(row, preview_paths)
     return {
         "project": row["project"],
         "level": row["level"],
@@ -674,6 +734,7 @@ def render_ready_row(row: dict[str, str], top_n: int) -> dict[str, str]:
         "n_significant": str(len(filtered_rows)),
         "n_up": str(n_up),
         "n_down": str(n_down),
+        **qa_fields,
     }
 
 

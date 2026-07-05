@@ -302,9 +302,14 @@ def main() -> int:
             "100",
         ]
     )
-    plot_rows = read_tsv(dtu_dir / "plots" / "dtu_plot_manifest.tsv", {"method", "status", "overview_plot", "usage_plot", "feature_plot"})
+    plot_rows = read_tsv(
+        dtu_dir / "plots" / "dtu_plot_manifest.tsv",
+        {"method", "status", "overview_plot", "usage_plot", "feature_plot", "plot_qa_status", "plot_file_count"},
+    )
     if plot_rows[0]["method"] != "DEXSeqExon" or plot_rows[0]["status"] != "ok":
         raise ValueError(f"DEXSeqExon plots were not ok: {plot_rows}")
+    if plot_rows[0]["plot_qa_status"] != "ok" or int(plot_rows[0]["plot_file_count"]) < 3:
+        raise ValueError(f"DEXSeqExon plot QA did not confirm rendered SVGs: {plot_rows}")
     usage_svg = Path(plot_rows[0]["usage_plot"]).read_text(encoding="utf-8")
     if "Top DEXSeqExon genes: exon-bin detail" not in usage_svg or "exon bin E002" not in usage_svg or "log2FC" not in usage_svg:
         raise ValueError(f"DEXSeqExon usage plot did not include exon-bin features: {plot_rows}")

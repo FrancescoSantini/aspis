@@ -440,6 +440,11 @@ def main() -> int:
         assert any(row["match_type"] == "isoform_id" for row in annotation_rows), annotation_rows
         assert Path(plots[0]["plot_svg"]).exists(), plots
         assert Path(plots[0]["event_html"]).exists(), plots
+        event_html = Path(plots[0]["event_html"]).read_text(encoding="utf-8")
+        if "Isoform-switch overview" not in event_html or 'aria-label="Page sections"' not in event_html:
+            raise AssertionError("event-specific isoform-switch page lacks breadcrumb or mini table of contents")
+        if "#annotations" not in event_html or "#sequences" not in event_html:
+            raise AssertionError("event-specific isoform-switch page lacks deep section links")
         assert Path(plots[0]["nt_fasta"]).exists(), plots
         assert Path(plots[0]["aa_fasta"]).exists(), plots
         assert (outdir / "switch_plots.pdf").exists()

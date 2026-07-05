@@ -26,6 +26,9 @@ COLUMNS = [
     "n_significant",
     "top_gene",
     "top_padj",
+    "plot_qa_status",
+    "plot_qa_reason",
+    "plot_file_count",
 ]
 
 
@@ -78,6 +81,45 @@ def write_done(path: Path, rows: list[dict[str, str]]) -> None:
     with path.open("w", encoding="utf-8") as handle:
         handle.write("status\tplot_ok\tplot_blocked\tplot_failed\ttotal\treason\n")
         handle.write(f"{status}\t{ok}\t{blocked}\t{failed}\t{total}\t{reason}\n")
+
+
+def svg_qa(path_text: str) -> tuple[bool, str]:
+    if not path_text:
+        return True, "not expected"
+    path = Path(path_text)
+    if not path.exists():
+        return False, "missing"
+    if path.stat().st_size < 120:
+        return False, "too small"
+    head = path.read_text(encoding="utf-8", errors="replace")[:512].lower()
+    if "<svg" not in head:
+        return False, "not svg"
+    return True, "ok"
+
+
+def plot_qa_fields(row: dict[str, str]) -> dict[str, str]:
+    checked = [
+        ("overview", row.get("overview_plot", "")),
+        ("usage", row.get("usage_plot", "")),
+        ("feature", row.get("feature_plot", "")),
+    ]
+    present = [(label, path) for label, path in checked if path]
+    failures = []
+    for label, path in present:
+        ok, reason = svg_qa(path)
+        if not ok:
+            failures.append(f"{label}: {reason}")
+    if failures:
+        status = "warning"
+        reason = "; ".join(failures)
+    else:
+        status = "ok"
+        reason = f"{len(present)} SVG plot file(s) passed basic QA"
+    return {
+        "plot_qa_status": status,
+        "plot_qa_reason": reason,
+        "plot_file_count": str(len(present)),
+    }
 
 
 def safe_float(value: str) -> float | None:
@@ -720,6 +762,9 @@ def plot_row(args: argparse.Namespace, row: dict[str, str]) -> dict[str, str]:
         "n_significant": "0",
         "top_gene": "",
         "top_padj": "",
+        "plot_qa_status": "",
+        "plot_qa_reason": "",
+        "plot_file_count": "0",
     }
     if row.get("status") != "completed" or row.get("standardized_status") != "ok":
         output["reason"] = row.get("reason", "") or "DTU method did not complete with standardized results"
@@ -795,6 +840,7 @@ def plot_row(args: argparse.Namespace, row: dict[str, str]) -> dict[str, str]:
         output["usage_plot"] = ""
         output["feature_plot"] = ""
     output["status"] = "ok"
+    output.update(plot_qa_fields(output))
     return output
 
 

@@ -85,6 +85,9 @@ SCHEMAS = {
         "n_significant",
         "n_up",
         "n_down",
+        "plot_qa_status",
+        "plot_source_count",
+        "plot_preview_count",
     },
     "asset_manifest.tsv": {
         "project",
@@ -192,6 +195,16 @@ def main() -> int:
             require_table_adapter=report_dir == Path("results/deseq2_smoke/reports"),
         )
         _, summary_rows = read_tsv(report_dir / "summaries/summary_manifest.tsv")
+        for row in summary_rows:
+            summary_html = Path(row.get("summary_html", ""))
+            if row.get("status") == "ok":
+                if row.get("plot_qa_status", "") not in {"ok", "warning", "missing_source"}:
+                    raise ValueError(f"{report_dir} summary row lacks plot QA status: {row}")
+                if not summary_html.exists():
+                    raise FileNotFoundError(f"Missing differential summary HTML: {summary_html}")
+                summary_text = summary_html.read_text(encoding="utf-8")
+                if "RNA-seq differential report" not in summary_text or 'aria-label="Page sections"' not in summary_text:
+                    raise ValueError(f"{summary_html} lacks breadcrumb or mini table of contents")
         for row in summary_rows:
             if row.get("level") != "transcript":
                 continue

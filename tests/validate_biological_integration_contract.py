@@ -451,9 +451,14 @@ def exercise_biotype_and_dtu(paths: dict[str, Path]) -> None:
             "100",
         ]
     )
-    dtu_plot_rows = read_tsv(dtu_dir / "plots" / "dtu_plot_manifest.tsv", {"method", "status", "reason", "overview_plot", "usage_plot", "feature_plot"})
+    dtu_plot_rows = read_tsv(
+        dtu_dir / "plots" / "dtu_plot_manifest.tsv",
+        {"method", "status", "reason", "overview_plot", "usage_plot", "feature_plot", "plot_qa_status", "plot_file_count"},
+    )
     if dtu_plot_rows[0]["status"] != "ok":
         raise ValueError(f"DTU plot rendering was not ok: {dtu_plot_rows}")
+    if dtu_plot_rows[0]["plot_qa_status"] != "ok" or int(dtu_plot_rows[0]["plot_file_count"]) < 2:
+        raise ValueError(f"DTU plot QA did not confirm rendered SVGs: {dtu_plot_rows}")
     if (
         not dtu_plot_rows[0]["overview_plot"]
         or not Path(dtu_plot_rows[0]["overview_plot"]).exists()
@@ -654,7 +659,12 @@ def exercise_biotype_and_dtu(paths: dict[str, Path]) -> None:
             str(suppa2_dir / "plots" / "dtu_plots.done"),
         ]
     )
-    suppa2_plot_rows = read_tsv(suppa2_dir / "plots" / "dtu_plot_manifest.tsv", {"method", "status", "usage_plot"})
+    suppa2_plot_rows = read_tsv(
+        suppa2_dir / "plots" / "dtu_plot_manifest.tsv",
+        {"method", "status", "usage_plot", "plot_qa_status", "plot_file_count"},
+    )
+    if suppa2_plot_rows[0]["plot_qa_status"] != "ok" or int(suppa2_plot_rows[0]["plot_file_count"]) < 2:
+        raise ValueError(f"SUPPA2 plot QA did not confirm rendered SVGs: {suppa2_plot_rows}")
     suppa2_usage_plot = Path(suppa2_plot_rows[0]["usage_plot"])
     suppa2_usage_svg = suppa2_usage_plot.read_text(encoding="utf-8")
     if "Top SUPPA2 genes: event detail" not in suppa2_usage_svg or "delta PSI" not in suppa2_usage_svg:
