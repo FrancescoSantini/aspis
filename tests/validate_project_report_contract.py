@@ -193,12 +193,19 @@ def main() -> int:
             "Sample And Design Summary",
             "Workflow Status Matrix",
             "Raw Contrast Summary",
+            "Unified Report Tree",
         ]
         positions = [html.index(heading) for heading in headings]
         assert positions == sorted(positions)
         assert "combined project technical PDF" in html
         assert 'aria-label="Report map"' in html
         assert "Report Map" in html
+        assert 'href="#rnaseq-report-tree"' in html
+        assert 'href="#smallrna-report-tree"' in html
+        assert 'href="#matched-evidence-report-tree"' in html
+        assert 'id="rnaseq-report-tree"' in html
+        assert 'id="smallrna-report-tree"' in html
+        assert 'id="matched-evidence-report-tree"' in html
 
         if importlib.util.find_spec("reportlab") is None or importlib.util.find_spec("pypdf") is None:
             print("project report PDF contract skipped: missing reportlab or pypdf")

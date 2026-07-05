@@ -72,12 +72,13 @@ def metric(label: str, value: str | int) -> str:
     return f'<div class="metric"><strong>{html.escape(label)}</strong><span>{html.escape(str(value))}</span></div>'
 
 
-def section(title: str, description: str, items: list[str]) -> str:
+def section(title: str, description: str, items: list[str], section_id: str = "") -> str:
     body = "\n".join(f"<li>{item}</li>" for item in items if item)
     if not body:
         body = '<li><span class="status muted">no resources listed</span></li>'
+    id_attr = f' id="{html.escape(section_id)}"' if section_id else ""
     return (
-        f"<section><h2>{html.escape(title)}</h2>"
+        f"<section{id_attr}><h2>{html.escape(title)}</h2>"
         f"<p class=\"section-note\">{html.escape(description)}</p>"
         f"<ul>{body}</ul></section>"
     )
@@ -449,11 +450,13 @@ def project_report_map(
                 report_map_item("Sample and design", "#sample-design"),
                 report_map_item("Workflow status", "#workflow-status"),
                 report_map_item("Raw contrast summary", "#raw-contrast-summary"),
+                report_map_item("Unified report tree", "#unified-report-tree"),
                 report_map_item("Combined technical PDF", pdf_target, planned=bool(technical_pdf)),
             ],
         ),
         report_map_item(
             "RNA-seq",
+            "#rnaseq-report-tree",
             children=[
                 report_map_item("Branch report", rnaseq_base / "report/index.html"),
                 report_map_item("Differential index", rnaseq_base / "differential/reports/index.html"),
@@ -465,6 +468,7 @@ def project_report_map(
         ),
         report_map_item(
             "smallRNA",
+            "#smallrna-report-tree",
             children=[
                 report_map_item("Branch report", smallrna_base / "report/index.html"),
                 report_map_item("Differential index", smallrna_base / "smallrna/differential/reports/index.html"),
@@ -474,6 +478,7 @@ def project_report_map(
         ),
         report_map_item(
             "Matched evidence",
+            "#matched-evidence-report-tree",
             children=[
                 report_map_item(
                     "miRNA-mRNA integration",
@@ -556,6 +561,7 @@ def render(args: argparse.Namespace) -> None:
     input {{ border: 1px solid #d0d7de; border-radius: 6px; padding: 0.45rem 0.55rem; }}
     .review-order {{ background: #f6f8fa; border: 1px solid #d0d7de; border-radius: 6px; padding: 0.75rem 1rem 0.75rem 2.2rem; }}
     .review-order li {{ margin: 0.35rem 0; }}
+    .report-tree-grid section h2 {{ border-bottom: 0; margin-top: 0.9rem; padding-bottom: 0; }}
     {report_map_css()}
   </style>
 </head>
@@ -631,6 +637,39 @@ def render(args: argparse.Namespace) -> None:
   <h2 id="raw-contrast-summary">Raw Contrast Summary</h2>
   <p class="section-note">This lower table preserves the assay-specific summary rows used to build the matrix above.</p>
   {summary_table(base_dir, rnaseq_base, smallrna_base)}
+  <h2 id="unified-report-tree">Unified Report Tree</h2>
+  <p class="section-note">This tree is the body-level counterpart of the sticky report map. It makes the assay branches and matched-evidence layers explicit inside the integrated project report, so the project page remains a single review surface rather than only a launch page.</p>
+  <div class="grid report-tree-grid">
+    {section("RNA-seq", "Gene, transcript, enrichment, DTU/splicing, isoform-switch, strandedness, and RNA-seq PDF layers for this project.", [
+        link(rnaseq_base / "report/index.html", "branch report", base_dir),
+        link(rnaseq_base / "differential/reports/index.html", "differential report index", base_dir),
+        link(rnaseq_base / "differential/reports/enrichment/index.html", "GO/Reactome enrichment overview", base_dir),
+        link(rnaseq_base / "differential/isoform_switch/report/index.html", "isoform-switch overview", base_dir),
+        table_link(rnaseq_base / "differential/isoform_switch/report/isoform_interpretation_consensus.tsv", "isoform-switch / DTU interpretation consensus", base_dir),
+        table_link(rnaseq_base / "differential/dtu/dtu_method_manifest.tsv", "DTU/splicing method manifest", base_dir),
+        table_link(rnaseq_base / "differential/dtu/consensus/dtu_consensus_gene_summary.tsv", "DTU consensus gene summary", base_dir),
+        table_link(rnaseq_base / "alignment/strandedness/strandedness_report.tsv", "strandedness diagnostics", base_dir),
+        link(rnaseq_base / "differential/reports/technical_report.pdf", "RNA-seq technical PDF", base_dir),
+    ], "rnaseq-report-tree")}
+    {section("smallRNA", "miRNA differential expression, target enrichment, target feature sets, length/read-fate QC, and smallRNA PDF layers for this project.", [
+        link(smallrna_base / "report/index.html", "branch report", base_dir),
+        link(smallrna_base / "smallrna/differential/reports/index.html", "differential report index", base_dir),
+        link(smallrna_base / "smallrna/differential/reports/targets/index.html", "target and integration overview", base_dir),
+        table_link(smallrna_base / "smallrna/differential/mirna_deseq2/deseq2_manifest.tsv", "miRNA DESeq2 manifest", base_dir),
+        table_link(smallrna_base / "smallrna/differential/target_enrichment/target_manifest.tsv", "target enrichment manifest", base_dir),
+        table_link(smallrna_base / "smallrna/differential/target_feature_sets/target_feature_set_manifest.tsv", "target feature-set manifest", base_dir),
+        table_link(smallrna_base / "smallrna/differential/mirna_feature_sets/mirna_feature_set_manifest.tsv", "miRNA feature-set manifest", base_dir),
+        link(smallrna_base / "smallrna/differential/reports/technical_report.pdf", "smallRNA technical PDF", base_dir),
+    ], "smallrna-report-tree")}
+    {section("Matched evidence", "Cross-assay interpretation layers that require both RNA-seq and smallRNA evidence from the same biological project and contrast labels.", [
+        link(smallrna_base / "smallrna/differential/reports/targets/index.html", "target and integration overview", base_dir),
+        table_link(smallrna_base / "smallrna/differential/mirna_mrna_integration/mirna_mrna_manifest.tsv", "miRNA-mRNA integration manifest", base_dir),
+        table_link(smallrna_base / "smallrna/differential/mirna_mrna_target_feature_sets/target_feature_set_manifest.tsv", "inverse target feature-set manifest", base_dir),
+        table_link(rnaseq_base / "differential/isoform_switch/report/isoform_dtu_evidence.tsv", "isoform-switch / DTU evidence table", base_dir),
+        table_link(rnaseq_base / "differential/isoform_switch/report/isoform_interpretation_consensus.tsv", "isoform-switch / DTU interpretation consensus", base_dir),
+        table_link(rnaseq_base / "differential/dtu/consensus/dtu_consensus_method_detail.tsv", "DTU consensus method detail", base_dir),
+    ], "matched-evidence-report-tree")}
+  </div>
   <h2>Status Glossary</h2>
   <p class="note"><strong>ok</strong> means the artifact exists or the source manifest says the layer completed. <strong>not present</strong> means an optional layer was not configured or did not apply. <strong>missing</strong> means an expected linked artifact is absent. Biological interpretation still requires reviewing the linked source tables and plots.</p>
   <script>

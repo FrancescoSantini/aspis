@@ -273,6 +273,9 @@ Completed hardening slice:
   integrated project report, RNA-seq differential index, RNA-seq GO/Reactome
   overview, smallRNA differential index, smallRNA target/integration overview,
   and isoform-switch overview.
+- The integrated project report also includes an in-page `Unified Report Tree`
+  after the raw contrast summary, with anchored RNA-seq, smallRNA, and matched
+  evidence sections so the sticky map headings resolve to visible body content.
 - Each integrated project report now emits a combined project-level technical
   PDF beside the HTML page. This PDF is the email-friendly single-file export
   for the project and includes RNA-seq, smallRNA, enrichment, target,
