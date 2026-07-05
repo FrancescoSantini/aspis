@@ -189,7 +189,7 @@ def method_sort_key(method: str) -> tuple[int, str]:
 
 def significant(row: dict[str, str], padj_threshold: float) -> bool:
     status = row.get("status", "")
-    if status and status not in {"ok", "completed"}:
+    if status and status not in {"ok", "completed", "standardized"}:
         return False
     padj = parse_float(row.get("padj", ""))
     if padj is None:

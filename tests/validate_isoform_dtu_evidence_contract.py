@@ -105,7 +105,7 @@ def main() -> int:
                 "contrast_id": "treated_vs_control__time_h_24",
                 "gene_id": "GENE1",
                 "gene_name": "Gene One",
-                "status": "ok",
+                "status": "standardized",
                 "reason": "",
             },
             {
