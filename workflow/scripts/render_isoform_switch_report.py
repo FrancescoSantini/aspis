@@ -22,6 +22,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, Optional
 
+from report_navigation import report_map_css, report_map_item, report_shell_close, report_shell_open
+
 
 MANIFEST_REQUIRED = {
     "contrast_id",
@@ -3212,16 +3214,16 @@ def render_project_html(
         source_block = f'<p class="asset-links">{source_links}</p>' if source_links else ""
         return (
             '<section class="overview">'
-            '<h2>Isoform-Switch Overview</h2>'
+            '<h2 id="isoform-overview">Isoform-Switch Overview</h2>'
             '<p class="note">This overview is the first page to inspect. It summarizes which contrasts ran, how many candidate switch events were rendered, and which events have direct diagram and sequence links. The detailed tables below remain available for exhaustive review.</p>'
             f'<div class="metrics">{metric_html}</div>'
             f"{source_block}"
-            '<h2>Contrast Status</h2>'
+            '<h2 id="contrast-status">Contrast Status</h2>'
             f"{contrast_status_table()}"
-            '<h2>Optional Consequence Annotation Status</h2>'
+            '<h2 id="annotation-status">Optional Consequence Annotation Status</h2>'
             '<p class="note">Optional consequence annotations are supportive evidence. A status of not_configured or ok_no_matches does not invalidate the isoform-switch calls; blocked or failed rows identify resource or parser issues to fix before interpreting annotation-derived consequences.</p>'
             f"{annotation_status_table()}"
-            '<h2>Top Candidate Events</h2>'
+            '<h2 id="top-candidate-events">Top Candidate Events</h2>'
             f"{top_event_cards(event_rows)}"
             "</section>"
         )
@@ -3292,6 +3294,44 @@ def render_project_html(
     ambiguous_events = [row for row in event_rows if row.get("switch_biotype_class") not in {"coding", "noncoding", "mixed_coding_noncoding"}]
     if not event_rows:
         ambiguous_events = []
+    run_root = output.parents[6] if len(output.parents) > 6 else output.parent
+    project = output.parents[3].name if len(output.parents) > 3 else ""
+    sidebar = report_shell_open(
+        "Report Map",
+        [
+            report_map_item("Run dashboard", run_root / "index.html"),
+            report_map_item(
+                "Project",
+                children=[
+                    report_map_item("Integrated project report", run_root / "projects" / project / "index.html"),
+                    report_map_item("Combined project PDF", run_root / "projects" / project / "technical_report.pdf"),
+                ],
+            ),
+            report_map_item(
+                "RNA-seq",
+                children=[
+                    report_map_item("Differential index", output.parents[2] / "reports/index.html"),
+                    report_map_item("DTU methods", output.parents[2] / "dtu/dtu_method_manifest.tsv"),
+                    report_map_item("GO/Reactome", output.parents[2] / "reports/enrichment/index.html"),
+                    report_map_item("RNA-seq technical PDF", output.parents[2] / "reports/technical_report.pdf"),
+                ],
+            ),
+            report_map_item(
+                "Isoform switch",
+                children=[
+                    report_map_item("Overview", "#isoform-overview"),
+                    report_map_item("Contrast status", "#contrast-status"),
+                    report_map_item("Annotation status", "#annotation-status"),
+                    report_map_item("Top candidate events", "#top-candidate-events"),
+                    report_map_item("Coding switches", "#coding-switches"),
+                    report_map_item("Noncoding/mixed switches", "#noncoding-and-mixed-coding-potential-switches"),
+                    report_map_item("Candidate table", output.parent / "switch_candidates.tsv"),
+                    report_map_item("Interpretation consensus", output.parent / "isoform_interpretation_consensus.tsv"),
+                ],
+            ),
+        ],
+        output.parent,
+    )
     sections = [
         ("Coding Switches", coding_events),
         ("Noncoding And Mixed Coding-Potential Switches", noncoding_events),
@@ -3318,7 +3358,7 @@ def render_project_html(
     </tbody>
   </table>
   ''' if title == 'Coding Switches' else ''}
-  <h2>{html.escape(title)}</h2>
+  <h2 id="{html.escape(title.lower().replace(' ', '-'))}">{html.escape(title)}</h2>
   <p class="note">Each row is one isoform-switch event. The table gives the contrast, gene, switch class, leading switch-in/switch-out isoforms, effect size, annotation count, and links to event-level FASTA files when available.</p>
   <table>
     <thead>
@@ -3365,7 +3405,7 @@ def render_project_html(
   <meta charset="utf-8">
   <title>Isoform-switch report</title>
   <style>
-    body {{ font-family: system-ui, -apple-system, Segoe UI, sans-serif; margin: 24px; max-width: 1440px; }}
+    body {{ font-family: system-ui, -apple-system, Segoe UI, sans-serif; margin: 24px; max-width: 1680px; }}
     table {{ border-collapse: collapse; width: 100%; }}
     th, td {{ border: 1px solid #d0d7de; padding: 6px 8px; text-align: left; vertical-align: top; overflow-wrap: anywhere; }}
     th {{ background: #f6f8fa; }}
@@ -3392,9 +3432,11 @@ def render_project_html(
     .status.failed {{ color: #cf222e; }}
     table {{ display: block; overflow-x: auto; }}
     nav.breadcrumbs {{ color: #57606a; margin-bottom: 1rem; }}
+    {report_map_css()}
   </style>
 </head>
 <body>
+  {sidebar}
   <nav class="breadcrumbs">ASPIS / RNA-seq / Isoform-switch overview</nav>
   <h1>Isoform-switch report</h1>
   <p>Events are ranked by absolute isoform fraction change and split into coding, noncoding/mixed, and ambiguous sections. Coding switches are additionally prioritized by predicted functional consequences. Noncoding switches are interpreted through transcript architecture rather than requiring ORF/domain evidence.</p>
@@ -3402,6 +3444,7 @@ def render_project_html(
   <p class="note">Isoform-switch calls are candidate transcript-usage changes. Prioritize events by effect size, replicate support, annotation quality, and biological plausibility; optional consequence annotation is supportive evidence, not a required condition for a valid switch.</p>
   {overview_html()}
   {''.join(tables)}
+  {report_shell_close()}
 </body>
 </html>
 """,

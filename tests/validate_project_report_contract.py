@@ -197,6 +197,8 @@ def main() -> int:
         positions = [html.index(heading) for heading in headings]
         assert positions == sorted(positions)
         assert "combined project technical PDF" in html
+        assert 'aria-label="Report map"' in html
+        assert "Report Map" in html
 
         if importlib.util.find_spec("reportlab") is None or importlib.util.find_spec("pypdf") is None:
             print("project report PDF contract skipped: missing reportlab or pypdf")

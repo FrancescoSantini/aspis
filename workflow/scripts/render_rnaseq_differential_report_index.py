@@ -11,6 +11,8 @@ from collections import Counter
 from pathlib import Path
 from typing import Optional
 
+from report_navigation import report_map_css, report_map_item, report_shell_close, report_shell_open
+
 
 KEY_COLUMNS = ["project", "level", "contrast_id"]
 REQUIRED_PLAN_COLUMNS = {
@@ -910,6 +912,33 @@ def render_enrichment_overview(rows: list[dict[str, str]], overview: Path) -> No
     not_configured = sum(1 for row in rows if row.get("status") == "not_configured")
     blocked = sum(1 for row in rows if row.get("status") == "blocked")
     failed = sum(1 for row in rows if row.get("status") == "failed")
+    projects = sorted({row.get("project", "") for row in rows if row.get("project", "")})
+    run_root = overview.parents[6] if len(overview.parents) > 6 else overview.parent
+    project_items = []
+    if len(projects) == 1:
+        project = projects[0]
+        project_items = [
+            report_map_item("Integrated project report", run_root / "projects" / project / "index.html"),
+            report_map_item("Combined project PDF", run_root / "projects" / project / "technical_report.pdf"),
+        ]
+    sidebar = report_shell_open(
+        "Report Map",
+        [
+            report_map_item("Run dashboard", run_root / "index.html"),
+            report_map_item("Project", children=project_items),
+            report_map_item(
+                "RNA-seq",
+                children=[
+                    report_map_item("Differential index", overview.parent.parent / "index.html"),
+                    report_map_item("GO/Reactome overview", "#enrichment-overview"),
+                    report_map_item("Technical PDF", overview.parent.parent / "technical_report.pdf"),
+                    report_map_item("DTU methods", overview.parent.parent.parent / "dtu/dtu_method_manifest.tsv"),
+                    report_map_item("Isoform switch", overview.parent.parent.parent / "isoform_switch/report/index.html"),
+                ],
+            ),
+        ],
+        overview.parent,
+    )
     overview.write_text(
         f"""<!doctype html>
 <html lang="en">
@@ -917,7 +946,7 @@ def render_enrichment_overview(rows: list[dict[str, str]], overview: Path) -> No
   <meta charset="utf-8">
   <title>RNA-seq GO/Reactome enrichment overview</title>
   <style>
-    body {{ font-family: system-ui, -apple-system, Segoe UI, sans-serif; margin: 24px; max-width: 1440px; color: #24292f; }}
+    body {{ font-family: system-ui, -apple-system, Segoe UI, sans-serif; margin: 24px; max-width: 1680px; color: #24292f; }}
     h1 {{ font-size: 28px; margin-bottom: 8px; }}
     h3 {{ margin: 0.2rem 0 0; font-size: 1rem; }}
     h4 {{ margin: 0 0 0.5rem; }}
@@ -942,13 +971,16 @@ def render_enrichment_overview(rows: list[dict[str, str]], overview: Path) -> No
     .plot-panel img {{ display: block; width: 100%; max-height: 520px; object-fit: contain; border: 1px solid #d0d7de; background: white; }}
     .links {{ margin-top: 0.5rem; font-size: 0.92rem; }}
     .empty {{ color: #57606a; background: #f6f8fa; padding: 1rem; border: 1px dashed #d0d7de; }}
+    {report_map_css()}
   </style>
 </head>
 <body>
-  <h1>RNA-seq GO/Reactome enrichment overview</h1>
+  {sidebar}
+  <h1 id="enrichment-overview">RNA-seq GO/Reactome enrichment overview</h1>
   <p class="note">This page collects ORA and ranked feature-set enrichment plots across gene and transcript contrasts. ORA panels summarize significant-feature overlap with configured resources; ranked panels use all tested features ordered by the differential statistic.</p>
   <div class="counts">contrasts: {len(rows)}; ok: {ok}; not configured: {not_configured}; blocked: {blocked}; failed: {failed}; <a href="../index.html">back to differential index</a></div>
   {body}
+  {report_shell_close()}
 </body>
 </html>
 """,
@@ -1045,13 +1077,50 @@ def render_html(
     enrichment_overview_html = (
         f"; {enrichment_overview_link}" if enrichment_overview_link else ""
     )
+    run_root = output.parents[5] if len(output.parents) > 5 else output.parent
+    project_report_items = []
+    if len(project_names) == 1:
+        project = project_names[0]
+        project_report_items = [
+            report_map_item("Integrated project report", run_root / "projects" / project / "index.html"),
+            report_map_item("Combined project PDF", run_root / "projects" / project / "technical_report.pdf"),
+        ]
+    sidebar = report_shell_open(
+        "Report Map",
+        [
+            report_map_item("Run dashboard", run_root / "index.html"),
+            report_map_item("Project", children=project_report_items),
+            report_map_item(
+                "RNA-seq differential",
+                children=[
+                    report_map_item("Project resources", "#project-resources"),
+                    report_map_item("DTU/splicing", "#dtu-summary"),
+                    report_map_item("Isoform/DTU evidence", "#isoform-dtu-summary"),
+                    report_map_item("Contrast table", "#contrast-table"),
+                    report_map_item("GO/Reactome overview", Path(enrichment_overview) if enrichment_overview else ""),
+                    report_map_item("Technical PDF", output.parent / "technical_report.pdf"),
+                ],
+            ),
+            report_map_item(
+                "Companion layers",
+                children=[
+                    report_map_item("Biotype summary", Path(biotype_html) if biotype_html else ""),
+                    report_map_item("Biological warnings", Path(warnings_html) if warnings_html else ""),
+                    report_map_item("Strandedness report", Path(strandedness_report) if strandedness_report else ""),
+                    report_map_item("Isoform-switch overview", Path(isoform_switch_html) if isoform_switch_html else ""),
+                    report_map_item("DTU manifest", Path(dtu_method_manifest) if dtu_method_manifest else ""),
+                ],
+            ),
+        ],
+        output.parent,
+    )
     return f"""<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
   <title>{html.escape(title)}</title>
   <style>
-    body {{ font-family: system-ui, -apple-system, Segoe UI, sans-serif; margin: 24px; max-width: 1440px; color: #24292f; }}
+    body {{ font-family: system-ui, -apple-system, Segoe UI, sans-serif; margin: 24px; max-width: 1680px; color: #24292f; }}
     .note {{ background: #f6f8fa; border-left: 4px solid #57606a; margin: 12px 0 18px; padding: 10px 12px; }}
     .guide {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 0.75rem; margin: 1rem 0 1.5rem; }}
     .guide div {{ border: 1px solid #d0d7de; border-radius: 6px; padding: 0.75rem; }}
@@ -1091,9 +1160,11 @@ def render_html(
     .resource-status th:nth-child(3), .resource-status td:nth-child(3) {{ width: 420px; }}
     .resource-status th:nth-child(4), .resource-status td:nth-child(4) {{ width: 260px; }}
     nav.breadcrumbs {{ color: #57606a; margin-bottom: 1rem; }}
+    {report_map_css()}
   </style>
 </head>
 <body>
+  {sidebar}
   <nav class="breadcrumbs">ASPIS / RNA-seq / Differential reports</nav>
   <h1>{html.escape(title)}</h1>
   <p class="note">This report index summarizes RNA-seq differential-expression contrasts for this project. Use it to find contrast-level summaries, DESeq2 tables, diagnostic plots, enrichment outputs, optional isoform-switch/DTU resources, warnings, and the printable technical PDF.</p>
@@ -1103,9 +1174,10 @@ def render_html(
     <div><strong>Enrichment</strong><br>ORA/GSEA-style outputs appear only when feature-set resources are configured and enough features map.</div>
   </div>
   <div class="counts">contrasts: {len(rows)}; ok: {ok}; blocked: {blocked}; failed: {failed}; <a href="technical_report.pdf">printable technical PDF</a>{enrichment_overview_html}</div>
-  {project_resources}
-  {dtu_summary}
-  {isoform_dtu_summary}
+  <div id="project-resources">{project_resources}</div>
+  <div id="dtu-summary">{dtu_summary}</div>
+  <div id="isoform-dtu-summary">{isoform_dtu_summary}</div>
+  <h2 id="contrast-table">Contrast Table</h2>
   <table>
     <thead>
       <tr>
@@ -1130,6 +1202,7 @@ def render_html(
 {render_table(rows, output)}
     </tbody>
   </table>
+  {report_shell_close()}
 </body>
 </html>
 """

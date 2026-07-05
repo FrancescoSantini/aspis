@@ -912,6 +912,35 @@ def contrast_overview_table(
     return table
 
 
+def project_report_map_table(styles: dict[str, ParagraphStyle]) -> Table:
+    rows = [
+        ("Run dashboard", "Top-level run status, planned branches, QC overview, report inventory, project cards."),
+        ("Project report", "Contrast matrix, evidence-layer entry points, sample/design summary, workflow status."),
+        ("RNA-seq", "Branch report, differential index, GO/Reactome overview, DTU/splicing, isoform switch, RNA-seq PDF."),
+        ("smallRNA", "Branch report, miRNA differential, target enrichment, feature sets, target/integration overview, smallRNA PDF."),
+        ("Matched evidence", "miRNA-mRNA integration, inverse target feature sets, isoform-switch and DTU interpretation consensus."),
+        ("Raw artifacts", "Manifest TSVs, complete tables, plots, logs, provenance, and machine-readable source files."),
+    ]
+    data = [[para("report layer", styles["table_header"]), para("what it contains", styles["table_header"])]]
+    data.extend([[para(layer, styles["table"]), para(description, styles["table"])] for layer, description in rows])
+    table = Table(data, colWidths=[0.28 * CONTENT_WIDTH, 0.72 * CONTENT_WIDTH], hAlign="LEFT", repeatRows=1)
+    table.setStyle(
+        TableStyle(
+            [
+                ("BACKGROUND", (0, 0), (-1, 0), HEADER_BG),
+                ("BOX", (0, 0), (-1, -1), 0.35, BORDER),
+                ("INNERGRID", (0, 0), (-1, -1), 0.25, BORDER),
+                ("LEFTPADDING", (0, 0), (-1, -1), 4),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 4),
+                ("TOPPADDING", (0, 0), (-1, -1), 4),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+                ("VALIGN", (0, 0), (-1, -1), "TOP"),
+            ]
+        )
+    )
+    return table
+
+
 def selected_asset_rows(
     assets: list[dict[str, str]],
     *,
@@ -1188,6 +1217,17 @@ def render_project_report(args: argparse.Namespace) -> int:
     if assets:
         story.append(Spacer(1, 5 * mm))
         story.append(metric_table(asset_summary(assets), styles, columns=2))
+
+    story.append(Spacer(1, 6 * mm))
+    story.append(para("Report Map", styles["h1"]))
+    story.append(
+        para(
+            "The HTML project report shows this map as a sticky side navigation. In this PDF it is summarized "
+            "as a compact hierarchy before the detailed sections.",
+            styles["body"],
+        )
+    )
+    story.append(project_report_map_table(styles))
 
     section_page(
         story,

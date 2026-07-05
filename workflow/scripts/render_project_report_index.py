@@ -10,6 +10,8 @@ import os
 from collections import Counter
 from pathlib import Path
 
+from report_navigation import report_map_css, report_map_item, report_shell_close, report_shell_open
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
@@ -428,6 +430,68 @@ def contrast_matrix(
     )
 
 
+def project_report_map(
+    project: str,
+    base_dir: Path,
+    rnaseq_base: Path,
+    smallrna_base: Path,
+    technical_pdf: str,
+) -> list[dict[str, object]]:
+    pdf_target: str | Path = Path(technical_pdf) if technical_pdf else ""
+    return [
+        report_map_item("Run dashboard", Path("../../index.html")),
+        report_map_item(
+            "Project report",
+            children=[
+                report_map_item("Review order", "#review-order"),
+                report_map_item("Contrast matrix", "#contrast-matrix"),
+                report_map_item("Evidence entry points", "#evidence-entry-points"),
+                report_map_item("Sample and design", "#sample-design"),
+                report_map_item("Workflow status", "#workflow-status"),
+                report_map_item("Raw contrast summary", "#raw-contrast-summary"),
+                report_map_item("Combined technical PDF", pdf_target, planned=bool(technical_pdf)),
+            ],
+        ),
+        report_map_item(
+            "RNA-seq",
+            children=[
+                report_map_item("Branch report", rnaseq_base / "report/index.html"),
+                report_map_item("Differential index", rnaseq_base / "differential/reports/index.html"),
+                report_map_item("GO/Reactome overview", rnaseq_base / "differential/reports/enrichment/index.html"),
+                report_map_item("DTU method manifest", rnaseq_base / "differential/dtu/dtu_method_manifest.tsv"),
+                report_map_item("Isoform-switch overview", rnaseq_base / "differential/isoform_switch/report/index.html"),
+                report_map_item("RNA-seq technical PDF", rnaseq_base / "differential/reports/technical_report.pdf"),
+            ],
+        ),
+        report_map_item(
+            "smallRNA",
+            children=[
+                report_map_item("Branch report", smallrna_base / "report/index.html"),
+                report_map_item("Differential index", smallrna_base / "smallrna/differential/reports/index.html"),
+                report_map_item("Target/integration overview", smallrna_base / "smallrna/differential/reports/targets/index.html"),
+                report_map_item("smallRNA technical PDF", smallrna_base / "smallrna/differential/reports/technical_report.pdf"),
+            ],
+        ),
+        report_map_item(
+            "Matched evidence",
+            children=[
+                report_map_item(
+                    "miRNA-mRNA integration",
+                    smallrna_base / "smallrna/differential/mirna_mrna_integration/mirna_mrna_manifest.tsv",
+                ),
+                report_map_item(
+                    "Inverse target feature sets",
+                    smallrna_base / "smallrna/differential/mirna_mrna_target_feature_sets/target_feature_set_manifest.tsv",
+                ),
+                report_map_item(
+                    "Isoform/DTU consensus",
+                    rnaseq_base / "differential/isoform_switch/report/isoform_interpretation_consensus.tsv",
+                ),
+            ],
+        ),
+    ]
+
+
 def render(args: argparse.Namespace) -> None:
     output = Path(args.output)
     output.parent.mkdir(parents=True, exist_ok=True)
@@ -451,6 +515,11 @@ def render(args: argparse.Namespace) -> None:
         if args.technical_pdf
         else '<span class="status muted">combined project technical PDF: not configured</span>'
     )
+    sidebar = report_shell_open(
+        "Report Map",
+        project_report_map(args.project, base_dir, rnaseq_base, smallrna_base, args.technical_pdf),
+        base_dir,
+    )
 
     content = f"""<!doctype html>
 <html lang="en">
@@ -458,7 +527,7 @@ def render(args: argparse.Namespace) -> None:
   <meta charset="utf-8">
   <title>{html.escape(args.project)} integrated ASPIS report</title>
   <style>
-    body {{ font-family: system-ui, -apple-system, Segoe UI, sans-serif; margin: 24px; max-width: 1320px; color: #24292f; }}
+    body {{ font-family: system-ui, -apple-system, Segoe UI, sans-serif; margin: 24px; max-width: 1600px; color: #24292f; }}
     h1 {{ margin-bottom: 0.25rem; }}
     h2 {{ margin-top: 1.5rem; border-bottom: 1px solid #d0d7de; padding-bottom: 0.25rem; }}
     .note {{ background: #f6f8fa; border-left: 4px solid #57606a; margin: 12px 0 18px; padding: 10px 12px; }}
@@ -487,9 +556,11 @@ def render(args: argparse.Namespace) -> None:
     input {{ border: 1px solid #d0d7de; border-radius: 6px; padding: 0.45rem 0.55rem; }}
     .review-order {{ background: #f6f8fa; border: 1px solid #d0d7de; border-radius: 6px; padding: 0.75rem 1rem 0.75rem 2.2rem; }}
     .review-order li {{ margin: 0.35rem 0; }}
+    {report_map_css()}
   </style>
 </head>
 <body>
+  {sidebar}
   <nav class="breadcrumbs"><a href="../../index.html">ASPIS run dashboard</a> / project / {html.escape(args.project)}</nav>
   <h1>{html.escape(args.project)} integrated ASPIS report</h1>
   <p class="note">This project page is the canonical entry point below the run dashboard. It joins assay-specific branches for the same biological project and keeps gene, transcript, miRNA, enrichment, DTU, isoform-switch, target, and integration evidence in one review path. Export: {technical_pdf_link}.</p>
@@ -505,7 +576,7 @@ def render(args: argparse.Namespace) -> None:
     {metric("integrated contrasts", sum(1 for row in mirna_integration if row.get("status") == "ok"))}
     {metric("assay-only contrasts", assay_only_contrast_count(rnaseq_summary, smallrna_summary))}
   </div>
-  <h2>Recommended Review Order</h2>
+  <h2 id="review-order">Recommended Review Order</h2>
   <ol class="review-order">
     <li><strong>Run dashboard</strong>: confirm the intended branches, environment, execution report, QC overview, and report inventory.</li>
     <li><strong>Project contrast matrix</strong>: review each biological contrast across gene, transcript, DTU, miRNA, enrichment, target, and integration layers.</li>
@@ -513,11 +584,11 @@ def render(args: argparse.Namespace) -> None:
     <li><strong>Sample/design and workflow status</strong>: verify the metadata, QC, and optional-layer availability that explain the matrix.</li>
     <li><strong>Raw contrast summaries and TSV artifacts</strong>: use these for audit, export, and exact machine-readable values.</li>
   </ol>
-  <h2>Project Contrast Matrix</h2>
+  <h2 id="contrast-matrix">Project Contrast Matrix</h2>
   <p class="section-note">This matrix puts gene, transcript, DTU/splicing, and miRNA contrasts on the same row when assays share the same project and contrast labels. The cross-assay state marks integrated contrasts, RNA-seq-only contrasts, smallRNA-only contrasts, and shared contrasts where integration is not present.</p>
   <div class="controls"><input id="contrastFilter" placeholder="Filter contrasts"></div>
   {contrast_matrix(base_dir, rnaseq_summary, smallrna_summary, rnaseq_enrichment, mirna_integration, rnaseq_dtu, rnaseq_dtu_plots)}
-  <h2>Evidence Layer Entry Points</h2>
+  <h2 id="evidence-entry-points">Evidence Layer Entry Points</h2>
   <p class="section-note">Use these links only after the contrast matrix has identified the layer worth inspecting. The project PDF is the email-friendly single-file export; HTML and TSV links remain the complete source of truth.</p>
   <div class="grid">
     {section("RNA-seq", "Gene, transcript, quantification, differential expression, enrichment, and isoform-switch outputs.", [
@@ -551,13 +622,13 @@ def render(args: argparse.Namespace) -> None:
         table_link(smallrna_base / "smallrna/differential/reports/summaries/summary_manifest.tsv", "smallRNA summary manifest", base_dir),
     ])}
   </div>
-  <h2>Sample And Design Summary</h2>
+  <h2 id="sample-design">Sample And Design Summary</h2>
   <p class="section-note">This table gives the basic assay-level sample/design shape used by the project reports. It does not judge the biological design; it shows which metadata columns and sample tables are available for review.</p>
   {assay_sample_summary(base_dir, rnaseq_base, smallrna_base)}
-  <h2>Workflow Status Matrix</h2>
+  <h2 id="workflow-status">Workflow Status Matrix</h2>
   <p class="section-note">This matrix separates expected branch artifacts from optional layers. Missing required branch pages need attention; optional layers can be not present when they were not configured.</p>
   {workflow_status_matrix(base_dir, rnaseq_base, smallrna_base)}
-  <h2>Raw Contrast Summary</h2>
+  <h2 id="raw-contrast-summary">Raw Contrast Summary</h2>
   <p class="section-note">This lower table preserves the assay-specific summary rows used to build the matrix above.</p>
   {summary_table(base_dir, rnaseq_base, smallrna_base)}
   <h2>Status Glossary</h2>
@@ -573,6 +644,7 @@ def render(args: argparse.Namespace) -> None:
       }});
     }}
   </script>
+  {report_shell_close()}
 </body>
 </html>
 """

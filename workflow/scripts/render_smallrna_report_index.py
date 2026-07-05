@@ -9,6 +9,8 @@ import html
 import os
 from pathlib import Path
 
+from report_navigation import report_map_css, report_map_item, report_shell_close, report_shell_open
+
 
 SUMMARY_COLUMNS = {
     "project",
@@ -274,6 +276,33 @@ def render_target_overview(path: Path, rows: list[dict[str, str]]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     projects = sorted({row.get("project", "") for row in rows if row.get("project", "")})
     title_project = ", ".join(projects) if projects else "smallRNA"
+    run_root = path.parents[7] if len(path.parents) > 7 else path.parent
+    project_items = []
+    if len(projects) == 1:
+        project = projects[0]
+        project_items = [
+            report_map_item("Integrated project report", run_root / "projects" / project / "index.html"),
+            report_map_item("Combined project PDF", run_root / "projects" / project / "technical_report.pdf"),
+        ]
+    sidebar = report_shell_open(
+        "Report Map",
+        [
+            report_map_item("Run dashboard", run_root / "index.html"),
+            report_map_item("Project", children=project_items),
+            report_map_item(
+                "smallRNA",
+                children=[
+                    report_map_item("Differential index", path.parent.parent / "index.html"),
+                    report_map_item("Target/integration overview", "#target-overview"),
+                    report_map_item("Technical PDF", path.parent.parent / "technical_report.pdf"),
+                    report_map_item("Target enrichment", "#target-overview"),
+                    report_map_item("miRNA-mRNA integration", "#target-overview"),
+                    report_map_item("Feature sets", "#target-overview"),
+                ],
+            ),
+        ],
+        path.parent,
+    )
     cards = []
     for row in sorted(rows, key=lambda item: (item.get("project", ""), item.get("contrast_id", ""))):
         status = row.get("status", "unknown") or "unknown"
@@ -365,7 +394,7 @@ def render_target_overview(path: Path, rows: list[dict[str, str]]) -> None:
   <meta charset="utf-8">
   <title>{html.escape(title_project)} smallRNA target and integration overview</title>
   <style>
-    body {{ font-family: system-ui, -apple-system, Segoe UI, sans-serif; margin: 24px; max-width: 1360px; color: #24292f; }}
+    body {{ font-family: system-ui, -apple-system, Segoe UI, sans-serif; margin: 24px; max-width: 1600px; color: #24292f; }}
     h1 {{ margin-bottom: 0.25rem; }}
     h2 {{ margin: 0; font-size: 1.15rem; }}
     h4 {{ margin: 0 0 0.5rem; }}
@@ -390,13 +419,16 @@ def render_target_overview(path: Path, rows: list[dict[str, str]]) -> None:
     .status.blocked {{ background: #fff8c5; color: #9a6700; }}
     .status.failed {{ background: #ffebe9; color: #cf222e; }}
     nav.breadcrumbs {{ color: #57606a; margin-bottom: 1rem; }}
+    {report_map_css()}
   </style>
 </head>
 <body>
+  {sidebar}
   <nav class="breadcrumbs"><a href="../index.html">smallRNA differential report</a> / target and integration overview</nav>
-  <h1>{html.escape(title_project)} smallRNA target and integration overview</h1>
+  <h1 id="target-overview">{html.escape(title_project)} smallRNA target and integration overview</h1>
   <p class="note">This page pulls target enrichment, target-gene feature sets, miRNA-mRNA integration, and integrated target feature-set outputs into one contrast-level view. Empty panels mean the corresponding layer produced no plot artifact or was not configured for that contrast; the linked TSVs remain the source of truth.</p>
   {''.join(cards)}
+  {report_shell_close()}
 </body>
 </html>
 """
@@ -412,6 +444,31 @@ def render_index(
     path.parent.mkdir(parents=True, exist_ok=True)
     projects = sorted({row.get("project", "") for row in rows if row.get("project", "")})
     title_project = ", ".join(projects) if projects else "smallRNA"
+    run_root = path.parents[6] if len(path.parents) > 6 else path.parent
+    project_items = []
+    if len(projects) == 1:
+        project = projects[0]
+        project_items = [
+            report_map_item("Integrated project report", run_root / "projects" / project / "index.html"),
+            report_map_item("Combined project PDF", run_root / "projects" / project / "technical_report.pdf"),
+        ]
+    sidebar = report_shell_open(
+        "Report Map",
+        [
+            report_map_item("Run dashboard", run_root / "index.html"),
+            report_map_item("Project", children=project_items),
+            report_map_item(
+                "smallRNA differential",
+                children=[
+                    report_map_item("Contrast table", "#contrast-table"),
+                    report_map_item("Target/integration overview", Path(target_overview) if target_overview else ""),
+                    report_map_item("Technical PDF", path.parent / "technical_report.pdf"),
+                    report_map_item("Biological warnings", Path(warnings_html) if warnings_html else ""),
+                ],
+            ),
+        ],
+        path.parent,
+    )
     body_rows = []
     for row in sorted(rows, key=lambda item: (item.get("project", ""), item.get("contrast_id", ""))):
         resources = " | ".join(
@@ -531,7 +588,7 @@ def render_index(
   <meta charset="utf-8">
   <title>{html.escape(title_project)} smallRNA differential reports</title>
   <style>
-    body {{ font-family: system-ui, -apple-system, Segoe UI, sans-serif; margin: 24px; max-width: 1440px; color: #24292f; }}
+    body {{ font-family: system-ui, -apple-system, Segoe UI, sans-serif; margin: 24px; max-width: 1680px; color: #24292f; }}
     .note {{ background: #f6f8fa; border-left: 4px solid #57606a; margin: 12px 0 18px; padding: 10px 12px; }}
     .guide {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 0.75rem; margin: 1rem 0 1.5rem; }}
     .guide div {{ border: 1px solid #d0d7de; border-radius: 6px; padding: 0.75rem; }}
@@ -541,9 +598,11 @@ def render_index(
     a {{ color: #0969da; text-decoration: none; }}
     a:hover {{ text-decoration: underline; }}
     nav.breadcrumbs {{ color: #57606a; margin-bottom: 1rem; }}
+    {report_map_css()}
   </style>
 </head>
 <body>
+  {sidebar}
   <nav class="breadcrumbs">ASPIS / smallRNA / Differential reports</nav>
   <h1>{html.escape(title_project)} smallRNA differential reports</h1>
   <p class="note">This report index summarizes miRNA differential-expression contrasts, target-resource outputs, smallRNA QC summaries, residual-genome checks, and optional matched miRNA-mRNA integration for this project.</p>
@@ -554,7 +613,9 @@ def render_index(
   </div>
   <p><a href="technical_report.pdf">printable technical PDF</a>{target_overview_block}</p>
   {warnings_block}
+  <h2 id="contrast-table">Contrast Table</h2>
   <table><thead><tr>{header}</tr></thead><tbody>{''.join(body_rows)}</tbody></table>
+  {report_shell_close()}
 </body>
 </html>
 """

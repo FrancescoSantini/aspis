@@ -267,6 +267,12 @@ Completed hardening slice:
   on the page: run dashboard, project contrast matrix, evidence-layer entry
   points, sample/design and workflow status, then raw contrast summaries and
   TSV artifacts.
+- Main navigational HTML pages now expose a sticky side `Report Map` so users
+  can see the run, project, assay, evidence-layer, PDF, and raw-artifact tree
+  while scrolling wide report tables. The map is applied to the run dashboard,
+  integrated project report, RNA-seq differential index, RNA-seq GO/Reactome
+  overview, smallRNA differential index, smallRNA target/integration overview,
+  and isoform-switch overview.
 - Each integrated project report now emits a combined project-level technical
   PDF beside the HTML page. This PDF is the email-friendly single-file export
   for the project and includes RNA-seq, smallRNA, enrichment, target,

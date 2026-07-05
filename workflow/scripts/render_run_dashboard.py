@@ -10,6 +10,8 @@ import os
 from collections import Counter
 from pathlib import Path
 
+from report_navigation import report_map_css, report_map_item, report_shell_close, report_shell_open
+
 
 REQUIRED_PLAN_COLUMNS = {"assay", "project", "status", "reason"}
 REPORT_INVENTORY_COLUMNS = [
@@ -528,6 +530,48 @@ def project_card(project: str, plan_rows: list[dict[str, str]], branch_dir: Path
     )
 
 
+def dashboard_report_map(
+    projects: list[str],
+    branch_dir: Path,
+    base_dir: Path,
+    qc_overview_path: Path,
+    report_inventory_path: Path,
+) -> list[dict[str, object]]:
+    project_items = []
+    for project in projects:
+        rnaseq = branch_dir / "rnaseq" / project
+        smallrna = branch_dir / "smallrna" / project
+        project_items.append(
+            report_map_item(
+                project,
+                base_dir / "projects" / project / "index.html",
+                children=[
+                    report_map_item("Combined PDF", base_dir / "projects" / project / "technical_report.pdf"),
+                    report_map_item("RNA-seq differential", rnaseq / "differential/reports/index.html"),
+                    report_map_item("RNA-seq GO/Reactome", rnaseq / "differential/reports/enrichment/index.html"),
+                    report_map_item("RNA-seq DTU", rnaseq / "differential/dtu/dtu_method_manifest.tsv"),
+                    report_map_item("Isoform switch", rnaseq / "differential/isoform_switch/report/index.html"),
+                    report_map_item("smallRNA differential", smallrna / "smallrna/differential/reports/index.html"),
+                    report_map_item("smallRNA targets/integration", smallrna / "smallrna/differential/reports/targets/index.html"),
+                ],
+            )
+        )
+    return [
+        report_map_item(
+            "Run dashboard",
+            children=[
+                report_map_item("Resources", "#run-resources"),
+                report_map_item("Optional-layer status", "#optional-layer-status"),
+                report_map_item("Projects", "#projects"),
+                report_map_item("Assay branches", "#assay-branches"),
+            ],
+        ),
+        report_map_item("QC overview", qc_overview_path),
+        report_map_item("Report inventory", report_inventory_path),
+        report_map_item("Projects", children=project_items),
+    ]
+
+
 def qc_stage_card(
     *,
     assay: str,
@@ -749,6 +793,11 @@ def render(args: argparse.Namespace) -> None:
     report_inventory_path = Path(args.report_inventory) if args.report_inventory else output.parent / "report_inventory.tsv"
     write_report_inventory(report_inventory_path, report_inventory)
     project_cards = "".join(project_card(project, plan_rows, branch_dir, base_dir) for project in projects)
+    sidebar = report_shell_open(
+        "Report Map",
+        dashboard_report_map(projects, branch_dir, base_dir, qc_overview_path, report_inventory_path),
+        base_dir,
+    )
     project_table_rows = []
     for project in projects:
         project_rows = [row for row in plan_rows if row.get("project", "") == project]
@@ -788,7 +837,7 @@ def render(args: argparse.Namespace) -> None:
   <meta charset=\"utf-8\">
   <title>ASPIS run dashboard</title>
   <style>
-    body {{ font-family: system-ui, -apple-system, Segoe UI, sans-serif; margin: 24px; max-width: 1440px; color: #24292f; }}
+    body {{ font-family: system-ui, -apple-system, Segoe UI, sans-serif; margin: 24px; max-width: 1680px; color: #24292f; }}
     .note {{ background: #f6f8fa; border-left: 4px solid #57606a; margin: 12px 0 18px; padding: 10px 12px; }}
     .guide {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 0.75rem; margin: 1rem 0 1.5rem; }}
     .guide div {{ border: 1px solid #d0d7de; border-radius: 6px; padding: 0.75rem; }}
@@ -823,9 +872,11 @@ def render(args: argparse.Namespace) -> None:
     input, select {{ border: 1px solid #d0d7de; border-radius: 6px; padding: 0.45rem 0.55rem; }}
     .option-strip {{ display: flex; flex-wrap: wrap; gap: 0.5rem; margin: 0.75rem 0 1.25rem; }}
     .option-pill {{ border: 1px solid #d0d7de; border-radius: 999px; padding: 0.25rem 0.65rem; }}
+    {report_map_css()}
   </style>
 </head>
 <body>
+  {sidebar}
   <nav class="breadcrumbs">ASPIS / Run dashboard</nav>
   <h1>ASPIS run dashboard</h1>
   <p class="note">This page is the top-level navigation point for one ASPIS run. Start here to check which assay/project branches were planned, whether they are ready, and where the branch reports, QC summaries, provenance, and technical PDFs live.</p>
@@ -834,7 +885,7 @@ def render(args: argparse.Namespace) -> None:
     <div><strong>Project reports</strong><br>Start with the integrated project page, then move to assay branches only for deeper QC, differential, and evidence-layer details.</div>
     <div><strong>Environment</strong><br>Confirm required tools and optional advanced tools before trusting expensive outputs.</div>
   </div>
-  <div class=\"resources\">{manifest_link} | {plan_link} | {env_link} | {exec_link} | {inventory_link} | {qc_overview_link}</div>
+  <div id="run-resources" class=\"resources\">{manifest_link} | {plan_link} | {env_link} | {exec_link} | {inventory_link} | {qc_overview_link}</div>
   <section class=\"metrics\">
     <div class=\"metric\"><strong>planned branches</strong><span>{len(plan_rows)}</span></div>
     <div class=\"metric\"><strong>ready branches</strong><span>{len(ready)}</span></div>
@@ -844,7 +895,7 @@ def render(args: argparse.Namespace) -> None:
     <div class=\"metric\"><strong>execution issues</strong><span>{execution_failed}</span></div>
     <div class=\"metric\"><strong>available reports</strong><span>{sum(inventory_counts.values())}</span></div>
   </section>
-  <h2>Optional-Layer Status</h2>
+  <h2 id="optional-layer-status">Optional-Layer Status</h2>
   <div class="option-strip">{optional_strip}</div>
   <p class="note">The report inventory is a typed TSV map of the generated report graph. It is intended for auditing, packaging, and programmatic checks without opening every nested HTML page.</p>
   <div class="controls">
@@ -852,7 +903,7 @@ def render(args: argparse.Namespace) -> None:
     <select id="dashboardAssay"><option value="">all assays</option><option value="rnaseq">RNA-seq</option><option value="smallrna">smallRNA</option></select>
     <select id="dashboardStatus"><option value="">all statuses</option><option value="ready">ready</option><option value="blocked">blocked</option><option value="failed">failed</option></select>
   </div>
-  <h2>Projects</h2>
+  <h2 id="projects">Projects</h2>
   <p class="note">Project pages join assay branches that share a project identifier, so matched RNA-seq and smallRNA analyses can be reviewed together.</p>
   <div class="project-grid">{project_cards}</div>
   <table>
@@ -861,7 +912,7 @@ def render(args: argparse.Namespace) -> None:
     </thead>
     <tbody>{''.join(project_table_rows)}</tbody>
   </table>
-  <h2>Assay Branches</h2>
+  <h2 id="assay-branches">Assay Branches</h2>
   <table>
     <thead>
       <tr><th>assay</th><th>project</th><th>status</th><th>reason</th><th>libraries</th><th>samples</th><th>branch resources</th></tr>
@@ -884,6 +935,7 @@ def render(args: argparse.Namespace) -> None:
     }}
     ['dashboardSearch', 'dashboardAssay', 'dashboardStatus'].forEach(id => document.getElementById(id).addEventListener('input', applyDashboardFilters));
   </script>
+  {report_shell_close()}
 </body>
 </html>
 """
