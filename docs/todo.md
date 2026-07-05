@@ -4,7 +4,7 @@ This is the canonical ASPIS backlog. Older TODO-style notes have been merged
 here so that implementation priorities, validation blockers, and cleanup work
 are tracked in one place.
 
-Last updated: 2026-07-04.
+Last updated: 2026-07-05.
 
 ## How To Read This Backlog
 
@@ -46,12 +46,16 @@ narrower and no longer organized as open P0 report/resource plumbing:
   transcript-event SUPPA2, and native rMATS DTU execution is implemented,
   contract-tested, and split into one schedulable job per contrast/method pair.
   DRIMSeq, DEXSeq, DEXSeqExon, SUPPA2, and rMATS are validated on the BEAS_2B
-  G100 run.
+  G100 run. The final BEAS_2B DTU refresh completed all 30 contrast/method
+  jobs and all 30 DTU plot sets.
 - Core isoform-switch analysis is functionally closed for the current cycle:
   IsoformSwitchAnalyzeR execution, sequence export, ncRNA interpretation,
   DTU/splicing method support, DTU consensus, isoform/DTU evidence linking, and
   high/medium/low isoform interpretation consensus are implemented and exposed
-  in reports.
+  in reports. The refreshed BEAS_2B isoform/DTU evidence summary links all 95
+  isoform-switch candidate rows to DTU/splicing context, with 83 candidate rows
+  and 25 genes carrying significant DTU/splicing support across
+  DRIMSeq, DEXSeq, DEXSeqExon, SUPPA2, and rMATS.
 - Optional isoform-switch consequence annotation with external open tools or
   precomputed user-supplied annotation tables remains future polish, not a
   blocker for core isoform-switch/DTU interpretation.
@@ -606,6 +610,8 @@ Completed native DTU scope:
   RNA-seq differential report. A subsequent rMATS refresh validated six
   native rMATS contrasts on BEAS_2B aligned BAMs, producing 75,842-88,044
   standardized junction-event rows per contrast and populated delta-PSI plots.
+  The final BEAS_2B DTU refresh completed all 30 contrast/method jobs and all
+  30 DTU plot sets.
 - Missing `Rscript`, missing `R::DRIMSeq`/`R::DEXSeq`, missing
   `dexseq_prepare_annotation.py`, missing `dexseq_count.py`, missing
   `suppa.py`, missing `rmats.py`, missing rMATS read length, insufficient
@@ -643,6 +649,11 @@ Completed native DTU scope:
   55 high priority, 30 medium priority, 10 low priority, 31 multi-method
   supported rows, and 52 single-method supported rows. The RNA-seq differential
   report exposes the interpretation section and links the consensus table.
+- The final BEAS_2B isoform/DTU evidence refresh confirmed that all 95
+  isoform-switch candidate rows have DTU/splicing context, 83 rows and 25 genes
+  have significant DTU/splicing support, and the significant evidence spans all
+  five completed native DTU/splicing methods: DRIMSeq, DEXSeq, DEXSeqExon,
+  SUPPA2, and rMATS.
 - The local biological integration contract covers DRIMSeq standardization,
   DEXSeq transcript-feature standardization, SUPPA2 transcript-event
   standardization, and DTU plot/report asset exposure without requiring real R
@@ -663,8 +674,8 @@ Remaining optional/future tasks:
   `RI`, `FL`) after validating storage/runtime on real data.
 - Add optional environment checks for future engines only when their native input
   contracts are implemented.
-- Improve human-facing labels and explanatory prose in the interpretation
-  consensus table as report polish, without changing statistical outputs.
+- Further human-facing interpretation prose belongs under report polish, not
+  native DTU functionality.
 
 Acceptance criteria:
 
