@@ -171,6 +171,8 @@ def build_report_inventory(
                 label="integrated project report",
                 project=project,
                 html_path=base_dir / "projects" / project / "index.html",
+                pdf_path=base_dir / "projects" / project / "technical_report.pdf",
+                summary_paths=[base_dir / "projects" / project / "technical_report.qa.tsv"],
                 manifest_paths=[],
             )
         )
@@ -488,6 +490,7 @@ def project_card(project: str, plan_rows: list[dict[str, str]], branch_dir: Path
     rnaseq = branch_dir / "rnaseq" / project
     smallrna = branch_dir / "smallrna" / project
     project_report = base_dir / "projects" / project / "index.html"
+    project_pdf = base_dir / "projects" / project / "technical_report.pdf"
     core_links = [
         link_if_exists(project_report, "integrated project report", base_dir),
         optional_link(rnaseq / "differential/reports/index.html", "RNA-seq differential", base_dir),
@@ -505,6 +508,7 @@ def project_card(project: str, plan_rows: list[dict[str, str]], branch_dir: Path
         optional_link(smallrna / "smallrna/length_qc/length_distribution.svg", "smallRNA length QC", base_dir),
     ]
     pdf_links = [
+        optional_link(project_pdf, "combined project technical PDF", base_dir),
         optional_link(rnaseq / "differential/reports/technical_report.pdf", "RNA-seq technical PDF", base_dir),
         optional_link(smallrna / "smallrna/differential/reports/technical_report.pdf", "smallRNA technical PDF", base_dir),
     ]
@@ -827,7 +831,7 @@ def render(args: argparse.Namespace) -> None:
   <p class="note">This page is the top-level navigation point for one ASPIS run. Start here to check which assay/project branches were planned, whether they are ready, and where the branch reports, QC summaries, provenance, and technical PDFs live.</p>
   <div class="guide">
     <div><strong>Manifests</strong><br>Audit what was materialized from local FASTQs or public accessions.</div>
-    <div><strong>Branch reports</strong><br>Open assay/project pages for QC, alignment, quantification, differential results, warnings, and reports.</div>
+    <div><strong>Project reports</strong><br>Start with the integrated project page, then move to assay branches only for deeper QC, differential, and evidence-layer details.</div>
     <div><strong>Environment</strong><br>Confirm required tools and optional advanced tools before trusting expensive outputs.</div>
   </div>
   <div class=\"resources\">{manifest_link} | {plan_link} | {env_link} | {exec_link} | {inventory_link} | {qc_overview_link}</div>

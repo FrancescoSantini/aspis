@@ -98,6 +98,18 @@ PLOT_COLUMNS = [
         "checking whether the main signal is coherent across replicates.",
     ),
     (
+        "feature_set_plot",
+        "feature_set_plot",
+        "Feature-Set ORA Plot",
+        "This plot summarizes over-representation results for configured feature-set resources.",
+    ),
+    (
+        "ranked_feature_set_plot",
+        "ranked_feature_set_plot",
+        "Ranked Feature-Set Plot",
+        "This plot summarizes ranked feature-set evidence using all tested features ordered by the differential statistic.",
+    ),
+    (
         "target_enrichment_plot",
         "target_enrichment_plot",
         "Target Enrichment Plot",
@@ -108,6 +120,36 @@ PLOT_COLUMNS = [
         "mirna_mrna_plot",
         "miRNA-mRNA Integration Plot",
         "This panel summarizes matched miRNA and mRNA relationships when matched RNA-seq data and target resources are configured.",
+    ),
+    (
+        "target_feature_set_plot",
+        "target_feature_set_plot",
+        "Target Feature-Set Plot",
+        "This plot summarizes feature-set enrichment among target genes linked to differential miRNAs.",
+    ),
+    (
+        "mirna_feature_set_plot",
+        "mirna_feature_set_plot",
+        "miRNA Feature-Set Plot",
+        "This plot summarizes configured miRNA-ID feature-set resources.",
+    ),
+    (
+        "mirna_ranked_feature_set_plot",
+        "mirna_ranked_feature_set_plot",
+        "Ranked miRNA Feature-Set Plot",
+        "This plot summarizes ranked miRNA-ID feature-set evidence using all tested miRNAs.",
+    ),
+    (
+        "mirna_mrna_target_feature_set_plot",
+        "mirna_mrna_target_feature_set_plot",
+        "Integrated Target Feature-Set Plot",
+        "This plot summarizes target-gene feature sets after joining miRNA and matched RNA-seq evidence.",
+    ),
+    (
+        "mirna_mrna_target_ranked_feature_set_plot",
+        "mirna_mrna_target_ranked_feature_set_plot",
+        "Integrated Ranked Target Feature-Set Plot",
+        "This plot summarizes ranked target-gene feature sets after joining miRNA and matched RNA-seq evidence.",
     ),
     (
         "smallrna_length_plot",
@@ -125,6 +167,8 @@ COMMON_TABLES = [
 
 RNASEQ_TABLES = COMMON_TABLES + [
     ("novelty_summary_tsv", "Transcript Novelty Summary"),
+    ("feature_set_results", "Feature-Set ORA Results"),
+    ("ranked_feature_set_results", "Ranked Feature-Set Results"),
 ]
 
 SMALLRNA_TABLES = COMMON_TABLES + [
@@ -135,6 +179,11 @@ SMALLRNA_TABLES = COMMON_TABLES + [
     ("smallrna_length_stage_summary", "Length-Stage Summary"),
     ("smallrna_arm_summary", "miRNA Arm Summary"),
     ("residual_biotype_counts", "Residual Read Biotypes"),
+    ("target_feature_set_results", "Target Feature-Set Results"),
+    ("mirna_feature_set_results", "miRNA Feature-Set Results"),
+    ("mirna_ranked_feature_set_results", "Ranked miRNA Feature-Set Results"),
+    ("mirna_mrna_target_feature_set_results", "Integrated Target Feature-Set Results"),
+    ("mirna_mrna_target_ranked_feature_set_results", "Integrated Ranked Target Feature-Set Results"),
 ]
 
 PREFERRED_TABLE_COLUMNS = [
@@ -173,9 +222,15 @@ INTERESTING_ASSET_GROUPS = {
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--assay", required=True, choices=["rnaseq", "smallrna"])
-    parser.add_argument("--summary-manifest", required=True)
+    parser.add_argument("--assay", choices=["rnaseq", "smallrna"], default="")
+    parser.add_argument("--summary-manifest", default="")
     parser.add_argument("--asset-manifest", default="")
+    parser.add_argument("--project", default="", help="Render a combined project-level PDF when set")
+    parser.add_argument("--project-html", default="", help="Optional project HTML report linked in combined mode")
+    parser.add_argument("--rnaseq-summary-manifest", default="", help="RNA-seq summary manifest for combined project PDF")
+    parser.add_argument("--smallrna-summary-manifest", default="", help="smallRNA summary manifest for combined project PDF")
+    parser.add_argument("--rnaseq-asset-manifest", default="", help="RNA-seq asset manifest for combined project PDF")
+    parser.add_argument("--smallrna-asset-manifest", default="", help="smallRNA asset manifest for combined project PDF")
     parser.add_argument("--output", required=True)
     parser.add_argument("--done", required=True)
     parser.add_argument("--top-table-rows", type=int, default=8)
@@ -191,6 +246,13 @@ def read_tsv(path: Path) -> list[dict[str, str]]:
         if reader.fieldnames is None:
             return []
         return [{key: (value or "").strip() for key, value in row.items()} for row in reader]
+
+
+def path_if_exists(path_text: str) -> Path | None:
+    if not path_text:
+        return None
+    path = Path(path_text)
+    return path if path.exists() else None
 
 
 def safe_int(value: str) -> int:
@@ -768,6 +830,182 @@ def draw_asset_inventory(
     story.append(table)
 
 
+def contrast_overview_table(
+    rnaseq_rows: list[dict[str, str]],
+    smallrna_rows: list[dict[str, str]],
+    styles: dict[str, ParagraphStyle],
+) -> Table:
+    gene_by_contrast = {
+        row.get("contrast_id", ""): row for row in rnaseq_rows if row.get("level", "") == "gene"
+    }
+    transcript_by_contrast = {
+        row.get("contrast_id", ""): row for row in rnaseq_rows if row.get("level", "") == "transcript"
+    }
+    mirna_by_contrast = {row.get("contrast_id", ""): row for row in smallrna_rows}
+    contrast_ids = sorted(set(gene_by_contrast) | set(transcript_by_contrast) | set(mirna_by_contrast))
+    data: list[list[Paragraph]] = [
+        [
+            para("contrast", styles["table_header"]),
+            para("gene DE", styles["table_header"]),
+            para("transcript DE", styles["table_header"]),
+            para("miRNA DE", styles["table_header"]),
+            para("integration hints", styles["table_header"]),
+        ]
+    ]
+    for contrast_id in contrast_ids:
+        gene = gene_by_contrast.get(contrast_id, {})
+        transcript = transcript_by_contrast.get(contrast_id, {})
+        mirna = mirna_by_contrast.get(contrast_id, {})
+        integration = []
+        if gene or transcript:
+            integration.append("RNA-seq")
+        if mirna:
+            integration.append("smallRNA")
+        if gene and transcript and mirna:
+            integration.append("shared contrast")
+        data.append(
+            [
+                para(contrast_id, styles["table"]),
+                para(
+                    f"{gene.get('status', 'not present')} | {gene.get('n_significant', '0')} significant",
+                    styles["table"],
+                ),
+                para(
+                    f"{transcript.get('status', 'not present')} | {transcript.get('n_significant', '0')} significant",
+                    styles["table"],
+                ),
+                para(
+                    f"{mirna.get('status', 'not present')} | {mirna.get('n_significant', '0')} significant",
+                    styles["table"],
+                ),
+                para(", ".join(integration) or "not present", styles["table"]),
+            ]
+        )
+    if len(data) == 1:
+        data.append([para("No contrast summaries were available.", styles["table"])] + [para("", styles["table"])] * 4)
+    table = Table(
+        data,
+        colWidths=[
+            0.30 * CONTENT_WIDTH,
+            0.17 * CONTENT_WIDTH,
+            0.19 * CONTENT_WIDTH,
+            0.17 * CONTENT_WIDTH,
+            0.17 * CONTENT_WIDTH,
+        ],
+        hAlign="LEFT",
+        repeatRows=1,
+    )
+    table.setStyle(
+        TableStyle(
+            [
+                ("BACKGROUND", (0, 0), (-1, 0), HEADER_BG),
+                ("BOX", (0, 0), (-1, -1), 0.35, BORDER),
+                ("INNERGRID", (0, 0), (-1, -1), 0.25, BORDER),
+                ("LEFTPADDING", (0, 0), (-1, -1), 4),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 4),
+                ("TOPPADDING", (0, 0), (-1, -1), 4),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+                ("VALIGN", (0, 0), (-1, -1), "TOP"),
+            ]
+        )
+    )
+    return table
+
+
+def selected_asset_rows(
+    assets: list[dict[str, str]],
+    *,
+    kinds: set[str],
+    max_rows: int,
+) -> list[dict[str, str]]:
+    selected = [
+        row
+        for row in assets
+        if row.get("exists", "") == "true"
+        and row.get("asset_kind", "") in kinds
+        and row.get("asset_group", "") in INTERESTING_ASSET_GROUPS
+        and path_if_exists(row.get("path", "")) is not None
+    ]
+    return selected[:max_rows]
+
+
+def draw_selected_asset_plots(
+    story: list,
+    assets: list[dict[str, str]],
+    styles: dict[str, ParagraphStyle],
+    vector_pdf_placements: list[dict[str, object]],
+    max_rows: int,
+) -> None:
+    selected = selected_asset_rows(assets, kinds={"plot"}, max_rows=max_rows)
+    if not selected:
+        return
+    section_page(
+        story,
+        "Evidence-Layer Plots",
+        "These plots come from report asset manifests and cover higher-level evidence layers such as "
+        "DTU, isoform-switch interpretation, target enrichment, integration, and QC. They supplement "
+        "the per-contrast differential-expression plots above.",
+        styles,
+    )
+    for row in selected:
+        path = path_if_exists(row.get("path", ""))
+        if path is None:
+            continue
+        title = " - ".join(
+            part
+            for part in [
+                row.get("assay", ""),
+                row.get("asset_group", ""),
+                row.get("contrast_id", ""),
+                row.get("asset_label", ""),
+            ]
+            if part
+        )
+        flowables = plot_flowables(
+            path,
+            path,
+            title,
+            "Asset-manifest plot embedded from the HTML report graph.",
+            styles,
+            vector_pdf_placements,
+        )
+        story.extend(flowables)
+
+
+def draw_selected_asset_tables(
+    story: list,
+    assets: list[dict[str, str]],
+    styles: dict[str, ParagraphStyle],
+    top_table_rows: int,
+    max_rows: int,
+) -> None:
+    selected = selected_asset_rows(assets, kinds={"table", "manifest"}, max_rows=max_rows)
+    if not selected:
+        return
+    section_page(
+        story,
+        "Evidence-Layer Table Excerpts",
+        "These pages include short excerpts from interpretive TSVs and manifests. Complete records, "
+        "provenance, and machine-readable files remain in the HTML report and linked TSV artifacts.",
+        styles,
+    )
+    for row in selected:
+        path = path_if_exists(row.get("path", ""))
+        if path is None:
+            continue
+        title = " - ".join(
+            part
+            for part in [
+                row.get("assay", ""),
+                row.get("asset_group", ""),
+                row.get("contrast_id", ""),
+                row.get("asset_label", ""),
+            ]
+            if part
+        )
+        story.extend(table_flowables(title, path, top_table_rows, styles))
+
+
 class PageCounter:
     def __init__(self) -> None:
         self.pages = 0
@@ -891,8 +1129,136 @@ def render_report(args: argparse.Namespace) -> int:
     return counter.pages
 
 
+def render_project_report(args: argparse.Namespace) -> int:
+    rnaseq_rows = read_tsv(Path(args.rnaseq_summary_manifest)) if args.rnaseq_summary_manifest else []
+    smallrna_rows = read_tsv(Path(args.smallrna_summary_manifest)) if args.smallrna_summary_manifest else []
+    rows = rnaseq_rows + smallrna_rows
+
+    rnaseq_assets = read_tsv(Path(args.rnaseq_asset_manifest)) if args.rnaseq_asset_manifest else []
+    smallrna_assets = read_tsv(Path(args.smallrna_asset_manifest)) if args.smallrna_asset_manifest else []
+    assets = rnaseq_assets + smallrna_assets
+    styles = stylesheet()
+    project = args.project or ", ".join(sorted({row.get("project", "") for row in rows if row.get("project", "")})) or "ASPIS"
+    status_counts = Counter(row.get("status", "unknown") or "unknown" for row in rows)
+    vector_pdf_placements: list[dict[str, object]] = []
+
+    story: list = []
+    story.append(para("ASPIS Project Technical Report", styles["title"]))
+    story.append(para(project, styles["subtitle"]))
+    story.append(
+        para(
+            f"Generated {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}",
+            styles["caption"],
+        )
+    )
+    if args.project_html:
+        story.append(para(f"Project HTML report: {compact_path(args.project_html)}", styles["caption"]))
+    story.append(Spacer(1, 6 * mm))
+    story.append(para("How To Read This Report", styles["h1"]))
+    story.append(
+        para(
+            "This is the email-friendly single-file companion to the project HTML report. The review order is: "
+            "run dashboard, project report, contrast matrix, evidence layers, then raw artifacts. This PDF embeds "
+            "the major contrast sections plus selected DTU, isoform-switch, enrichment, target, integration, and QC "
+            "assets so collaborators can review the project without traversing the full directory tree.",
+            styles["body"],
+        )
+    )
+    story.append(
+        para(
+            "The PDF intentionally shows excerpts for large TSV files. The HTML index and TSV artifacts remain the "
+            "source of truth for complete tables, exact paths, and machine-readable provenance.",
+            styles["body"],
+        )
+    )
+    story.append(
+        metric_table(
+            [
+                ("project", project),
+                ("RNA-seq contrast rows", str(len(rnaseq_rows))),
+                ("smallRNA contrast rows", str(len(smallrna_rows))),
+                ("statuses", ", ".join(f"{key}:{value}" for key, value in sorted(status_counts.items())) or "none"),
+                ("assets listed", str(len(assets))),
+                ("assets present", str(sum(1 for row in assets if row.get("exists", "") == "true"))),
+            ],
+            styles,
+            columns=2,
+        )
+    )
+    if assets:
+        story.append(Spacer(1, 5 * mm))
+        story.append(metric_table(asset_summary(assets), styles, columns=2))
+
+    section_page(
+        story,
+        "Project Contrast Matrix",
+        "This compact overview aligns gene, transcript, and miRNA contrast rows before the detailed pages.",
+        styles,
+    )
+    story.append(contrast_overview_table(rnaseq_rows, smallrna_rows, styles))
+
+    if rnaseq_rows:
+        section_page(
+            story,
+            "RNA-seq Contrast Sections",
+            "Gene and transcript differential-expression sections include plots, enrichment outputs, and short table excerpts.",
+            styles,
+        )
+        for row in sorted(rnaseq_rows, key=lambda item: (item.get("level", ""), item.get("contrast_id", ""))):
+            render_contrast(story, row, "rnaseq", styles, args.top_table_rows, vector_pdf_placements)
+
+    if smallrna_rows:
+        section_page(
+            story,
+            "smallRNA Contrast Sections",
+            "miRNA differential-expression sections include target, integration, feature-set, QC, and short table excerpts.",
+            styles,
+        )
+        for row in sorted(smallrna_rows, key=lambda item: item.get("contrast_id", "")):
+            render_contrast(story, row, "smallrna", styles, args.top_table_rows, vector_pdf_placements)
+
+    if assets:
+        draw_selected_asset_plots(story, assets, styles, vector_pdf_placements, args.max_asset_rows)
+        draw_selected_asset_tables(story, assets, styles, args.top_table_rows, args.max_asset_rows)
+        draw_asset_inventory(story, assets, styles, args.max_asset_rows)
+
+    output = Path(args.output)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    counter = PageCounter()
+    doc = SimpleDocTemplate(
+        str(output),
+        pagesize=A4,
+        rightMargin=MARGIN,
+        leftMargin=MARGIN,
+        topMargin=MARGIN,
+        bottomMargin=MARGIN + FOOTER_HEIGHT,
+        title=f"ASPIS Project Technical Report - {project}",
+        author="ASPIS",
+    )
+    doc.build(story, onFirstPage=footer(counter), onLaterPages=footer(counter))
+    apply_vector_pdf_overlays(output, vector_pdf_placements)
+
+    done = Path(args.done)
+    done.parent.mkdir(parents=True, exist_ok=True)
+    with done.open("w", encoding="utf-8") as handle:
+        handle.write("status\tproject\trnaseq_rows\tsmallrna_rows\tassets\tpages\n")
+        handle.write(
+            f"{row_status(rows)}\t{project}\t{len(rnaseq_rows)}\t{len(smallrna_rows)}\t"
+            f"{len(assets)}\t{counter.pages}\n"
+        )
+    return counter.pages
+
+
 def main() -> int:
-    render_report(parse_args())
+    args = parse_args()
+    if args.project or args.rnaseq_summary_manifest or args.smallrna_summary_manifest:
+        render_project_report(args)
+        return 0
+    if not args.assay:
+        raise SystemExit("--assay is required unless --project is set")
+    if not args.summary_manifest:
+        raise SystemExit("--summary-manifest is required unless --project is set")
+    render_report(args)
     return 0
 
 

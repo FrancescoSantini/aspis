@@ -16,6 +16,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--project", required=True)
     parser.add_argument("--analysis-plan", required=True)
     parser.add_argument("--branch-dir", required=True)
+    parser.add_argument("--technical-pdf", default="")
     parser.add_argument("--output", required=True)
     parser.add_argument("--done", required=True)
     return parser.parse_args()
@@ -445,6 +446,11 @@ def render(args: argparse.Namespace) -> None:
     smallrna_summary = read_table(smallrna_base / "smallrna/differential/reports/summaries/summary_manifest.tsv")
     isoform_events = read_table(rnaseq_base / "differential/isoform_switch/report/switch_event_summary.tsv")
     mirna_integration = read_table(smallrna_base / "smallrna/differential/mirna_mrna_integration/mirna_mrna_manifest.tsv")
+    technical_pdf_link = (
+        f'<a href="{html.escape(rel_href(Path(args.technical_pdf), base_dir))}">combined project technical PDF</a>'
+        if args.technical_pdf
+        else '<span class="status muted">combined project technical PDF: not configured</span>'
+    )
 
     content = f"""<!doctype html>
 <html lang="en">
@@ -479,12 +485,14 @@ def render(args: argparse.Namespace) -> None:
     nav.breadcrumbs {{ color: #57606a; margin-bottom: 1rem; }}
     .controls {{ display: flex; flex-wrap: wrap; gap: 0.75rem; margin: 1rem 0; }}
     input {{ border: 1px solid #d0d7de; border-radius: 6px; padding: 0.45rem 0.55rem; }}
+    .review-order {{ background: #f6f8fa; border: 1px solid #d0d7de; border-radius: 6px; padding: 0.75rem 1rem 0.75rem 2.2rem; }}
+    .review-order li {{ margin: 0.35rem 0; }}
   </style>
 </head>
 <body>
   <nav class="breadcrumbs"><a href="../../index.html">ASPIS run dashboard</a> / project / {html.escape(args.project)}</nav>
   <h1>{html.escape(args.project)} integrated ASPIS report</h1>
-  <p class="note">This project page joins assay-specific branches for the same biological project. Use it to move between RNA-seq gene/transcript/isoform-switch outputs, smallRNA miRNA outputs, target enrichment, and miRNA-mRNA integration without losing the project context.</p>
+  <p class="note">This project page is the canonical entry point below the run dashboard. It joins assay-specific branches for the same biological project and keeps gene, transcript, miRNA, enrichment, DTU, isoform-switch, target, and integration evidence in one review path. Export: {technical_pdf_link}.</p>
   <div class="metrics">
     {metric("planned branches", len(plan_rows))}
     {metric("ready assays", ", ".join(ready_assays) or "none")}
@@ -497,12 +505,20 @@ def render(args: argparse.Namespace) -> None:
     {metric("integrated contrasts", sum(1 for row in mirna_integration if row.get("status") == "ok"))}
     {metric("assay-only contrasts", assay_only_contrast_count(rnaseq_summary, smallrna_summary))}
   </div>
-  <h2>Sample And Design Summary</h2>
-  <p class="section-note">This table gives the basic assay-level sample/design shape used by the project reports. It does not judge the biological design; it shows which metadata columns and sample tables are available for review.</p>
-  {assay_sample_summary(base_dir, rnaseq_base, smallrna_base)}
-  <h2>Workflow Status Matrix</h2>
-  <p class="section-note">This matrix separates expected branch artifacts from optional layers. Missing required branch pages need attention; optional layers can be not present when they were not configured.</p>
-  {workflow_status_matrix(base_dir, rnaseq_base, smallrna_base)}
+  <h2>Recommended Review Order</h2>
+  <ol class="review-order">
+    <li><strong>Run dashboard</strong>: confirm the intended branches, environment, execution report, QC overview, and report inventory.</li>
+    <li><strong>Project contrast matrix</strong>: review each biological contrast across gene, transcript, DTU, miRNA, enrichment, target, and integration layers.</li>
+    <li><strong>Evidence layer entry points</strong>: open the assay-specific branch or specialized overview only when a matrix cell needs deeper inspection.</li>
+    <li><strong>Sample/design and workflow status</strong>: verify the metadata, QC, and optional-layer availability that explain the matrix.</li>
+    <li><strong>Raw contrast summaries and TSV artifacts</strong>: use these for audit, export, and exact machine-readable values.</li>
+  </ol>
+  <h2>Project Contrast Matrix</h2>
+  <p class="section-note">This matrix puts gene, transcript, DTU/splicing, and miRNA contrasts on the same row when assays share the same project and contrast labels. The cross-assay state marks integrated contrasts, RNA-seq-only contrasts, smallRNA-only contrasts, and shared contrasts where integration is not present.</p>
+  <div class="controls"><input id="contrastFilter" placeholder="Filter contrasts"></div>
+  {contrast_matrix(base_dir, rnaseq_summary, smallrna_summary, rnaseq_enrichment, mirna_integration, rnaseq_dtu, rnaseq_dtu_plots)}
+  <h2>Evidence Layer Entry Points</h2>
+  <p class="section-note">Use these links only after the contrast matrix has identified the layer worth inspecting. The project PDF is the email-friendly single-file export; HTML and TSV links remain the complete source of truth.</p>
   <div class="grid">
     {section("RNA-seq", "Gene, transcript, quantification, differential expression, enrichment, and isoform-switch outputs.", [
         link(rnaseq_base / "report/index.html", "RNA-seq branch report", base_dir),
@@ -535,10 +551,12 @@ def render(args: argparse.Namespace) -> None:
         table_link(smallrna_base / "smallrna/differential/reports/summaries/summary_manifest.tsv", "smallRNA summary manifest", base_dir),
     ])}
   </div>
-  <h2>Project Contrast Matrix</h2>
-  <p class="section-note">This matrix puts gene, transcript, and miRNA contrasts on the same row when assays share the same project and contrast labels. The cross-assay state marks integrated contrasts, RNA-seq-only contrasts, smallRNA-only contrasts, and shared contrasts where integration is not present.</p>
-  <div class="controls"><input id="contrastFilter" placeholder="Filter contrasts"></div>
-  {contrast_matrix(base_dir, rnaseq_summary, smallrna_summary, rnaseq_enrichment, mirna_integration, rnaseq_dtu, rnaseq_dtu_plots)}
+  <h2>Sample And Design Summary</h2>
+  <p class="section-note">This table gives the basic assay-level sample/design shape used by the project reports. It does not judge the biological design; it shows which metadata columns and sample tables are available for review.</p>
+  {assay_sample_summary(base_dir, rnaseq_base, smallrna_base)}
+  <h2>Workflow Status Matrix</h2>
+  <p class="section-note">This matrix separates expected branch artifacts from optional layers. Missing required branch pages need attention; optional layers can be not present when they were not configured.</p>
+  {workflow_status_matrix(base_dir, rnaseq_base, smallrna_base)}
   <h2>Raw Contrast Summary</h2>
   <p class="section-note">This lower table preserves the assay-specific summary rows used to build the matrix above.</p>
   {summary_table(base_dir, rnaseq_base, smallrna_base)}

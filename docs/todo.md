@@ -263,6 +263,15 @@ Completed hardening slice:
   filtering, and a status glossary. The contrast matrix remains the main
   biological navigation layer for matched gene, transcript, miRNA,
   GO/Reactome, target, and miRNA-mRNA integration outputs.
+- Integrated project reports now enforce the canonical review order directly
+  on the page: run dashboard, project contrast matrix, evidence-layer entry
+  points, sample/design and workflow status, then raw contrast summaries and
+  TSV artifacts.
+- Each integrated project report now emits a combined project-level technical
+  PDF beside the HTML page. This PDF is the email-friendly single-file export
+  for the project and includes RNA-seq, smallRNA, enrichment, target,
+  integration, DTU, isoform-switch, and selected QC/report asset excerpts
+  instead of only one assay-specific subset.
 - The main dashboard, integrated project report, RNA-seq differential index,
   smallRNA differential index, smallRNA target/integration overview, and
   isoform-switch overview now include breadcrumbs and consistent context
@@ -372,6 +381,10 @@ Completed hardening slice:
 - RNA-seq and smallRNA technical report rules now emit
   `technical_report.qa.tsv` beside `technical_report.pdf`; the run dashboard
   inventory links these QA TSVs as report summary artifacts.
+- Project-level technical PDFs are now generated from both assay summary
+  manifests plus report asset manifests, so the combined export captures the
+  project report graph rather than only the RNA-seq or only the smallRNA
+  branch.
 - `tests/validate_technical_pdf_report_contract.py` covers a valid vector-text
   PDF, a tiny embedded raster image failure, and a full-page raster/no-text
   failure.

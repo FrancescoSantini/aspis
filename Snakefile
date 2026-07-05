@@ -2100,6 +2100,18 @@ def project_report_done(project):
     return f"{PROJECT_REPORT_DIR}/{project}/index.done"
 
 
+def project_report_pdf(project):
+    return f"{PROJECT_REPORT_DIR}/{project}/technical_report.pdf"
+
+
+def project_report_pdf_done(project):
+    return f"{PROJECT_REPORT_DIR}/{project}/technical_report.done"
+
+
+def project_report_pdf_qa(project):
+    return f"{PROJECT_REPORT_DIR}/{project}/technical_report.qa.tsv"
+
+
 def planned_ready_projects(wildcards):
     plan_path = checkpoints.build_analysis_plan.get().output[0]
     projects = set()
@@ -2119,7 +2131,15 @@ def planned_ready_projects(wildcards):
 def planned_project_report_targets(wildcards):
     targets = []
     for project in planned_ready_projects(wildcards):
-        targets.extend([project_report_html(project), project_report_done(project)])
+        targets.extend(
+            [
+                project_report_html(project),
+                project_report_done(project),
+                project_report_pdf(project),
+                project_report_pdf_done(project),
+                project_report_pdf_qa(project),
+            ]
+        )
     return targets
 
 
@@ -2374,10 +2394,17 @@ rule render_project_report_index:
         project_report_inputs
     output:
         html=f"{PROJECT_REPORT_DIR}/{{project}}/index.html",
+        technical_pdf=f"{PROJECT_REPORT_DIR}/{{project}}/technical_report.pdf",
+        technical_done=f"{PROJECT_REPORT_DIR}/{{project}}/technical_report.done",
+        technical_qa=f"{PROJECT_REPORT_DIR}/{{project}}/technical_report.qa.tsv",
         done=f"{PROJECT_REPORT_DIR}/{{project}}/index.done"
     params:
         analysis_plan=ANALYSIS_PLAN,
-        branch_dir=BRANCH_DIR
+        branch_dir=BRANCH_DIR,
+        rnaseq_summary_manifest=lambda wildcards: f"{BRANCH_DIR}/rnaseq/{wildcards.project}/differential/reports/summaries/summary_manifest.tsv",
+        rnaseq_asset_manifest=lambda wildcards: f"{BRANCH_DIR}/rnaseq/{wildcards.project}/differential/reports/asset_manifest.tsv",
+        smallrna_summary_manifest=lambda wildcards: f"{BRANCH_DIR}/smallrna/{wildcards.project}/smallrna/differential/reports/summaries/summary_manifest.tsv",
+        smallrna_asset_manifest=lambda wildcards: f"{BRANCH_DIR}/smallrna/{wildcards.project}/smallrna/differential/reports/asset_manifest.tsv"
     log:
         "logs/projects/{project}.report_index.log"
     shell:
@@ -2387,9 +2414,24 @@ rule render_project_report_index:
           --project {wildcards.project:q} \
           --analysis-plan {params.analysis_plan:q} \
           --branch-dir {params.branch_dir:q} \
+          --technical-pdf {output.technical_pdf:q} \
           --output {output.html:q} \
           --done {output.done:q} \
           > {log:q} 2>&1
+        python3 workflow/scripts/render_technical_pdf_report.py \
+          --project {wildcards.project:q} \
+          --project-html {output.html:q} \
+          --rnaseq-summary-manifest {params.rnaseq_summary_manifest:q} \
+          --rnaseq-asset-manifest {params.rnaseq_asset_manifest:q} \
+          --smallrna-summary-manifest {params.smallrna_summary_manifest:q} \
+          --smallrna-asset-manifest {params.smallrna_asset_manifest:q} \
+          --output {output.technical_pdf:q} \
+          --done {output.technical_done:q} \
+          >> {log:q} 2>&1
+        python3 workflow/scripts/validate_technical_pdf_report.py \
+          --pdf {output.technical_pdf:q} \
+          --output {output.technical_qa:q} \
+          >> {log:q} 2>&1
         """
 
 
