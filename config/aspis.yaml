@@ -174,9 +174,12 @@ rnaseq_differential:
   isoform_switch_genome_object: ""
   isoform_switch_reports: true
   isoform_switch_report_top_n: 30
-  # Optional TSV(s) with columns such as isoform_id/source/feature_type/
-  # feature_id/feature_name/start_aa/end_aa/description. These can be
-  # InterProScan, Pfam/hmmscan, SignalP/TM/localization, or user-curated tables.
+  # Optional TSV(s) with columns such as isoform_id, transcript_id, protein_id,
+  # gene_id, source, feature_type, feature_id, feature_name, start_aa, end_aa,
+  # score, and description. These can be InterProScan, Pfam/hmmscan,
+  # CPAT/CPC2, SignalP/TM/localization/disorder, or user-curated tables.
+  # Imports are normalized into functional_annotation_summary.tsv and audited
+  # per source in functional_annotation_qa.tsv.
   isoform_switch_functional_annotation_tables: []
   # Optional TSV(s) with ncRNA switch resources. Rows can match by transcript_id,
   # gene_id, or chrom/start/end overlap with gained/lost switch intervals.

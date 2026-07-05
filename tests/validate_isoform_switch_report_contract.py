@@ -41,6 +41,7 @@ def main() -> int:
         deeptmhmm = tmp / "deeptmhmm.gff3"
         deeploc = tmp / "deeploc2.tsv"
         iupred = tmp / "iupred2a.tsv"
+        mock_command = tmp / "mock_annotation_command.py"
         outdir = tmp / "report"
 
         write(
@@ -219,6 +220,18 @@ def main() -> int:
             + "\n",
         )
         write(
+            mock_command,
+            "from pathlib import Path\n"
+            "import sys\n"
+            "outdir = Path(sys.argv[1])\n"
+            "outdir.mkdir(parents=True, exist_ok=True)\n"
+            "(outdir / 'mock_command_annotation.tsv').write_text(\n"
+            "    'isoform_id\\tsource\\tfeature_type\\tfeature_id\\tfeature_name\\tstart_aa\\tend_aa\\tdescription\\n'\n"
+            "    'tx_novel\\tmock_command\\tdomain\\tMOCK1\\tMock command domain\\t1\\t2\\tcommand template output\\n',\n"
+            "    encoding='utf-8',\n"
+            ")\n",
+        )
+        write(
             ncrna_annotations,
             "\t".join(
                 [
@@ -320,6 +333,8 @@ def main() -> int:
             str(outdir / "switch_sequence_summary.tsv"),
             "--functional-annotation-table",
             str(outdir / "functional_annotation_summary.tsv"),
+            "--functional-annotation-qa",
+            str(outdir / "functional_annotation_qa.tsv"),
             "--plot-manifest",
             str(outdir / "switch_plot_manifest.tsv"),
             "--external-tool-manifest",
@@ -351,6 +366,8 @@ def main() -> int:
             ),
             "--ncrna-annotation-tables",
             str(ncrna_annotations),
+            "--coding-potential-command",
+            f"{sys.executable} {mock_command} {{outdir}}",
         ]
         completed = subprocess.run(command, check=False, capture_output=True, text=True)
         if completed.returncode:
@@ -364,6 +381,8 @@ def main() -> int:
         coding_rows = read_rows(outdir / "coding_switch_summary.tsv")
         sequences = read_rows(outdir / "switch_sequence_summary.tsv")
         annotation_rows = read_rows(outdir / "functional_annotation_summary.tsv")
+        annotation_qa_rows = read_rows(outdir / "functional_annotation_qa.tsv")
+        external_tool_rows = read_rows(outdir / "external_tool_manifest.tsv")
         plots = read_rows(outdir / "switch_plot_manifest.tsv")
         assert len(events) == 3, events
         assert {row["switch_biotype_class"] for row in events} >= {"coding", "noncoding"}, events
@@ -411,12 +430,21 @@ def main() -> int:
         assert any(row["feature_type"] == "transmembrane" and row["start_aa"] == "2" for row in annotation_rows)
         assert any(row["feature_type"] == "localization" and row["feature_name"] == "Nucleus" for row in annotation_rows)
         assert any(row["feature_type"] == "disorder" and row["start_aa"] == "2" and row["end_aa"] == "3" for row in annotation_rows)
+        assert any(row["feature_name"] == "Mock command domain" for row in annotation_rows), annotation_rows
+        assert annotation_qa_rows, "functional_annotation_qa.tsv is empty"
+        assert all(row["status"] == "ok" for row in annotation_qa_rows), annotation_qa_rows
+        assert any(row["source_kind"] == "interproscan_tsv" and row["matched_rows"] == "1" for row in annotation_qa_rows), annotation_qa_rows
+        assert any(row["source_kind"] == "hmmer_pfam_domtblout" and row["output_rows"] == "1" for row in annotation_qa_rows), annotation_qa_rows
+        assert any(row["source_name"] == "mock_command_annotation.tsv" and row["status"] == "ok" for row in annotation_qa_rows), annotation_qa_rows
+        assert any(row["tool_name"] == "coding_potential" and row["parser_status"] == "ok" for row in external_tool_rows), external_tool_rows
+        assert any(row["match_type"] == "isoform_id" for row in annotation_rows), annotation_rows
         assert Path(plots[0]["plot_svg"]).exists(), plots
         assert Path(plots[0]["event_html"]).exists(), plots
         assert Path(plots[0]["nt_fasta"]).exists(), plots
         assert Path(plots[0]["aa_fasta"]).exists(), plots
         assert (outdir / "switch_plots.pdf").exists()
         assert (outdir / "external_tool_manifest.tsv").exists()
+        assert (outdir / "functional_annotation_qa.tsv").exists()
         assert (outdir / "index.html").exists()
         assert (outdir / "report.done").exists()
     print("isoform_switch_report\tok\tcandidate, sequence, annotation, SVG, and HTML outputs present")

@@ -721,122 +721,49 @@ Acceptance criteria:
   The generated prune manifest records removed, missing, skipped, and failed
   files plus bytes removed.
 
-## P1 - Optional Isoform-Switch Consequence Annotation Polish
+## Validated - Optional Isoform-Switch Consequence Annotation Polish
 
-Reason for priority: isoform-switch execution, event pages, exon diagrams, and
-NT/AA sequence extraction now work on real data, and the core
-isoform-switch/DTU interpretation layer is closed. The remaining value here is
-annotation quality and clearer optional consequence interpretation.
+Status: implemented; focused contract validation passes. Real-run refresh still
+needed when optional consequence tables or command templates are supplied.
 
-Implementation workstreams:
+Implemented behavior:
 
-1. Canonical optional-annotation contract.
+- `rnaseq_differential.isoform_switch_functional_annotation_tables` accepts
+  generic TSVs plus native InterProScan TSV, HMMER/Pfam `domtblout`,
+  CPAT/CPC2-style coding-potential TSV, SignalP, TM/topology, localization, and
+  disorder table formats.
+- Imported rows are normalized into `functional_annotation_summary.tsv` with
+  stable source, feature, coordinate, score, match, status, reason, and
+  source-path columns.
+- Matching now audits `isoform_id`, `transcript_id`, `protein_id`, query aliases,
+  and gene-level identifiers; ncRNA resource tables continue to support
+  transcript/gene/interval matching.
+- `functional_annotation_qa.tsv` records input rows, parsed rows, rows with
+  identifiers, matched/unmatched rows, duplicate IDs, unsupported columns,
+  mapping loss, output rows, and source status per imported table.
+- `external_tool_manifest.tsv` records command template provenance including
+  exact command, return code, produced files, parser status, stdout/stderr logs,
+  and blocked/failed reason.
+- Empty NT/AA FASTA, missing command output, missing input tables, parse errors,
+  and no-match cases are represented as `blocked`, `failed`, or `ok_no_matches`
+  without breaking otherwise valid isoform-switch reports.
+- Report refresh clears stale event pages and generated optional annotation
+  command outputs before rebuilding.
+- The isoform-switch overview and RNA-seq differential index expose coding
+  consequence summary, normalized functional annotations, annotation QA, and
+  external-tool provenance links.
+- Local contract fixtures cover generic TSV, InterProScan TSV, HMMER/Pfam
+  `domtblout`, CPAT/CPC2 coding-potential TSV, SignalP/TM/localization/disorder
+  imports, ncRNA interval imports, annotation QA, SVG/HTML/FASTA outputs, and
+  command-template provenance for a parseable local mock output.
 
-   - Define and document the stable input schema accepted by
-     `rnaseq_differential.isoform_switch_functional_annotation_tables` and
-     `rnaseq_differential.isoform_switch_ncrna_annotation_tables`.
-   - Keep native parser support for InterProScan TSV, HMMER/Pfam `domtblout`,
-     CPAT/CPC2-style coding-potential TSVs, and generic TSVs, but normalize
-     all imported rows into `functional_annotation_summary.tsv` with stable
-     source, feature type, feature ID/name, coordinates, score, status, and
-     reason columns.
-   - Define matching priority across `isoform_id`, `transcript_id`,
-     `protein_id`, `gene_id`, and interval overlap so MSTRG and reference
-     transcript IDs can be traced consistently.
-   - Add an annotation QA table reporting input rows, parsed rows, matched rows,
-     unmatched rows, duplicated IDs, unsupported columns, and mapping loss per
-     source.
+Remaining validation note:
 
-2. Open/local resource policy.
-
-   - Treat precomputed local tables as the preferred interface for external
-     tools and databases.
-   - Make InterProScan TSV, HMMER/Pfam `domtblout`, and CPAT/CPC2-style tables
-     the open validation path when their databases/model files are present under
-     project provenance.
-   - Keep SignalP, TMHMM/DeepTMHMM, DeepLoc2, NetSurfP, IUPred2A, and similar
-     tools out of the default open validation path unless a site/user explicitly
-     provides a reviewed local table or command and accepts the licensing or
-     model-asset terms.
-   - Ensure the open-resource policy test continues to reject restricted sources
-     in default configs and docs.
-
-3. Optional command-template execution.
-
-   - Harden command-template execution for `interproscan.sh`, `hmmscan`, and
-     CPAT/CPC2 first; direct execution of restricted tools remains non-default.
-   - Record exact command, return code, stdout/stderr logs, produced files,
-     parser status, and blocked/failed reason in `external_tool_manifest.tsv`.
-   - Block with an actionable status when NT/AA FASTA files are empty, the
-     command is missing, a required database/model path is missing, or the
-     command produces no parseable output.
-   - Avoid internet access at workflow runtime; all databases and model files
-     must be local and version/provenance tracked.
-
-4. Consequence interpretation polishing.
-
-   - Improve gene-name propagation from StringTie/gffcompare outputs and
-     transcript metadata into isoform-switch candidate, event, sequence,
-     functional annotation, and interpretation tables.
-   - Map MSTRG and reference transcript IDs to gene symbols, gene IDs,
-     transcript IDs, biotypes, and discovery classes where possible.
-   - Classify known, novel-isoform, novel-locus, ambiguous, and likely-artifact
-     events more clearly without hiding uncertain cases.
-   - Summarize optional consequence changes per event: gained/lost protein
-     domains, coding-potential transitions, ORF-length changes, NMD changes,
-     signal/transmembrane/localization/disorder annotations when explicitly
-     supplied, and ncRNA motif/overlap annotations.
-   - Feed the optional consequence class into
-     `isoform_interpretation_consensus.tsv` as descriptive evidence, without
-     changing switch or DTU p-values.
-
-5. Report and cleanup behavior.
-
-   - Expose annotation-source status, annotation QA, and matched/unmatched row
-     counts in the isoform-switch report and RNA-seq differential report.
-   - Add clear report text for `not_configured`, `blocked`, `failed`, and
-     `ok_no_matches` optional annotation states.
-   - Keep event pages and exon diagrams reachable and readable when annotations
-     are absent, partial, or failed.
-   - Ensure stale event pages and stale optional annotation files are cleared on
-     report refresh, while preserving current successful outputs.
-
-6. Tests and validation.
-
-   - Add local contract fixtures for generic TSV, InterProScan TSV,
-     HMMER/Pfam `domtblout`, CPAT/CPC2 coding-potential TSV, and ncRNA interval
-     annotation imports.
-   - Add local command-template mock tests for successful output, missing
-     command, empty FASTA, missing database/model path, failed command, and
-     unparseable output.
-   - Add regression tests for annotation QA counts, stale file cleanup, and
-     report exposure of annotation status.
-   - Validate one precomputed-table path on a real completed isoform-switch run,
-     preferably with InterProScan or Pfam/HMMER rows generated outside ASPIS and
-     imported locally.
-   - Validate one open conda-managed or site-managed command path only after the
-     required local databases/model files are frozen and provenance recorded.
-
-Acceptance criteria:
-
-- With no optional annotation tables or commands, isoform-switch reports remain
-  complete and explicitly report `not_configured` optional consequence
-  annotation status.
-- With precomputed InterProScan, HMMER/Pfam, and CPAT/CPC2-style fixture tables,
-  ASPIS writes normalized `functional_annotation_summary.tsv`, annotation QA,
-  external-tool/source manifests, and event-level gained/lost/coding-potential
-  consequence summaries.
-- With local command-template mocks, ASPIS records command provenance and
-  distinguishes `ok`, `not_configured`, `blocked`, `failed`, and
-  `ok_no_matches` without breaking the rest of the isoform-switch report.
-- Reports expose optional consequence annotation status and links from the
-  isoform-switch overview, RNA-seq differential index, branch report, and
-  project report.
-- Restricted or license-sensitive tools remain excluded from default open
-  validation unless supplied as reviewed local user/site resources.
-- Event pages, exon diagrams, NT/AA sequence status, and isoform/DTU
-  interpretation consensus remain correct when optional annotations are absent,
-  partial, or failed.
+- When a real project supplies InterProScan, Pfam/HMMER, CPAT/CPC2, or reviewed
+  local command-template outputs, refresh the isoform-switch report target and
+  inspect `functional_annotation_qa.tsv`, `external_tool_manifest.tsv`,
+  `functional_annotation_summary.tsv`, and the isoform-switch overview before
+  interpreting annotation-derived consequences.
 
 ## P1 - Plot Rendering And Aesthetics
 

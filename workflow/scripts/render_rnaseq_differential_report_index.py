@@ -109,6 +109,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--isoform-switch-candidates", default="", help="Optional isoform-switch candidate table")
     parser.add_argument("--isoform-switch-events", default="", help="Optional isoform-switch event table")
     parser.add_argument("--isoform-switch-ncrna", default="", help="Optional isoform-switch ncRNA interpretation table")
+    parser.add_argument("--isoform-switch-coding", default="", help="Optional isoform-switch coding consequence-priority table")
+    parser.add_argument("--isoform-switch-functional-annotations", default="", help="Optional normalized isoform-switch functional annotations table")
+    parser.add_argument("--isoform-switch-annotation-qa", default="", help="Optional isoform-switch annotation QA table")
+    parser.add_argument("--isoform-switch-external-tools", default="", help="Optional isoform-switch external tool manifest")
     parser.add_argument("--isoform-switch-plots", default="", help="Optional isoform-switch plot manifest")
     parser.add_argument("--isoform-switch-plots-pdf", default="", help="Optional isoform-switch multi-page plot PDF")
     parser.add_argument("--isoform-dtu-evidence", default="", help="Optional isoform-switch plus DTU evidence table")
@@ -554,6 +558,10 @@ def render_project_resources(
     isoform_switch_candidates: str = "",
     isoform_switch_events: str = "",
     isoform_switch_ncrna: str = "",
+    isoform_switch_coding: str = "",
+    isoform_switch_functional_annotations: str = "",
+    isoform_switch_annotation_qa: str = "",
+    isoform_switch_external_tools: str = "",
     isoform_switch_plots: str = "",
     isoform_switch_plots_pdf: str = "",
     isoform_dtu_evidence: str = "",
@@ -588,6 +596,10 @@ def render_project_resources(
                 ("isoform switch candidates", isoform_switch_candidates),
                 ("isoform switch events", isoform_switch_events),
                 ("isoform switch ncRNA interpretation", isoform_switch_ncrna),
+                ("coding consequence summary", isoform_switch_coding),
+                ("functional annotations", isoform_switch_functional_annotations),
+                ("annotation QA", isoform_switch_annotation_qa),
+                ("external tool manifest", isoform_switch_external_tools),
                 ("isoform/DTU evidence", isoform_dtu_evidence),
                 ("isoform/DTU evidence summary", isoform_dtu_evidence_summary),
                 ("isoform interpretation consensus", isoform_interpretation_consensus),
@@ -956,6 +968,10 @@ def render_html(
     isoform_switch_candidates: str = "",
     isoform_switch_events: str = "",
     isoform_switch_ncrna: str = "",
+    isoform_switch_coding: str = "",
+    isoform_switch_functional_annotations: str = "",
+    isoform_switch_annotation_qa: str = "",
+    isoform_switch_external_tools: str = "",
     isoform_switch_plots: str = "",
     isoform_switch_plots_pdf: str = "",
     isoform_dtu_evidence: str = "",
@@ -992,6 +1008,10 @@ def render_html(
         isoform_switch_candidates,
         isoform_switch_events,
         isoform_switch_ncrna,
+        isoform_switch_coding,
+        isoform_switch_functional_annotations,
+        isoform_switch_annotation_qa,
+        isoform_switch_external_tools,
         isoform_switch_plots,
         isoform_switch_plots_pdf,
         isoform_dtu_evidence,
@@ -1260,6 +1280,10 @@ def main() -> int:
             args.isoform_switch_candidates,
             args.isoform_switch_events,
             args.isoform_switch_ncrna,
+            args.isoform_switch_coding,
+            args.isoform_switch_functional_annotations,
+            args.isoform_switch_annotation_qa,
+            args.isoform_switch_external_tools,
             args.isoform_switch_plots,
             args.isoform_switch_plots_pdf,
             args.isoform_dtu_evidence,
@@ -1289,6 +1313,10 @@ def main() -> int:
         ("isoform_switch", "isoform_switch", "candidate_table", "table", args.isoform_switch_candidates, "ok"),
         ("isoform_switch", "isoform_switch", "event_summary", "table", args.isoform_switch_events, "ok"),
         ("isoform_switch", "isoform_switch", "ncrna_switch_interpretation", "table", args.isoform_switch_ncrna, "ok"),
+        ("isoform_switch", "isoform_switch", "coding_switch_summary", "table", args.isoform_switch_coding, "ok"),
+        ("isoform_switch", "isoform_switch", "functional_annotation_summary", "table", args.isoform_switch_functional_annotations, "ok"),
+        ("isoform_switch", "isoform_switch", "functional_annotation_qa", "table", args.isoform_switch_annotation_qa, "ok"),
+        ("isoform_switch", "isoform_switch", "external_tool_manifest", "manifest", args.isoform_switch_external_tools, "ok"),
         ("isoform_switch", "isoform_switch", "plot_manifest", "manifest", args.isoform_switch_plots, "ok"),
         ("isoform_switch", "isoform_switch", "plots_pdf", "plot", args.isoform_switch_plots_pdf, "ok"),
         ("isoform_switch", "isoform_switch", "isoform_dtu_evidence", "table", args.isoform_dtu_evidence, "ok"),

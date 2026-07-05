@@ -205,6 +205,26 @@ ANNOTATION_COLUMNS = [
     "description",
     "feature_change",
     "status",
+    "match_type",
+    "reason",
+    "source_path",
+]
+ANNOTATION_QA_COLUMNS = [
+    "source_path",
+    "source_name",
+    "source_kind",
+    "status",
+    "reason",
+    "input_rows",
+    "parsed_rows",
+    "rows_with_identifier",
+    "matched_rows",
+    "unmatched_rows",
+    "duplicate_identifier_rows",
+    "unsupported_column_count",
+    "unsupported_columns",
+    "mapping_loss_fraction",
+    "output_rows",
 ]
 PLOT_MANIFEST_COLUMNS = [
     "event_id",
@@ -227,6 +247,9 @@ EXTERNAL_TOOL_COLUMNS = [
     "status",
     "returncode",
     "command",
+    "produced_files",
+    "parser_status",
+    "parser_detail",
     "stdout_log",
     "stderr_log",
     "detail",
@@ -245,6 +268,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--coding-switch-summary", required=True, help="Output coding-switch consequence-priority TSV")
     parser.add_argument("--sequence-table", required=True, help="Output event sequence TSV")
     parser.add_argument("--functional-annotation-table", required=True, help="Output normalized annotation TSV")
+    parser.add_argument("--functional-annotation-qa", required=True, help="Output per-source annotation import QA TSV")
     parser.add_argument("--plot-manifest", required=True, help="Output plot manifest TSV")
     parser.add_argument("--external-tool-manifest", required=True, help="Output optional external-tool manifest TSV")
     parser.add_argument("--plots-pdf", required=True, help="Output multi-page switch plot summary PDF")
@@ -674,6 +698,177 @@ def native_annotation_rows(path: Path) -> list[dict[str, str]]:
     return parse_structured_annotation_table(path)
 
 
+ANNOTATION_ID_FIELDS = ["isoform_id", "transcript_id", "protein_id", "query", "query_id", "id"]
+ANNOTATION_GENE_FIELDS = ["gene_id", "gene", "geneid", "gene_name", "gene_symbol"]
+SUPPORTED_GENERIC_ANNOTATION_FIELDS = {
+    "analysis",
+    "accession",
+    "aa_position",
+    "ali_end",
+    "ali_start",
+    "coding_label",
+    "coding_potential",
+    "coding_prob",
+    "coding_probability",
+    "cs_pos",
+    "cs_position",
+    "database",
+    "description",
+    "desc",
+    "disorder_score",
+    "e_value",
+    "end",
+    "end_aa",
+    "feature_id",
+    "feature_name",
+    "feature_type",
+    "from",
+    "gene",
+    "gene_id",
+    "gene_name",
+    "gene_symbol",
+    "geneid",
+    "id",
+    "interpro_accession",
+    "interpro_description",
+    "isoform_id",
+    "iupred2",
+    "iupred_score",
+    "label",
+    "localization",
+    "localizations",
+    "name",
+    "prediction",
+    "probability",
+    "protein_accession",
+    "protein_id",
+    "query",
+    "query_id",
+    "score",
+    "seq_id",
+    "signature_accession",
+    "signature_desc",
+    "signature_description",
+    "signals",
+    "source",
+    "sp_sec_spi",
+    "start",
+    "start_aa",
+    "stop",
+    "to",
+    "transcript_id",
+    "type",
+}
+
+
+def nonempty_source_lines(path: Path) -> list[str]:
+    return [
+        line.rstrip("\n")
+        for line in path.read_text(encoding="utf-8", errors="replace").splitlines()
+        if line.strip()
+    ]
+
+
+def looks_like_annotation_header(line: str) -> bool:
+    fields = [normalized_key(part) for part in line.lstrip("#").split("\t")]
+    if len(fields) < 2:
+        return False
+    recognizable = set(fields) & SUPPORTED_GENERIC_ANNOTATION_FIELDS
+    return bool(recognizable & {normalized_key(field) for field in ANNOTATION_ID_FIELDS + ANNOTATION_GENE_FIELDS})
+
+
+def source_input_row_count(path: Path) -> int:
+    lines = [line for line in nonempty_source_lines(path) if not line.startswith("#") or looks_like_annotation_header(line)]
+    if not lines:
+        return 0
+    if looks_like_annotation_header(lines[0]):
+        return max(0, len(lines) - 1)
+    return len([line for line in lines if not line.startswith("#")])
+
+
+def source_header_columns(path: Path) -> list[str]:
+    for line in nonempty_source_lines(path):
+        if looks_like_annotation_header(line):
+            return [part.strip().lstrip("#").strip() for part in line.split("\t")]
+        if line.startswith("#"):
+            continue
+        break
+    return []
+
+
+def unsupported_annotation_columns(path: Path) -> list[str]:
+    unsupported = []
+    for column in source_header_columns(path):
+        if normalized_key(column) not in SUPPORTED_GENERIC_ANNOTATION_FIELDS:
+            unsupported.append(column)
+    return unsupported
+
+
+def annotation_source_kind(path: Path, rows: list[dict[str, str]]) -> str:
+    sources = {first_existing(row, ["source", "analysis", "database"]).lower() for row in rows[:20]}
+    feature_types = {first_existing(row, ["feature_type", "type"]).lower() for row in rows[:20]}
+    if any(source.startswith("interproscan:") for source in sources):
+        return "interproscan_tsv"
+    if "hmmer_domtblout" in sources or path.suffix.lower() == ".domtblout":
+        return "hmmer_pfam_domtblout"
+    if "coding_potential" in sources or "coding_potential" in feature_types:
+        return "coding_potential_tsv"
+    if "signalp" in sources or "signal_peptide" in feature_types:
+        return "signalp_table"
+    if any(source in {"deeptmhmm", "tmhmm"} for source in sources) or "transmembrane" in feature_types:
+        return "tm_topology_table"
+    if "deeploc2" in sources or "localization" in feature_types:
+        return "localization_table"
+    if "iupred2a" in sources or "disorder" in feature_types:
+        return "disorder_table"
+    return "generic_tsv"
+
+
+def annotation_aliases(value: str) -> set[str]:
+    if not value:
+        return set()
+    aliases = {value, value.split("|")[0], value.rsplit("|", 1)[-1]}
+    aliases.add(value.split(".")[0])
+    return {alias for alias in aliases if alias}
+
+
+def annotation_qa_row(
+    *,
+    path: Path | None,
+    source_name: str,
+    source_kind: str,
+    status: str,
+    reason: str,
+    input_rows: int = 0,
+    parsed_rows: int = 0,
+    rows_with_identifier: int = 0,
+    matched_rows: int = 0,
+    duplicate_identifier_rows: int = 0,
+    unsupported_columns: list[str] | None = None,
+    output_rows: int = 0,
+) -> dict[str, str]:
+    unmatched_rows = max(0, parsed_rows - matched_rows)
+    mapping_loss = (unmatched_rows / parsed_rows) if parsed_rows else 0.0
+    unsupported = unsupported_columns or []
+    return {
+        "source_path": "" if path is None else str(path),
+        "source_name": source_name,
+        "source_kind": source_kind,
+        "status": status,
+        "reason": reason,
+        "input_rows": str(input_rows),
+        "parsed_rows": str(parsed_rows),
+        "rows_with_identifier": str(rows_with_identifier),
+        "matched_rows": str(matched_rows),
+        "unmatched_rows": str(unmatched_rows),
+        "duplicate_identifier_rows": str(duplicate_identifier_rows),
+        "unsupported_column_count": str(len(unsupported)),
+        "unsupported_columns": ";".join(unsupported),
+        "mapping_loss_fraction": f"{mapping_loss:.6g}",
+        "output_rows": str(output_rows),
+    }
+
+
 def parse_fasta(path: Path) -> dict[str, str]:
     if not path.is_file() or path.stat().st_size == 0:
         return {}
@@ -809,24 +1004,111 @@ def normalized_annotations(
     paths_text: str,
     candidate_isoforms: set[str],
     event_by_isoform: dict[str, list[dict[str, str]]],
-) -> list[dict[str, str]]:
+    event_by_gene: dict[str, list[dict[str, str]]],
+) -> tuple[list[dict[str, str]], list[dict[str, str]]]:
     rows: list[dict[str, str]] = []
-    for item in [part.strip() for part in paths_text.split(",") if part.strip()]:
+    qa_rows: list[dict[str, str]] = []
+    paths = [part.strip() for part in paths_text.split(",") if part.strip()]
+    if not paths:
+        qa_rows.append(
+            annotation_qa_row(
+                path=None,
+                source_name="functional_annotation_tables",
+                source_kind="precomputed_tables",
+                status="not_configured",
+                reason="No functional annotation table or parseable command output configured",
+            )
+        )
+        return rows, qa_rows
+
+    for item in paths:
         path = Path(item)
         if not path.exists():
-            raise FileNotFoundError(f"Functional annotation table does not exist: {path}")
-        raw_rows = native_annotation_rows(path)
-        if not raw_rows:
+            qa_rows.append(
+                annotation_qa_row(
+                    path=path,
+                    source_name=path.name,
+                    source_kind="unknown",
+                    status="blocked",
+                    reason="Functional annotation table does not exist",
+                )
+            )
             continue
-        if not any(first_existing(raw, ["isoform_id", "transcript_id", "protein_id", "query", "query_id"]) for raw in raw_rows):
-            raise ValueError(f"Annotation table lacks isoform/transcript/protein identifier column: {path}")
+        input_rows = source_input_row_count(path)
+        unsupported_columns = unsupported_annotation_columns(path)
+        try:
+            raw_rows = native_annotation_rows(path)
+        except Exception as exc:
+            qa_rows.append(
+                annotation_qa_row(
+                    path=path,
+                    source_name=path.name,
+                    source_kind="unknown",
+                    status="failed",
+                    reason=f"Could not parse annotation table: {exc}",
+                    input_rows=input_rows,
+                    unsupported_columns=unsupported_columns,
+                )
+            )
+            continue
+        source_kind = annotation_source_kind(path, raw_rows)
+        if not raw_rows:
+            qa_rows.append(
+                annotation_qa_row(
+                    path=path,
+                    source_name=path.name,
+                    source_kind=source_kind,
+                    status="blocked",
+                    reason="No parseable annotation rows found",
+                    input_rows=input_rows,
+                    unsupported_columns=unsupported_columns,
+                )
+            )
+            continue
+        identifiers = [
+            first_existing(raw, ANNOTATION_ID_FIELDS) or first_existing(raw, ANNOTATION_GENE_FIELDS)
+            for raw in raw_rows
+        ]
+        rows_with_identifier = sum(1 for value in identifiers if value)
+        duplicate_identifier_rows = sum(count - 1 for count in Counter(value for value in identifiers if value).values() if count > 1)
+        if not rows_with_identifier:
+            qa_rows.append(
+                annotation_qa_row(
+                    path=path,
+                    source_name=path.name,
+                    source_kind=source_kind,
+                    status="blocked",
+                    reason="Annotation table lacks a recognized isoform/transcript/protein/gene identifier",
+                    input_rows=input_rows,
+                    parsed_rows=len(raw_rows),
+                    rows_with_identifier=rows_with_identifier,
+                    duplicate_identifier_rows=duplicate_identifier_rows,
+                    unsupported_columns=unsupported_columns,
+                )
+            )
+            continue
+        source_output_rows = 0
+        source_matched_rows = 0
         for raw in raw_rows:
-            isoform_id = first_existing(raw, ["isoform_id", "transcript_id", "protein_id", "query", "query_id"])
-            if not isoform_id:
+            isoform_id = first_existing(raw, ANNOTATION_ID_FIELDS)
+            gene_id = first_existing(raw, ANNOTATION_GENE_FIELDS)
+            if not isoform_id and not gene_id:
                 continue
-            isoform_aliases = {isoform_id, isoform_id.split("|")[0], isoform_id.split(".")[0]}
-            matched = sorted(alias for alias in isoform_aliases if alias in candidate_isoforms)
-            if not matched:
+            matched_isoforms = sorted(alias for alias in annotation_aliases(isoform_id) if alias in candidate_isoforms)
+            matched_events = []
+            match_type = ""
+            if matched_isoforms:
+                source_matched_rows += 1
+                match_type = "isoform_id"
+                for matched_id in matched_isoforms:
+                    for event in event_by_isoform.get(matched_id, []):
+                        matched_events.append((matched_id, event, "isoform_id"))
+            elif gene_id and gene_id in event_by_gene:
+                source_matched_rows += 1
+                match_type = "gene_id"
+                for event in event_by_gene.get(gene_id, []):
+                    matched_events.append((isoform_id, event, "gene_id"))
+            if not matched_events:
                 continue
             source = first_existing(raw, ["source", "analysis", "database", "signature_desc"])
             feature_id = first_existing(raw, ["feature_id", "accession", "signature_accession", "interpro_accession", "id"])
@@ -836,29 +1118,54 @@ def normalized_annotations(
             end_aa = first_existing(raw, ["end_aa", "end", "to", "ali_end", "hmm_end"])
             score = first_existing(raw, ["score", "evalue", "e_value", "bitscore"])
             description = first_existing(raw, ["description", "desc", "interpro_description", "signature_description"])
-            for matched_id in matched:
-                for event in event_by_isoform.get(matched_id, []):
-                    rows.append(
-                        {
-                            "event_id": event["event_id"],
-                            "contrast_id": event["contrast_id"],
-                            "gene_id": event["gene_id"],
-                            "gene_name": event["gene_name"],
-                            "isoform_id": matched_id,
-                            "source": source or path.name,
-                            "feature_type": feature_type,
-                            "feature_id": feature_id,
-                            "feature_name": feature_name,
-                            "start_aa": start_aa,
-                            "end_aa": end_aa,
-                            "score": score,
-                            "description": description,
-                            "feature_change": "",
-                            "status": "ok",
-                        }
-                    )
+            for matched_id, event, row_match_type in matched_events:
+                source_output_rows += 1
+                rows.append(
+                    {
+                        "event_id": event["event_id"],
+                        "contrast_id": event["contrast_id"],
+                        "gene_id": event["gene_id"],
+                        "gene_name": event["gene_name"],
+                        "isoform_id": matched_id,
+                        "source": source or path.name,
+                        "feature_type": feature_type,
+                        "feature_id": feature_id,
+                        "feature_name": feature_name,
+                        "start_aa": start_aa,
+                        "end_aa": end_aa,
+                        "score": score,
+                        "description": description,
+                        "feature_change": "",
+                        "status": "ok",
+                        "match_type": row_match_type,
+                        "reason": f"matched by {row_match_type}",
+                        "source_path": str(path),
+                    }
+                )
+        if source_matched_rows:
+            status = "ok"
+            reason = "One or more annotation rows matched rendered isoform-switch candidates"
+        else:
+            status = "ok_no_matches"
+            reason = "Annotation table parsed, but no rows matched rendered isoform-switch candidates"
+        qa_rows.append(
+            annotation_qa_row(
+                path=path,
+                source_name=path.name,
+                source_kind=source_kind,
+                status=status,
+                reason=reason,
+                input_rows=input_rows,
+                parsed_rows=len(raw_rows),
+                rows_with_identifier=rows_with_identifier,
+                matched_rows=source_matched_rows,
+                duplicate_identifier_rows=duplicate_identifier_rows,
+                unsupported_columns=unsupported_columns,
+                output_rows=source_output_rows,
+            )
+        )
     rows.sort(key=lambda row: (row["event_id"], row["isoform_id"], row["source"], row["start_aa"]))
-    return rows
+    return rows, qa_rows
 
 
 def intervals_overlap_text(feature_start: str, feature_end: str, interval_text_value: str) -> bool:
@@ -2635,6 +2942,9 @@ def run_external_tool_commands(
                     "status": "not_configured",
                     "returncode": "",
                     "command": "",
+                    "produced_files": "",
+                    "parser_status": "not_run",
+                    "parser_detail": "No command output to parse",
                     "stdout_log": "",
                     "stderr_log": "",
                     "detail": "No command template configured",
@@ -2650,6 +2960,9 @@ def run_external_tool_commands(
                     "status": "blocked",
                     "returncode": "",
                     "command": "",
+                    "produced_files": "",
+                    "parser_status": "not_run",
+                    "parser_detail": "Required FASTA missing or empty",
                     "stdout_log": "",
                     "stderr_log": "",
                     "detail": (
@@ -2669,25 +2982,84 @@ def run_external_tool_commands(
             outdir=str(external_dir),
             tool_name=safe_id(name),
         )
+        before_files = {path.resolve() for path in external_annotation_candidates(external_dir)}
         completed = subprocess.run(command, shell=True, text=True, capture_output=True, check=False)
         stdout_log.write_text(completed.stdout or "", encoding="utf-8")
         stderr_log.write_text(completed.stderr or "", encoding="utf-8")
+        after_files = {path.resolve() for path in external_annotation_candidates(external_dir)}
+        produced_files = sorted(str(path) for path in after_files - before_files)
+        if completed.returncode == 0 and not produced_files:
+            status = "blocked"
+            detail = "Command completed but produced no supported annotation output file"
+            parser_status = "not_run"
+            parser_detail = detail
+        elif completed.returncode == 0:
+            status = "ok"
+            detail = ""
+            parser_status = "pending"
+            parser_detail = "Parser status is recorded in annotation QA"
+        else:
+            status = "failed"
+            detail = "Command exited non-zero"
+            parser_status = "not_run"
+            parser_detail = "Command failed before parsing"
         rows.append(
             {
                 "tool_group": group,
                 "tool_name": name,
-                "status": "ok" if completed.returncode == 0 else "failed",
+                "status": status,
                 "returncode": str(completed.returncode),
                 "command": command,
+                "produced_files": ",".join(produced_files),
+                "parser_status": parser_status,
+                "parser_detail": parser_detail,
                 "stdout_log": str(stdout_log),
                 "stderr_log": str(stderr_log),
-                "detail": "",
+                "detail": detail,
             }
         )
     return rows, external_annotation_candidates(external_dir)
 
 
-def render_project_html(event_rows: list[dict[str, str]], coding_switch_rows: list[dict[str, str]], manifest_rows: list[dict[str, str]], output: Path) -> None:
+def update_external_tool_parser_status(
+    external_tool_rows: list[dict[str, str]],
+    annotation_qa_rows: list[dict[str, str]],
+) -> None:
+    qa_by_path = {str(Path(row.get("source_path", "")).resolve()): row for row in annotation_qa_rows if row.get("source_path")}
+    for row in external_tool_rows:
+        produced = [part.strip() for part in row.get("produced_files", "").split(",") if part.strip()]
+        if row.get("status") != "ok" or not produced:
+            continue
+        matched_qa = [qa_by_path.get(str(Path(path).resolve())) for path in produced]
+        matched_qa = [qa for qa in matched_qa if qa]
+        if not matched_qa:
+            row["parser_status"] = "not_assessed"
+            row["parser_detail"] = "No annotation QA row matched produced file(s)"
+            continue
+        statuses = [qa.get("status", "") for qa in matched_qa]
+        if any(status == "ok" for status in statuses):
+            row["parser_status"] = "ok"
+        elif any(status == "ok_no_matches" for status in statuses):
+            row["parser_status"] = "ok_no_matches"
+        elif any(status == "blocked" for status in statuses):
+            row["parser_status"] = "blocked"
+        elif any(status == "failed" for status in statuses):
+            row["parser_status"] = "failed"
+        else:
+            row["parser_status"] = "unknown"
+        row["parser_detail"] = "; ".join(
+            f"{Path(qa.get('source_path', '')).name}:{qa.get('status', '')}:{qa.get('reason', '')}"
+            for qa in matched_qa
+        )
+
+
+def render_project_html(
+    event_rows: list[dict[str, str]],
+    coding_switch_rows: list[dict[str, str]],
+    manifest_rows: list[dict[str, str]],
+    annotation_qa_rows: list[dict[str, str]],
+    output: Path,
+) -> None:
     output.parent.mkdir(parents=True, exist_ok=True)
 
     def status_badge(status: str) -> str:
@@ -2705,7 +3077,9 @@ def render_project_html(event_rows: list[dict[str, str]], coding_switch_rows: li
             file_link("ncRNA switch interpretation", str(output.parent / "ncrna_switch_interpretation.tsv"), output),
             file_link("sequence summary", str(output.parent / "switch_sequence_summary.tsv"), output),
             file_link("functional annotations", str(output.parent / "functional_annotation_summary.tsv"), output),
-            file_link("plot manifest", str(output.parent / "plot_manifest.tsv"), output),
+            file_link("annotation QA", str(output.parent / "functional_annotation_qa.tsv"), output),
+            file_link("external tool manifest", str(output.parent / "external_tool_manifest.tsv"), output),
+            file_link("plot manifest", str(output.parent / "switch_plot_manifest.tsv"), output),
             file_link("plot PDF", str(output.parent / "switch_plots.pdf"), output),
         ]
         return " | ".join(link for link in links if link)
@@ -2773,9 +3147,37 @@ def render_project_html(event_rows: list[dict[str, str]], coding_switch_rows: li
             + "</tbody></table>"
         )
 
+    def annotation_status_table() -> str:
+        if not annotation_qa_rows:
+            return '<p class="muted">No optional annotation QA rows were written.</p>'
+        body = []
+        for row in annotation_qa_rows:
+            body.append(
+                "<tr>"
+                f"<td>{html.escape(row.get('source_name', ''))}</td>"
+                f"<td>{html.escape(row.get('source_kind', ''))}</td>"
+                f"<td>{status_badge(row.get('status', ''))}</td>"
+                f"<td>{html.escape(row.get('input_rows', ''))}</td>"
+                f"<td>{html.escape(row.get('parsed_rows', ''))}</td>"
+                f"<td>{html.escape(row.get('matched_rows', ''))}</td>"
+                f"<td>{html.escape(row.get('unmatched_rows', ''))}</td>"
+                f"<td>{html.escape(row.get('mapping_loss_fraction', ''))}</td>"
+                f"<td>{html.escape(row.get('unsupported_column_count', ''))}</td>"
+                f"<td>{html.escape(row.get('reason', ''))}</td>"
+                "</tr>"
+            )
+        return (
+            "<table><thead><tr><th>source</th><th>kind</th><th>status</th>"
+            "<th>input</th><th>parsed</th><th>matched</th><th>unmatched</th>"
+            "<th>mapping loss</th><th>unsupported columns</th><th>reason</th></tr></thead><tbody>"
+            + "".join(body)
+            + "</tbody></table>"
+        )
+
     def overview_html() -> str:
         class_counts = Counter(row.get("switch_biotype_class", "unknown") or "unknown" for row in event_rows)
         status_counts = Counter(row.get("status", "unknown") or "unknown" for row in manifest_rows)
+        annotation_status_counts = Counter(row.get("status", "unknown") or "unknown" for row in annotation_qa_rows)
         source_links = table_source_links()
         metric_html = "".join(
             [
@@ -2785,6 +3187,14 @@ def render_project_html(event_rows: list[dict[str, str]], coding_switch_rows: li
                 metric_card("ambiguous", sum(count for key, count in class_counts.items() if key not in {"coding", "noncoding", "mixed_coding_noncoding"})),
                 metric_card("contrasts ok", status_counts.get("ok", 0)),
                 metric_card("contrasts blocked/failed", status_counts.get("blocked", 0) + status_counts.get("failed", 0)),
+                metric_card("annotation sources ok", annotation_status_counts.get("ok", 0)),
+                metric_card(
+                    "annotation sources pending",
+                    annotation_status_counts.get("not_configured", 0)
+                    + annotation_status_counts.get("ok_no_matches", 0)
+                    + annotation_status_counts.get("blocked", 0)
+                    + annotation_status_counts.get("failed", 0),
+                ),
             ]
         )
         source_block = f'<p class="asset-links">{source_links}</p>' if source_links else ""
@@ -2796,6 +3206,9 @@ def render_project_html(event_rows: list[dict[str, str]], coding_switch_rows: li
             f"{source_block}"
             '<h2>Contrast Status</h2>'
             f"{contrast_status_table()}"
+            '<h2>Optional Consequence Annotation Status</h2>'
+            '<p class="note">Optional consequence annotations are supportive evidence. A status of not_configured or ok_no_matches does not invalidate the isoform-switch calls; blocked or failed rows identify resource or parser issues to fix before interpreting annotation-derived consequences.</p>'
+            f"{annotation_status_table()}"
             '<h2>Top Candidate Events</h2>'
             f"{top_event_cards(event_rows)}"
             "</section>"
@@ -2991,6 +3404,13 @@ def clean_stale_report_outputs(outdir: Path) -> None:
     events_dir = outdir / "events"
     if events_dir.exists():
         shutil.rmtree(events_dir)
+    external_dir = outdir / "external_annotations"
+    if external_dir.exists():
+        shutil.rmtree(external_dir)
+    for stale_name in ["switch_selected.nt.fa", "switch_selected.aa.fa"]:
+        stale_path = outdir / stale_name
+        if stale_path.exists():
+            stale_path.unlink()
 
 
 def main() -> int:
@@ -3017,15 +3437,25 @@ def main() -> int:
     ncrna_switch_rows = build_ncrna_switch_rows(candidate_rows, sequence_rows, gtf_models, ncrna_annotations)
 
     event_by_isoform: dict[str, list[dict[str, str]]] = defaultdict(list)
+    event_by_gene: dict[str, list[dict[str, str]]] = defaultdict(list)
     for row in candidate_rows:
-        event_by_isoform[row["isoform_id"]].append(
-            {
-                "event_id": row["event_id"],
-                "contrast_id": row["contrast_id"],
-                "gene_id": row["gene_id"],
-                "gene_name": row["gene_name"],
-            }
-        )
+        event_stub = {
+            "event_id": row["event_id"],
+            "contrast_id": row["contrast_id"],
+            "gene_id": row["gene_id"],
+            "gene_name": row["gene_name"],
+        }
+        event_by_isoform[row["isoform_id"]].append(event_stub)
+        event_by_gene[row["gene_id"]].append(event_stub)
+    for gene_id, events in list(event_by_gene.items()):
+        deduped = []
+        seen_event_ids = set()
+        for event in events:
+            if event["event_id"] in seen_event_ids:
+                continue
+            seen_event_ids.add(event["event_id"])
+            deduped.append(event)
+        event_by_gene[gene_id] = deduped
     selected_nt_fasta, selected_aa_fasta = write_selected_fastas(outdir, sequence_rows)
     external_tool_rows, generated_annotation_paths = run_external_tool_commands(
         args,
@@ -3038,11 +3468,13 @@ def main() -> int:
         + [str(path) for path in generated_annotation_paths]
     )
 
-    annotation_rows = normalized_annotations(
+    annotation_rows, annotation_qa_rows = normalized_annotations(
         annotation_path_text,
         {row["isoform_id"] for row in candidate_rows},
         event_by_isoform,
+        event_by_gene,
     )
+    update_external_tool_parser_status(external_tool_rows, annotation_qa_rows)
     annotate_feature_changes(annotation_rows, sequence_rows)
     annotation_counts = defaultdict(int)
     for row in annotation_rows:
@@ -3105,9 +3537,10 @@ def main() -> int:
     write_table(Path(args.coding_switch_summary), CODING_SWITCH_COLUMNS, coding_switch_rows)
     write_table(Path(args.sequence_table), SEQUENCE_COLUMNS, sequence_rows)
     write_table(Path(args.functional_annotation_table), ANNOTATION_COLUMNS, annotation_rows)
+    write_table(Path(args.functional_annotation_qa), ANNOTATION_QA_COLUMNS, annotation_qa_rows)
     write_table(Path(args.plot_manifest), PLOT_MANIFEST_COLUMNS, plot_rows)
     write_table(Path(args.external_tool_manifest), EXTERNAL_TOOL_COLUMNS, external_tool_rows)
-    render_project_html(event_rows, coding_switch_rows, manifest_rows, Path(args.html))
+    render_project_html(event_rows, coding_switch_rows, manifest_rows, annotation_qa_rows, Path(args.html))
     write_done(Path(args.done), event_rows)
     return 0
 

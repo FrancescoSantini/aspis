@@ -288,6 +288,11 @@ is also suitable when its model files are kept under project provenance. Tools
 or databases with academic-only, non-commercial, registration-only, or otherwise
 restricted terms are not part of the ASPIS open-resource validation path.
 
+Every imported source is audited in the isoform-switch report. Inspect
+`functional_annotation_qa.tsv` for parser status, matched/unmatched rows,
+duplicate IDs, unsupported columns, and mapping loss before interpreting
+annotation-derived consequence summaries.
+
 ## G100 BEAS Application
 
 For the current BEAS validation, prepare resources under a shared path such as:

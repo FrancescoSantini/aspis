@@ -89,6 +89,15 @@ the selected NT/AA FASTA files are empty. Empty FASTAs usually mean
 `rnaseq_differential.isoform_switch_genome_object` is unset or does not match
 the annotation chromosome names.
 
+Imported rows are written to `functional_annotation_summary.tsv` with stable
+source, feature, coordinate, score, match, status, reason, and source-path
+columns. Per-source parser and mapping diagnostics are written to
+`functional_annotation_qa.tsv`, including input rows, parsed rows, matched and
+unmatched rows, duplicate identifiers, unsupported columns, and mapping loss.
+Command-template provenance is written to `external_tool_manifest.tsv`, including
+the exact command, return code, produced files, parser status, stdout/stderr
+logs, and blocked or failed reason.
+
 ## Splicing And DTU Environment
 
 Use this when you want optional event-level or DTU companion methods:

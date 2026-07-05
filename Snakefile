@@ -1055,8 +1055,10 @@ def rnaseq_isoform_switch_report_outputs(project):
         "candidate_table": f"{base}/switch_candidates.tsv",
         "event_summary": f"{base}/switch_event_summary.tsv",
         "ncrna_switch_table": f"{base}/ncrna_switch_interpretation.tsv",
+        "coding_switch_summary": f"{base}/coding_switch_summary.tsv",
         "sequence_table": f"{base}/switch_sequence_summary.tsv",
         "functional_annotation_table": f"{base}/functional_annotation_summary.tsv",
+        "functional_annotation_qa": f"{base}/functional_annotation_qa.tsv",
         "plot_manifest": f"{base}/switch_plot_manifest.tsv",
         "external_tool_manifest": f"{base}/external_tool_manifest.tsv",
         "dtu_evidence_table": f"{base}/isoform_dtu_evidence.tsv",
@@ -1078,8 +1080,10 @@ def rnaseq_isoform_switch_report_inputs(wildcards):
         outputs["candidate_table"],
         outputs["event_summary"],
         outputs["ncrna_switch_table"],
+        outputs["coding_switch_summary"],
         outputs["sequence_table"],
         outputs["functional_annotation_table"],
+        outputs["functional_annotation_qa"],
         outputs["plot_manifest"],
         outputs["external_tool_manifest"],
         outputs["dtu_evidence_table"],
@@ -1478,8 +1482,10 @@ def branch_provenance_inputs(wildcards):
                                     outputs["candidate_table"],
                                     outputs["event_summary"],
                                     outputs["ncrna_switch_table"],
+                                    outputs["coding_switch_summary"],
                                     outputs["sequence_table"],
                                     outputs["functional_annotation_table"],
+                                    outputs["functional_annotation_qa"],
                                     outputs["plot_manifest"],
                                     outputs["external_tool_manifest"],
                                     outputs["dtu_evidence_table"],
@@ -1842,8 +1848,10 @@ def planned_branch_targets(wildcards):
                                             outputs["candidate_table"],
                                             outputs["event_summary"],
                                             outputs["ncrna_switch_table"],
+                                            outputs["coding_switch_summary"],
                                             outputs["sequence_table"],
                                             outputs["functional_annotation_table"],
+                                            outputs["functional_annotation_qa"],
                                             outputs["plot_manifest"],
                                             outputs["external_tool_manifest"],
                                             outputs["dtu_evidence_table"],
@@ -5761,6 +5769,7 @@ rule render_isoform_switch_report:
         coding_switch_summary=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/isoform_switch/report/coding_switch_summary.tsv",
         sequence_table=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/isoform_switch/report/switch_sequence_summary.tsv",
         functional_annotation_table=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/isoform_switch/report/functional_annotation_summary.tsv",
+        functional_annotation_qa=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/isoform_switch/report/functional_annotation_qa.tsv",
         plot_manifest=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/isoform_switch/report/switch_plot_manifest.tsv",
         external_tool_manifest=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/isoform_switch/report/external_tool_manifest.tsv",
         plots_pdf=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/isoform_switch/report/switch_plots.pdf",
@@ -5827,6 +5836,7 @@ rule render_isoform_switch_report:
           --coding-switch-summary {output.coding_switch_summary:q} \
           --sequence-table {output.sequence_table:q} \
           --functional-annotation-table {output.functional_annotation_table:q} \
+          --functional-annotation-qa {output.functional_annotation_qa:q} \
           --plot-manifest {output.plot_manifest:q} \
           --external-tool-manifest {output.external_tool_manifest:q} \
           --plots-pdf {output.plots_pdf:q} \
@@ -6914,6 +6924,26 @@ rule render_rnaseq_differential_report_index:
             "ncrna_switch_table",
             "--isoform-switch-ncrna",
         ),
+        isoform_switch_coding=lambda wildcards: rnaseq_isoform_switch_report_arg(
+            wildcards,
+            "coding_switch_summary",
+            "--isoform-switch-coding",
+        ),
+        isoform_switch_functional_annotations=lambda wildcards: rnaseq_isoform_switch_report_arg(
+            wildcards,
+            "functional_annotation_table",
+            "--isoform-switch-functional-annotations",
+        ),
+        isoform_switch_annotation_qa=lambda wildcards: rnaseq_isoform_switch_report_arg(
+            wildcards,
+            "functional_annotation_qa",
+            "--isoform-switch-annotation-qa",
+        ),
+        isoform_switch_external_tools=lambda wildcards: rnaseq_isoform_switch_report_arg(
+            wildcards,
+            "external_tool_manifest",
+            "--isoform-switch-external-tools",
+        ),
         isoform_switch_plots=lambda wildcards: rnaseq_isoform_switch_report_arg(
             wildcards,
             "plot_manifest",
@@ -6996,6 +7026,10 @@ rule render_rnaseq_differential_report_index:
           {params.isoform_switch_candidates} \
           {params.isoform_switch_events} \
           {params.isoform_switch_ncrna} \
+          {params.isoform_switch_coding} \
+          {params.isoform_switch_functional_annotations} \
+          {params.isoform_switch_annotation_qa} \
+          {params.isoform_switch_external_tools} \
           {params.isoform_switch_plots} \
           {params.isoform_switch_plots_pdf} \
           {params.isoform_dtu_evidence} \
