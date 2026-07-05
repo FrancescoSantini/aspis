@@ -524,8 +524,10 @@ Acceptance criteria:
 
 ## Validated - Cross-Assay Integration Refinement
 
-Status: implemented pending routine real-run refresh after the next full project
-run.
+Status: closed for the current cycle. BEAS_2B real-report refresh confirms the
+current project matrix, integration manifest fields, sample-pairing table, and
+cross-assay state labels. HEP_G2 or other cohort reruns belong to the final
+whole-pipeline validation pass, not to this feature backlog item.
 
 Implemented:
 
@@ -542,12 +544,16 @@ Implemented:
   available.
 - The integrated project page now marks each contrast as integrated, RNA-seq
   only, smallRNA only, shared without integration, blocked, or failed.
+- BEAS_2B refresh validated the current real-data path: 6/6 miRNA-mRNA
+  integration contrasts completed, `sample_pairing.tsv` was produced with 27
+  matched RNA-seq/smallRNA sample pairs, each contrast manifest records
+  `sample_pairing` and `n_sample_pairs`, and the integrated project report
+  displays the cross-assay state plus pairing-table links.
 
-Residual validation:
+Future validation:
 
-- On the next combined real-data refresh, verify that explicit match-table runs
-  and metadata-matched runs produce the expected pairing table and contrast
-  matrix labels.
+- Recheck HEP_G2, explicit `match_table` configs, and any other new cohort as
+  part of the final whole-pipeline validation pass.
 
 ## Validated - Native DTU And Isoform-Switch Interpretation
 
@@ -889,7 +895,10 @@ Acceptance criteria:
 
 ## P1 - Strandedness And Quantification Diagnostics
 
-Status: implemented; real-run report refresh pending.
+Status: closed for the current cycle. BEAS_2B real-report refresh confirms the
+strandedness report, quantification plan, branch diagnostics section, and
+differential-report diagnostics resource. HEP_G2 report refresh is deferred to
+the final whole-pipeline validation pass.
 
 Reason for priority: strandedness affects featureCounts and StringTie
 interpretation, and real data can silently suffer if assumptions are wrong.
@@ -911,11 +920,15 @@ Implemented:
   as a project resource and carry those files in the asset inventory.
 - Biological warnings include the strandedness recommendation when inference
   detects a conflict or weak evidence.
+- BEAS_2B refresh validated the current real-report path: 27-row
+  `strandedness_report.tsv`, `quantification_plan.tsv`, branch report
+  `Strandedness And Quantification Diagnostics`, and RNA-seq differential
+  report `Strandedness / Quantification Diagnostics` resource row.
 
-Remaining operational validation:
+Future validation:
 
-- Refresh the BEAS_2B and HEP_G2 report targets on G100 and inspect the new
-  diagnostic sections against the real strandedness reports.
+- Recheck HEP_G2 and any other new cohort as part of the final whole-pipeline
+  validation pass.
 
 Acceptance criteria:
 
