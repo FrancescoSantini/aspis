@@ -157,7 +157,31 @@ def main() -> int:
                     "asset_kind": "table",
                     "path": dtu_table.as_posix(),
                     "exists": "true",
-                }
+                },
+                {
+                    "project": project,
+                    "assay": "rnaseq",
+                    "level": "dtu",
+                    "contrast_id": "project",
+                    "status": "ok",
+                    "asset_group": "dtu",
+                    "asset_label": "dtu_plot_manifest",
+                    "asset_kind": "manifest",
+                    "path": (rnaseq / "differential" / "dtu" / "plots" / "dtu_plot_manifest.tsv").as_posix(),
+                    "exists": "true",
+                },
+                {
+                    "project": project,
+                    "assay": "rnaseq",
+                    "level": "isoform_switch",
+                    "contrast_id": "project",
+                    "status": "ok",
+                    "asset_group": "isoform_switch",
+                    "asset_label": "plot_manifest",
+                    "asset_kind": "manifest",
+                    "path": (rnaseq / "differential" / "isoform_switch" / "report" / "switch_plot_manifest.tsv").as_posix(),
+                    "exists": "true",
+                },
             ],
         )
         write_tsv(
@@ -214,6 +238,21 @@ def main() -> int:
                     "event_html": event_html.as_posix(),
                     "event_nt_fasta": result_table.as_posix(),
                     "event_aa_fasta": filtered_table.as_posix(),
+                }
+            ],
+        )
+        write_tsv(
+            rnaseq / "differential" / "isoform_switch" / "report" / "switch_plot_manifest.tsv",
+            [
+                {
+                    "event_id": "eventA",
+                    "contrast_id": "treated_vs_control",
+                    "gene_id": "geneA",
+                    "plot_svg": plot_svg.as_posix(),
+                    "event_html": event_html.as_posix(),
+                    "nt_fasta": result_table.as_posix(),
+                    "aa_fasta": filtered_table.as_posix(),
+                    "status": "ok",
                 }
             ],
         )
@@ -401,6 +440,13 @@ def main() -> int:
         assert pdf_report.exists()
         assert "status\tproject\trnaseq_rows\tsmallrna_rows\tassets\tpages" in pdf_done.read_text(encoding="utf-8")
         assert pdf_qa.read_text(encoding="utf-8").splitlines()[1].startswith("ok\t")
+        from pypdf import PdfReader
+
+        pdf_text = "\n".join(page.extract_text() or "" for page in PdfReader(str(pdf_report)).pages)
+        assert "Evidence-Layer Plots" in pdf_text
+        assert "Evidence-Layer Table Excerpts" in pdf_text
+        assert "dtu_plot_manifest" in pdf_text
+        assert "source results" in pdf_text
 
     return 0
 

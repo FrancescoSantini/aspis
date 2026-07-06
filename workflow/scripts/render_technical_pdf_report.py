@@ -210,7 +210,7 @@ PREFERRED_TABLE_COLUMNS = [
     "n",
 ]
 
-INTERESTING_ASSET_GROUPS = {
+INTERESTING_ASSET_GROUP_ORDER = [
     "enrichment",
     "isoform_switch",
     "dtu",
@@ -220,7 +220,36 @@ INTERESTING_ASSET_GROUPS = {
     "mirna_feature_sets",
     "length_qc",
     "residual",
-}
+]
+INTERESTING_ASSET_GROUPS = set(INTERESTING_ASSET_GROUP_ORDER)
+
+NESTED_PLOT_COLUMNS = [
+    ("plot_svg", "plot"),
+    ("overview_plot", "overview plot"),
+    ("usage_plot", "usage plot"),
+    ("feature_plot", "feature plot"),
+    ("feature_set_plot", "ORA plot"),
+    ("ranked_feature_set_plot", "ranked plot"),
+    ("target_enrichment_plot", "target enrichment plot"),
+    ("target_feature_set_plot", "target feature-set plot"),
+    ("mirna_mrna_plot", "miRNA-mRNA plot"),
+    ("mirna_mrna_target_feature_set_plot", "integrated target feature-set plot"),
+    ("mirna_mrna_target_ranked_feature_set_plot", "integrated ranked target feature-set plot"),
+    ("plots_pdf", "plots PDF"),
+]
+
+NESTED_TABLE_COLUMNS = [
+    ("source_results", "source results"),
+    ("transcript_results", "feature/event table"),
+    ("standardized_results", "standardized results"),
+    ("feature_set_results", "ORA results"),
+    ("ranked_feature_set_results", "ranked results"),
+    ("target_summary", "target summary"),
+    ("target_feature_set_results", "target feature-set results"),
+    ("mirna_mrna_summary", "miRNA-mRNA summary"),
+    ("isoform_dtu_evidence", "isoform DTU evidence"),
+    ("isoform_interpretation_consensus", "isoform interpretation consensus"),
+]
 
 
 def parse_args() -> argparse.Namespace:
@@ -955,7 +984,7 @@ def selected_asset_rows(
     kinds: set[str],
     max_rows: int,
 ) -> list[dict[str, str]]:
-    selected = [
+    filtered = [
         row
         for row in assets
         if row.get("exists", "") == "true"
@@ -963,7 +992,100 @@ def selected_asset_rows(
         and row.get("asset_group", "") in INTERESTING_ASSET_GROUPS
         and path_if_exists(row.get("path", "")) is not None
     ]
-    return selected[:max_rows]
+    if max_rows <= 0 or len(filtered) <= max_rows:
+        return filtered
+
+    grouped: dict[str, list[dict[str, str]]] = {group: [] for group in INTERESTING_ASSET_GROUP_ORDER}
+    for row in filtered:
+        grouped.setdefault(row.get("asset_group", ""), []).append(row)
+
+    selected: list[dict[str, str]] = []
+    while len(selected) < max_rows:
+        added = False
+        for group in INTERESTING_ASSET_GROUP_ORDER:
+            rows = grouped.get(group, [])
+            if not rows:
+                continue
+            selected.append(rows.pop(0))
+            added = True
+            if len(selected) >= max_rows:
+                break
+        if not added:
+            break
+    return selected
+
+
+def asset_identity(row: dict[str, str]) -> tuple[str, str, str, str]:
+    return (
+        row.get("asset_group", ""),
+        row.get("asset_label", ""),
+        row.get("asset_kind", ""),
+        row.get("path", ""),
+    )
+
+
+def nested_label(parent: dict[str, str], nested: dict[str, str], column_label: str) -> str:
+    parts = [
+        parent.get("asset_label", ""),
+        nested.get("method", ""),
+        nested.get("contrast_id", ""),
+        nested.get("event_id", "") or nested.get("switch_pair_id", ""),
+        column_label,
+    ]
+    return " ".join(part for part in parts if part)
+
+
+def nested_asset_row(
+    parent: dict[str, str],
+    nested: dict[str, str],
+    *,
+    column_label: str,
+    kind: str,
+    path_text: str,
+) -> dict[str, str]:
+    return {
+        "project": parent.get("project", "") or nested.get("project", ""),
+        "assay": parent.get("assay", "") or nested.get("assay", ""),
+        "level": parent.get("level", "") or nested.get("level", ""),
+        "contrast_id": nested.get("contrast_id", "") or parent.get("contrast_id", ""),
+        "status": nested.get("status", "") or parent.get("status", ""),
+        "asset_group": parent.get("asset_group", ""),
+        "asset_label": nested_label(parent, nested, column_label),
+        "asset_kind": kind,
+        "path": path_text,
+        "exists": "true",
+    }
+
+
+def expand_manifest_assets(assets: list[dict[str, str]]) -> list[dict[str, str]]:
+    expanded = list(assets)
+    seen = {asset_identity(row) for row in expanded}
+    for parent in assets:
+        if parent.get("asset_kind", "") != "manifest":
+            continue
+        manifest = path_if_exists(parent.get("path", ""))
+        if manifest is None or manifest.suffix.lower() != ".tsv":
+            continue
+        for nested in read_tsv(manifest):
+            for column, label in NESTED_PLOT_COLUMNS:
+                path_text = nested.get(column, "")
+                if not path_text or path_if_exists(path_text) is None:
+                    continue
+                row = nested_asset_row(parent, nested, column_label=label, kind="plot", path_text=path_text)
+                identity = asset_identity(row)
+                if identity not in seen:
+                    expanded.append(row)
+                    seen.add(identity)
+            for column, label in NESTED_TABLE_COLUMNS:
+                path_text = nested.get(column, "")
+                if not path_text or path_if_exists(path_text) is None:
+                    continue
+                row = nested_asset_row(parent, nested, column_label=label, kind="table", path_text=path_text)
+                identity = asset_identity(row)
+                if identity not in seen:
+                    expanded.append(row)
+                    seen.add(identity)
+    return expanded
 
 
 def draw_selected_asset_plots(
@@ -1071,7 +1193,7 @@ def render_report(args: argparse.Namespace) -> int:
     if not rows:
         raise ValueError(f"Summary manifest has no rows: {summary_path}")
 
-    assets = read_tsv(Path(args.asset_manifest)) if args.asset_manifest else []
+    assets = expand_manifest_assets(read_tsv(Path(args.asset_manifest))) if args.asset_manifest else []
     styles = stylesheet()
     project_names = sorted({row.get("project", "") for row in rows if row.get("project", "")})
     title_project = ", ".join(project_names) if project_names else "ASPIS"
@@ -1174,10 +1296,11 @@ def render_project_report(args: argparse.Namespace) -> int:
 
     rnaseq_assets = read_tsv(Path(args.rnaseq_asset_manifest)) if args.rnaseq_asset_manifest else []
     smallrna_assets = read_tsv(Path(args.smallrna_asset_manifest)) if args.smallrna_asset_manifest else []
-    assets = rnaseq_assets + smallrna_assets
+    raw_assets = rnaseq_assets + smallrna_assets
+    assets = expand_manifest_assets(raw_assets)
     log_step(
         f"loaded {len(rnaseq_rows)} RNA-seq row(s), {len(smallrna_rows)} smallRNA row(s), "
-        f"{len(assets)} asset row(s)"
+        f"{len(raw_assets)} direct asset row(s), {len(assets)} expanded asset row(s)"
     )
     styles = stylesheet()
     project = args.project or ", ".join(sorted({row.get("project", "") for row in rows if row.get("project", "")})) or "ASPIS"
