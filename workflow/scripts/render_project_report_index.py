@@ -258,7 +258,7 @@ def layer_panel(title: str, section_id: str, description: str, items: list[str])
 
 def html_panel(title: str, section_id: str, description: str, body_html: str) -> str:
     return (
-        f'<section class="layer-panel" id="{html.escape(section_id)}">'
+        f'<section class="layer-panel wide-panel" id="{html.escape(section_id)}">'
         f"<h3>{html.escape(title)}</h3>"
         f'<p class="section-note">{html.escape(description)}</p>'
         f"{body_html}</section>"
@@ -651,7 +651,7 @@ def project_evidence_map(
             ],
             [
                 link(rnaseq_base / "differential/reports/index.html", "report", base_dir),
-                '<a href="#plot-atlas-rnaseq-summary">plots</a>',
+                '<a href="#layer-rnaseq-de-listing">plots and tables</a>',
                 table_link(rnaseq_base / "differential/reports/summaries/summary_manifest.tsv", "manifest", base_dir),
             ],
         )
@@ -672,7 +672,7 @@ def project_evidence_map(
             ],
             [
                 link(rnaseq_base / "differential/reports/enrichment/index.html", "overview", base_dir),
-                '<a href="#plot-atlas-enrichment">plots</a>',
+                '<a href="#layer-enrichment-listing">plots and tables</a>',
                 table_link(rnaseq_base / "differential/reports/enrichment/enrichment_manifest.tsv", "manifest", base_dir),
             ],
         )
@@ -692,7 +692,7 @@ def project_evidence_map(
                 ("plot rows", rows_with_status(rnaseq_dtu_plots, "ok")),
             ],
             [
-                '<a href="#plot-atlas-dtu">plots</a>',
+                '<a href="#layer-dtu-listing">plots and tables</a>',
                 table_link(rnaseq_base / "differential/dtu/dtu_method_manifest.tsv", "method manifest", base_dir),
                 table_link(rnaseq_base / "differential/dtu/plots/dtu_plot_manifest.tsv", "plot manifest", base_dir),
             ],
@@ -715,7 +715,7 @@ def project_evidence_map(
             ],
             [
                 link(rnaseq_base / "differential/isoform_switch/report/index.html", "overview", base_dir),
-                '<a href="#plot-atlas-isoform-switch">event plots</a>',
+                '<a href="#layer-isoform-switch-listing">event plots and tables</a>',
                 table_link(
                     rnaseq_base / "differential/isoform_switch/report/isoform_interpretation_consensus.tsv",
                     "consensus",
@@ -740,7 +740,7 @@ def project_evidence_map(
             ],
             [
                 link(smallrna_base / "smallrna/differential/reports/index.html", "report", base_dir),
-                '<a href="#plot-atlas-smallrna">plots</a>',
+                '<a href="#layer-smallrna-listing">plots and tables</a>',
                 table_link(smallrna_base / "smallrna/differential/reports/summaries/summary_manifest.tsv", "manifest", base_dir),
             ],
         )
@@ -763,7 +763,7 @@ def project_evidence_map(
             ],
             [
                 link(smallrna_base / "smallrna/differential/reports/targets/index.html", "overview", base_dir),
-                '<a href="#plot-atlas-smallrna">plots</a>',
+                '<a href="#layer-smallrna-listing">plots and tables</a>',
                 table_link(smallrna_base / "smallrna/differential/target_enrichment/target_manifest.tsv", "target manifest", base_dir),
             ],
         )
@@ -784,7 +784,7 @@ def project_evidence_map(
                 ("feature-set rows", len(mirna_mrna_feature_sets)),
             ],
             [
-                '<a href="#plot-atlas-smallrna">plots</a>',
+                '<a href="#layer-smallrna-listing">plots and tables</a>',
                 table_link(
                     smallrna_base / "smallrna/differential/mirna_mrna_integration/mirna_mrna_manifest.tsv",
                     "integration manifest",
@@ -801,7 +801,7 @@ def project_evidence_map(
     return '<div class="evidence-grid">' + "".join(cards) + "</div>"
 
 
-def plot_atlas_sections(
+def evidence_layer_listing_sections(
     base_dir: Path,
     rnaseq_summary: list[dict[str, str]],
     rnaseq_enrichment: list[dict[str, str]],
@@ -980,7 +980,7 @@ def plot_atlas_sections(
         [
             html_panel(
                 "RNA-seq summary plot pages",
-                "plot-atlas-rnaseq-summary",
+                "layer-rnaseq-de-listing",
                 "Gene and transcript summary pages are the entry point for DE plots such as MA/PCA/volcano/heatmap panels.",
                 html_cell_table(
                     ["level", "contrast", "status", "significant", "links"],
@@ -990,7 +990,7 @@ def plot_atlas_sections(
             ),
             html_panel(
                 "GO/Reactome enrichment plots",
-                "plot-atlas-enrichment",
+                "layer-enrichment-listing",
                 "Direct links to ORA and ranked enrichment plots for each gene/transcript contrast.",
                 html_cell_table(
                     ["level", "contrast", "terms", "plots", "tables"],
@@ -999,8 +999,8 @@ def plot_atlas_sections(
                 ),
             ),
             html_panel(
-                "Independent DTU/splicing method plot atlas",
-                "plot-atlas-dtu",
+                "Independent DTU/splicing method plots and source tables",
+                "layer-dtu-listing",
                 "Direct plot links for each native DTU/splicing method and contrast. This includes method overview plots, ranked feature/event plots, and top-gene detail plots when the method emits them.",
                 html_cell_table(
                     ["method", "contrast", "status", "padj<0.05", "top gene/event", "plots", "source tables"],
@@ -1010,7 +1010,7 @@ def plot_atlas_sections(
             ),
             html_panel(
                 "Isoform-switch event plots",
-                "plot-atlas-isoform-switch",
+                "layer-isoform-switch-listing",
                 "Direct links to each isoform-switch event plot, event page, and sequence FASTA assets.",
                 html_cell_table(
                     ["rank", "contrast", "gene", "class", "switch in/out", "event assets"],
@@ -1020,7 +1020,7 @@ def plot_atlas_sections(
             ),
             html_panel(
                 "smallRNA, target, and integration plots",
-                "plot-atlas-smallrna",
+                "layer-smallrna-listing",
                 "Direct links to miRNA summaries, target enrichment plots, target feature-set plots, and matched miRNA-mRNA integration plots.",
                 html_cell_table(
                     [
@@ -1039,7 +1039,19 @@ def plot_atlas_sections(
     )
 
 
-def evidence_layer_sections(base_dir: Path, rnaseq_base: Path, smallrna_base: Path) -> str:
+def evidence_layer_sections(
+    base_dir: Path,
+    rnaseq_base: Path,
+    smallrna_base: Path,
+    rnaseq_summary: list[dict[str, str]],
+    rnaseq_enrichment: list[dict[str, str]],
+    rnaseq_dtu_plots: list[dict[str, str]],
+    isoform_events: list[dict[str, str]],
+    smallrna_summary: list[dict[str, str]],
+    smallrna_targets: list[dict[str, str]],
+    smallrna_target_feature_sets: list[dict[str, str]],
+    mirna_integration: list[dict[str, str]],
+) -> str:
     return "\n".join(
         [
             layer_panel(
@@ -1140,6 +1152,17 @@ def evidence_layer_sections(base_dir: Path, rnaseq_base: Path, smallrna_base: Pa
                     table_link(smallrna_base / "smallrna/differential/reports/summaries/summary_manifest.tsv", "smallRNA summary manifest", base_dir),
                 ],
             ),
+            evidence_layer_listing_sections(
+                base_dir,
+                rnaseq_summary,
+                rnaseq_enrichment,
+                rnaseq_dtu_plots,
+                isoform_events,
+                smallrna_summary,
+                smallrna_targets,
+                smallrna_target_feature_sets,
+                mirna_integration,
+            ),
         ]
     )
 
@@ -1206,20 +1229,9 @@ def project_report_map(
     return [
         report_map_item("Run dashboard", Path("../../index.html")),
         report_map_item(
-            "Project evidence map",
-            "#project-evidence-map",
+            "Project overview",
+            "#project-overview",
             children=[report_map_item("Combined technical PDF", pdf_target, planned=bool(technical_pdf))],
-        ),
-        report_map_item(
-            "Plot atlas",
-            "#plot-atlas",
-            children=[
-                report_map_item("RNA-seq summary plots", "#plot-atlas-rnaseq-summary"),
-                report_map_item("GO/Reactome plots", "#plot-atlas-enrichment"),
-                report_map_item("DTU method plots", "#plot-atlas-dtu"),
-                report_map_item("Isoform event plots", "#plot-atlas-isoform-switch"),
-                report_map_item("smallRNA/target plots", "#plot-atlas-smallrna"),
-            ],
         ),
         report_map_item("Contrast evidence matrix", "#contrast-matrix"),
         report_map_item(
@@ -1227,12 +1239,17 @@ def project_report_map(
             "#evidence-layers",
             children=[
                 report_map_item("RNA-seq DE", "#layer-rnaseq-de"),
+                report_map_item("RNA-seq DE plots/tables", "#layer-rnaseq-de-listing"),
                 report_map_item("GO/Reactome", "#layer-enrichment"),
+                report_map_item("GO/Reactome plots/tables", "#layer-enrichment-listing"),
                 report_map_item("DTU/splicing", "#layer-dtu"),
+                report_map_item("DTU/splicing plots/tables", "#layer-dtu-listing"),
                 report_map_item("Isoform-switch support", "#layer-isoform-switch"),
+                report_map_item("Isoform event plots/tables", "#layer-isoform-switch-listing"),
                 report_map_item("smallRNA DE", "#layer-smallrna-de"),
                 report_map_item("miRNA targets", "#layer-mirna-targets"),
                 report_map_item("Matched miRNA-mRNA", "#layer-matched-mirna-mrna"),
+                report_map_item("smallRNA/target plots/tables", "#layer-smallrna-listing"),
             ],
         ),
         report_map_item(
@@ -1317,12 +1334,12 @@ def render(args: argparse.Namespace) -> None:
     .metric {{ border: 1px solid #d0d7de; border-radius: 6px; padding: 0.75rem; }}
     .metric strong {{ display: block; color: #57606a; font-size: 0.85rem; }}
     .metric span {{ display: block; margin-top: 0.25rem; font-size: 1.25rem; font-weight: 700; }}
-    .grid, .evidence-grid, .layer-grid, .plot-atlas-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1rem; }}
+    .grid, .evidence-grid, .layer-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1rem; }}
     .evidence-grid {{ grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); }}
-    .plot-atlas-grid {{ grid-template-columns: 1fr; }}
-    .plot-atlas-grid table {{ font-size: 0.86rem; }}
-    .plot-atlas-grid td {{ overflow-wrap: anywhere; }}
     .evidence-card, .layer-panel {{ border: 1px solid #d0d7de; border-radius: 6px; padding: 0.85rem 1rem; background: #fff; }}
+    .wide-panel {{ grid-column: 1 / -1; }}
+    .wide-panel table {{ font-size: 0.86rem; }}
+    .wide-panel td {{ overflow-wrap: anywhere; }}
     .evidence-card h3, .layer-panel h3 {{ margin-top: 0; }}
     .mini-metrics {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 0.55rem; margin-top: 0.75rem; }}
     .mini-metric {{ background: #f6f8fa; border: 1px solid #d8dee4; border-radius: 6px; padding: 0.45rem 0.55rem; }}
@@ -1374,23 +1391,18 @@ def render(args: argparse.Namespace) -> None:
     {metric("integrated contrasts", sum(1 for row in mirna_integration if row.get("status") == "ok"))}
     {metric("assay-only contrasts", assay_only_contrast_count(rnaseq_summary, smallrna_summary))}
   </div>
-  <h2 id="project-evidence-map">Project Evidence Map</h2>
-  <p class="section-note">This map is the report tree for the project. It groups the run outputs by evidence layer, shows deterministic status/count summaries from source manifests, and links to the first table or page to open for each layer.</p>
+  <h2 id="project-overview">Project Overview</h2>
+  <p class="section-note">This overview lists the evidence layers available for this project and gives compact status/count summaries. Use the contrast matrix below for contrast-level review, then open the self-contained evidence layers for plots, source tables, and method-specific pages.</p>
   <p class="note"><strong>Independent DTU/splicing method results</strong> are the native outputs of methods such as DRIMSeq, DEXSeq, DEXSeqExon, SUPPA2, and rMATS. <strong>Isoform-switch candidates with DTU/splicing support</strong> starts from IsoformSwitchAnalyzeR switch candidates and asks whether those same genes/contrasts also have supporting DTU or splicing evidence. The support layer is a deterministic evidence join, not another statistical test.</p>
   {project_evidence_map(base_dir, rnaseq_base, smallrna_base, rnaseq_summary, rnaseq_enrichment, rnaseq_dtu, rnaseq_dtu_plots, isoform_events, isoform_interpretation_summary, smallrna_summary, smallrna_targets, smallrna_target_feature_sets, mirna_feature_sets, mirna_integration, mirna_mrna_feature_sets)}
-  <h2 id="plot-atlas">Plot Atlas</h2>
-  <p class="section-note">This section is the direct graph index. It intentionally repeats plot links from deeper assay reports so method graphs and event plots can be found without opening manifest TSVs first.</p>
-  <div class="plot-atlas-grid">
-    {plot_atlas_sections(base_dir, rnaseq_summary, rnaseq_enrichment, rnaseq_dtu_plots, isoform_events, smallrna_summary, smallrna_targets, smallrna_target_feature_sets, mirna_integration)}
-  </div>
   <h2 id="contrast-matrix">Contrast Evidence Matrix</h2>
   <p class="section-note">This matrix puts gene, transcript, DTU/splicing, and miRNA contrasts on the same row when assays share the same project and contrast labels. The cross-assay state marks integrated contrasts, RNA-seq-only contrasts, smallRNA-only contrasts, and shared contrasts where integration is not present.</p>
   <div class="controls"><input id="contrastFilter" placeholder="Filter contrasts"></div>
   {contrast_matrix(base_dir, rnaseq_summary, smallrna_summary, rnaseq_enrichment, mirna_integration, rnaseq_dtu, rnaseq_dtu_plots)}
   <h2 id="evidence-layers">Evidence Layers</h2>
-  <p class="section-note">These panels define what each layer contains and where the source manifests live. They are deterministic report navigation, not automated biological interpretation.</p>
+  <p class="section-note">These panels define what each layer contains and keep its plots, source tables, and deeper assay pages together. They are deterministic report navigation, not automated biological interpretation.</p>
   <div class="layer-grid">
-    {evidence_layer_sections(base_dir, rnaseq_base, smallrna_base)}
+    {evidence_layer_sections(base_dir, rnaseq_base, smallrna_base, rnaseq_summary, rnaseq_enrichment, rnaseq_dtu_plots, isoform_events, smallrna_summary, smallrna_targets, smallrna_target_feature_sets, mirna_integration)}
   </div>
   <h2 id="qc-and-design">QC And Design</h2>
   <p class="section-note">These tables show the sample/design shape and report availability that explain the evidence layers above.</p>

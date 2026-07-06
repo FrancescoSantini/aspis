@@ -300,8 +300,7 @@ def main() -> int:
         )
         html = html_report.read_text(encoding="utf-8")
         headings = [
-            "Project Evidence Map",
-            "Plot Atlas",
+            "Project Overview",
             "Contrast Evidence Matrix",
             "Evidence Layers",
             "QC And Design",
@@ -316,19 +315,21 @@ def main() -> int:
         assert "Gene A (geneA)" in html
         assert 'aria-label="Report map"' in html
         assert "Report Map" in html
-        assert 'href="#project-evidence-map"' in html
-        assert 'href="#plot-atlas"' in html
-        assert 'href="#plot-atlas-dtu"' in html
-        assert 'href="#plot-atlas-isoform-switch"' in html
+        assert 'href="#project-overview"' in html
         assert 'href="#contrast-matrix"' in html
         assert 'href="#evidence-layers"' in html
         assert 'href="#layer-rnaseq-de"' in html
+        assert 'href="#layer-rnaseq-de-listing"' in html
         assert 'href="#layer-enrichment"' in html
+        assert 'href="#layer-enrichment-listing"' in html
         assert 'href="#layer-dtu"' in html
+        assert 'href="#layer-dtu-listing"' in html
         assert 'href="#layer-isoform-switch"' in html
+        assert 'href="#layer-isoform-switch-listing"' in html
         assert 'href="#layer-smallrna-de"' in html
         assert 'href="#layer-mirna-targets"' in html
         assert 'href="#layer-matched-mirna-mrna"' in html
+        assert 'href="#layer-smallrna-listing"' in html
         assert 'href="#qc-and-design"' in html
         assert 'href="#sample-design"' in html
         assert 'href="#workflow-status"' in html
@@ -344,11 +345,12 @@ def main() -> int:
         assert 'id="layer-rnaseq-de"' in html
         assert 'id="layer-dtu"' in html
         assert 'id="layer-matched-mirna-mrna"' in html
-        assert "Independent DTU/splicing method plot atlas" in html
+        assert "Independent DTU/splicing method plots and source tables" in html
         assert "Independent DTU/splicing method results" in html
         assert "Isoform-switch candidates with DTU/splicing support" in html
         assert "support layer is a deterministic evidence join" in html
         assert "Isoform-switch event plots" in html
+        assert "Plot Atlas" not in html
         assert 'class="link-list"' in html
         assert "overview plot" in html
         assert "ranked candidate plot" in html
