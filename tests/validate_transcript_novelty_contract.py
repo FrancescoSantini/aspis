@@ -119,6 +119,10 @@ def exercise_transcript_matrix() -> tuple[Path, Path]:
             metadata,
             {
                 "transcript_id",
+                "gene_id",
+                "gene_name",
+                "gene_display",
+                "transcript_display",
                 "gene_biotype",
                 "transcript_biotype",
                 "class_code",
@@ -127,6 +131,10 @@ def exercise_transcript_matrix() -> tuple[Path, Path]:
                 "true_novel_candidate",
                 "transcript_plot_group",
                 "transcript_plot_label",
+                "is_stringtie_assembly",
+                "assembly_evidence_class",
+                "assembly_evidence_label",
+                "assembly_evidence_note",
             },
         )
     }
@@ -154,16 +162,32 @@ def exercise_transcript_matrix() -> tuple[Path, Path]:
         raise ValueError(f"exact match was not treated as known: {rows['TX_KNOWN']}")
     if rows["TX_KNOWN"]["transcript_plot_group"] != "known_compatible":
         raise ValueError(f"exact match was not assigned to known-compatible plots: {rows['TX_KNOWN']}")
+    if rows["TX_KNOWN"]["gene_display"] != "Gene1 (GENE1)":
+        raise ValueError(f"known gene display label was not symbol-first: {rows['TX_KNOWN']}")
+    if rows["TX_KNOWN"]["transcript_display"] != "Gene1 (GENE1) | TX_KNOWN":
+        raise ValueError(f"known transcript display label was not propagated: {rows['TX_KNOWN']}")
+    if rows["TX_KNOWN"]["assembly_evidence_class"] != "reference_compatible":
+        raise ValueError(f"known transcript did not get reference-compatible evidence label: {rows['TX_KNOWN']}")
     if rows["TX_J"]["transcript_novelty"] != "novel_isoform" or rows["TX_J"]["true_novel_candidate"] != "yes":
         raise ValueError(f"class j was not treated as a true novel isoform: {rows['TX_J']}")
     if rows["TX_J"]["transcript_plot_group"] != "novel_isoform":
         raise ValueError(f"class j was not assigned to novel-isoform plots: {rows['TX_J']}")
     if rows["TX_J"]["gene_type_strict"] != "Novel":
         raise ValueError(f"class j was still treated as strict Known: {rows['TX_J']}")
+    if rows["TX_J"]["assembly_evidence_class"] != "candidate_novel_isoform":
+        raise ValueError(f"class j was not labelled as a candidate novel isoform: {rows['TX_J']}")
     if rows["TX_U"]["transcript_novelty"] != "novel_locus" or rows["TX_U"]["true_novel_candidate"] != "yes":
         raise ValueError(f"class u was not treated as a true novel locus: {rows['TX_U']}")
     if rows["TX_U"]["transcript_plot_group"] != "novel_locus":
         raise ValueError(f"class u was not assigned to novel-locus plots: {rows['TX_U']}")
+    if rows["TX_U"]["gene_display"] != "MSTRG.1" or rows["TX_U"]["is_stringtie_assembly"] != "yes":
+        raise ValueError(f"MSTRG transcript did not get conservative assembly display metadata: {rows['TX_U']}")
+    if rows["TX_U"]["assembly_evidence_class"] != "candidate_novel_locus":
+        raise ValueError(f"class u was not labelled as a candidate novel locus: {rows['TX_U']}")
+    if rows["TX_I"]["assembly_evidence_class"] != "ambiguous_assembly_model":
+        raise ValueError(f"class i was not labelled as ambiguous assembly model: {rows['TX_I']}")
+    if rows["TX_P"]["assembly_evidence_class"] != "low_confidence_assembly":
+        raise ValueError(f"class p was not labelled as low-confidence assembly model: {rows['TX_P']}")
     return counts, metadata
 
 

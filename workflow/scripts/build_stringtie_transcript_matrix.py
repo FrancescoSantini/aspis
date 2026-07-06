@@ -295,6 +295,69 @@ def classify_transcript_discovery(gene_id: str, class_code: str) -> tuple[str, s
     )
 
 
+def looks_like_stringtie_id(value: str) -> bool:
+    return bool(value) and value.startswith(("MSTRG", "STRG"))
+
+
+def gene_display_label(gene_id: str, gene_name: str) -> str:
+    gene_id = (gene_id or "").strip()
+    gene_name = (gene_name or "").strip()
+    if gene_name and gene_id and gene_name != gene_id:
+        return f"{gene_name} ({gene_id})"
+    return gene_name or gene_id
+
+
+def transcript_display_label(transcript_id: str, gene_id: str, gene_name: str) -> str:
+    transcript_id = (transcript_id or "").strip()
+    gene_label = gene_display_label(gene_id, gene_name)
+    if gene_label and transcript_id:
+        return f"{gene_label} | {transcript_id}"
+    return transcript_id or gene_label
+
+
+def assembly_evidence_fields(
+    gene_id: str,
+    transcript_id: str,
+    discovery_class: str,
+) -> tuple[str, str, str, str]:
+    """Conservative interpretation labels for StringTie/gffcompare transcript models."""
+    stringtie_model = "yes" if looks_like_stringtie_id(gene_id) or looks_like_stringtie_id(transcript_id) else "no"
+    if discovery_class in {"known_transcript", "reference_contained_or_containing", "unclassified_reference_compatible"}:
+        return (
+            stringtie_model,
+            "reference_compatible",
+            "Reference-compatible transcript",
+            "Annotated or reference-compatible transcript model; not a novel-assembly claim.",
+        )
+    if discovery_class == "novel_isoform_known_gene":
+        return (
+            stringtie_model,
+            "candidate_novel_isoform",
+            "Candidate novel isoform",
+            "RNA-seq assembly supports a candidate novel isoform of a known gene; independent validation is recommended before treating it as a validated transcript.",
+        )
+    if discovery_class in {"intergenic_novel_locus", "unclassified_novel_candidate"}:
+        return (
+            stringtie_model,
+            "candidate_novel_locus",
+            "Candidate novel locus",
+            "RNA-seq assembly supports an intergenic transcript model; independent validation is required before naming a new gene or transcript.",
+        )
+    if discovery_class == "likely_artifact_or_repeat":
+        return (
+            stringtie_model,
+            "low_confidence_assembly",
+            "Low-confidence assembly model",
+            "Possible artifact, repeat, pre-mRNA, or run-on signal; do not treat as a validated transcript without external evidence.",
+        )
+    return (
+        stringtie_model,
+        "ambiguous_assembly_model",
+        "Ambiguous assembled model",
+        "Assembly overlaps annotation ambiguously; review splice structure, strand, expression, and independent evidence before interpretation.",
+    )
+
+
 def main() -> int:
     args = parse_args()
     plan = read_plan(Path(args.plan))
@@ -342,6 +405,8 @@ def main() -> int:
         "transcript_id",
         "gene_id",
         "gene_name",
+        "gene_display",
+        "transcript_display",
         "gene_biotype",
         "transcript_biotype",
         "class_code",
@@ -350,6 +415,10 @@ def main() -> int:
         "true_novel_candidate",
         "transcript_plot_group",
         "transcript_plot_label",
+        "is_stringtie_assembly",
+        "assembly_evidence_class",
+        "assembly_evidence_label",
+        "assembly_evidence_note",
         "gffcompare_description",
         "gene_type_strict",
         "gene_type_lenient",
@@ -376,14 +445,26 @@ def main() -> int:
                 args.gene_type_view,
             )
             discovery_class, novelty, true_novel, plot_group, plot_label, description = classify_transcript_discovery(row["gene_id"], class_code)
+            (
+                is_stringtie_assembly,
+                assembly_evidence_class,
+                assembly_evidence_label,
+                assembly_evidence_note,
+            ) = assembly_evidence_fields(row["gene_id"], tx_id, discovery_class)
             row.update(
                 {
+                    "gene_display": gene_display_label(row["gene_id"], row.get("gene_name", "")),
+                    "transcript_display": transcript_display_label(tx_id, row["gene_id"], row.get("gene_name", "")),
                     "class_code": class_code,
                     "transcript_discovery_class": discovery_class,
                     "transcript_novelty": novelty,
                     "true_novel_candidate": true_novel,
                     "transcript_plot_group": plot_group,
                     "transcript_plot_label": plot_label,
+                    "is_stringtie_assembly": is_stringtie_assembly,
+                    "assembly_evidence_class": assembly_evidence_class,
+                    "assembly_evidence_label": assembly_evidence_label,
+                    "assembly_evidence_note": assembly_evidence_note,
                     "gffcompare_description": description,
                     "gene_type_strict": strict_value,
                     "gene_type_lenient": lenient_value,

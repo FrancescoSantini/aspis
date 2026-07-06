@@ -62,11 +62,16 @@ def main() -> int:
             "contrast_id",
             "gene_id",
             "gene_name",
+            "gene_display",
             "isoform_id",
+            "transcript_display",
             "switch_role",
             "dIF",
             "padj_qvalue",
             "candidate_status",
+            "assembly_evidence_class",
+            "assembly_evidence_label",
+            "assembly_evidence_note",
             "switch_direction",
         ],
         [
@@ -75,11 +80,16 @@ def main() -> int:
                 "contrast_id": "treated_vs_control__time_h_24",
                 "gene_id": "GENE1",
                 "gene_name": "Gene One",
+                "gene_display": "Gene One (GENE1)",
                 "isoform_id": "TX1",
+                "transcript_display": "Gene One (GENE1) | TX1",
                 "switch_role": "switch_in",
                 "dIF": "0.32",
                 "padj_qvalue": "0.01",
                 "candidate_status": "ok",
+                "assembly_evidence_class": "candidate_novel_isoform",
+                "assembly_evidence_label": "Candidate novel isoform",
+                "assembly_evidence_note": "RNA-seq assembly supports a candidate novel isoform of a known gene.",
                 "switch_direction": "increased_usage",
             },
             {
@@ -87,11 +97,16 @@ def main() -> int:
                 "contrast_id": "treated_vs_control__time_h_24",
                 "gene_id": "GENE2",
                 "gene_name": "Gene Two",
+                "gene_display": "Gene Two (GENE2)",
                 "isoform_id": "TX2",
+                "transcript_display": "Gene Two (GENE2) | TX2",
                 "switch_role": "switch_out",
                 "dIF": "-0.22",
                 "padj_qvalue": "0.02",
                 "candidate_status": "ok",
+                "assembly_evidence_class": "reference_compatible",
+                "assembly_evidence_label": "Reference-compatible transcript",
+                "assembly_evidence_note": "Annotated or reference-compatible transcript model.",
                 "switch_direction": "decreased_usage",
             },
         ],
@@ -316,6 +331,9 @@ def main() -> int:
         output,
         {
             "event_id",
+            "gene_display",
+            "transcript_display",
+            "assembly_evidence_class",
             "dtu_evidence_status",
             "dtu_methods_detected",
             "dtu_methods_significant",
@@ -332,6 +350,10 @@ def main() -> int:
         raise ValueError(f"switch1 significant methods were not summarized: {by_event['switch1']}")
     if by_event["switch1"]["best_dtu_method"] != "SUPPA2" or by_event["switch1"]["best_dtu_padj"] != "0.01":
         raise ValueError(f"best DTU evidence was not selected by padj: {by_event['switch1']}")
+    if by_event["switch1"]["gene_display"] != "Gene One (GENE1)" or by_event["switch1"]["transcript_display"] != "Gene One (GENE1) | TX1":
+        raise ValueError(f"display labels were not propagated to evidence: {by_event['switch1']}")
+    if by_event["switch1"]["assembly_evidence_class"] != "candidate_novel_isoform":
+        raise ValueError(f"assembly evidence label was not propagated to evidence: {by_event['switch1']}")
     if by_event["switch1"]["dexseq_exon_n_significant"] != "1":
         raise ValueError(f"DEXSeqExon evidence columns were not populated: {by_event['switch1']}")
     if by_event["switch2"]["dtu_evidence_status"] != "supported_not_significant":
@@ -345,6 +367,9 @@ def main() -> int:
         interpretation,
         {
             "event_id",
+            "gene_display",
+            "transcript_display",
+            "assembly_evidence_class",
             "interpretation_priority",
             "interpretation_label",
             "dtu_support_class",
@@ -359,6 +384,8 @@ def main() -> int:
         raise ValueError(f"switch1 should use DTU consensus support class: {interpretation_by_event['switch1']}")
     if interpretation_by_event["switch1"]["best_dtu_method"] != "SUPPA2":
         raise ValueError(f"switch1 should use consensus best DTU method: {interpretation_by_event['switch1']}")
+    if interpretation_by_event["switch1"]["assembly_evidence_class"] != "candidate_novel_isoform":
+        raise ValueError(f"assembly evidence label was not propagated to interpretation: {interpretation_by_event['switch1']}")
 
     interpretation_summary_rows = read_tsv(interpretation_summary, {"status", "high_priority_rows", "multi_method_supported_rows"})
     if interpretation_summary_rows[0]["status"] != "ok" or interpretation_summary_rows[0]["high_priority_rows"] != "1":

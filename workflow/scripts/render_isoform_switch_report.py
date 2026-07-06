@@ -40,11 +40,13 @@ CANDIDATE_COLUMNS = [
     "contrast_id",
     "gene_id",
     "gene_name",
+    "gene_display",
     "gene_biotype",
     "transcript_biotype",
     "switch_biotype_class",
     "switch_rank",
     "isoform_id",
+    "transcript_display",
     "switch_role",
     "dIF",
     "padj_qvalue",
@@ -60,6 +62,10 @@ CANDIDATE_COLUMNS = [
     "transcript_novelty",
     "transcript_plot_group",
     "gffcompare_class_code",
+    "is_stringtie_assembly",
+    "assembly_evidence_class",
+    "assembly_evidence_label",
+    "assembly_evidence_note",
     "consequence_summary",
     "source_detailed",
 ]
@@ -68,6 +74,7 @@ EVENT_COLUMNS = [
     "contrast_id",
     "gene_id",
     "gene_name",
+    "gene_display",
     "gene_biotype",
     "switch_biotype_class",
     "switch_interpretation_label",
@@ -982,6 +989,64 @@ def metadata_by_transcript(path: Path) -> dict[str, dict[str, str]]:
     return indexed
 
 
+def looks_like_stringtie_id(value: str) -> bool:
+    return bool(value) and value.startswith(("MSTRG", "STRG"))
+
+
+def display_gene(gene_id: str, gene_name: str) -> str:
+    gene_id = (gene_id or "").strip()
+    gene_name = (gene_name or "").strip()
+    if gene_name and gene_id and gene_name != gene_id:
+        return f"{gene_name} ({gene_id})"
+    return gene_name or gene_id
+
+
+def display_transcript(transcript_id: str, gene_id: str, gene_name: str) -> str:
+    transcript_id = (transcript_id or "").strip()
+    gene_label = display_gene(gene_id, gene_name)
+    if gene_label and transcript_id:
+        return f"{gene_label} | {transcript_id}"
+    return transcript_id or gene_label
+
+
+def fallback_assembly_evidence(gene_id: str, transcript_id: str, discovery_class: str) -> tuple[str, str, str, str]:
+    is_stringtie = "yes" if looks_like_stringtie_id(gene_id) or looks_like_stringtie_id(transcript_id) else "no"
+    if discovery_class in {"known_transcript", "reference_contained_or_containing", "unclassified_reference_compatible"}:
+        return (
+            is_stringtie,
+            "reference_compatible",
+            "Reference-compatible transcript",
+            "Annotated or reference-compatible transcript model; not a novel-assembly claim.",
+        )
+    if discovery_class == "novel_isoform_known_gene":
+        return (
+            is_stringtie,
+            "candidate_novel_isoform",
+            "Candidate novel isoform",
+            "RNA-seq assembly supports a candidate novel isoform of a known gene; independent validation is recommended before treating it as a validated transcript.",
+        )
+    if discovery_class in {"intergenic_novel_locus", "unclassified_novel_candidate"}:
+        return (
+            is_stringtie,
+            "candidate_novel_locus",
+            "Candidate novel locus",
+            "RNA-seq assembly supports an intergenic transcript model; independent validation is required before naming a new gene or transcript.",
+        )
+    if discovery_class == "likely_artifact_or_repeat":
+        return (
+            is_stringtie,
+            "low_confidence_assembly",
+            "Low-confidence assembly model",
+            "Possible artifact, repeat, pre-mRNA, or run-on signal; do not treat as a validated transcript without external evidence.",
+        )
+    return (
+        is_stringtie,
+        "ambiguous_assembly_model",
+        "Ambiguous assembled model",
+        "Assembly overlaps annotation ambiguously; review splice structure, strand, expression, and independent evidence before interpretation.",
+    )
+
+
 def consequence_lookup(rows: list[dict[str, str]]) -> dict[tuple[str, str], list[str]]:
     lookup: dict[tuple[str, str], list[str]] = defaultdict(list)
     for row in rows:
@@ -1590,6 +1655,15 @@ def build_events(
             meta = metadata.get(isoform_id, {})
             model = models.get(isoform_id)
             gene_biotype, transcript_biotype = metadata_biotype(meta, model)
+            gene_display = meta.get("gene_display") or display_gene(gene_id, gene_name)
+            transcript_display = meta.get("transcript_display") or display_transcript(isoform_id, gene_id, gene_name)
+            discovery_class = meta.get("transcript_discovery_class", "")
+            (
+                is_stringtie_assembly,
+                assembly_evidence_class,
+                assembly_evidence_label,
+                assembly_evidence_note,
+            ) = fallback_assembly_evidence(gene_id, isoform_id, discovery_class)
             status = "candidate" if isoform_id in candidate_isoforms else "same_gene_context"
             candidate = (
                 {
@@ -1597,11 +1671,13 @@ def build_events(
                     "contrast_id": contrast_id,
                     "gene_id": gene_id,
                     "gene_name": gene_name,
+                    "gene_display": gene_display,
                     "gene_biotype": gene_biotype,
                     "transcript_biotype": transcript_biotype,
                     "switch_biotype_class": "",
                     "switch_rank": str(switch_rank),
                     "isoform_id": isoform_id,
+                    "transcript_display": transcript_display,
                     "switch_role": role_for_isoform(isoform_id, switch_in["_isoform_id"], switch_out["_isoform_id"]),
                     "dIF": row["_dIF"],
                     "padj_qvalue": row["_statistic"],
@@ -1615,10 +1691,14 @@ def build_events(
                     if isoform_id in candidate_isoforms
                     else "same-gene context for selected switch",
                     "candidate_status": status,
-                    "transcript_discovery_class": meta.get("transcript_discovery_class", ""),
+                    "transcript_discovery_class": discovery_class,
                     "transcript_novelty": meta.get("transcript_novelty", ""),
                     "transcript_plot_group": meta.get("transcript_plot_group", ""),
                     "gffcompare_class_code": meta.get("gffcompare_class_code", meta.get("class_code", "")),
+                    "is_stringtie_assembly": meta.get("is_stringtie_assembly", is_stringtie_assembly),
+                    "assembly_evidence_class": meta.get("assembly_evidence_class", assembly_evidence_class),
+                    "assembly_evidence_label": meta.get("assembly_evidence_label", assembly_evidence_label),
+                    "assembly_evidence_note": meta.get("assembly_evidence_note", assembly_evidence_note),
                     "consequence_summary": "",
                     "source_detailed": row["_detailed"],
                     "ORF_length": first_available_feature(row, ["ORF_length", "orf_length", "ORF_length_aa", "orf_length_aa"]),
@@ -1635,6 +1715,7 @@ def build_events(
             row for row in current_candidate_rows if row["switch_role"] in {"switch_in", "switch_out"}
         ] or current_candidate_rows
         switch_class, gene_biotype, interpretation_label = classify_switch_biotype(classified_rows)
+        event["gene_display"] = first_existing(current_candidate_rows[0], ["gene_display"]) if current_candidate_rows else display_gene(gene_id, gene_name)
         event["gene_biotype"] = gene_biotype
         event["switch_biotype_class"] = switch_class
         event["switch_interpretation_label"] = interpretation_label
@@ -2726,7 +2807,7 @@ def render_event_html(
 </head>
 <body>
   <nav class="breadcrumbs"><a href="{html.escape(relative(str(report_index), out_path))}">Isoform-switch overview</a> / {html.escape(event['contrast_id'])} / {html.escape(event['event_id'])}</nav>
-  <h1>{html.escape(event['gene_name'])} isoform switch</h1>
+  <h1>{html.escape(event.get('gene_display', '') or event['gene_name'])} isoform switch</h1>
   <div class="muted">{html.escape(event['event_id'])} | contrast {html.escape(event['contrast_id'])}</div>
   <nav class="toc" aria-label="Page sections">
     <a href="#diagram">Diagram</a>
@@ -2744,8 +2825,8 @@ def render_event_html(
   <p class="note">The exon diagram compares the switch-in and switch-out isoforms in genomic coordinates. It is a structural view of which transcript model gains relative usage and which loses usage in the test group.</p>
   <img id="diagram" src="{html.escape(relative(str(svg_path), out_path))}" alt="Isoform switch plot">
   <h2 id="candidates">Candidate Isoforms</h2>
-  <p class="note">Candidate isoforms are the transcripts selected from the IsoformSwitchAnalyzeR output for this event. dIF is the change in isoform fraction between groups; positive and negative roles identify switch-in and switch-out transcripts.</p>
-  {table(['switch_rank', 'isoform_id', 'switch_role', 'gene_biotype', 'transcript_biotype', 'switch_biotype_class', 'dIF', 'padj_qvalue', 'isoform_fraction_control', 'isoform_fraction_test', 'switch_direction', 'novelty_group', 'reason_selected', 'consequence_summary'], event_candidates)}
+  <p class="note">Candidate isoforms are the transcripts selected from the IsoformSwitchAnalyzeR output for this event. dIF is the change in isoform fraction between groups; positive and negative roles identify switch-in and switch-out transcripts. StringTie/MSTRG identifiers are RNA-seq assembled transcript models; evidence labels are conservative review classes, not independent validation.</p>
+  {table(['switch_rank', 'transcript_display', 'isoform_id', 'switch_role', 'assembly_evidence_label', 'gffcompare_class_code', 'gene_biotype', 'transcript_biotype', 'switch_biotype_class', 'dIF', 'padj_qvalue', 'isoform_fraction_control', 'isoform_fraction_test', 'switch_direction', 'novelty_group', 'reason_selected', 'assembly_evidence_note', 'consequence_summary'], event_candidates)}
   <h2 id="coding">Coding Switch Prioritization</h2>
   <p class="note">This table ranks coding switches by predicted consequence evidence such as NMD, coding-potential changes, ORF length changes, domains, signal peptides, transmembrane regions, or localization annotations when those resources are available.</p>
   {table(['coding_priority_rank', 'coding_priority_score', 'coding_priority_tier', 'coding_priority_reasons', 'nmd_change', 'coding_potential_change', 'orf_length_change_aa', 'gained_domain', 'lost_domain', 'gained_signal_peptide', 'lost_signal_peptide', 'gained_transmembrane_region', 'lost_transmembrane_region', 'localization_change'], event_coding_rows)}
@@ -3126,7 +3207,7 @@ def render_project_html(
             cards.append(
                 '<article class="event-card">'
                 f'<h3>{file_link(row.get("event_id", "event"), row.get("event_html", ""), output)}</h3>'
-                f'<p><strong>{html.escape(row.get("gene_name") or row.get("gene_id", ""))}</strong> '
+                f'<p><strong>{html.escape(row.get("gene_display") or row.get("gene_name") or row.get("gene_id", ""))}</strong> '
                 f'<code>{html.escape(row.get("gene_id", ""))}</code></p>'
                 f'<p>{html.escape(row.get("contrast_id", ""))}</p>'
                 f'<p>{status_badge(row.get("status", ""))} '
@@ -3243,7 +3324,7 @@ def render_project_html(
                 f"<td>{html.escape(row.get('coding_priority_rank', ''))}</td>"
                 f"<td>{html.escape(row.get('coding_priority_score', ''))}</td>"
                 f"<td>{html.escape(row.get('coding_priority_tier', ''))}</td>"
-                f"<td>{html.escape(row['gene_name'])}</td>"
+                f"<td>{html.escape(row.get('gene_display') or row['gene_name'])}</td>"
                 f"<td>{html.escape(row['gene_id'])}</td>"
                 f"<td>{html.escape(row.get('coding_priority_reasons', ''))}</td>"
                 f"<td>{html.escape(row.get('gained_domain', ''))}</td>"
@@ -3270,7 +3351,7 @@ def render_project_html(
                 f"<td>{link}</td>"
                 f"<td>{html.escape(row['contrast_id'])}</td>"
                 f"<td>{html.escape(row.get('switch_rank', ''))}</td>"
-                f"<td>{html.escape(row['gene_name'])}</td>"
+                f"<td>{html.escape(row.get('gene_display') or row['gene_name'])}</td>"
                 f"<td>{html.escape(row['gene_id'])}</td>"
                 f"<td>{html.escape(row.get('gene_biotype', ''))}</td>"
                 f"<td>{html.escape(row.get('switch_biotype_class', ''))}</td>"
@@ -3348,7 +3429,7 @@ def render_project_html(
     <thead>
       <tr>
         <th>event</th><th>contrast</th><th>priority rank</th><th>score</th><th>tier</th>
-        <th>gene</th><th>gene_id</th><th>priority reasons</th>
+        <th>gene display</th><th>gene_id</th><th>priority reasons</th>
         <th>gained domains</th><th>lost domains</th><th>NMD change</th>
         <th>coding-potential change</th><th>ORF length change</th>
       </tr>
@@ -3363,7 +3444,7 @@ def render_project_html(
   <table>
     <thead>
       <tr>
-        <th>event</th><th>contrast</th><th>rank</th><th>gene</th><th>gene_id</th>
+        <th>event</th><th>contrast</th><th>rank</th><th>gene display</th><th>gene_id</th>
         <th>gene biotype</th><th>switch class</th><th>interpretation</th>
         <th>coding priority</th><th>priority reasons</th>
         <th>switch-in</th><th>switch-out</th><th>max abs dIF</th>

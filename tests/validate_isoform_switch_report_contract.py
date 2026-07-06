@@ -104,28 +104,34 @@ def main() -> int:
                 [
                     "transcript_id",
                     "gene_id",
+                    "gene_display",
+                    "transcript_display",
                     "transcript_discovery_class",
                     "transcript_novelty",
                     "transcript_plot_group",
                     "gffcompare_class_code",
+                    "is_stringtie_assembly",
+                    "assembly_evidence_class",
+                    "assembly_evidence_label",
+                    "assembly_evidence_note",
                     "gene_biotype",
                     "transcript_biotype",
                 ]
             )
             + "\n"
-            + "\t".join(["tx_known", "geneA", "reference_compatible", "known", "known_compatible", "=", "protein_coding", "protein_coding"])
+            + "\t".join(["tx_known", "geneA", "GeneA (geneA)", "GeneA (geneA) | tx_known", "known_transcript", "known", "known_compatible", "=", "no", "reference_compatible", "Reference-compatible transcript", "Annotated or reference-compatible transcript model.", "protein_coding", "protein_coding"])
             + "\n"
-            + "\t".join(["tx_novel", "geneA", "novel_isoform", "novel", "novel_isoform", "j", "protein_coding", "protein_coding"])
+            + "\t".join(["tx_novel", "geneA", "GeneA (geneA)", "GeneA (geneA) | tx_novel", "novel_isoform_known_gene", "novel_isoform", "novel_isoform", "j", "no", "candidate_novel_isoform", "Candidate novel isoform", "RNA-seq assembly supports a candidate novel isoform of a known gene.", "protein_coding", "protein_coding"])
             + "\n"
-            + "\t".join(["tx_context", "geneA", "reference_compatible", "known", "known_compatible", "c", "protein_coding", "protein_coding"])
+            + "\t".join(["tx_context", "geneA", "GeneA (geneA)", "GeneA (geneA) | tx_context", "reference_contained_or_containing", "reference_overlap", "known_compatible", "c", "no", "reference_compatible", "Reference-compatible transcript", "Annotated or reference-compatible transcript model.", "protein_coding", "protein_coding"])
             + "\n"
-            + "\t".join(["lnc_short", "geneB", "reference_compatible", "known", "known_compatible", "=", "lncRNA", "lncRNA"])
+            + "\t".join(["lnc_short", "geneB", "LncB (geneB)", "LncB (geneB) | lnc_short", "known_transcript", "known", "known_compatible", "=", "no", "reference_compatible", "Reference-compatible transcript", "Annotated or reference-compatible transcript model.", "lncRNA", "lncRNA"])
             + "\n"
-            + "\t".join(["lnc_long", "geneB", "novel_isoform", "novel", "novel_isoform", "j", "lncRNA", "lncRNA"])
+            + "\t".join(["lnc_long", "geneB", "LncB (geneB)", "LncB (geneB) | lnc_long", "novel_isoform_known_gene", "novel_isoform", "novel_isoform", "j", "no", "candidate_novel_isoform", "Candidate novel isoform", "RNA-seq assembly supports a candidate novel isoform of a known gene.", "lncRNA", "lncRNA"])
             + "\n"
-            + "\t".join(["pg_short", "geneC", "reference_compatible", "known", "known_compatible", "=", "processed_pseudogene", "processed_pseudogene"])
+            + "\t".join(["pg_short", "geneC", "PseudoC (geneC)", "PseudoC (geneC) | pg_short", "known_transcript", "known", "known_compatible", "=", "no", "reference_compatible", "Reference-compatible transcript", "Annotated or reference-compatible transcript model.", "processed_pseudogene", "processed_pseudogene"])
             + "\n"
-            + "\t".join(["pg_long", "geneC", "novel_isoform", "novel", "novel_isoform", "j", "processed_pseudogene", "processed_pseudogene"])
+            + "\t".join(["pg_long", "geneC", "PseudoC (geneC)", "PseudoC (geneC) | pg_long", "novel_isoform_known_gene", "novel_isoform", "novel_isoform", "j", "no", "candidate_novel_isoform", "Candidate novel isoform", "RNA-seq assembly supports a candidate novel isoform of a known gene.", "processed_pseudogene", "processed_pseudogene"])
             + "\n",
         )
         write(
@@ -396,6 +402,8 @@ def main() -> int:
         assert "NMD_status_change" in coding_rows[0]["coding_priority_reasons"], coding_rows
         assert any(row["gene_id"] == "geneA" and row["coding_priority_score"] == coding_rows[0]["coding_priority_score"] for row in events), events
         assert {row["switch_role"] for row in candidates} >= {"switch_in", "switch_out"}, candidates
+        assert any(row["isoform_id"] == "tx_novel" and row["transcript_display"] == "GeneA (geneA) | tx_novel" for row in candidates), candidates
+        assert any(row["isoform_id"] == "tx_novel" and row["assembly_evidence_class"] == "candidate_novel_isoform" for row in candidates), candidates
         assert any(row["gene_biotype"] == "lncRNA" and row["switch_biotype_class"] == "noncoding" for row in candidates)
         assert candidates[0]["switch_rank"] == "1"
         assert candidates[0]["reason_selected"]
@@ -445,6 +453,8 @@ def main() -> int:
             raise AssertionError("event-specific isoform-switch page lacks breadcrumb or mini table of contents")
         if "#annotations" not in event_html or "#sequences" not in event_html:
             raise AssertionError("event-specific isoform-switch page lacks deep section links")
+        if "Candidate novel isoform" not in event_html or "GeneA (geneA) | tx_novel" not in event_html:
+            raise AssertionError("event-specific isoform-switch page lacks display/evidence labels")
         assert Path(plots[0]["nt_fasta"]).exists(), plots
         assert Path(plots[0]["aa_fasta"]).exists(), plots
         assert (outdir / "switch_plots.pdf").exists()
