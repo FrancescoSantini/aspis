@@ -1131,16 +1131,9 @@ def project_report_map(
     return [
         report_map_item("Run dashboard", Path("../../index.html")),
         report_map_item(
-            "Project report",
-            children=[
-                report_map_item("Project evidence map", "#project-evidence-map"),
-                report_map_item("Plot atlas", "#plot-atlas"),
-                report_map_item("Contrast evidence matrix", "#contrast-matrix"),
-                report_map_item("Evidence layers", "#evidence-layers"),
-                report_map_item("QC and design", "#qc-and-design"),
-                report_map_item("Raw artifacts", "#raw-artifacts"),
-                report_map_item("Combined technical PDF", pdf_target, planned=bool(technical_pdf)),
-            ],
+            "Project evidence map",
+            "#project-evidence-map",
+            children=[report_map_item("Combined technical PDF", pdf_target, planned=bool(technical_pdf))],
         ),
         report_map_item(
             "Plot atlas",
@@ -1153,6 +1146,7 @@ def project_report_map(
                 report_map_item("smallRNA/target plots", "#plot-atlas-smallrna"),
             ],
         ),
+        report_map_item("Contrast evidence matrix", "#contrast-matrix"),
         report_map_item(
             "Evidence layers",
             "#evidence-layers",
@@ -1166,6 +1160,25 @@ def project_report_map(
                 report_map_item("Matched miRNA-mRNA", "#layer-matched-mirna-mrna"),
             ],
         ),
+        report_map_item(
+            "QC and design",
+            "#qc-and-design",
+            children=[
+                report_map_item("Sample and design summary", "#sample-design"),
+                report_map_item("Workflow status matrix", "#workflow-status"),
+            ],
+        ),
+        report_map_item(
+            "Raw artifacts",
+            "#raw-artifacts",
+            children=[
+                report_map_item("Project and assay entry pages", "#raw-project-pages"),
+                report_map_item("QC and design source files", "#raw-qc-design"),
+                report_map_item("Raw summary manifests", "#raw-summary-manifests"),
+                report_map_item("Raw contrast summary", "#raw-contrast-summary"),
+            ],
+        ),
+        report_map_item("Status glossary", "#status-glossary"),
     ]
 
 

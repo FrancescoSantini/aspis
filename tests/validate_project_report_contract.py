@@ -281,6 +281,18 @@ def main() -> int:
         assert 'href="#layer-smallrna-de"' in html
         assert 'href="#layer-mirna-targets"' in html
         assert 'href="#layer-matched-mirna-mrna"' in html
+        assert 'href="#qc-and-design"' in html
+        assert 'href="#sample-design"' in html
+        assert 'href="#workflow-status"' in html
+        assert 'href="#raw-artifacts"' in html
+        assert 'href="#raw-project-pages"' in html
+        assert 'href="#raw-qc-design"' in html
+        assert 'href="#raw-summary-manifests"' in html
+        assert 'href="#raw-contrast-summary"' in html
+        assert 'href="#status-glossary"' in html
+        assert html.index('href="#layer-matched-mirna-mrna"') < html.index('href="#qc-and-design"')
+        assert html.index('href="#qc-and-design"') < html.index('href="#raw-artifacts"')
+        assert html.index('href="#raw-artifacts"') < html.index('href="#status-glossary"')
         assert 'id="layer-rnaseq-de"' in html
         assert 'id="layer-dtu"' in html
         assert 'id="layer-matched-mirna-mrna"' in html

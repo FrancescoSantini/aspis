@@ -286,6 +286,10 @@ Completed hardening slice:
   integrated project report, RNA-seq differential index, RNA-seq GO/Reactome
   overview, smallRNA differential index, smallRNA target/integration overview,
   and isoform-switch overview.
+- The integrated project report side map now follows the full page order as
+  top-level navigation: evidence map, plot atlas, contrast matrix, evidence
+  layers, QC/design, raw artifacts, and status glossary. Lower sections no
+  longer disappear after the matched miRNA-mRNA evidence subtree.
 - The former duplicate `Unified Report Tree` was replaced by the evidence map
   and evidence-layer detail panels, so the sticky map and the body use the same
   structure instead of presenting two competing navigation models.
