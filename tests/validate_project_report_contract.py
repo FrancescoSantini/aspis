@@ -289,9 +289,13 @@ def main() -> int:
         assert "Isoform-switch candidates with DTU/splicing support" in html
         assert "support layer is a deterministic evidence join" in html
         assert "Isoform-switch event plots" in html
+        assert 'class="link-list"' in html
         assert "overview plot" in html
         assert "ranked candidate plot" in html
         assert "switch plot" in html
+        assert "event page" in html
+        assert "NT FASTA" in html
+        assert "AA FASTA" in html
         assert "deterministic report navigation" in html
         assert "optional miRNA identifier feature-set manifest" in html
         assert "Recommended Review Order" not in html

@@ -309,6 +309,10 @@ Completed hardening slice:
 - Human-readable HTML/PDF pages now separate short status summaries from wide
   machine manifests. Complete TSVs are linked as source data instead of being
   the only way to understand report status.
+- Dense cells with several related artifacts now render grouped action links
+  with visible spacing and borders instead of a run-on string of adjacent blue
+  links. This applies to project plot-atlas/source-table cells, RNA-seq DTU
+  resource cells, and isoform-switch event-card asset links.
 - Report text now states what plots and status rows represent without pretending
   to automatically interpret the biology.
 - The inspected `g100_beas_full_BEAS_2B_review_20260610_1159.tar` bundle passed

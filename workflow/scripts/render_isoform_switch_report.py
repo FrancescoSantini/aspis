@@ -3421,8 +3421,8 @@ def render_project_html(
     .event-card {{ border: 1px solid #d0d7de; border-radius: 6px; padding: 0.8rem; }}
     .event-card h3 {{ margin: 0 0 0.35rem; font-size: 1rem; }}
     .event-card p {{ margin: 0.25rem 0; }}
-    .asset-links {{ color: #57606a; font-size: 0.92rem; }}
-    .asset-links a {{ display: inline-block; margin-right: 0.75rem; }}
+    .asset-links {{ color: #57606a; display: flex; flex-wrap: wrap; gap: 0.35rem 0.45rem; font-size: 0.92rem; }}
+    .asset-links a {{ background: #f6f8fa; border: 1px solid #d0d7de; border-radius: 4px; display: inline-block; line-height: 1.25; padding: 0.16rem 0.42rem; white-space: nowrap; }}
     .muted {{ color: #57606a; }}
     .status {{ font-weight: 700; }}
     .status.ok {{ color: #1a7f37; }}

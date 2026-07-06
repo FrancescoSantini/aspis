@@ -67,6 +67,13 @@ def optional_row_link(row: dict[str, str], column: str, label: str, base_dir: Pa
     return link(Path(path_text), label, base_dir)
 
 
+def grouped_links(links: list[str], *, css_class: str = "link-list") -> str:
+    present = [item for item in links if item]
+    if not present:
+        return ""
+    return f'<span class="{html.escape(css_class)}">' + "".join(f"<span>{item}</span>" for item in present) + "</span>"
+
+
 def status_counts(rows: list[dict[str, str]], key: str = "status") -> str:
     counts = Counter(row.get(key, "unknown") or "unknown" for row in rows)
     return ", ".join(f"{name}:{count}" for name, count in sorted(counts.items())) or "none"
@@ -153,9 +160,9 @@ def evidence_card(
         f'<div class="mini-metric"><strong>{html.escape(label)}</strong><span>{html.escape(str(value))}</span></div>'
         for label, value in metrics
     )
-    link_html = " ".join(link_text for link_text in links if link_text)
+    link_html = grouped_links(links, css_class="card-links")
     if link_html:
-        link_html = f'<div class="card-links">{link_html}</div>'
+        link_html = f"<div>{link_html}</div>"
     return (
         f'<article class="evidence-card" id="{html.escape(target_id)}-card">'
         f'<h3><a href="#{html.escape(target_id)}">{html.escape(title)}</a></h3>'
@@ -199,7 +206,7 @@ def html_cell_table(headers: list[str], rows: list[list[str]], empty_message: st
 
 def link_group(row: dict[str, str], specs: list[tuple[str, str]], base_dir: Path, empty: str = "no direct link") -> str:
     links = [optional_row_link(row, column, label, base_dir) for column, label in specs]
-    text = " ".join(item for item in links if item)
+    text = grouped_links(links)
     if text:
         return text
     return f'<span class="status muted">{html.escape(empty)}</span>'
@@ -355,7 +362,7 @@ def enrichment_cell(
             optional_row_link(row, "feature_set_results", "ORA table", base_dir),
             optional_row_link(row, "ranked_feature_set_results", "ranked table", base_dir),
         ]
-        link_text = " ".join(link_text for link_text in links if link_text)
+        link_text = grouped_links(links)
         items.append(
             f"<strong>{html.escape(label)}</strong>: "
             f'<span class="status {html.escape(status or "unknown")}">{html.escape(status or "unknown")}</span>'
@@ -395,7 +402,7 @@ def smallrna_target_cell(
         optional_row_link(integration_row, "mirna_mrna_pairs", "miRNA-mRNA pairs", base_dir),
         optional_row_link(integration_row, "mirna_mrna_plot", "integration plot", base_dir),
     ]
-    return "<br>".join(part for part in [", ".join(item for item in metrics if item), " ".join(link for link in links if link)] if part)
+    return "<br>".join(part for part in [", ".join(item for item in metrics if item), grouped_links(links)] if part)
 
 
 def assay_only_contrast_count(
@@ -1229,7 +1236,9 @@ def render(args: argparse.Namespace) -> None:
     .mini-metric {{ background: #f6f8fa; border: 1px solid #d8dee4; border-radius: 6px; padding: 0.45rem 0.55rem; }}
     .mini-metric strong {{ display: block; color: #57606a; font-size: 0.78rem; }}
     .mini-metric span {{ display: block; font-weight: 700; margin-top: 0.2rem; overflow-wrap: anywhere; }}
-    .card-links {{ margin-top: 0.75rem; display: flex; flex-wrap: wrap; gap: 0.55rem; }}
+    .card-links, .link-list {{ display: flex; flex-wrap: wrap; gap: 0.35rem 0.45rem; align-items: flex-start; }}
+    .card-links {{ margin-top: 0.75rem; }}
+    .card-links a, .link-list a {{ background: #f6f8fa; border: 1px solid #d0d7de; border-radius: 4px; display: inline-block; line-height: 1.25; padding: 0.16rem 0.42rem; white-space: nowrap; }}
     section {{ border: 1px solid #d0d7de; border-radius: 6px; padding: 0 1rem 1rem; }}
     section.layer-panel {{ padding: 0.85rem 1rem; }}
     .section-note {{ color: #57606a; }}

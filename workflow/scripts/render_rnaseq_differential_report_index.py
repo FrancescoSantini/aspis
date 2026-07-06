@@ -1144,8 +1144,8 @@ def render_html(
     .dtu-method-table th:nth-child(7), .dtu-method-table td:nth-child(7) {{ width: 86px; }}
     .dtu-method-table th:nth-child(8), .dtu-method-table td:nth-child(8) {{ width: 330px; }}
     .dtu-method-table code {{ white-space: normal; }}
-    .link-grid {{ display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: flex-start; }}
-    .link-grid a {{ display: inline-block; white-space: nowrap; }}
+    .link-grid {{ display: flex; flex-wrap: wrap; gap: 4px 6px; align-items: flex-start; }}
+    .link-grid a {{ background: #f6f8fa; border: 1px solid #d0d7de; border-radius: 4px; display: inline-block; line-height: 1.25; padding: 0.14rem 0.4rem; white-space: nowrap; }}
     .method-reason {{ min-width: 260px; overflow-wrap: anywhere; }}
     .status {{ font-weight: 700; }}
     .status.ok {{ color: #1a7f37; }}
