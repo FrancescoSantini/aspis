@@ -599,11 +599,11 @@ def project_evidence_map(
     state = evidence_state(rnaseq_dtu, ok_statuses=("completed", "ok"))
     cards.append(
         evidence_card(
-            "DTU and splicing methods",
+            "Independent DTU/splicing method results",
             "layer-dtu",
             state[0],
             state[1],
-            "DRIMSeq, DEXSeq, DEXSeqExon, SUPPA2, and rMATS method outputs when configured.",
+            "Native DRIMSeq, DEXSeq, DEXSeqExon, SUPPA2, and rMATS outputs that test usage or splicing changes independently of the isoform-switch caller.",
             [
                 ("method rows", len(rnaseq_dtu)),
                 ("completed", rows_with_status(rnaseq_dtu, "completed")),
@@ -621,11 +621,11 @@ def project_evidence_map(
     state = evidence_state(iso_rows)
     cards.append(
         evidence_card(
-            "Isoform switch and DTU support",
+            "Isoform-switch candidates with DTU/splicing support",
             "layer-isoform-switch",
             state[0],
             state[1],
-            "Isoform-switch candidates linked to DTU and splicing evidence for the same contrast and gene.",
+            "IsoformSwitchAnalyzeR candidates joined to independent DTU/splicing results for the same contrast and gene; this is support aggregation, not a new statistical test.",
             [
                 ("switch events", len(isoform_events)),
                 ("high priority", iso_summary.get("high_priority_rows", 0)),
@@ -913,9 +913,9 @@ def plot_atlas_sections(
                 ),
             ),
             html_panel(
-                "DTU method plot atlas",
+                "Independent DTU/splicing method plot atlas",
                 "plot-atlas-dtu",
-                "Direct plot links for each DTU/splicing method and contrast. This includes method overview plots, ranked feature/event plots, and top-gene detail plots when the method emits them.",
+                "Direct plot links for each native DTU/splicing method and contrast. This includes method overview plots, ranked feature/event plots, and top-gene detail plots when the method emits them.",
                 html_cell_table(
                     ["method", "contrast", "status", "padj<0.05", "top gene/event", "plots", "source tables"],
                     dtu_rows,
@@ -979,9 +979,9 @@ def evidence_layer_sections(base_dir: Path, rnaseq_base: Path, smallrna_base: Pa
                 ],
             ),
             layer_panel(
-                "DTU and splicing methods",
+                "Independent DTU/splicing method results",
                 "layer-dtu",
-                "Use this layer for method-level DTU/splicing outputs. The project report aggregates status; method tables remain the source data.",
+                "Use this layer for native method-level outputs. DRIMSeq, DEXSeq, DEXSeqExon, SUPPA2, and rMATS each test transcript/exon/event usage or splice-event changes directly from counts, expression, or alignments.",
                 [
                     table_link(rnaseq_base / "differential/dtu/dtu_method_manifest.tsv", "method manifest", base_dir),
                     table_link(rnaseq_base / "differential/dtu/plots/dtu_plot_manifest.tsv", "plot manifest", base_dir),
@@ -990,9 +990,9 @@ def evidence_layer_sections(base_dir: Path, rnaseq_base: Path, smallrna_base: Pa
                 ],
             ),
             layer_panel(
-                "Isoform switch and DTU support",
+                "Isoform-switch candidates with DTU/splicing support",
                 "layer-isoform-switch",
-                "Use this layer for isoform-switch candidates, sequence/consequence assets, and deterministic DTU evidence joins.",
+                "Use this layer for IsoformSwitchAnalyzeR switch candidates, sequence/consequence assets, and deterministic joins to independent DTU/splicing method evidence for the same contrast and gene.",
                 [
                     link(rnaseq_base / "differential/isoform_switch/report/index.html", "isoform-switch overview", base_dir),
                     table_link(rnaseq_base / "differential/isoform_switch/report/switch_candidates.tsv", "switch candidates", base_dir),
@@ -1149,7 +1149,7 @@ def project_report_map(
                 report_map_item("RNA-seq DE", "#layer-rnaseq-de"),
                 report_map_item("GO/Reactome", "#layer-enrichment"),
                 report_map_item("DTU/splicing", "#layer-dtu"),
-                report_map_item("Isoform switch", "#layer-isoform-switch"),
+                report_map_item("Isoform-switch support", "#layer-isoform-switch"),
                 report_map_item("smallRNA DE", "#layer-smallrna-de"),
                 report_map_item("miRNA targets", "#layer-mirna-targets"),
                 report_map_item("Matched miRNA-mRNA", "#layer-matched-mirna-mrna"),
@@ -1271,6 +1271,7 @@ def render(args: argparse.Namespace) -> None:
   </div>
   <h2 id="project-evidence-map">Project Evidence Map</h2>
   <p class="section-note">This map is the report tree for the project. It groups the run outputs by evidence layer, shows deterministic status/count summaries from source manifests, and links to the first table or page to open for each layer.</p>
+  <p class="note"><strong>Independent DTU/splicing method results</strong> are the native outputs of methods such as DRIMSeq, DEXSeq, DEXSeqExon, SUPPA2, and rMATS. <strong>Isoform-switch candidates with DTU/splicing support</strong> starts from IsoformSwitchAnalyzeR switch candidates and asks whether those same genes/contrasts also have supporting DTU or splicing evidence. The support layer is a deterministic evidence join, not another statistical test.</p>
   {project_evidence_map(base_dir, rnaseq_base, smallrna_base, rnaseq_summary, rnaseq_enrichment, rnaseq_dtu, rnaseq_dtu_plots, isoform_events, isoform_interpretation_summary, smallrna_summary, smallrna_targets, smallrna_target_feature_sets, mirna_feature_sets, mirna_integration, mirna_mrna_feature_sets)}
   <h2 id="plot-atlas">Plot Atlas</h2>
   <p class="section-note">This section is the direct graph index. It intentionally repeats plot links from deeper assay reports so method graphs and event plots can be found without opening manifest TSVs first.</p>

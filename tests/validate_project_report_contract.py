@@ -282,7 +282,10 @@ def main() -> int:
         assert 'id="layer-rnaseq-de"' in html
         assert 'id="layer-dtu"' in html
         assert 'id="layer-matched-mirna-mrna"' in html
-        assert "DTU method plot atlas" in html
+        assert "Independent DTU/splicing method plot atlas" in html
+        assert "Independent DTU/splicing method results" in html
+        assert "Isoform-switch candidates with DTU/splicing support" in html
+        assert "support layer is a deterministic evidence join" in html
         assert "Isoform-switch event plots" in html
         assert "overview plot" in html
         assert "ranked candidate plot" in html

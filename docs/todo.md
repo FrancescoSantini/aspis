@@ -268,6 +268,10 @@ Completed hardening slice:
   summary pages, GO/Reactome plots, DTU/splicing method plots, isoform-switch
   event plots, and smallRNA/target/integration plots without requiring users to
   open manifest TSVs to find method graphs.
+- The project report now explicitly separates independent DTU/splicing method
+  results from isoform-switch candidate support. The former are native
+  DRIMSeq/DEXSeq/DEXSeqExon/SUPPA2/rMATS outputs; the latter is a deterministic
+  evidence join from IsoformSwitchAnalyzeR candidates to those method outputs.
 - Integrated project reports now include a contrast evidence matrix,
   sample/design summary, workflow status matrix by assay and analysis layer,
   contrast filtering, raw artifact groupings, and a status glossary. The matrix
