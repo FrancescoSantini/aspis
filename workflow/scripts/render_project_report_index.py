@@ -35,6 +35,76 @@ def read_table(path: Path) -> list[dict[str, str]]:
         return [{key: (value or "").strip() for key, value in row.items()} for row in reader]
 
 
+def add_gene_display(
+    display_by_gene: dict[str, str],
+    name_by_gene: dict[str, str],
+    gene_id: str,
+    gene_name: str = "",
+    gene_display: str = "",
+) -> None:
+    gene_id = (gene_id or "").strip()
+    if not gene_id:
+        return
+    gene_name = (gene_name or "").strip()
+    gene_display = (gene_display or "").strip() or gene_display_label(gene_id, gene_name)
+    if gene_display and gene_id not in display_by_gene:
+        display_by_gene[gene_id] = gene_display
+    if gene_name and gene_id not in name_by_gene:
+        name_by_gene[gene_id] = gene_name
+
+
+def gene_display_maps(rnaseq_base: Path) -> tuple[dict[str, str], dict[str, str]]:
+    display_by_gene: dict[str, str] = {}
+    name_by_gene: dict[str, str] = {}
+    for row in read_table(rnaseq_base / "quantification/featurecounts/gene_metadata.tsv"):
+        add_gene_display(
+            display_by_gene,
+            name_by_gene,
+            row.get("Geneid", "") or row.get("gene_id", ""),
+            row.get("gene_name", "") or row.get("GeneName", ""),
+            row.get("gene_display", ""),
+        )
+    for row in read_table(rnaseq_base / "quantification/counts/transcript_metadata.tsv"):
+        add_gene_display(
+            display_by_gene,
+            name_by_gene,
+            row.get("gene_id", ""),
+            row.get("gene_name", ""),
+            row.get("gene_display", ""),
+        )
+    return display_by_gene, name_by_gene
+
+
+def display_gene_id(gene_id: str, display_by_gene: dict[str, str], name_by_gene: dict[str, str]) -> str:
+    gene_id = (gene_id or "").strip()
+    if not gene_id:
+        return ""
+    return display_by_gene.get(gene_id, "") or gene_display_label(gene_id, name_by_gene.get(gene_id, ""))
+
+
+def hydrate_gene_displays(
+    rows: list[dict[str, str]],
+    display_by_gene: dict[str, str],
+    name_by_gene: dict[str, str],
+) -> None:
+    for row in rows:
+        gene_id = row.get("gene_id", "") or row.get("gene", "")
+        if gene_id and not row.get("gene_display", ""):
+            row["gene_display"] = display_gene_id(gene_id, display_by_gene, name_by_gene)
+            if not row.get("gene_name", "") and gene_id in name_by_gene:
+                row["gene_name"] = name_by_gene[gene_id]
+        top_gene = row.get("top_gene", "")
+        if top_gene and not row.get("top_gene_display", ""):
+            row["top_gene_display"] = display_gene_id(top_gene, display_by_gene, name_by_gene)
+
+
+def resolved_technical_pdf(args: argparse.Namespace, base_dir: Path) -> str:
+    if args.technical_pdf:
+        return args.technical_pdf
+    candidate = base_dir / "technical_report.pdf"
+    return str(candidate) if candidate.exists() else ""
+
+
 def rel_href(path: Path, base_dir: Path) -> str:
     if path.is_absolute():
         return path.as_posix()
@@ -798,7 +868,7 @@ def plot_atlas_sections(
                 f"<code>{html.escape(row.get('contrast_id', ''))}</code>",
                 f'<span class="status {html.escape(row.get("status", "unknown") or "unknown")}">{html.escape(row.get("status", "unknown") or "unknown")}</span>',
                 html.escape(row.get("n_significant", "")),
-                html.escape(row.get("top_gene", "")),
+                html.escape(row.get("top_gene_display", "") or row.get("top_gene", "")),
                 link_group(
                     row,
                     [
@@ -1218,14 +1288,18 @@ def render(args: argparse.Namespace) -> None:
     mirna_mrna_feature_sets = read_table(
         smallrna_base / "smallrna/differential/mirna_mrna_target_feature_sets/target_feature_set_manifest.tsv"
     )
+    display_by_gene, name_by_gene = gene_display_maps(rnaseq_base)
+    for rows in [rnaseq_dtu, rnaseq_dtu_plots, rnaseq_dtu_consensus, isoform_events]:
+        hydrate_gene_displays(rows, display_by_gene, name_by_gene)
+    technical_pdf = resolved_technical_pdf(args, base_dir)
     technical_pdf_link = (
-        f'<a href="{html.escape(rel_href(Path(args.technical_pdf), base_dir))}">combined project technical PDF</a>'
-        if args.technical_pdf
+        f'<a href="{html.escape(rel_href(Path(technical_pdf), base_dir))}">combined project technical PDF</a>'
+        if technical_pdf
         else '<span class="status muted">combined project technical PDF: not configured</span>'
     )
     sidebar = report_shell_open(
         "Report Map",
-        project_report_map(args.project, base_dir, rnaseq_base, smallrna_base, args.technical_pdf),
+        project_report_map(args.project, base_dir, rnaseq_base, smallrna_base, technical_pdf),
         base_dir,
     )
 
@@ -1327,7 +1401,7 @@ def render(args: argparse.Namespace) -> None:
   <h2 id="raw-artifacts">Raw Artifacts</h2>
   <p class="section-note">Raw artifacts are grouped last so the main report remains readable while all source files stay reachable.</p>
   <div class="layer-grid">
-    {raw_artifact_sections(base_dir, rnaseq_base, smallrna_base, args.technical_pdf)}
+    {raw_artifact_sections(base_dir, rnaseq_base, smallrna_base, technical_pdf)}
   </div>
   <h3 id="raw-contrast-summary">Raw Contrast Summary</h3>
   <p class="section-note">This lower table preserves the assay-specific summary rows used to build the matrix above.</p>

@@ -84,6 +84,14 @@ def main() -> int:
             write_tsv(branch / "samples.tsv", [{"sample_id": "S1", "condition": "control"}])
             write_tsv(branch / "design.tsv", [{"sample_id": "S1", "condition": "control"}])
             write_tsv(branch / "fastq_inspection.tsv", [{"sample_id": "S1", "status": "ok"}])
+        write_tsv(
+            rnaseq / "quantification" / "featurecounts" / "gene_metadata.tsv",
+            [{"Geneid": "geneA", "gene_name": "Gene A", "gene_display": "Gene A (geneA)"}],
+        )
+        write_tsv(
+            rnaseq / "quantification" / "counts" / "transcript_metadata.tsv",
+            [{"transcript_id": "tx1", "gene_id": "geneA", "gene_name": "Gene A", "gene_display": "Gene A (geneA)"}],
+        )
 
         result_table = tmp / "tables" / "results.tsv"
         filtered_table = tmp / "tables" / "filtered.tsv"
@@ -266,6 +274,7 @@ def main() -> int:
         assert "combined project technical PDF" in html
         assert 'href="technical_report.pdf"' in html
         assert "combined project technical PDF: not present" not in html
+        assert "Gene A (geneA)" in html
         assert 'aria-label="Report map"' in html
         assert "Report Map" in html
         assert 'href="#project-evidence-map"' in html
@@ -315,6 +324,28 @@ def main() -> int:
         assert "optional miRNA identifier feature-set manifest" in html
         assert "Recommended Review Order" not in html
         assert "Unified Report Tree" not in html
+        pdf_report.write_text("%PDF placeholder\n", encoding="utf-8")
+        manual_html = project_dir / "manual_index.html"
+        manual_done = project_dir / "manual_index.done"
+        run(
+            [
+                sys.executable,
+                str(repo / "workflow" / "scripts" / "render_project_report_index.py"),
+                "--project",
+                project,
+                "--analysis-plan",
+                str(analysis_plan),
+                "--branch-dir",
+                str(branch_dir),
+                "--output",
+                str(manual_html),
+                "--done",
+                str(manual_done),
+            ]
+        )
+        manual = manual_html.read_text(encoding="utf-8")
+        assert 'href="technical_report.pdf"' in manual
+        assert "combined project technical PDF: not configured" not in manual
         cwd = Path.cwd()
         try:
             os.chdir(tmp)

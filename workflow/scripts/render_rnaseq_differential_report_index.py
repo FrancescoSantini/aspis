@@ -163,6 +163,60 @@ def read_optional_table(path_text: str) -> list[dict[str, str]]:
         return [{key: (value or "").strip() for key, value in row.items()} for row in reader]
 
 
+def add_gene_display(
+    display_by_gene: dict[str, str],
+    name_by_gene: dict[str, str],
+    gene_id: str,
+    gene_name: str = "",
+    gene_display: str = "",
+) -> None:
+    gene_id = (gene_id or "").strip()
+    if not gene_id:
+        return
+    gene_name = (gene_name or "").strip()
+    gene_display = (gene_display or "").strip() or gene_display_label(gene_id, gene_name)
+    if gene_display and gene_id not in display_by_gene:
+        display_by_gene[gene_id] = gene_display
+    if gene_name and gene_id not in name_by_gene:
+        name_by_gene[gene_id] = gene_name
+
+
+def gene_display_maps(branch_root: Path) -> tuple[dict[str, str], dict[str, str]]:
+    display_by_gene: dict[str, str] = {}
+    name_by_gene: dict[str, str] = {}
+    for row in read_optional_table(str(branch_root / "quantification/featurecounts/gene_metadata.tsv")):
+        add_gene_display(
+            display_by_gene,
+            name_by_gene,
+            row.get("Geneid", "") or row.get("gene_id", ""),
+            row.get("gene_name", "") or row.get("GeneName", ""),
+            row.get("gene_display", ""),
+        )
+    for row in read_optional_table(str(branch_root / "quantification/counts/transcript_metadata.tsv")):
+        add_gene_display(
+            display_by_gene,
+            name_by_gene,
+            row.get("gene_id", ""),
+            row.get("gene_name", ""),
+            row.get("gene_display", ""),
+        )
+    return display_by_gene, name_by_gene
+
+
+def hydrate_gene_displays(
+    rows: list[dict[str, str]],
+    display_by_gene: dict[str, str],
+    name_by_gene: dict[str, str],
+) -> None:
+    for row in rows:
+        gene_id = row.get("gene_id", "") or row.get("gene", "")
+        if not gene_id or row.get("gene_display", ""):
+            continue
+        row["gene_display"] = display_by_gene.get(gene_id, "") or gene_display_label(gene_id, name_by_gene.get(gene_id, ""))
+        if not row.get("gene_name", "") and gene_id in name_by_gene:
+            row["gene_name"] = name_by_gene[gene_id]
+
+
 def key_for(row: dict[str, str]) -> tuple[str, str, str]:
     return tuple(row.get(column, "") for column in KEY_COLUMNS)  # type: ignore[return-value]
 
@@ -1346,6 +1400,9 @@ def main() -> int:
     for row in dtu_plot_rows:
         row["_manifest_path"] = args.dtu_plot_manifest
     output = Path(args.output)
+    branch_root = output.parents[2] if len(output.parents) > 2 else output.parent
+    display_by_gene, name_by_gene = gene_display_maps(branch_root)
+    hydrate_gene_displays(dtu_consensus_gene_rows, display_by_gene, name_by_gene)
     output.parent.mkdir(parents=True, exist_ok=True)
     enrichment_overview = Path(args.enrichment_overview) if args.enrichment_overview else output.parent / "enrichment/index.html"
     render_enrichment_overview(rows, enrichment_overview)
