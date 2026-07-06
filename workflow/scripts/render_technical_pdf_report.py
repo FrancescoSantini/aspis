@@ -919,9 +919,10 @@ def contrast_overview_table(
 def project_report_map_table(styles: dict[str, ParagraphStyle]) -> Table:
     rows = [
         ("Run dashboard", "Top-level run status, planned branches, QC overview, report inventory, project cards."),
-        ("Project report", "Contrast matrix, evidence-layer entry points, sample/design summary, workflow status."),
-        ("RNA-seq", "Branch report, differential index, GO/Reactome overview, DTU/splicing, isoform switch, RNA-seq PDF."),
-        ("smallRNA", "Branch report, miRNA differential, target enrichment, feature sets, target/integration overview, smallRNA PDF."),
+        ("Project report", "Evidence map, plot atlas, contrast matrix, sample/design summary, workflow status."),
+        ("Project PDF", "Single-file export of the integrated project report with embedded main sections and selected evidence-layer assets."),
+        ("RNA-seq", "Branch report, differential index, GO/Reactome overview, DTU/splicing, isoform switch, assay PDF."),
+        ("smallRNA", "Branch report, miRNA differential, target enrichment, feature sets, target/integration overview, assay PDF."),
         ("Matched evidence", "miRNA-mRNA integration, inverse target feature sets, isoform-switch and DTU interpretation consensus."),
         ("Raw artifacts", "Manifest TSVs, complete tables, plots, logs, provenance, and machine-readable source files."),
     ]
@@ -1195,17 +1196,19 @@ def render_project_report(args: argparse.Namespace) -> int:
     story.append(para("How To Read This Report", styles["h1"]))
     story.append(
         para(
-            "This is the email-friendly single-file companion to the project HTML report. The review order is: "
-            "run dashboard, project report, contrast matrix, evidence layers, then raw artifacts. This PDF embeds "
-            "the major contrast sections plus selected DTU, isoform-switch, enrichment, target, integration, and QC "
-            "assets so collaborators can review the project without traversing the full directory tree.",
+            "This is the primary email-friendly single-file export for the project. The review order is: "
+            "run dashboard context, project evidence map, plot atlas, contrast matrix, evidence layers, then raw "
+            "artifacts. This PDF embeds the major contrast sections plus selected DTU, isoform-switch, enrichment, "
+            "target, integration, and QC assets so collaborators can review the project without traversing the full "
+            "directory tree.",
             styles["body"],
         )
     )
     story.append(
         para(
-            "The PDF intentionally shows excerpts for large TSV files. The HTML index and TSV artifacts remain the "
-            "source of truth for complete tables, exact paths, and machine-readable provenance.",
+            "The PDF intentionally shows excerpts for large TSV files and selected plots from large asset manifests. "
+            "The HTML index and TSV artifacts remain the source of truth for complete tables, every plot path, exact "
+            "file locations, and machine-readable provenance.",
             styles["body"],
         )
     )

@@ -264,6 +264,8 @@ def main() -> int:
         positions = [html.index(heading) for heading in headings]
         assert positions == sorted(positions)
         assert "combined project technical PDF" in html
+        assert 'href="technical_report.pdf"' in html
+        assert "combined project technical PDF: not present" not in html
         assert 'aria-label="Report map"' in html
         assert "Report Map" in html
         assert 'href="#project-evidence-map"' in html

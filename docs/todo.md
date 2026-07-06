@@ -294,6 +294,12 @@ Completed hardening slice:
   for the project and includes RNA-seq, smallRNA, enrichment, target,
   integration, DTU, isoform-switch, and selected QC/report asset excerpts
   instead of only one assay-specific subset.
+- Project report HTML treats the combined PDF as a planned sibling artifact
+  from the same Snakemake rule, so the sidebar and raw-artifact sections link
+  to `technical_report.pdf` without showing a stale `not present` status before
+  the PDF output is created. The PDF report map now describes the project PDF as
+  the primary single-file export while keeping complete TSVs and all plot paths
+  in the HTML/manifests as the source of truth.
 - The main dashboard, integrated project report, RNA-seq differential index,
   smallRNA differential index, smallRNA target/integration overview, and
   isoform-switch overview now include breadcrumbs and consistent context

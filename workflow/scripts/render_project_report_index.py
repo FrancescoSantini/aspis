@@ -49,6 +49,10 @@ def link(path: Path, label: str, base_dir: Path, expected: bool = False) -> str:
     return f'<span class="status {cls}">{label_html}: {state}</span>'
 
 
+def planned_link(path: Path, label: str, base_dir: Path) -> str:
+    return f'<a href="{html.escape(rel_href(path, base_dir))}">{html.escape(label)}</a>'
+
+
 def table_link(path: Path, label: str, base_dir: Path, expected: bool = False) -> str:
     suffix = ""
     if path.exists() and path.suffix == ".tsv":
@@ -1067,7 +1071,7 @@ def raw_artifact_sections(base_dir: Path, rnaseq_base: Path, smallrna_base: Path
                 "raw-project-pages",
                 "Stable HTML/PDF entry points for the complete project and each assay branch.",
                 [
-                    link(pdf_target, "combined project technical PDF", base_dir) if technical_pdf else "",
+                    planned_link(pdf_target, "combined project technical PDF", base_dir) if technical_pdf else "",
                     link(rnaseq_base / "report/index.html", "RNA-seq branch report", base_dir),
                     link(smallrna_base / "report/index.html", "smallRNA branch report", base_dir),
                     link(rnaseq_base / "differential/reports/index.html", "RNA-seq differential index", base_dir),
@@ -1116,7 +1120,7 @@ def project_report_map(
     smallrna_base: Path,
     technical_pdf: str,
 ) -> list[dict[str, object]]:
-    pdf_target: str | Path = Path(technical_pdf) if technical_pdf else ""
+    pdf_target: str | Path = rel_href(Path(technical_pdf), base_dir) if technical_pdf else ""
     return [
         report_map_item("Run dashboard", Path("../../index.html")),
         report_map_item(
