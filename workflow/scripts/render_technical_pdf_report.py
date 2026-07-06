@@ -1088,6 +1088,106 @@ def expand_manifest_assets(assets: list[dict[str, str]]) -> list[dict[str, str]]
     return expanded
 
 
+def add_inferred_asset(
+    assets: list[dict[str, str]],
+    seen: set[tuple[str, str, str, str]],
+    *,
+    project: str,
+    assay: str,
+    level: str,
+    group: str,
+    label: str,
+    kind: str,
+    path: Path,
+    status: str = "ok",
+) -> None:
+    if not path.exists():
+        return
+    row = {
+        "project": project,
+        "assay": assay,
+        "level": level,
+        "contrast_id": "project",
+        "status": status,
+        "asset_group": group,
+        "asset_label": label,
+        "asset_kind": kind,
+        "path": path.as_posix(),
+        "exists": "true",
+    }
+    identity = asset_identity(row)
+    if identity not in seen:
+        assets.append(row)
+        seen.add(identity)
+
+
+def infer_rnaseq_layout_assets(assets: list[dict[str, str]], asset_manifest_text: str, project: str) -> list[dict[str, str]]:
+    if not asset_manifest_text:
+        return assets
+    manifest = Path(asset_manifest_text)
+    if len(manifest.parents) < 3:
+        return assets
+    branch_base = manifest.parent.parent.parent
+    expanded = list(assets)
+    seen = {asset_identity(row) for row in expanded}
+    add_inferred_asset(
+        expanded,
+        seen,
+        project=project,
+        assay="rnaseq",
+        level="dtu",
+        group="dtu",
+        label="dtu_plot_manifest",
+        kind="manifest",
+        path=branch_base / "differential/dtu/plots/dtu_plot_manifest.tsv",
+    )
+    add_inferred_asset(
+        expanded,
+        seen,
+        project=project,
+        assay="rnaseq",
+        level="dtu",
+        group="dtu",
+        label="dtu_consensus_gene_summary",
+        kind="table",
+        path=branch_base / "differential/dtu/consensus/dtu_consensus_gene_summary.tsv",
+    )
+    add_inferred_asset(
+        expanded,
+        seen,
+        project=project,
+        assay="rnaseq",
+        level="isoform_switch",
+        group="isoform_switch",
+        label="plot_manifest",
+        kind="manifest",
+        path=branch_base / "differential/isoform_switch/report/switch_plot_manifest.tsv",
+    )
+    add_inferred_asset(
+        expanded,
+        seen,
+        project=project,
+        assay="rnaseq",
+        level="isoform_switch",
+        group="isoform_switch",
+        label="plots_pdf",
+        kind="plot",
+        path=branch_base / "differential/isoform_switch/report/switch_plots.pdf",
+    )
+    add_inferred_asset(
+        expanded,
+        seen,
+        project=project,
+        assay="rnaseq",
+        level="isoform_switch",
+        group="isoform_switch",
+        label="isoform_interpretation_consensus",
+        kind="table",
+        path=branch_base / "differential/isoform_switch/report/isoform_interpretation_consensus.tsv",
+    )
+    return expanded
+
+
 def draw_selected_asset_plots(
     story: list,
     assets: list[dict[str, str]],
@@ -1193,7 +1293,10 @@ def render_report(args: argparse.Namespace) -> int:
     if not rows:
         raise ValueError(f"Summary manifest has no rows: {summary_path}")
 
-    assets = expand_manifest_assets(read_tsv(Path(args.asset_manifest))) if args.asset_manifest else []
+    assets = read_tsv(Path(args.asset_manifest)) if args.asset_manifest else []
+    if args.assay == "rnaseq":
+        assets = infer_rnaseq_layout_assets(assets, args.asset_manifest, "")
+    assets = expand_manifest_assets(assets)
     styles = stylesheet()
     project_names = sorted({row.get("project", "") for row in rows if row.get("project", "")})
     title_project = ", ".join(project_names) if project_names else "ASPIS"
@@ -1296,14 +1399,14 @@ def render_project_report(args: argparse.Namespace) -> int:
 
     rnaseq_assets = read_tsv(Path(args.rnaseq_asset_manifest)) if args.rnaseq_asset_manifest else []
     smallrna_assets = read_tsv(Path(args.smallrna_asset_manifest)) if args.smallrna_asset_manifest else []
-    raw_assets = rnaseq_assets + smallrna_assets
+    project = args.project or ", ".join(sorted({row.get("project", "") for row in rows if row.get("project", "")})) or "ASPIS"
+    raw_assets = infer_rnaseq_layout_assets(rnaseq_assets + smallrna_assets, args.rnaseq_asset_manifest, project)
     assets = expand_manifest_assets(raw_assets)
     log_step(
         f"loaded {len(rnaseq_rows)} RNA-seq row(s), {len(smallrna_rows)} smallRNA row(s), "
         f"{len(raw_assets)} direct asset row(s), {len(assets)} expanded asset row(s)"
     )
     styles = stylesheet()
-    project = args.project or ", ".join(sorted({row.get("project", "") for row in rows if row.get("project", "")})) or "ASPIS"
     status_counts = Counter(row.get("status", "unknown") or "unknown" for row in rows)
     vector_pdf_placements: list[dict[str, object]] = []
 
