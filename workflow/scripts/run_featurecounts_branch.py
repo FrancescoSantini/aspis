@@ -11,11 +11,13 @@ import shutil
 import subprocess
 from pathlib import Path
 
+from display_labels import gene_display_label
+
 
 REQUIRED_SAMPLE_COLUMNS = {"library_id", "assay", "project", "layout", "bam"}
 REQUIRED_PLAN_COLUMNS = {"project", "assay", "status", "gene_counter", "annotation_gtf"}
 METADATA_COLUMNS = ["Geneid", "Chr", "Start", "End", "Strand", "Length"]
-GENE_ANNOTATION_COLUMNS = ["gene_name", "gene_biotype"]
+GENE_ANNOTATION_COLUMNS = ["gene_name", "gene_display", "gene_biotype"]
 ATTR_RE = re.compile(r'([A-Za-z0-9_.-]+) "([^"]*)"')
 
 
@@ -260,6 +262,7 @@ def write_merged_counts(
         for gene_id in gene_ids:
             output_row = dict(merged_metadata[gene_id])
             output_row.update(gene_annotations.get(gene_id, {}))
+            output_row["gene_display"] = gene_display_label(gene_id, output_row.get("gene_name", ""))
             writer.writerow({column: output_row.get(column, "") for column in METADATA_COLUMNS + GENE_ANNOTATION_COLUMNS})
 
 

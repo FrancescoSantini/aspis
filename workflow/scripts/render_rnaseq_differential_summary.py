@@ -11,6 +11,8 @@ import shutil
 import subprocess
 from pathlib import Path
 
+from display_labels import feature_display_label
+
 
 REQUIRED_PLAN_COLUMNS = {
     "project",
@@ -236,7 +238,23 @@ def plot_qa_fields(row: dict[str, str], preview_paths: dict[str, str]) -> dict[s
 
 
 def first_feature_column(rows: list[dict[str, str]]) -> str:
-    stat_columns = {"baseMean", "log2FoldChange", "lfcSE", "stat", "pvalue", "padj"}
+    stat_columns = {
+        "baseMean",
+        "log2FoldChange",
+        "lfcSE",
+        "stat",
+        "pvalue",
+        "padj",
+        "feature_display",
+        "gene_display",
+        "transcript_display",
+        "gene_name",
+        "GeneName",
+        "gene_symbol",
+        "symbol",
+        "gene_biotype",
+        "transcript_biotype",
+    }
     for column in rows[0]:
         if column not in stat_columns:
             return column
@@ -404,7 +422,7 @@ def top_feature_table(rows: list[dict[str, str]], top_n: int) -> str:
     selected = ordered[:top_n]
     body = "\n".join(
         "<tr>"
-        f"<td><code>{html.escape(feature.get(feature_column, ''))}</code></td>"
+        f"<td>{html.escape(feature_display_label(feature, feature_column))}</td>"
         f"<td>{html.escape(feature.get('log2FoldChange', ''))}</td>"
         f"<td>{html.escape(feature.get('padj', ''))}</td>"
         "</tr>"

@@ -9,12 +9,15 @@ import math
 from collections import defaultdict
 from pathlib import Path
 
+from display_labels import gene_display_label
+
 
 DETAIL_COLUMNS = [
     "project",
     "contrast_id",
     "gene_id",
     "gene_name",
+    "gene_display",
     "method",
     "status",
     "n_rows",
@@ -33,6 +36,7 @@ SUMMARY_COLUMNS = [
     "contrast_id",
     "gene_id",
     "gene_name",
+    "gene_display",
     "status",
     "support_class",
     "methods_detected",
@@ -134,6 +138,7 @@ def method_detail_rows(method_rows: list[dict[str, str]], alpha: float) -> list[
     grouped: dict[tuple[str, str, str, str], list[dict[str, str]]] = defaultdict(list)
     source_by_key: dict[tuple[str, str, str, str], str] = {}
     gene_name_by_key: dict[tuple[str, str, str, str], str] = {}
+    gene_display_by_key: dict[tuple[str, str, str, str], str] = {}
 
     for method_row in method_rows:
         if not is_completed_method(method_row):
@@ -158,6 +163,8 @@ def method_detail_rows(method_rows: list[dict[str, str]], alpha: float) -> list[
             source_by_key[key] = str(source_path)
             if row.get("gene_name", ""):
                 gene_name_by_key[key] = row["gene_name"]
+            if row.get("gene_display", ""):
+                gene_display_by_key[key] = row["gene_display"]
 
     detail_rows: list[dict[str, str]] = []
     for key, rows in grouped.items():
@@ -177,6 +184,8 @@ def method_detail_rows(method_rows: list[dict[str, str]], alpha: float) -> list[
                 "contrast_id": contrast_id,
                 "gene_id": gene_id,
                 "gene_name": gene_name_by_key.get(key, ""),
+                "gene_display": gene_display_by_key.get(key, "")
+                or gene_display_label(gene_id, gene_name_by_key.get(key, "")),
                 "method": method,
                 "status": "significant" if significant else "evaluated",
                 "n_rows": str(len(rows)),
@@ -229,12 +238,17 @@ def gene_summary_rows(detail_rows: list[dict[str, str]]) -> list[dict[str, str]]
             support_class = "evaluated_not_significant"
             status = "evaluated"
         gene_name = next((row.get("gene_name", "") for row in rows if row.get("gene_name", "")), "")
+        gene_display = (
+            next((row.get("gene_display", "") for row in rows if row.get("gene_display", "")), "")
+            or gene_display_label(gene_id, gene_name)
+        )
         summary_rows.append(
             {
                 "project": project,
                 "contrast_id": contrast_id,
                 "gene_id": gene_id,
                 "gene_name": gene_name,
+                "gene_display": gene_display,
                 "status": status,
                 "support_class": support_class,
                 "methods_detected": sorted_join(detected),

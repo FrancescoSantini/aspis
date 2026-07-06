@@ -10,6 +10,8 @@ import math
 import re
 from pathlib import Path
 
+from display_labels import gene_display_label
+
 
 COLUMNS = [
     "project",
@@ -177,7 +179,11 @@ def dexseq_exon_label(row: dict[str, str]) -> str:
 
 
 def gene_label(row: dict[str, str]) -> str:
-    label = cleaned_identifier(row.get("gene_name", "") or row.get("gene_id", ""))
+    label = cleaned_identifier(
+        row.get("gene_display", "")
+        or gene_display_label(row.get("gene_id", ""), row.get("gene_name", ""))
+        or row.get("gene_id", "")
+    )
     if not label:
         return "unknown gene"
     if "+" in label:

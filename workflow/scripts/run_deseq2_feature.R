@@ -130,6 +130,89 @@ merge_metadata <- function(result, metadata_path, feature_id_column) {
   result
 }
 
+clean_display_value <- function(value) {
+  cleaned <- trimws(as.character(value))
+  cleaned[is.na(cleaned)] <- ""
+  missing <- tolower(cleaned) %in% c("", "na", "n/a", "none", "null", "nan", ".")
+  cleaned[missing] <- ""
+  wrapped <- grepl("^(NA|N/A|None|NULL|NaN)\\s*\\([^)]+\\)$", cleaned, ignore.case = TRUE)
+  cleaned[wrapped] <- sub("^(NA|N/A|None|NULL|NaN)\\s*\\(([^)]+)\\)$", "\\2", cleaned[wrapped], ignore.case = TRUE)
+  cleaned
+}
+
+first_clean_column <- function(result, columns) {
+  for (column in columns) {
+    if (column %in% colnames(result)) {
+      cleaned <- clean_display_value(result[[column]])
+      if (any(cleaned != "")) {
+        return(cleaned)
+      }
+    }
+  }
+  rep("", nrow(result))
+}
+
+gene_display_label <- function(gene_id, gene_name) {
+  gene_id <- clean_display_value(gene_id)
+  gene_name <- clean_display_value(gene_name)
+  ifelse(
+    gene_name != "" & gene_id != "" & gene_name != gene_id,
+    paste0(gene_name, " (", gene_id, ")"),
+    ifelse(gene_name != "", gene_name, gene_id)
+  )
+}
+
+transcript_display_label <- function(transcript_id, gene_id, gene_name) {
+  transcript_id <- clean_display_value(transcript_id)
+  gene_label <- gene_display_label(gene_id, gene_name)
+  ifelse(
+    gene_label != "" & transcript_id != "",
+    paste0(gene_label, " | ", transcript_id),
+    ifelse(transcript_id != "", transcript_id, gene_label)
+  )
+}
+
+add_display_columns <- function(result, feature_id_column) {
+  feature_id <- if (feature_id_column %in% colnames(result)) {
+    clean_display_value(result[[feature_id_column]])
+  } else {
+    rep("", nrow(result))
+  }
+  gene_id <- first_clean_column(result, c("gene_id", "Geneid", "gene"))
+  if (feature_id_column == "Geneid") {
+    gene_id <- ifelse(gene_id != "", gene_id, feature_id)
+  }
+  gene_name <- first_clean_column(result, c("gene_name", "GeneName", "gene_symbol", "symbol"))
+  gene_display <- first_clean_column(result, c("gene_display"))
+  gene_display <- ifelse(gene_display != "", gene_display, gene_display_label(gene_id, gene_name))
+
+  transcript_id <- first_clean_column(result, c("transcript_id", "isoform_id"))
+  if (feature_id_column %in% c("transcript_id", "isoform_id")) {
+    transcript_id <- ifelse(transcript_id != "", transcript_id, feature_id)
+  }
+  transcript_display <- first_clean_column(result, c("transcript_display"))
+  transcript_display <- ifelse(
+    transcript_display != "",
+    transcript_display,
+    ifelse(transcript_id != "", transcript_display_label(transcript_id, gene_id, gene_name), "")
+  )
+  existing_feature_display <- first_clean_column(result, c("feature_display"))
+  computed_feature_display <- ifelse(
+    transcript_display != "",
+    transcript_display,
+    ifelse(gene_display != "", gene_display, feature_id)
+  )
+
+  result$gene_display <- gene_display
+  result$feature_display <- ifelse(
+    existing_feature_display != "",
+    existing_feature_display,
+    computed_feature_display
+  )
+  preferred <- c(feature_id_column, "feature_display", "gene_display")
+  result[, c(preferred[preferred %in% colnames(result)], setdiff(colnames(result), preferred)), drop = FALSE]
+}
+
 write_feature_matrix <- function(matrix, feature_id_column, path) {
   output <- as.data.frame(matrix, check.names = FALSE)
   output[[feature_id_column]] <- rownames(output)
@@ -260,6 +343,7 @@ res$lfc_shrinkage_method <- shrinkage$method
 res <- res[order(res$padj, na.last = TRUE), , drop = FALSE]
 
 res <- merge_metadata(res, opt$metadata, feature_id_column)
+res <- add_display_columns(res, feature_id_column)
 
 dir.create(dirname(opt$results), recursive = TRUE, showWarnings = FALSE)
 write.table(res, opt$results, sep = "\t", quote = FALSE, row.names = FALSE)

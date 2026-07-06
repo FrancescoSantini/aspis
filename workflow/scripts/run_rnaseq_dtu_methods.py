@@ -11,6 +11,8 @@ import shlex
 import subprocess
 from pathlib import Path
 
+from display_labels import gene_display_label
+
 
 METHOD_ALIASES = {
     "drimseq": "DRIMSeq",
@@ -62,6 +64,7 @@ STANDARD_RESULT_COLUMNS = [
     "feature_id",
     "gene_id",
     "gene_name",
+    "gene_display",
     "event_type",
     "statistic",
     "log2_fold_change",
@@ -393,6 +396,7 @@ def standardize_native_row(
     )
     gene_id = first_value(row, ["gene_id", "geneID", "GeneID", "group_id", "groupID", "gene"])
     gene_name = first_value(row, ["gene_name", "geneSymbol", "gene_symbol", "symbol"])
+    gene_display = first_value(row, ["gene_display"]) or gene_display_label(gene_id, gene_name)
     statistic = first_value(row, ["statistic", "stat", "lr", "LR", "lrt", "testStatistic"])
     log2_fold_change = first_value(
         row,
@@ -417,6 +421,7 @@ def standardize_native_row(
         "feature_id": feature_id,
         "gene_id": gene_id,
         "gene_name": gene_name,
+        "gene_display": gene_display,
         "event_type": infer_event_type(source_file, row),
         "statistic": statistic,
         "log2_fold_change": log2_fold_change,
@@ -1397,6 +1402,10 @@ def parse_rmats_event_rows(event_files: list[Path]) -> list[dict[str, str]]:
                     "feature_id": feature_id,
                     "gene_id": first_value(raw, ["gene_id", "geneID", "GeneID", "gene"]),
                     "gene_name": first_value(raw, ["gene_name", "geneSymbol", "gene_symbol", "symbol"]),
+                    "gene_display": first_value(raw, ["gene_display"]) or gene_display_label(
+                        first_value(raw, ["gene_id", "geneID", "GeneID", "gene"]),
+                        first_value(raw, ["gene_name", "geneSymbol", "gene_symbol", "symbol"]),
+                    ),
                     "event_type": event_type,
                     "delta_psi": first_value(raw, ["delta_psi", "dpsi", "deltaPSI", "IncLevelDifference"]),
                     "pvalue": first_value(raw, ["pvalue", "p_value", "p.value", "pval", "PValue"]),
@@ -1414,6 +1423,7 @@ def write_rmats_event_results(path: Path, rows: list[dict[str, str]]) -> None:
         "feature_id",
         "gene_id",
         "gene_name",
+        "gene_display",
         "event_type",
         "delta_psi",
         "pvalue",

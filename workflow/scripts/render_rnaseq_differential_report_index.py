@@ -11,6 +11,7 @@ from collections import Counter
 from pathlib import Path
 from typing import Optional
 
+from display_labels import gene_display_label
 from report_navigation import report_map_css, report_map_item, report_shell_close, report_shell_open
 
 
@@ -435,10 +436,14 @@ def render_dtu_summary(
                 item.get("gene_id", ""),
             ),
         )[:20]:
+            gene_label = row.get("gene_display", "") or gene_display_label(
+                row.get("gene_id", ""),
+                row.get("gene_name", ""),
+            )
             top_consensus.append(
                 "<tr>"
                 f"<td><code>{html.escape(row.get('contrast_id', ''))}</code></td>"
-                f"<td>{html.escape(row.get('gene_name', '') or row.get('gene_id', ''))}</td>"
+                f"<td>{html.escape(gene_label)}</td>"
                 f"<td>{html.escape(row.get('support_class', ''))}</td>"
                 f"<td>{html.escape(row.get('methods_significant', '') or 'none')}</td>"
                 f"<td>{html.escape(row.get('best_method', ''))}</td>"

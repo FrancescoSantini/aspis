@@ -8,11 +8,13 @@ import csv
 import re
 from pathlib import Path
 
+from display_labels import gene_display_label
+
 
 REQUIRED_SAMPLE_COLUMNS = {"library_id", "assay", "project", "layout", "bam"}
 REQUIRED_PLAN_COLUMNS = {"project", "assay", "status", "gene_counter", "annotation_gtf"}
 METADATA_COLUMNS = ["Geneid", "Chr", "Start", "End", "Strand", "Length"]
-GENE_ANNOTATION_COLUMNS = ["gene_name", "gene_biotype"]
+GENE_ANNOTATION_COLUMNS = ["gene_name", "gene_display", "gene_biotype"]
 ATTR_RE = re.compile(r'([A-Za-z0-9_.-]+) "([^"]*)"')
 
 
@@ -169,6 +171,7 @@ def write_matrices(
         for gene_id in gene_ids:
             row = dict(merged_metadata[gene_id])
             row.update(annotations.get(gene_id, {}))
+            row["gene_display"] = gene_display_label(gene_id, row.get("gene_name", ""))
             writer.writerow({column: row.get(column, "") for column in METADATA_COLUMNS + GENE_ANNOTATION_COLUMNS})
 
 

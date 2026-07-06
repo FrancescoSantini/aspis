@@ -10,6 +10,7 @@ import os
 from collections import Counter
 from pathlib import Path
 
+from display_labels import gene_display_label
 from report_navigation import report_map_css, report_map_item, report_shell_close, report_shell_open
 
 
@@ -822,11 +823,15 @@ def plot_atlas_sections(
 
     isoform_rows = []
     for row in sorted(isoform_events, key=lambda item: as_int(item.get("switch_rank", "0")) or 10**9):
+        gene_label = row.get("gene_display", "") or gene_display_label(
+            row.get("gene_id", ""),
+            row.get("gene_name", ""),
+        )
         isoform_rows.append(
             [
                 html.escape(row.get("switch_rank", "")),
                 f"<code>{html.escape(row.get('contrast_id', ''))}</code>",
-                html.escape(row.get("gene_id", "")),
+                html.escape(gene_label),
                 html.escape(row.get("switch_interpretation_label", row.get("switch_biotype_class", ""))),
                 f'{html.escape(row.get("switch_in_isoform", ""))} / {html.escape(row.get("switch_out_isoform", ""))}',
                 link_group(

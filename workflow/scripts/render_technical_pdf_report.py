@@ -187,6 +187,9 @@ SMALLRNA_TABLES = COMMON_TABLES + [
 ]
 
 PREFERRED_TABLE_COLUMNS = [
+    "feature_display",
+    "gene_display",
+    "transcript_display",
     "feature_id",
     "Geneid",
     "gene_id",

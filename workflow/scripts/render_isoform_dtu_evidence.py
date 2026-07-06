@@ -10,6 +10,8 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Iterable
 
+from display_labels import gene_display_label, transcript_display_label
+
 
 EVIDENCE_COLUMNS = [
     "event_id",
@@ -314,9 +316,9 @@ def build_rows(
             "contrast_id": contrast_id,
             "gene_id": gene_id,
             "gene_name": candidate.get("gene_name", "") or event.get("gene_name", ""),
-            "gene_display": candidate.get("gene_display", "") or event.get("gene_display", "") or candidate.get("gene_name", "") or event.get("gene_name", "") or gene_id,
+            "gene_display": display_gene(candidate, event),
             "isoform_id": candidate.get("isoform_id", ""),
-            "transcript_display": candidate.get("transcript_display", "") or candidate.get("isoform_id", ""),
+            "transcript_display": display_transcript(candidate, event),
             "switch_role": candidate.get("switch_role", ""),
             "dIF": candidate.get("dIF", ""),
             "padj_qvalue": candidate.get("padj_qvalue", ""),
@@ -363,6 +365,25 @@ def first_value(*values: str) -> str:
         if value:
             return value
     return ""
+
+
+def display_gene(row: dict[str, str], *fallback_rows: dict[str, str]) -> str:
+    for source in (row, *fallback_rows):
+        if source.get("gene_display", ""):
+            return source["gene_display"]
+    gene_id = first_value(*(source.get("gene_id", "") for source in (row, *fallback_rows)))
+    gene_name = first_value(*(source.get("gene_name", "") for source in (row, *fallback_rows)))
+    return gene_display_label(gene_id, gene_name)
+
+
+def display_transcript(row: dict[str, str], *fallback_rows: dict[str, str]) -> str:
+    for source in (row, *fallback_rows):
+        if source.get("transcript_display", ""):
+            return source["transcript_display"]
+    transcript_id = first_value(*(source.get("isoform_id", "") for source in (row, *fallback_rows)))
+    gene_id = first_value(*(source.get("gene_id", "") for source in (row, *fallback_rows)))
+    gene_name = first_value(*(source.get("gene_name", "") for source in (row, *fallback_rows)))
+    return transcript_display_label(transcript_id, gene_id, gene_name)
 
 
 def priority_from(
@@ -462,9 +483,9 @@ def build_interpretation_rows(
                 "contrast_id": contrast_id,
                 "gene_id": gene_id,
                 "gene_name": first_value(candidate.get("gene_name", ""), event.get("gene_name", ""), consensus.get("gene_name", "")),
-                "gene_display": first_value(candidate.get("gene_display", ""), event.get("gene_display", ""), candidate.get("gene_name", ""), event.get("gene_name", ""), consensus.get("gene_name", ""), gene_id),
+                "gene_display": display_gene(candidate, event, consensus),
                 "isoform_id": candidate.get("isoform_id", ""),
-                "transcript_display": first_value(candidate.get("transcript_display", ""), candidate.get("isoform_id", "")),
+                "transcript_display": display_transcript(candidate, event, consensus),
                 "switch_role": candidate.get("switch_role", ""),
                 "interpretation_status": status,
                 "interpretation_priority": priority,
