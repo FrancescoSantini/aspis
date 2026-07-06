@@ -309,6 +309,9 @@ def main() -> int:
         assert "NT FASTA" in html
         assert "AA FASTA" in html
         assert "deterministic report navigation" in html
+        assert "Direct miRNA-ID set enrichment is a separate optional layer" in html
+        assert "direct miRNA-ID sets" in html
+        assert "optional/not configured" not in html
         assert "optional miRNA identifier feature-set manifest" in html
         assert "Recommended Review Order" not in html
         assert "Unified Report Tree" not in html

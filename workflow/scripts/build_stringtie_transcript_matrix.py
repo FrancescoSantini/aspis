@@ -299,16 +299,23 @@ def looks_like_stringtie_id(value: str) -> bool:
     return bool(value) and value.startswith(("MSTRG", "STRG"))
 
 
+def clean_display_value(value: str) -> str:
+    value = (value or "").strip()
+    if value.lower() in {"na", "n/a", "none", "null", "nan", "."}:
+        return ""
+    return value
+
+
 def gene_display_label(gene_id: str, gene_name: str) -> str:
-    gene_id = (gene_id or "").strip()
-    gene_name = (gene_name or "").strip()
+    gene_id = clean_display_value(gene_id)
+    gene_name = clean_display_value(gene_name)
     if gene_name and gene_id and gene_name != gene_id:
         return f"{gene_name} ({gene_id})"
     return gene_name or gene_id
 
 
 def transcript_display_label(transcript_id: str, gene_id: str, gene_name: str) -> str:
-    transcript_id = (transcript_id or "").strip()
+    transcript_id = clean_display_value(transcript_id)
     gene_label = gene_display_label(gene_id, gene_name)
     if gene_label and transcript_id:
         return f"{gene_label} | {transcript_id}"

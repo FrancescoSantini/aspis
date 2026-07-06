@@ -677,18 +677,18 @@ def project_evidence_map(
 
     target_rows = smallrna_targets + smallrna_target_feature_sets
     state = evidence_state(target_rows)
-    mirna_feature_state = "available" if mirna_feature_sets else "optional/not configured"
+    mirna_feature_state = "configured" if mirna_feature_sets else "not used"
     cards.append(
         evidence_card(
             "miRNA targets and target feature sets",
             "layer-mirna-targets",
             state[0],
             state[1],
-            "Target-gene enrichment and target-gene feature sets; miRNA identifier feature sets are optional.",
+            "Target-gene enrichment and target-gene feature sets. Direct miRNA-ID set enrichment is a separate optional layer.",
             [
                 ("target rows", len(smallrna_targets)),
                 ("target-set rows", len(smallrna_target_feature_sets)),
-                ("miRNA-ID sets", mirna_feature_state),
+                ("direct miRNA-ID sets", mirna_feature_state),
             ],
             [
                 link(smallrna_base / "smallrna/differential/reports/targets/index.html", "overview", base_dir),

@@ -53,7 +53,7 @@ def write_quant_gtf(path: Path) -> None:
                 'chr1\tStringTie\texon\t100\t160\t.\t+\t.\tgene_id "GENE1"; transcript_id "TX_J";',
                 'chr1\tStringTie\ttranscript\t1\t90\t.\t+\t.\tgene_id "GENE1"; transcript_id "TX_C"; gene_name "Gene1"; gene_biotype "protein_coding"; transcript_biotype "protein_coding"; cov "7";',
                 'chr1\tStringTie\texon\t1\t90\t.\t+\t.\tgene_id "GENE1"; transcript_id "TX_C";',
-                'chr1\tStringTie\ttranscript\t300\t380\t.\t+\t.\tgene_id "MSTRG.1"; transcript_id "TX_U"; gene_biotype "lncRNA"; transcript_biotype "lncRNA"; cov "5";',
+                'chr1\tStringTie\ttranscript\t300\t380\t.\t+\t.\tgene_id "MSTRG.1"; transcript_id "TX_U"; gene_name "NA"; gene_biotype "lncRNA"; transcript_biotype "lncRNA"; cov "5";',
                 'chr1\tStringTie\texon\t300\t380\t.\t+\t.\tgene_id "MSTRG.1"; transcript_id "TX_U";',
                 'chr1\tStringTie\ttranscript\t500\t580\t.\t+\t.\tgene_id "GENE2"; transcript_id "TX_I"; gene_name "Gene2"; gene_biotype "lncRNA"; transcript_biotype "lncRNA"; cov "4";',
                 'chr1\tStringTie\texon\t500\t580\t.\t+\t.\tgene_id "GENE2"; transcript_id "TX_I";',

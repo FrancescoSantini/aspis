@@ -993,16 +993,30 @@ def looks_like_stringtie_id(value: str) -> bool:
     return bool(value) and value.startswith(("MSTRG", "STRG"))
 
 
+def clean_display_value(value: str) -> str:
+    value = (value or "").strip()
+    if value.lower() in {"na", "n/a", "none", "null", "nan", "."}:
+        return ""
+    return value
+
+
+def clean_existing_display_label(value: str) -> str:
+    value = clean_display_value(value)
+    if re.match(r"^(na|n/a|none|null|nan)\s*\(", value, flags=re.IGNORECASE):
+        return ""
+    return value
+
+
 def display_gene(gene_id: str, gene_name: str) -> str:
-    gene_id = (gene_id or "").strip()
-    gene_name = (gene_name or "").strip()
+    gene_id = clean_display_value(gene_id)
+    gene_name = clean_display_value(gene_name)
     if gene_name and gene_id and gene_name != gene_id:
         return f"{gene_name} ({gene_id})"
     return gene_name or gene_id
 
 
 def display_transcript(transcript_id: str, gene_id: str, gene_name: str) -> str:
-    transcript_id = (transcript_id or "").strip()
+    transcript_id = clean_display_value(transcript_id)
     gene_label = display_gene(gene_id, gene_name)
     if gene_label and transcript_id:
         return f"{gene_label} | {transcript_id}"
@@ -1655,8 +1669,8 @@ def build_events(
             meta = metadata.get(isoform_id, {})
             model = models.get(isoform_id)
             gene_biotype, transcript_biotype = metadata_biotype(meta, model)
-            gene_display = meta.get("gene_display") or display_gene(gene_id, gene_name)
-            transcript_display = meta.get("transcript_display") or display_transcript(isoform_id, gene_id, gene_name)
+            gene_display = clean_existing_display_label(meta.get("gene_display", "")) or display_gene(gene_id, gene_name)
+            transcript_display = clean_existing_display_label(meta.get("transcript_display", "")) or display_transcript(isoform_id, gene_id, gene_name)
             discovery_class = meta.get("transcript_discovery_class", "")
             (
                 is_stringtie_assembly,
