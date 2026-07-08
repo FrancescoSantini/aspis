@@ -53,9 +53,10 @@ def add_gene_display(
         name_by_gene[gene_id] = gene_name
 
 
-def gene_display_maps(rnaseq_base: Path) -> tuple[dict[str, str], dict[str, str]]:
+def gene_display_maps(rnaseq_base: Path) -> tuple[dict[str, str], dict[str, str], dict[str, str]]:
     display_by_gene: dict[str, str] = {}
     name_by_gene: dict[str, str] = {}
+    gene_display_by_transcript: dict[str, str] = {}
     for row in read_table(rnaseq_base / "quantification/featurecounts/gene_metadata.tsv"):
         add_gene_display(
             display_by_gene,
@@ -65,14 +66,20 @@ def gene_display_maps(rnaseq_base: Path) -> tuple[dict[str, str], dict[str, str]
             row.get("gene_display", ""),
         )
     for row in read_table(rnaseq_base / "quantification/counts/transcript_metadata.tsv"):
+        gene_id = row.get("gene_id", "")
+        gene_name = row.get("gene_name", "")
+        gene_display = row.get("gene_display", "") or gene_display_label(gene_id, gene_name)
         add_gene_display(
             display_by_gene,
             name_by_gene,
-            row.get("gene_id", ""),
-            row.get("gene_name", ""),
-            row.get("gene_display", ""),
+            gene_id,
+            gene_name,
+            gene_display,
         )
-    return display_by_gene, name_by_gene
+        transcript_id = row.get("transcript_id", "") or row.get("target_id", "")
+        if transcript_id and gene_display:
+            gene_display_by_transcript[transcript_id] = gene_display
+    return display_by_gene, name_by_gene, gene_display_by_transcript
 
 
 def display_gene_id(gene_id: str, display_by_gene: dict[str, str], name_by_gene: dict[str, str]) -> str:
@@ -86,16 +93,34 @@ def hydrate_gene_displays(
     rows: list[dict[str, str]],
     display_by_gene: dict[str, str],
     name_by_gene: dict[str, str],
+    gene_display_by_transcript: dict[str, str] | None = None,
 ) -> None:
+    gene_display_by_transcript = gene_display_by_transcript or {}
     for row in rows:
         gene_id = row.get("gene_id", "") or row.get("gene", "")
         if gene_id and not row.get("gene_display", ""):
             row["gene_display"] = display_gene_id(gene_id, display_by_gene, name_by_gene)
             if not row.get("gene_name", "") and gene_id in name_by_gene:
                 row["gene_name"] = name_by_gene[gene_id]
+        if (not row.get("gene_display", "") or row.get("gene_display", "") == gene_id) and gene_display_by_transcript:
+            for column in ["switch_in_isoform", "switch_out_isoform", "isoform_id", "feature_id"]:
+                transcript_gene_display = gene_display_by_transcript.get(row.get(column, ""))
+                if transcript_gene_display:
+                    row["gene_display"] = transcript_gene_display
+                    break
         top_gene = row.get("top_gene", "")
         if top_gene and not row.get("top_gene_display", ""):
             row["top_gene_display"] = display_gene_id(top_gene, display_by_gene, name_by_gene)
+
+
+def display_isoform_id(isoform_id: str, gene_display_by_transcript: dict[str, str]) -> str:
+    isoform_id = (isoform_id or "").strip()
+    if not isoform_id:
+        return ""
+    gene_display = gene_display_by_transcript.get(isoform_id, "")
+    if gene_display and gene_display != isoform_id and gene_display not in isoform_id:
+        return f"{isoform_id} ({gene_display})"
+    return isoform_id
 
 
 def resolved_technical_pdf(args: argparse.Namespace, base_dir: Path) -> str:
@@ -401,12 +426,13 @@ def summary_cell(row: dict[str, str] | None, base_dir: Path, feature_label: str 
     down = row.get("n_down", "")
     summary = optional_row_link(row, "summary_html", "summary", base_dir)
     result = optional_row_link(row, "results", "results", base_dir)
+    links = grouped_links([summary, result])
     parts = [
         f'<span class="status {html.escape(status)}">{html.escape(status)}</span>',
         f"{html.escape(features)} {html.escape(feature_label)}" if features else "",
         f"{html.escape(significant)} significant" if significant else "",
         f"up {html.escape(up)} / down {html.escape(down)}" if up or down else "",
-        " ".join(part for part in [summary, result] if part),
+        links,
     ]
     reason = row.get("reason", "")
     if reason:
@@ -504,8 +530,12 @@ def integration_state_cell(
             f"{html.escape(integration_row.get('n_pairs', ''))} miRNA-target pairs"
             if integration_row.get("n_pairs")
             else "",
-            optional_row_link(integration_row, "sample_pairing", "pairing table", base_dir),
-            optional_row_link(integration_row, "mirna_mrna_summary", "integration summary", base_dir),
+            grouped_links(
+                [
+                    optional_row_link(integration_row, "sample_pairing", "pairing table", base_dir),
+                    optional_row_link(integration_row, "mirna_mrna_summary", "integration summary", base_dir),
+                ]
+            ),
         ]
         reason = integration_row.get("reason", "")
         if reason:
@@ -544,7 +574,7 @@ def dtu_cell(
         f"{html.escape(status_text)}",
         f"{standardized} standardized rows" if standardized else "",
         f"{plot_ok} plot sets" if plot_rows else "",
-        '<a href="#layer-dtu">DTU layer</a>',
+        grouped_links(['<a href="#layer-dtu">DTU layer</a>']),
     ]
     return "<br>".join(part for part in details if part)
 
@@ -806,6 +836,7 @@ def evidence_layer_listing_tables(
     rnaseq_enrichment: list[dict[str, str]],
     rnaseq_dtu_plots: list[dict[str, str]],
     isoform_events: list[dict[str, str]],
+    gene_display_by_transcript: dict[str, str],
     smallrna_summary: list[dict[str, str]],
     smallrna_targets: list[dict[str, str]],
     smallrna_target_feature_sets: list[dict[str, str]],
@@ -902,7 +933,10 @@ def evidence_layer_listing_tables(
                 f"<code>{html.escape(row.get('contrast_id', ''))}</code>",
                 html.escape(gene_label),
                 html.escape(row.get("switch_interpretation_label", row.get("switch_biotype_class", ""))),
-                f'{html.escape(row.get("switch_in_isoform", ""))} / {html.escape(row.get("switch_out_isoform", ""))}',
+                (
+                    f'{html.escape(display_isoform_id(row.get("switch_in_isoform", ""), gene_display_by_transcript))}'
+                    f' / {html.escape(display_isoform_id(row.get("switch_out_isoform", ""), gene_display_by_transcript))}'
+                ),
                 link_group(
                     row,
                     [
@@ -988,68 +1022,40 @@ def evidence_layer_listing_tables(
         )
 
     return {
-        "rnaseq_de": (
-            "<h4>RNA-seq DE plots and tables</h4>"
-            "<p class=\"section-note\">Gene and transcript summary pages are the entry point for DE plots such as MA/PCA/volcano/heatmap panels.</p>"
-            + html_cell_table(
-                ["level", "contrast", "status", "significant", "links"],
-                rnaseq_rows,
-                "No RNA-seq summary plot pages are available.",
-            )
+        "rnaseq_de": html_cell_table(
+            ["level", "contrast", "status", "significant", "links"],
+            rnaseq_rows,
+            "No RNA-seq summary plot pages are available.",
         ),
-        "enrichment": (
-            "<h4>GO/Reactome plots and tables</h4>"
-            "<p class=\"section-note\">Direct links to ORA and ranked enrichment plots for each gene/transcript contrast.</p>"
-            + html_cell_table(
-                ["level", "contrast", "terms", "plots", "tables"],
-                enrichment_rows,
-                "No enrichment plots are available.",
-            )
+        "enrichment": html_cell_table(
+            ["level", "contrast", "terms", "plots", "tables"],
+            enrichment_rows,
+            "No enrichment plots are available.",
         ),
-        "dtu": (
-            "<h4>DTU/splicing method plots and source tables</h4>"
-            "<p class=\"section-note\">Direct plot links for each native DTU/splicing method and contrast. This includes method overview plots, ranked feature/event plots, and top-gene detail plots when the method emits them.</p>"
-            + html_cell_table(
-                ["method", "contrast", "status", "padj<0.05", "top gene/event", "plots", "source tables"],
-                dtu_rows,
-                "No DTU method plots are available.",
-            )
+        "dtu": html_cell_table(
+            ["method", "contrast", "status", "padj<0.05", "top gene/event", "plots", "source tables"],
+            dtu_rows,
+            "No DTU method plots are available.",
         ),
-        "isoform_switch": (
-            "<h4>Isoform-switch event plots and tables</h4>"
-            "<p class=\"section-note\">Direct links to each isoform-switch event plot, event page, and sequence FASTA assets.</p>"
-            + html_cell_table(
-                ["rank", "contrast", "gene", "class", "switch in/out", "event assets"],
-                isoform_rows,
-                "No isoform-switch event plots are available.",
-            )
+        "isoform_switch": html_cell_table(
+            ["rank", "contrast", "gene", "class", "switch in/out", "event assets"],
+            isoform_rows,
+            "No isoform-switch event plots are available.",
         ),
-        "smallrna_de": (
-            "<h4>smallRNA DE plots and tables</h4>"
-            "<p class=\"section-note\">Direct links to miRNA summary pages and result tables.</p>"
-            + html_cell_table(
-                ["contrast", "miRNA significant", "miRNA DE"],
-                smallrna_de_rows,
-                "No smallRNA DE plots are available.",
-            )
+        "smallrna_de": html_cell_table(
+            ["contrast", "miRNA significant", "miRNA DE"],
+            smallrna_de_rows,
+            "No smallRNA DE plots are available.",
         ),
-        "mirna_targets": (
-            "<h4>miRNA target plots and tables</h4>"
-            "<p class=\"section-note\">Direct links to target enrichment and target feature-set outputs.</p>"
-            + html_cell_table(
-                ["contrast", "target enrichment", "target feature sets"],
-                mirna_target_rows,
-                "No miRNA target plots are available.",
-            )
+        "mirna_targets": html_cell_table(
+            ["contrast", "target enrichment", "target feature sets"],
+            mirna_target_rows,
+            "No miRNA target plots are available.",
         ),
-        "matched": (
-            "<h4>Matched miRNA-mRNA plots and tables</h4>"
-            "<p class=\"section-note\">Direct links to paired assay integration plots and inverse target pairs.</p>"
-            + html_cell_table(
-                ["contrast", "matched miRNA-mRNA"],
-                matched_rows,
-                "No matched miRNA-mRNA plots are available.",
-            )
+        "matched": html_cell_table(
+            ["contrast", "matched miRNA-mRNA"],
+            matched_rows,
+            "No matched miRNA-mRNA plots are available.",
         ),
     }
 
@@ -1062,6 +1068,7 @@ def evidence_layer_sections(
     rnaseq_enrichment: list[dict[str, str]],
     rnaseq_dtu_plots: list[dict[str, str]],
     isoform_events: list[dict[str, str]],
+    gene_display_by_transcript: dict[str, str],
     smallrna_summary: list[dict[str, str]],
     smallrna_targets: list[dict[str, str]],
     smallrna_target_feature_sets: list[dict[str, str]],
@@ -1073,6 +1080,7 @@ def evidence_layer_sections(
         rnaseq_enrichment,
         rnaseq_dtu_plots,
         isoform_events,
+        gene_display_by_transcript,
         smallrna_summary,
         smallrna_targets,
         smallrna_target_feature_sets,
@@ -1303,9 +1311,9 @@ def render(args: argparse.Namespace) -> None:
     mirna_mrna_feature_sets = read_table(
         smallrna_base / "smallrna/differential/mirna_mrna_target_feature_sets/target_feature_set_manifest.tsv"
     )
-    display_by_gene, name_by_gene = gene_display_maps(rnaseq_base)
+    display_by_gene, name_by_gene, gene_display_by_transcript = gene_display_maps(rnaseq_base)
     for rows in [rnaseq_dtu, rnaseq_dtu_plots, rnaseq_dtu_consensus, isoform_events]:
-        hydrate_gene_displays(rows, display_by_gene, name_by_gene)
+        hydrate_gene_displays(rows, display_by_gene, name_by_gene, gene_display_by_transcript)
     technical_pdf = resolved_technical_pdf(args, base_dir)
     technical_pdf_link = (
         f'<a href="{html.escape(rel_href(Path(technical_pdf), base_dir))}">combined project technical PDF</a>'
@@ -1340,7 +1348,6 @@ def render(args: argparse.Namespace) -> None:
     .wide-panel table {{ font-size: 0.86rem; }}
     .wide-panel td {{ overflow-wrap: anywhere; }}
     .evidence-card h3, .layer-panel h3 {{ margin-top: 0; }}
-    .layer-panel h4 {{ border-top: 1px solid #d0d7de; margin: 1rem 0 0.35rem; padding-top: 0.75rem; }}
     .mini-metrics {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 0.55rem; margin-top: 0.75rem; }}
     .mini-metric {{ background: #f6f8fa; border: 1px solid #d8dee4; border-radius: 6px; padding: 0.45rem 0.55rem; }}
     .mini-metric strong {{ display: block; color: #57606a; font-size: 0.78rem; }}
@@ -1402,7 +1409,7 @@ def render(args: argparse.Namespace) -> None:
   <h2 id="evidence-layers">Evidence Layers</h2>
   <p class="section-note">Each section below is one evidence layer. It keeps the layer purpose, primary entry links, plots, source tables, and deeper assay pages together. These sections are deterministic report navigation, not automated biological interpretation.</p>
   <div class="layer-grid">
-    {evidence_layer_sections(base_dir, rnaseq_base, smallrna_base, rnaseq_summary, rnaseq_enrichment, rnaseq_dtu_plots, isoform_events, smallrna_summary, smallrna_targets, smallrna_target_feature_sets, mirna_integration)}
+    {evidence_layer_sections(base_dir, rnaseq_base, smallrna_base, rnaseq_summary, rnaseq_enrichment, rnaseq_dtu_plots, isoform_events, gene_display_by_transcript, smallrna_summary, smallrna_targets, smallrna_target_feature_sets, mirna_integration)}
   </div>
   <h2 id="qc-and-design">Run QC And Design</h2>
   <p class="section-note">This section is run-validation context rather than biological evidence. It shows whether the sample metadata, design tables, assay branches, and key workflow outputs are coherent enough to interpret the evidence layers above.</p>

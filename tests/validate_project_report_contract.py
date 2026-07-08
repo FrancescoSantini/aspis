@@ -90,7 +90,10 @@ def main() -> int:
         )
         write_tsv(
             rnaseq / "quantification" / "counts" / "transcript_metadata.tsv",
-            [{"transcript_id": "tx1", "gene_id": "geneA", "gene_name": "Gene A", "gene_display": "Gene A (geneA)"}],
+            [
+                {"transcript_id": "tx1", "gene_id": "geneA", "gene_name": "Gene A", "gene_display": "Gene A (geneA)"},
+                {"transcript_id": "tx2", "gene_id": "geneA", "gene_name": "Gene A", "gene_display": "Gene A (geneA)"},
+            ],
         )
 
         result_table = tmp / "tables" / "results.tsv"
@@ -347,16 +350,17 @@ def main() -> int:
         assert 'id="layer-rnaseq-de"' in html
         assert 'id="layer-dtu"' in html
         assert 'id="layer-matched-mirna-mrna"' in html
-        assert "RNA-seq DE plots and tables" in html
-        assert "GO/Reactome plots and tables" in html
-        assert "DTU/splicing method plots and source tables" in html
+        assert "RNA-seq DE plots and tables" not in html
+        assert "GO/Reactome plots and tables" not in html
+        assert "DTU/splicing method plots and source tables" not in html
         assert "Independent DTU/splicing method results" in html
         assert "Isoform-switch candidates with DTU/splicing support" in html
         assert "support layer is a deterministic evidence join" in html
-        assert "Isoform-switch event plots and tables" in html
-        assert "smallRNA DE plots and tables" in html
-        assert "miRNA target plots and tables" in html
-        assert "Matched miRNA-mRNA plots and tables" in html
+        assert "tx1 (Gene A (geneA)) / tx2 (Gene A (geneA))" in html
+        assert "Isoform-switch event plots and tables" not in html
+        assert "smallRNA DE plots and tables" not in html
+        assert "miRNA target plots and tables" not in html
+        assert "Matched miRNA-mRNA plots and tables" not in html
         assert "Plot Atlas" not in html
         assert 'class="link-list"' in html
         assert "overview plot" in html
