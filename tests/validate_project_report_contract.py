@@ -303,33 +303,35 @@ def main() -> int:
             "Project Overview",
             "Contrast Evidence Matrix",
             "Evidence Layers",
-            "QC And Design",
-            "Raw Artifacts",
+            "Run QC And Design",
+            "Source Files And Audit Trail",
             "Status Glossary",
         ]
         positions = [html.index(heading) for heading in headings]
         assert positions == sorted(positions)
         assert "combined project technical PDF" in html
-        assert 'href="technical_report.pdf"' in html
+        assert "technical_report.pdf" in html
+        assert "Combined technical PDF" not in html
         assert "combined project technical PDF: not present" not in html
         assert "Gene A (geneA)" in html
         assert 'aria-label="Report map"' in html
         assert "Report Map" in html
         assert 'href="#project-overview"' in html
         assert 'href="#contrast-matrix"' in html
-        assert 'href="#evidence-layers"' in html
+        assert 'id="evidence-layers"' in html
+        assert 'href="#evidence-layers"' not in html
         assert 'href="#layer-rnaseq-de"' in html
-        assert 'href="#layer-rnaseq-de-listing"' in html
         assert 'href="#layer-enrichment"' in html
-        assert 'href="#layer-enrichment-listing"' in html
         assert 'href="#layer-dtu"' in html
-        assert 'href="#layer-dtu-listing"' in html
         assert 'href="#layer-isoform-switch"' in html
-        assert 'href="#layer-isoform-switch-listing"' in html
         assert 'href="#layer-smallrna-de"' in html
         assert 'href="#layer-mirna-targets"' in html
         assert 'href="#layer-matched-mirna-mrna"' in html
-        assert 'href="#layer-smallrna-listing"' in html
+        assert 'href="#layer-rnaseq-de-listing"' not in html
+        assert 'href="#layer-enrichment-listing"' not in html
+        assert 'href="#layer-dtu-listing"' not in html
+        assert 'href="#layer-isoform-switch-listing"' not in html
+        assert 'href="#layer-smallrna-listing"' not in html
         assert 'href="#qc-and-design"' in html
         assert 'href="#sample-design"' in html
         assert 'href="#workflow-status"' in html
@@ -345,11 +347,16 @@ def main() -> int:
         assert 'id="layer-rnaseq-de"' in html
         assert 'id="layer-dtu"' in html
         assert 'id="layer-matched-mirna-mrna"' in html
-        assert "Independent DTU/splicing method plots and source tables" in html
+        assert "RNA-seq DE plots and tables" in html
+        assert "GO/Reactome plots and tables" in html
+        assert "DTU/splicing method plots and source tables" in html
         assert "Independent DTU/splicing method results" in html
         assert "Isoform-switch candidates with DTU/splicing support" in html
         assert "support layer is a deterministic evidence join" in html
-        assert "Isoform-switch event plots" in html
+        assert "Isoform-switch event plots and tables" in html
+        assert "smallRNA DE plots and tables" in html
+        assert "miRNA target plots and tables" in html
+        assert "Matched miRNA-mRNA plots and tables" in html
         assert "Plot Atlas" not in html
         assert 'class="link-list"' in html
         assert "overview plot" in html
@@ -385,7 +392,7 @@ def main() -> int:
             ]
         )
         manual = manual_html.read_text(encoding="utf-8")
-        assert 'href="technical_report.pdf"' in manual
+        assert "technical_report.pdf" in manual
         assert "combined project technical PDF: not configured" not in manual
         cwd = Path.cwd()
         try:
