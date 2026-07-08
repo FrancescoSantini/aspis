@@ -284,9 +284,4 @@ ASPIS automates sequencing analysis and evidence organization. It does not make
 automated biological claims. Reports summarize statistical outputs, QC state,
 resource availability, and cross-assay links so that domain experts can review
 the evidence.
-
-## License And Citation
-
-No license or citation file is currently included in this repository. Add a
-repository license and citation metadata before public release if redistribution
 or formal citation is required.
