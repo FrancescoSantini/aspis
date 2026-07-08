@@ -185,10 +185,10 @@ EXECUTION_SLURM_ACCOUNT, EXECUTION_SLURM_ACCOUNT_SOURCE = execution_setting(
     "SLURM_ACCOUNT", "slurm_account", ""
 )
 EXECUTION_DEFAULT_PARTITION, EXECUTION_DEFAULT_PARTITION_SOURCE = execution_setting(
-    "SLURM_PARTITION", "default_partition", "g100_usr_prod"
+    "SLURM_PARTITION", "default_partition", ""
 )
 EXECUTION_DOWNLOAD_PARTITION, EXECUTION_DOWNLOAD_PARTITION_SOURCE = execution_setting(
-    "SLURM_DOWNLOAD_PARTITION", "download_partition", "g100_all_serial"
+    "SLURM_DOWNLOAD_PARTITION", "download_partition", ""
 )
 EXECUTION_DEFAULT_RUNTIME, EXECUTION_DEFAULT_RUNTIME_SOURCE = execution_resource_setting(
     "ASPIS_DEFAULT_RUNTIME", "runtime", 60

@@ -217,10 +217,11 @@ mirna_mrna_integration:
   top_n: 40
 
 execution:
-  # Leave empty for shared configs. G100 helpers set SLURM_ACCOUNT at runtime.
+  # Leave empty for shared configs. Set site-specific values in the project
+  # config, environment, or Snakemake CLI defaults.
   slurm_account: ""
-  default_partition: g100_usr_prod
-  download_partition: g100_all_serial
+  default_partition: ""
+  download_partition: ""
   default_resources:
     runtime: 240
     mem_mb: 8000

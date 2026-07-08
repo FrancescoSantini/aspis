@@ -160,8 +160,8 @@ rnaseq_differential:
   log2fc: 1.0
 
 execution:
-  default_partition: g100_usr_prod
-  download_partition: g100_all_serial
+  default_partition: ""
+  download_partition: ""
 
 provenance:
   # Build a lightweight per-branch bundle with run, design, and biological context.

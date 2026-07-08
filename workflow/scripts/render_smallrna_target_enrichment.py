@@ -203,7 +203,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--smallrna-plan", required=True, help="SmallRNA stage plan TSV")
     parser.add_argument("--deseq2-manifest", required=True, help="miRNA DESeq2 manifest TSV")
-    parser.add_argument("--target-table", default="", help="Legacy single local miRNA target table TSV")
+    parser.add_argument("--target-table", default="", help="Single local miRNA target table TSV")
     parser.add_argument(
         "--target-tables",
         default="",

@@ -1,7 +1,7 @@
-# ASPIS first-stage configuration.
+# ASPIS default fixture configuration.
 #
-# The old phdpipe-era config/config.yaml entrypoint has been removed from the
-# active source tree.
+# Use this file for local smoke tests and examples. For real projects, copy one
+# of the project templates and set a dedicated paths namespace.
 
 intake: config/intake.tsv
 
@@ -376,12 +376,13 @@ mirna_mrna_integration:
   top_n: 40
 
 execution:
-  # Leave empty for shared configs. G100 helpers set SLURM_ACCOUNT at runtime.
+  # Leave empty for shared configs. Set these through the project config,
+  # environment, or Snakemake CLI defaults on cluster runs.
   slurm_account: ""
   # Default submit partition for ordinary compute jobs.
-  default_partition: g100_usr_prod
+  default_partition: ""
   # Partition for public INSDC/SRA materialization jobs.
-  download_partition: g100_all_serial
+  download_partition: ""
   # Baseline Snakemake default resources used by helpers and reports.
   default_resources:
     runtime: 60

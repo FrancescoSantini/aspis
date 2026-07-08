@@ -163,15 +163,6 @@ python3 workflow/scripts/prepare_mirna_target_resources.py \
   --config-fragment /path/to/aspis_resources/beas/smallrna_targets/aspis_targets.yaml
 ```
 
-On G100, the same preparation step is wrapped by a helper that mirrors the
-RNA-seq feature-set helper:
-
-```bash
-MODE=dry-run bash tests/prepare_g100_smallrna_targets.sh "$ACCOUNT"
-MODE=check bash tests/prepare_g100_smallrna_targets.sh "$ACCOUNT"
-MODE=run bash tests/prepare_g100_smallrna_targets.sh "$ACCOUNT"
-```
-
 ASPIS intentionally does not bundle a universal default miRNA-target database.
 miRBase is appropriate for miRNA sequences and names, but it is not a
 miRNA-target interaction resource. Many target databases are free web resources
@@ -184,17 +175,6 @@ If the target export uses Entrez, UniProt, or another external identifier
 namespace, provide an
 `--id-map-table` with `source_id` and `target_id` columns, where `target_id`
 resolves to the GTF gene ID.
-
-The helper expects `project_reviewed_mirna_targets.tsv` under
-`/g100_work/$ACCOUNT/aspis_resources/source` by default. It also accepts the
-older local filename `project_open_mirna_targets.tsv` when present, but the
-prepared resource label defaults to `project_reviewed_targets` to avoid making
-unverified license claims. Override paths and metadata with
-`ASPIS_MIRNA_TARGET_INPUT`, `ASPIS_MIRNA_TARGET_DATABASE`,
-`ASPIS_MIRNA_TARGET_EVIDENCE_TYPE`, `ASPIS_MIRNA_TARGET_VERSION`,
-`ASPIS_MIRNA_TARGET_LICENSE`, `ASPIS_MIRNA_TARGET_LICENSE_STATUS`,
-`ASPIS_MIRNA_TARGET_ID_MAP_TABLES`, and column-specific overrides such as
-`ASPIS_MIRNA_TARGET_MIRNA_COLUMN` or `ASPIS_MIRNA_TARGET_TARGET_COLUMN`.
 
 Important outputs:
 
@@ -292,68 +272,3 @@ Every imported source is audited in the isoform-switch report. Inspect
 `functional_annotation_qa.tsv` for parser status, matched/unmatched rows,
 duplicate IDs, unsupported columns, and mapping loss before interpreting
 annotation-derived consequence summaries.
-
-## G100 BEAS Application
-
-For the current BEAS validation, prepare resources under a shared path such as:
-
-```text
-/g100_work/<ACCOUNT>/aspis_resources/beas/
-```
-
-After running the preparation scripts, merge the generated YAML fragments into:
-
-```text
-config/aspis_g100_beas_full.yaml
-```
-
-For BEAS RNA-seq ORA/GSEA resources, the G100 helper wraps the approved GO and
-Reactome preparation command and fails early when frozen source files are
-missing:
-
-```bash
-MODE=dry-run bash tests/prepare_g100_beas_feature_sets.sh "$ACCOUNT"
-MODE=check bash tests/prepare_g100_beas_feature_sets.sh "$ACCOUNT"
-MODE=run bash tests/prepare_g100_beas_feature_sets.sh "$ACCOUNT"
-```
-
-The helper expects frozen source files under
-`/g100_work/$ACCOUNT/aspis_resources/source` by default. Override paths with
-`ASPIS_RESOURCE_SOURCE_DIR`, `ASPIS_RESOURCE_ROOT`, `ASPIS_RESOURCE_GTF`,
-`ASPIS_GO_GAF`, `ASPIS_GO_OBO`, `ASPIS_REACTOME`, and optional
-`ASPIS_OPEN_GMT` when needed. Inspect the generated `unmapped_features.tsv`,
-`resource_summary.tsv`, and `aspis_feature_sets.yaml` before copying paths into
-the real BEAS config.
-
-The BEAS full config already enables the GRCh38 BSgenome object needed for
-isoform-switch NT/AA sequence extraction. The default open-resource decision is
-recorded in `config/aspis_open_resource_sources.example.yaml`: prepare GO
-GAF/OBO and Reactome for RNA-seq enrichment, add only reviewed open/user-owned
-GMTs when needed, and configure miRNA targets only from reviewed open or
-project-owned local exports.
-
-For BEAS smallRNA target enrichment resources, put the frozen reviewed target
-export under `/g100_work/$ACCOUNT/aspis_resources/source` or point the helper at
-the export explicitly:
-
-```bash
-export ASPIS_MIRNA_TARGET_INPUT=/g100_work/$ACCOUNT/aspis_resources/source/project_reviewed_mirna_targets.tsv
-export ASPIS_MIRNA_TARGET_DATABASE=project_reviewed_targets
-export ASPIS_MIRNA_TARGET_EVIDENCE_TYPE=user_provided
-export ASPIS_MIRNA_TARGET_VERSION=manual_release_label
-MODE=dry-run bash tests/prepare_g100_smallrna_targets.sh "$ACCOUNT"
-
-MODE=check bash tests/prepare_g100_smallrna_targets.sh "$ACCOUNT"
-MODE=run bash tests/prepare_g100_smallrna_targets.sh "$ACCOUNT"
-```
-
-ORA/GSEA and miRNA target enrichment remain
-disabled until the prepared feature-set and target TSVs exist and their paths
-are pasted into the config.
-
-Then rerun:
-
-```bash
-MODE=dry-run bash tests/run_g100_full_project.sh "$ACCOUNT" config/aspis_g100_beas_full.yaml
-MODE=run bash tests/run_g100_full_project.sh "$ACCOUNT" config/aspis_g100_beas_full.yaml
-```

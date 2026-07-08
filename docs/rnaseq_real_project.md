@@ -246,8 +246,8 @@ Optional columns are:
 source, collection, description
 ```
 
-Use this local contract for GO, KEGG, Reactome, or custom pathway exports when
-avoiding network/database access on G100.
+Use this local contract for GO, Reactome, or custom pathway exports when
+avoiding network/database access during workflow execution.
 
 Minimal examples are provided under:
 
@@ -268,37 +268,45 @@ docs/feature_set_resources.md
 config/aspis_feature_set_resources.example.yaml
 ```
 
-## G100 Run
+## SLURM Run
 
 Start with a dry-run:
 
-The G100 helper first runs a login-node preflight against the project
-config and intake sheet. It checks local FASTQ/reference paths, assay
-labels, path-safe IDs, configured design columns, differential replicate
-counts, aligner/index settings, and optional report feature-set files
-before submitting Snakemake jobs. The default report is written to
-`logs/preflight/<config-file>.rnaseq.tsv`; override it with
-`PREFLIGHT_REPORT=/path/to/report.tsv` when needed. Set `PREFLIGHT=0` only
-when you need to debug Snakemake itself despite a known preflight warning.
-The helper also writes an execution report to
-`logs/execution/<config-file>.execution.tsv`; set
-`EXECUTION_REPORT=/path/to/report.tsv` to choose another location.
+```bash
+snakemake results/rnaseq_<project>/index.html \
+  --workflow-profile profiles/slurm \
+  --configfile config/aspis_rnaseq_<project>.yaml \
+  --rerun-incomplete \
+  --dry-run \
+  --default-resources \
+    slurm_account=<SLURM_ACCOUNT> \
+    slurm_partition=<SLURM_PARTITION> \
+    runtime=60 \
+    mem_mb=4000 \
+    disk_mb=10000
+```
 
-`<SLURM_ACCOUNT>` is the account assigned to the user submitting the job. You
-can also set it once instead of passing it positionally:
+Run only after the DAG and resource requests look correct:
+
+```bash
+snakemake results/rnaseq_<project>/index.html \
+  --workflow-profile profiles/slurm \
+  --configfile config/aspis_rnaseq_<project>.yaml \
+  --rerun-incomplete \
+  --default-resources \
+    slurm_account=<SLURM_ACCOUNT> \
+    slurm_partition=<SLURM_PARTITION> \
+    runtime=60 \
+    mem_mb=4000 \
+    disk_mb=10000
+```
+
+Alternatively, set the account and partition through environment variables or
+the project config:
 
 ```bash
 export SLURM_ACCOUNT=<SLURM_ACCOUNT>
-export SLURM_PARTITION="${SLURM_PARTITION:-g100_usr_prod}"
-export SLURM_DOWNLOAD_PARTITION="${SLURM_DOWNLOAD_PARTITION:-g100_all_serial}"
-```
-
-```bash
-conda activate aspis-smk9
-cd ~/aspis
-MODE=dry-run bash tests/run_g100_rnaseq_project.sh \
-  <SLURM_ACCOUNT> \
-  config/aspis_rnaseq_<project>.yaml
+export SLURM_PARTITION=<SLURM_PARTITION>
 ```
 
 The first dry-run of a new project may stop at materialization and
@@ -313,25 +321,23 @@ or partial run has completed enough upstream outputs; it summarizes the
 design, configured biological references, quantification layers, and
 differential/report manifests without duplicating large data files.
 
-Run only after the DAG and resource requests look correct:
-
-```bash
-MODE=run bash tests/run_g100_rnaseq_project.sh \
-  <SLURM_ACCOUNT> \
-  config/aspis_rnaseq_<project>.yaml
-```
-
 To run or resume a specific output, set `TARGET`:
 
 ```bash
-TARGET=results/rnaseq_<project>/branches/rnaseq/<PROJECT>/differential/reports/report_index.done \
-MODE=run bash tests/run_g100_rnaseq_project.sh \
-  <SLURM_ACCOUNT> \
-  config/aspis_rnaseq_<project>.yaml
+snakemake results/rnaseq_<project>/branches/rnaseq/<PROJECT>/differential/reports/report_index.done \
+  --workflow-profile profiles/slurm \
+  --configfile config/aspis_rnaseq_<project>.yaml \
+  --rerun-incomplete \
+  --default-resources \
+    slurm_account=<SLURM_ACCOUNT> \
+    slurm_partition=<SLURM_PARTITION> \
+    runtime=60 \
+    mem_mb=4000 \
+    disk_mb=10000
 ```
 
-Use `FORCE_MODE=all` only when you intentionally want to rebuild every planned
-output. The default `FORCE_MODE=none` is safer for expensive G100 runs.
+Use targeted reruns where possible. Avoid broad `--forceall` on expensive
+projects unless a full recomputation is intentional.
 
 ## Key Outputs
 
@@ -371,23 +377,3 @@ Important intermediate manifests are:
 <branch_dir>/rnaseq/<PROJECT>/differential/gene_deseq2/deseq2_manifest.tsv
 <branch_dir>/rnaseq/<PROJECT>/differential/transcript_deseq2/deseq2_manifest.tsv
 ```
-
-## Legacy Comparison
-
-When legacy results exist for the same samples, compare tables before comparing
-HTML report layout:
-
-```bash
-python3 workflow/scripts/compare_aspis_tables.py \
-  --expected legacy/gene_counts.tsv \
-  --observed <branch_dir>/rnaseq/<PROJECT>/quantification/featurecounts/gene_counts.tsv \
-  --key-columns Geneid \
-  --ignore-columns Chr,Start,End,Strand,Length \
-  --summary <branch_dir>/rnaseq/<PROJECT>/legacy_compare/gene_counts.summary.tsv \
-  --details <branch_dir>/rnaseq/<PROJECT>/legacy_compare/gene_counts.details.tsv
-```
-
-Repeat for transcript counts, gene DESeq2 results, transcript DESeq2 results,
-isoform-switch outputs when enabled, enrichment tables, and report asset
-manifests. Differences in exact row IDs or count totals should be resolved
-before plot aesthetics are tuned.

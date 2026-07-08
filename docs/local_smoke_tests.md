@@ -1,7 +1,7 @@
 # Local Smoke Tests
 
 Run local checks from the repository root inside the `aspis-smk9` environment.
-These tests use tiny fixtures under `tests/` and do not require G100.
+These tests use tiny fixtures under `tests/` and do not require cluster access.
 
 ```bash
 conda activate aspis-smk9
@@ -51,12 +51,9 @@ quantification, smallRNA scaffold, and differential output contracts, exercises
 the ready isoform-switch runner handoff with a tiny mock R contrast script, then
 validates the RNA-seq report plan, plot, enrichment, summary, feature-set result,
 and index schemas plus the smallRNA target-enrichment, target feature-set, and
-report contracts emitted by the smoke fixtures.
-It is a local confidence gate only; it does not replace deliberate G100 SLURM
-smoke runs after local contracts are stable. Use `tests/run_g100_smoke.sh` for
-the RNA-seq fixture contract, `tests/run_g100_deseq2_smoke.sh` for the
-gene/transcript DESeq2/report layer, and `tests/run_g100_smallrna_smoke.sh` as
-the default dry-run contract gate for the smallRNA miRNA/report layer.
+report contracts emitted by the smoke fixtures. It is a local confidence gate;
+site-specific SLURM validation should be configured through `profiles/slurm/`
+and project-specific resource defaults.
 
 To exercise only the isoform-switch runner handoff:
 

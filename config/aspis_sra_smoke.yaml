@@ -65,8 +65,8 @@ rnaseq_alignment:
   extra_args: ""
 
 execution:
-  default_partition: g100_usr_prod
-  download_partition: g100_all_serial
+  default_partition: ""
+  download_partition: ""
 
 environment:
   required_tools:

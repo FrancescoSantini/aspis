@@ -263,10 +263,9 @@ Detailed documentation lives in `docs/`:
 - `docs/rnaseq_real_project.md`: RNA-seq project setup.
 - `docs/smallrna_real_project.md`: smallRNA project setup.
 - `docs/optional_tool_environments.md`: optional DTU/splicing tools.
-- `docs/real_data_readiness.md`: readiness checks before large runs.
 
-Site-specific launcher scripts and examples are kept under `tests/` and
-`docs/`. Treat them as examples to adapt, not as universal commands.
+Cluster execution should be adapted through the project config, environment,
+Snakemake CLI defaults, or `profiles/slurm/`.
 
 ## Reproducibility Notes
 
