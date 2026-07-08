@@ -1,6 +1,7 @@
 # ASPIS
 
-ASPIS is a Snakemake 9 workflow for reproducible RNA-seq, smallRNA/miRNA-seq,
+ASPIS (Assay-aware Sequencing Pipeline for Integrative Studies) is a 
+Snakemake 9 workflow for reproducible RNA-seq, smallRNA/miRNA-seq,
 and integrated multi-assay sequencing projects. It materializes sequencing
 libraries into a canonical project manifest, routes libraries through
 assay-specific branches, and produces both human-readable reports and
