@@ -1023,6 +1023,34 @@ def display_transcript(transcript_id: str, gene_id: str, gene_name: str) -> str:
     return transcript_id or gene_label
 
 
+def short_svg_label(value: str, max_chars: int) -> str:
+    value = (value or "").strip()
+    if len(value) <= max_chars:
+        return value
+    return value[: max_chars - 3] + "..."
+
+
+def reference_gene_displays(models: list[TranscriptModel]) -> list[str]:
+    displays: list[str] = []
+    seen: set[str] = set()
+    for model in models:
+        if not model.gene_id or looks_like_stringtie_id(model.gene_id):
+            continue
+        label = display_gene(model.gene_id, model.gene_name)
+        if label and label not in seen:
+            seen.add(label)
+            displays.append(label)
+    return displays
+
+
+def reference_transcript_display(isoform_id: str, model: Optional[TranscriptModel]) -> str:
+    if model is None or not model.gene_id or looks_like_stringtie_id(model.gene_id):
+        return ""
+    if not model.gene_name or model.gene_name == model.gene_id:
+        return ""
+    return display_transcript(isoform_id, model.gene_id, model.gene_name)
+
+
 def fallback_assembly_evidence(gene_id: str, transcript_id: str, discovery_class: str) -> tuple[str, str, str, str]:
     is_stringtie = "yes" if looks_like_stringtie_id(gene_id) or looks_like_stringtie_id(transcript_id) else "no"
     if discovery_class in {"known_transcript", "reference_contained_or_containing", "unclassified_reference_compatible"}:
@@ -2627,10 +2655,10 @@ def render_event_svg(
     isoforms = [row["_isoform_id"] for row in gene_rows]
     isoforms = list(dict.fromkeys(isoforms))
     relevant_models = [models[isoform] for isoform in isoforms if isoform in models and models[isoform].exons]
-    width = 1180
-    row_height = 82
-    margin_left = 210
-    margin_right = 260
+    width = 1400
+    row_height = 94
+    margin_left = 430
+    margin_right = 270
     top = 72
     height = top + max(1, len(isoforms)) * row_height + 70
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -2638,6 +2666,11 @@ def render_event_svg(
         event.get("gene_id", ""),
         event.get("gene_name", ""),
     )
+    reference_displays = reference_gene_displays(relevant_models)
+    if reference_displays and (not gene_heading or looks_like_stringtie_id(event.get("gene_id", ""))):
+        gene_heading = " / ".join(reference_displays[:3])
+        if len(reference_displays) > 3:
+            gene_heading += f" +{len(reference_displays) - 3} genes"
     transcript_display_by_isoform = {
         row.get("isoform_id", ""): clean_existing_display_label(row.get("transcript_display", ""))
         for row in event_context.get("_candidate_rows", [])  # type: ignore[union-attr]
@@ -2647,7 +2680,7 @@ def render_event_svg(
         '<svg xmlns="http://www.w3.org/2000/svg" '
         f'width="{width}" height="{height}" viewBox="0 0 {width} {height}">',
         '<rect width="100%" height="100%" fill="white"/>',
-        svg_text(24, 30, gene_heading, 18, "700"),
+        svg_text(24, 30, short_svg_label(gene_heading, 120), 18, "700"),
         svg_text(24, 52, f"{event['contrast_id']} | max abs dIF {event['max_abs_dIF']}", 12),
     ]
     if not relevant_models:
@@ -2677,9 +2710,13 @@ def render_event_svg(
         role = role_for_isoform(isoform_id, event["switch_in_isoform"], event["switch_out_isoform"])
         color = {"switch_in": "#1f77b4", "switch_out": "#d62728"}.get(role, "#57606a")
         model = models.get(isoform_id)
-        isoform_label = transcript_display_by_isoform.get(isoform_id, "") or isoform_id
+        isoform_label = (
+            reference_transcript_display(isoform_id, model)
+            or transcript_display_by_isoform.get(isoform_id, "")
+            or isoform_id
+        )
         label = f"{isoform_label} ({role}, dIF {d_if_by_isoform.get(isoform_id, '')})"
-        pieces.append(svg_text(24, y + 14, label, 12, "700" if role != "same_gene" else "400"))
+        pieces.append(svg_text(24, y + 14, short_svg_label(label, 72), 12, "700" if role != "same_gene" else "400"))
         pieces.append(f'<line x1="{margin_left}" x2="{width - margin_right}" y1="{y}" y2="{y}" stroke="#8c959f" stroke-width="1"/>')
         if model:
             for exon_start, exon_end in model.exons:

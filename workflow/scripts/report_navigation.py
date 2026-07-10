@@ -67,12 +67,16 @@ def report_map_script() -> str:
       }
       function updateActive() {
         let current = sections.length ? sections[0].id : '';
+        const pageBottom = window.scrollY + window.innerHeight >= document.documentElement.scrollHeight - 4;
         sections.forEach(section => {
           const rect = section.getBoundingClientRect();
           if (rect.top <= 140) {
             current = section.id;
           }
         });
+        if (pageBottom && sections.length) {
+          current = sections[sections.length - 1].id;
+        }
         if (window.location.hash) {
           const hashed = window.location.hash.slice(1);
           if (document.getElementById(hashed)) {

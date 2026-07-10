@@ -749,11 +749,11 @@ def enrichment_rows(
 
 def write_enrichment_svg(path: Path, rows: list[dict[str, str]], top_n: int) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    width = 980
-    row_height = 34
-    margin_left = 310
-    margin_right = 160
-    margin_top = 40
+    width = 1400
+    row_height = 36
+    margin_left = 680
+    margin_right = 200
+    margin_top = 52
     margin_bottom = 50
     selected = rows[:top_n]
     height = max(220, margin_top + margin_bottom + row_height * max(1, len(selected)))
@@ -781,10 +781,10 @@ def write_enrichment_svg(path: Path, rows: list[dict[str, str]], top_n: int) -> 
         '<rect width="100%" height="100%" fill="#ffffff"/>',
         '<text x="40" y="25" font-family="sans-serif" font-size="18" font-weight="700">Feature-set enrichment</text>',
         '<text x="40" y="40" font-family="sans-serif" font-size="11" fill="#57606a">Label format: description when available, otherwise collection:set ID. X axis is -log10(FDR); larger dots have larger overlap.</text>',
-        '<circle cx="670" cy="24" r="6" fill="#4d4d4d" fill-opacity="0.82"/><text x="682" y="28" font-family="sans-serif" font-size="11">significant</text>',
-        '<circle cx="760" cy="24" r="6" fill="#b2182b" fill-opacity="0.82"/><text x="772" y="28" font-family="sans-serif" font-size="11">up</text>',
-        '<circle cx="815" cy="24" r="6" fill="#2166ac" fill-opacity="0.82"/><text x="827" y="28" font-family="sans-serif" font-size="11">down</text>',
-        '<circle cx="885" cy="24" r="4" fill="#8c959f" fill-opacity="0.82"/><circle cx="905" cy="24" r="10" fill="#8c959f" fill-opacity="0.42"/><text x="920" y="28" font-family="sans-serif" font-size="11">overlap</text>',
+        '<circle cx="930" cy="24" r="6" fill="#4d4d4d" fill-opacity="0.82"/><text x="942" y="28" font-family="sans-serif" font-size="11">significant</text>',
+        '<circle cx="1045" cy="24" r="6" fill="#b2182b" fill-opacity="0.82"/><text x="1057" y="28" font-family="sans-serif" font-size="11">up</text>',
+        '<circle cx="1115" cy="24" r="6" fill="#2166ac" fill-opacity="0.82"/><text x="1127" y="28" font-family="sans-serif" font-size="11">down</text>',
+        '<circle cx="1205" cy="24" r="4" fill="#8c959f" fill-opacity="0.82"/><circle cx="1225" cy="24" r="10" fill="#8c959f" fill-opacity="0.42"/><text x="1240" y="28" font-family="sans-serif" font-size="11">overlap</text>',
         f'<line x1="{margin_left}" y1="{height - margin_bottom}" x2="{width - margin_right}" y2="{height - margin_bottom}" stroke="#777"/>',
     ]
     for index, (row, score) in enumerate(zip(selected, scores)):
@@ -796,8 +796,8 @@ def write_enrichment_svg(path: Path, rows: list[dict[str, str]], top_n: int) -> 
         identifier = f"{prefix}:{row['set_id']}" if prefix else row["set_id"]
         description = row.get("description", "")
         label = f"{description} ({identifier})" if description and description != row["set_id"] else identifier
-        if len(label) > 45:
-            label = label[:42] + "..."
+        if len(label) > 102:
+            label = label[:99] + "..."
         color = colors.get(row["collection"], "#4d4d4d")
         elements.append(
             f'<text x="40" y="{y + 4}" font-family="sans-serif" font-size="12">{html.escape(label)}</text>'
@@ -998,11 +998,11 @@ def feature_set_universe_rows(
 
 def write_ranked_enrichment_svg(path: Path, rows: list[dict[str, str]], top_n: int) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    width = 980
-    row_height = 34
-    margin_left = 330
-    margin_right = 150
-    margin_top = 42
+    width = 1400
+    row_height = 36
+    margin_left = 700
+    margin_right = 180
+    margin_top = 52
     margin_bottom = 46
     selected = rows[:top_n]
     height = max(220, margin_top + margin_bottom + row_height * max(1, len(selected)))
@@ -1014,9 +1014,9 @@ def write_ranked_enrichment_svg(path: Path, rows: list[dict[str, str]], top_n: i
         '<rect width="100%" height="100%" fill="#ffffff"/>',
         '<text x="40" y="25" font-family="sans-serif" font-size="18" font-weight="700">Ranked feature-set enrichment</text>',
         '<text x="40" y="40" font-family="sans-serif" font-size="11" fill="#57606a">Label format: description when available, otherwise collection:set ID. X axis is normalized enrichment score; dot size is leading-edge size.</text>',
-        '<circle cx="700" cy="24" r="6" fill="#b2182b" fill-opacity="0.82"/><text x="712" y="28" font-family="sans-serif" font-size="11">top enriched</text>',
-        '<circle cx="800" cy="24" r="6" fill="#2166ac" fill-opacity="0.82"/><text x="812" y="28" font-family="sans-serif" font-size="11">bottom enriched</text>',
-        '<circle cx="930" cy="24" r="4" fill="#8c959f" fill-opacity="0.82"/><circle cx="950" cy="24" r="10" fill="#8c959f" fill-opacity="0.42"/><text x="965" y="28" font-family="sans-serif" font-size="11">leading edge</text>',
+        '<circle cx="930" cy="24" r="6" fill="#b2182b" fill-opacity="0.82"/><text x="942" y="28" font-family="sans-serif" font-size="11">top enriched</text>',
+        '<circle cx="1055" cy="24" r="6" fill="#2166ac" fill-opacity="0.82"/><text x="1067" y="28" font-family="sans-serif" font-size="11">bottom enriched</text>',
+        '<circle cx="1230" cy="24" r="4" fill="#8c959f" fill-opacity="0.82"/><circle cx="1250" cy="24" r="10" fill="#8c959f" fill-opacity="0.42"/><text x="1265" y="28" font-family="sans-serif" font-size="11">leading edge</text>',
         f'<line x1="{margin_left}" y1="{height - margin_bottom}" x2="{width - margin_right}" y2="{height - margin_bottom}" stroke="#777"/>',
     ]
     if not selected:
@@ -1029,8 +1029,8 @@ def write_ranked_enrichment_svg(path: Path, rows: list[dict[str, str]], top_n: i
         identifier = f"{row.get('feature_set_collection') or row.get('feature_set_source')}:{row['set_id']}"
         description = row.get("description", "")
         label = f"{description} ({identifier})" if description and description != row["set_id"] else identifier
-        if len(label) > 48:
-            label = label[:45] + "..."
+        if len(label) > 108:
+            label = label[:105] + "..."
         color = "#b2182b" if score >= 0 else "#2166ac"
         radius = min(16, 4 + int(row.get("leading_edge_size", "1") or "1"))
         elements.append(f'<text x="40" y="{y + 4}" font-family="sans-serif" font-size="12">{html.escape(label)}</text>')

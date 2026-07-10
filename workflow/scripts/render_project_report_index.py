@@ -1301,7 +1301,6 @@ def project_report_map() -> list[dict[str, object]]:
                 report_map_item("Raw contrast summary", "#raw-contrast-summary"),
             ],
         ),
-        report_map_item("Status glossary", "#status-glossary"),
     ]
 
 
@@ -1455,8 +1454,6 @@ def render(args: argparse.Namespace) -> None:
   <h3 id="raw-contrast-summary">Raw Contrast Summary</h3>
   <p class="section-note">This lower table preserves the assay-specific summary rows used to build the matrix above.</p>
   {summary_table(base_dir, rnaseq_base, smallrna_base)}
-  <h2 id="status-glossary">Status Glossary</h2>
-  <p class="note"><strong>ok</strong> means the artifact exists or the source manifest says the layer completed. <strong>not present</strong> means an optional layer was not configured or did not apply. <strong>missing</strong> means an expected linked artifact is absent. Biological interpretation still requires reviewing the linked source tables and plots.</p>
   <script>
     const contrastInput = document.getElementById('contrastFilter');
     if (contrastInput) {{

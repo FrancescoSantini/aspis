@@ -540,13 +540,28 @@ def ranked_feature_set_rows(
     return rows
 
 
+def friendly_feature_set_label(row: dict[str, str]) -> str:
+    description = (row.get("description") or "").strip()
+    set_id = (row.get("set_id") or "").strip()
+    if description and description != set_id:
+        if description.startswith("Targets of ") and " from " in description:
+            return description.split(" from ", 1)[0]
+        return description
+    collection = (row.get("feature_set_collection") or "").strip()
+    source = (row.get("feature_set_source") or "").strip()
+    if collection in {"unspecified_mirna_targets", "mirna_targets"} and set_id:
+        return f"Targets of {set_id}"
+    prefix = collection or source
+    return f"{prefix}:{set_id}" if prefix else set_id
+
+
 def write_svg(path: Path, rows: list[dict[str, str]], top_n: int) -> None:
     selected = rows[:top_n]
-    width = 980
-    row_height = 34
+    width = 1320
+    row_height = 36
     height = max(220, 84 + row_height * max(1, len(selected)))
-    left = 320
-    plot_width = 500
+    left = 620
+    plot_width = 520
     max_score = max((-math.log10(max(parse_float(row.get("padj", "")) or 1.0, 1e-300)) for row in selected), default=1.0)
     max_score = max(max_score, 1.0)
     colors = {
@@ -569,9 +584,9 @@ def write_svg(path: Path, rows: list[dict[str, str]], top_n: int) -> None:
         y = 62 + index * row_height
         score = -math.log10(max(parse_float(row.get("padj", "")) or 1.0, 1e-300))
         x = left + (score / max_score) * plot_width
-        label = f"{row.get('feature_set_collection') or row.get('feature_set_source')}:{row.get('set_id')}"
-        if len(label) > 44:
-            label = label[:41] + "..."
+        label = friendly_feature_set_label(row)
+        if len(label) > 94:
+            label = label[:91] + "..."
         color = colors.get(row.get("collection", ""), "#4d4d4d")
         radius = min(16, 4 + int(row.get("overlap", "1") or "1") * 2)
         elements.append(f'<text x="32" y="{y + 4}" font-family="sans-serif" font-size="12">{html.escape(label)}</text>')
@@ -585,11 +600,11 @@ def write_svg(path: Path, rows: list[dict[str, str]], top_n: int) -> None:
 
 def write_ranked_svg(path: Path, rows: list[dict[str, str]], top_n: int) -> None:
     selected = rows[:top_n]
-    width = 980
-    row_height = 34
+    width = 1320
+    row_height = 36
     height = max(220, 84 + row_height * max(1, len(selected)))
-    left = 340
-    plot_width = 500
+    left = 620
+    plot_width = 520
     max_score = max((abs(parse_float(row.get("enrichment_score", "")) or 0.0) for row in selected), default=1.0)
     max_score = max(max_score, 1.0)
     elements = [
@@ -604,9 +619,9 @@ def write_ranked_svg(path: Path, rows: list[dict[str, str]], top_n: int) -> None
         y = 62 + index * row_height
         score = parse_float(row.get("enrichment_score", "")) or 0.0
         x = left + ((score / max_score) + 1.0) * plot_width / 2.0
-        label = f"{row.get('feature_set_collection') or row.get('feature_set_source')}:{row.get('set_id')}"
-        if len(label) > 46:
-            label = label[:43] + "..."
+        label = friendly_feature_set_label(row)
+        if len(label) > 94:
+            label = label[:91] + "..."
         color = "#b2182b" if score >= 0 else "#2166ac"
         radius = min(16, 4 + int(row.get("leading_edge_size", "1") or "1"))
         elements.append(f'<text x="32" y="{y + 4}" font-family="sans-serif" font-size="12">{html.escape(label)}</text>')

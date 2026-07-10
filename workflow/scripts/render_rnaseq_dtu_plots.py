@@ -161,6 +161,23 @@ def significant_count(rows: list[dict[str, str]], alpha: float) -> int:
     return count
 
 
+def identifier_variants(value: str) -> list[str]:
+    value = (value or "").strip()
+    variants = [value]
+    if "." in value:
+        variants.append(value.rsplit(".", 1)[0])
+    return [variant for variant in dict.fromkeys(variants) if variant]
+
+
+def gene_id_parts(gene_id: str) -> list[str]:
+    return [part.strip() for part in re.split(r"\s*\+\s*", gene_id or "") if part.strip()]
+
+
+def index_row(index: dict[str, dict[str, str]], key: str, row: dict[str, str]) -> None:
+    for variant in identifier_variants(key):
+        index.setdefault(variant, row)
+
+
 def load_gene_display_maps(metadata_path: str) -> tuple[dict[str, dict[str, str]], dict[str, dict[str, str]]]:
     if not metadata_path:
         return {}, {}
@@ -170,11 +187,31 @@ def load_gene_display_maps(metadata_path: str) -> tuple[dict[str, dict[str, str]
     for row in rows:
         gene_id = row.get("gene_id", "")
         transcript_id = row.get("transcript_id", "")
-        if gene_id and gene_id not in by_gene:
-            by_gene[gene_id] = row
+        if gene_id:
+            index_row(by_gene, gene_id, row)
         if transcript_id:
-            by_transcript[transcript_id] = row
+            index_row(by_transcript, transcript_id, row)
     return by_gene, by_transcript
+
+
+def display_for_gene_id(gene_id: str, by_gene: dict[str, dict[str, str]]) -> str:
+    parts = gene_id_parts(gene_id)
+    if not parts:
+        return ""
+    labels = []
+    for part in parts:
+        meta = next((by_gene.get(variant) for variant in identifier_variants(part) if by_gene.get(variant)), None)
+        if meta is None:
+            labels.append(part)
+            continue
+        label = meta.get("gene_display", "") or gene_display_label(
+            meta.get("gene_id", "") or part,
+            meta.get("gene_name", ""),
+        )
+        labels.append(label or part)
+    if len(parts) == 1 and labels[0] == parts[0]:
+        return ""
+    return " + ".join(labels)
 
 
 def hydrate_gene_display_rows(
@@ -183,9 +220,17 @@ def hydrate_gene_display_rows(
     by_transcript: dict[str, dict[str, str]],
 ) -> None:
     for row in rows:
-        meta = by_gene.get(row.get("gene_id", ""))
+        gene_id = row.get("gene_id", "")
+        gene_display = display_for_gene_id(gene_id, by_gene)
+        if gene_display and (not row.get("gene_display", "") or row.get("gene_display", "") == gene_id):
+            row["gene_display"] = gene_display
+        meta = next((by_gene.get(variant) for variant in identifier_variants(gene_id) if by_gene.get(variant)), None)
         if meta is None:
-            meta = by_transcript.get(row.get("feature_id", "") or row.get("event_id", ""))
+            feature_id = row.get("feature_id", "") or row.get("event_id", "")
+            meta = next(
+                (by_transcript.get(variant) for variant in identifier_variants(feature_id) if by_transcript.get(variant)),
+                None,
+            )
         if meta is None:
             continue
         if not row.get("gene_id", ""):
@@ -225,10 +270,6 @@ def gene_label(row: dict[str, str]) -> str:
     )
     if not label:
         return "unknown gene"
-    if "+" in label:
-        parts = [part for part in label.split("+") if part]
-        if len(parts) > 1:
-            return f"{parts[0]} +{len(parts) - 1} genes"
     return label
 
 
@@ -422,12 +463,12 @@ def render_top_genes_usage_svg(
     if not selected_rows:
         return False
 
-    width = 1320
+    width = 1400
     row_h = 42
     gene_h = 28
     content_h = sum(gene_h if kind == "gene" else row_h for kind, _item in grouped)
     height = max(300, 142 + content_h)
-    left, right, top = 390, 300, 78
+    left, right, top = 470, 300, 78
     bar_w = width - left - right
     parts = [svg_header(width, height)]
     parts.append('<rect width="100%" height="100%" fill="white"/>\n')
@@ -441,14 +482,14 @@ def render_top_genes_usage_svg(
     y = top
     for kind, item in grouped:
         if kind == "gene":
-            label = truncate_label(str(item), 55)
+            label = truncate_label(str(item), 72)
             parts.append(f'<line class="rule" x1="24" y1="{y - 7}" x2="{width - 24}" y2="{y - 7}"/>\n')
             parts.append(f'<text class="gene" x="24" y="{y + 10}" font-size="12">{html.escape(label)}</text>\n')
             y += gene_h
             continue
         row = item
         assert isinstance(row, dict)
-        feature = truncate_label(row.get("feature_id", ""), 46)
+        feature = truncate_label(row.get("feature_id", ""), 58)
         control = min(1.0, max(0.0, safe_float(row.get("mean_usage_control", "")) or 0.0))
         test = min(1.0, max(0.0, safe_float(row.get("mean_usage_test", "")) or 0.0))
         parts.append(f'<text x="{left - 12}" y="{y + 18}" text-anchor="end" font-size="12">{html.escape(feature)}</text>\n')
@@ -532,14 +573,14 @@ def render_signed_effect_svg(
 
     max_abs = value_limit or max(abs(safe_float(row.get(value_column, "")) or 0.0) for row in selected_rows)
     max_abs = max(1.0, math.ceil(max_abs * 2) / 2)
-    width = 1320
+    width = 1400
     row_h = 42
     legend_lines = [subtitle]
     legend = method_legend(method)
     if legend:
         legend_lines.append(legend)
     height = max(260, 130 + (len(selected_rows) * row_h) + ((len(legend_lines) - 1) * 18))
-    left, right, top = 390, 300, 78
+    left, right, top = 470, 300, 78
     bar_w = width - left - right
     half_w = bar_w / 2
     center = left + half_w
@@ -564,7 +605,7 @@ def render_signed_effect_svg(
         label = dexseq_exon_label(row) if method_upper == "DEXSEQEXON" else event_label(row, method)
         if not filter_gene and method_upper != "RMATS":
             label = f"{gene_label(row)} {label}"
-        label = truncate_label(label, 48)
+        label = truncate_label(label, 66)
         padj = row.get("padj", "")
         padj_text = f"; padj {format_number(padj)}" if padj else ""
         parts.append(f'<text x="{left - 12}" y="{y + 18}" text-anchor="end" font-size="12">{html.escape(label)}</text>\n')
@@ -657,7 +698,7 @@ def render_top_genes_signed_effect_svg(
 
     max_abs = value_limit or max(abs(safe_float(row.get(value_column, "")) or 0.0) for row in selected_rows)
     max_abs = max(1.0, math.ceil(max_abs * 2) / 2)
-    width = 1320
+    width = 1400
     row_h = 38
     gene_h = 28
     legend_lines = [subtitle]
@@ -666,7 +707,7 @@ def render_top_genes_signed_effect_svg(
         legend_lines.append(legend)
     content_h = sum(gene_h if kind == "gene" else row_h for kind, _item in grouped)
     height = max(300, 142 + content_h + ((len(legend_lines) - 1) * 18))
-    left, right, top = 390, 300, 88 + ((len(legend_lines) - 1) * 18)
+    left, right, top = 470, 300, 88 + ((len(legend_lines) - 1) * 18)
     bar_w = width - left - right
     half_w = bar_w / 2
     center = left + half_w
@@ -685,7 +726,7 @@ def render_top_genes_signed_effect_svg(
     y = top
     for kind, item in grouped:
         if kind == "gene":
-            label = truncate_label(str(item), 55)
+            label = truncate_label(str(item), 72)
             parts.append(f'<line class="rule" x1="24" y1="{y - 7}" x2="{width - 24}" y2="{y - 7}"/>\n')
             parts.append(f'<text class="gene" x="24" y="{y + 10}" font-size="12">{html.escape(label)}</text>\n')
             y += gene_h
@@ -696,7 +737,7 @@ def render_top_genes_signed_effect_svg(
         bar_x = center if effect >= 0 else center + (effect / max_abs) * half_w
         bar_width = abs(effect / max_abs) * half_w
         css_class = "bar2" if effect >= 0 else "bar1"
-        label = truncate_label(feature_only_label(row, method), 46)
+        label = truncate_label(feature_only_label(row, method), 58)
         padj = row.get("padj", "")
         padj_text = f"; padj {format_number(padj)}" if padj else ""
         parts.append(f'<text x="{left - 12}" y="{y + 18}" text-anchor="end" font-size="12">{html.escape(label)}</text>\n')

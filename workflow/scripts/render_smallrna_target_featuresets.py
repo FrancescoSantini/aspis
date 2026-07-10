@@ -457,13 +457,28 @@ def enrichment_rows(
     return rows
 
 
+def friendly_feature_set_label(row: dict[str, str]) -> str:
+    description = (row.get("description") or "").strip()
+    set_id = (row.get("set_id") or "").strip()
+    if description and description != set_id:
+        if description.startswith("Targets of ") and " from " in description:
+            return description.split(" from ", 1)[0]
+        return description
+    collection = (row.get("feature_set_collection") or "").strip()
+    source = (row.get("feature_set_source") or "").strip()
+    if collection in {"unspecified_mirna_targets", "mirna_targets"} and set_id:
+        return f"Targets of {set_id}"
+    prefix = collection or source
+    return f"{prefix}:{set_id}" if prefix else set_id
+
+
 def write_enrichment_svg(path: Path, rows: list[dict[str, str]], top_n: int) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    width = 980
-    row_height = 34
-    margin_left = 320
-    margin_right = 160
-    margin_top = 40
+    width = 1320
+    row_height = 36
+    margin_left = 650
+    margin_right = 190
+    margin_top = 52
     margin_bottom = 50
     selected = rows[:top_n]
     height = max(220, margin_top + margin_bottom + row_height * max(1, len(selected)))
@@ -487,10 +502,10 @@ def write_enrichment_svg(path: Path, rows: list[dict[str, str]], top_n: int) -> 
         '<rect width="100%" height="100%" fill="#ffffff"/>',
         '<text x="40" y="25" font-family="sans-serif" font-size="18" font-weight="700">Target feature-set enrichment</text>',
         '<text x="40" y="40" font-family="sans-serif" font-size="11" fill="#57606a">X axis is -log10(FDR); dot size is target overlap. Collection: all=all target genes, up/down=targets from direction-specific miRNAs.</text>',
-        '<circle cx="620" cy="24" r="6" fill="#4d4d4d" fill-opacity="0.82"/><text x="632" y="28" font-family="sans-serif" font-size="11">all</text>',
-        '<circle cx="670" cy="24" r="6" fill="#b2182b" fill-opacity="0.82"/><text x="682" y="28" font-family="sans-serif" font-size="11">up</text>',
-        '<circle cx="720" cy="24" r="6" fill="#2166ac" fill-opacity="0.82"/><text x="732" y="28" font-family="sans-serif" font-size="11">down</text>',
-        '<circle cx="790" cy="24" r="4" fill="#8c959f" fill-opacity="0.82"/><circle cx="810" cy="24" r="10" fill="#8c959f" fill-opacity="0.42"/><text x="825" y="28" font-family="sans-serif" font-size="11">overlap</text>',
+        '<circle cx="900" cy="24" r="6" fill="#4d4d4d" fill-opacity="0.82"/><text x="912" y="28" font-family="sans-serif" font-size="11">all</text>',
+        '<circle cx="960" cy="24" r="6" fill="#b2182b" fill-opacity="0.82"/><text x="972" y="28" font-family="sans-serif" font-size="11">up</text>',
+        '<circle cx="1020" cy="24" r="6" fill="#2166ac" fill-opacity="0.82"/><text x="1032" y="28" font-family="sans-serif" font-size="11">down</text>',
+        '<circle cx="1110" cy="24" r="4" fill="#8c959f" fill-opacity="0.82"/><circle cx="1130" cy="24" r="10" fill="#8c959f" fill-opacity="0.42"/><text x="1145" y="28" font-family="sans-serif" font-size="11">overlap</text>',
         f'<line x1="{margin_left}" y1="{height - margin_bottom}" x2="{width - margin_right}" y2="{height - margin_bottom}" stroke="#777"/>',
     ]
     for index, (row, score) in enumerate(zip(selected, scores)):
@@ -498,12 +513,9 @@ def write_enrichment_svg(path: Path, rows: list[dict[str, str]], top_n: int) -> 
         x = margin_left + (score / max_score) * plot_width
         overlap = int(row.get("overlap", "1") or "1")
         radius = min(16, 4 + overlap * 2)
-        prefix = row.get("feature_set_collection") or row.get("feature_set_source", "")
-        identifier = f"{prefix}:{row['set_id']}" if prefix else row["set_id"]
-        description = row.get("description", "")
-        label = f"{description} ({identifier})" if description and description != row["set_id"] else identifier
-        if len(label) > 48:
-            label = label[:45] + "..."
+        label = friendly_feature_set_label(row)
+        if len(label) > 98:
+            label = label[:95] + "..."
         color = colors.get(row["collection"], "#4d4d4d")
         elements.append(f'<text x="40" y="{y + 4}" font-family="sans-serif" font-size="12">{html.escape(label)}</text>')
         elements.append(f'<line x1="{margin_left}" y1="{y}" x2="{width - margin_right}" y2="{y}" stroke="#eeeeee"/>')

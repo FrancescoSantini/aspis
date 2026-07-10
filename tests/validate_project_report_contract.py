@@ -308,7 +308,6 @@ def main() -> int:
             "Evidence Layers",
             "Run QC And Design",
             "Source Files And Audit Trail",
-            "Status Glossary",
         ]
         positions = [html.index(heading) for heading in headings]
         assert positions == sorted(positions)
@@ -343,10 +342,11 @@ def main() -> int:
         assert 'href="#raw-qc-design"' in html
         assert 'href="#raw-summary-manifests"' in html
         assert 'href="#raw-contrast-summary"' in html
-        assert 'href="#status-glossary"' in html
+        assert 'href="#status-glossary"' not in html
+        assert 'id="status-glossary"' not in html
         assert html.index('href="#layer-matched-mirna-mrna"') < html.index('href="#qc-and-design"')
         assert html.index('href="#qc-and-design"') < html.index('href="#raw-artifacts"')
-        assert html.index('href="#raw-artifacts"') < html.index('href="#status-glossary"')
+        assert html.index('href="#raw-artifacts"') < html.index('href="#raw-contrast-summary"')
         assert 'id="layer-rnaseq-de"' in html
         assert 'id="layer-dtu"' in html
         assert 'id="layer-matched-mirna-mrna"' in html
