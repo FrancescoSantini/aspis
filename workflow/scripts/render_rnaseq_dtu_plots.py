@@ -371,6 +371,38 @@ def append_wrapped_svg_text(
         )
 
 
+def compact_gene_label(label: str, max_chars: int) -> str:
+    label = (label or "").strip()
+    if not label:
+        return ""
+    parts = [part.strip() for part in re.split(r"\s+\+\s+", label) if part.strip()]
+    if len(parts) > 1:
+        symbol_parts = [re.sub(r"\s*\([^)]*\)", "", part).strip() or part for part in parts]
+        compact = " + ".join(symbol_parts)
+        if len(compact) <= max_chars:
+            return compact
+        if len(symbol_parts) > 3:
+            compact = f"{symbol_parts[0]} + {symbol_parts[1]} + {symbol_parts[2]} +{len(symbol_parts) - 3} genes"
+        return truncate_label(compact, max_chars)
+    return truncate_label(label, max_chars)
+
+
+def append_dexseq_exon_ranked_label(parts: list[str], x: float, y: float, row: dict[str, str]) -> None:
+    gene = compact_gene_label(gene_label(row), 58)
+    exon = dexseq_exon_label(row)
+    if gene and gene != "unknown gene":
+        parts.append(
+            f'<text x="{x}" y="{y + 9}" text-anchor="end" font-size="11">{html.escape(gene)}</text>\n'
+        )
+        parts.append(
+            f'<text x="{x}" y="{y + 24}" text-anchor="end" font-size="11">{html.escape(exon)}</text>\n'
+        )
+        return
+    parts.append(
+        f'<text x="{x}" y="{y + 17}" text-anchor="end" font-size="11">{html.escape(exon)}</text>\n'
+    )
+
+
 def event_label(row: dict[str, str], method: str) -> str:
     method_upper = method.upper()
     feature = cleaned_identifier(row.get("feature_id", "") or row.get("event_id", ""))
@@ -699,7 +731,7 @@ def render_signed_effect_svg(
         padj = row.get("padj", "")
         padj_text = f"; padj {format_number(padj)}" if padj else ""
         if method_upper == "DEXSEQEXON":
-            append_wrapped_svg_text(parts, left - 12, y + 12, label, 54, anchor="end", size=11)
+            append_dexseq_exon_ranked_label(parts, left - 12, y, row)
         else:
             label = truncate_label(label, 66)
             parts.append(f'<text x="{left - 12}" y="{y + 18}" text-anchor="end" font-size="12">{html.escape(label)}</text>\n')
@@ -822,7 +854,9 @@ def render_top_genes_signed_effect_svg(
         if kind == "gene":
             parts.append(f'<line class="rule" x1="24" y1="{y - 7}" x2="{width - 24}" y2="{y - 7}"/>\n')
             if method.upper() == "DEXSEQEXON":
-                append_wrapped_svg_text(parts, 24, y + 7, str(item), 82, size=11, weight="700")
+                parts.append(
+                    f'<text class="gene" x="24" y="{y + 10}" font-size="12">{html.escape(compact_gene_label(str(item), 86))}</text>\n'
+                )
             else:
                 label = truncate_label(str(item), 72)
                 parts.append(f'<text class="gene" x="24" y="{y + 10}" font-size="12">{html.escape(label)}</text>\n')
