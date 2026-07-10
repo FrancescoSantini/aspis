@@ -1119,7 +1119,7 @@ def evidence_layer_sections(
             layer_panel(
                 "RNA-seq differential expression",
                 "layer-rnaseq-de",
-                "Start here for gene- and transcript-level DESeq2 status, summary pages, and source tables.",
+                "Gene- and transcript-level DESeq2 results by contrast, including summary plots, result tables, and source manifests.",
                 [
                     link(rnaseq_base / "differential/reports/index.html", "RNA-seq differential detailed report", base_dir),
                     table_link(rnaseq_base / "differential/reports/summaries/summary_manifest.tsv", "summary manifest", base_dir),
@@ -1132,7 +1132,7 @@ def evidence_layer_sections(
             layer_panel(
                 "GO/Reactome enrichment",
                 "layer-enrichment",
-                "Use this layer to check which feature-set resources were loaded and which ORA/ranked outputs were produced.",
+                "Over-representation and ranked enrichment results across the configured GO and Reactome feature-set resources.",
                 [
                     link(rnaseq_base / "differential/reports/enrichment/index.html", "GO/Reactome detailed report", base_dir),
                     table_link(rnaseq_base / "differential/reports/enrichment/enrichment_manifest.tsv", "enrichment manifest", base_dir),
@@ -1143,7 +1143,7 @@ def evidence_layer_sections(
             layer_panel(
                 "Independent DTU/splicing method results",
                 "layer-dtu",
-                "Use this layer for native method-level outputs. DRIMSeq, DEXSeq, DEXSeqExon, SUPPA2, and rMATS each test transcript/exon/event usage or splice-event changes directly from counts, expression, or alignments.",
+                "Independent transcript-usage, exon-bin, and splice-event tests from DRIMSeq, DEXSeq, DEXSeqExon, SUPPA2, and rMATS.",
                 [
                     table_link(rnaseq_base / "differential/dtu/dtu_method_manifest.tsv", "method manifest", base_dir),
                     table_link(rnaseq_base / "differential/dtu/plots/dtu_plot_manifest.tsv", "plot manifest", base_dir),
@@ -1155,7 +1155,7 @@ def evidence_layer_sections(
             layer_panel(
                 "Isoform-switch candidates with DTU/splicing support",
                 "layer-isoform-switch",
-                "Use this layer for IsoformSwitchAnalyzeR switch candidates, sequence/consequence assets, and deterministic joins to independent DTU/splicing method evidence for the same contrast and gene.",
+                "IsoformSwitchAnalyzeR candidates with sequence and consequence assets, joined to independent DTU/splicing evidence for the same contrast and gene.",
                 [
                     link(rnaseq_base / "differential/isoform_switch/report/index.html", "isoform-switch detailed report", base_dir),
                     table_link(rnaseq_base / "differential/isoform_switch/report/switch_candidates.tsv", "switch candidates", base_dir),
@@ -1172,7 +1172,7 @@ def evidence_layer_sections(
             layer_panel(
                 "smallRNA differential expression",
                 "layer-smallrna-de",
-                "Use this layer for miRNA differential-expression summaries and source tables.",
+                "miRNA differential-expression results by contrast, including summary plots, result tables, and source manifests.",
                 [
                     link(smallrna_base / "smallrna/differential/reports/index.html", "smallRNA differential detailed report", base_dir),
                     table_link(smallrna_base / "smallrna/differential/reports/summaries/summary_manifest.tsv", "summary manifest", base_dir),
@@ -1184,7 +1184,7 @@ def evidence_layer_sections(
             layer_panel(
                 "miRNA targets and target feature sets",
                 "layer-mirna-targets",
-                "Use this layer for target-gene enrichment and target-gene feature sets. miRNA identifier feature sets are optional and separate.",
+                "Target-gene and target-feature-set enrichment derived from differential miRNAs. Direct miRNA-identifier feature sets remain a separate optional input.",
                 [
                     link(smallrna_base / "smallrna/differential/reports/targets/index.html", "target and integration detailed report", base_dir),
                     table_link(smallrna_base / "smallrna/differential/target_enrichment/target_manifest.tsv", "target enrichment manifest", base_dir),
@@ -1204,7 +1204,7 @@ def evidence_layer_sections(
             layer_panel(
                 "Matched miRNA-mRNA evidence",
                 "layer-matched-mirna-mrna",
-                "Use this layer for paired assay evidence: sample matching, inverse miRNA-target pairs, and inverse target feature sets.",
+                "Paired-assay evidence combining sample matching, inverse miRNA-target relationships, and inverse target-feature-set results.",
                 [
                     table_link(
                         smallrna_base / "smallrna/differential/mirna_mrna_integration/mirna_mrna_manifest.tsv",
@@ -1225,35 +1225,26 @@ def evidence_layer_sections(
     )
 
 
-def raw_artifact_sections(base_dir: Path, rnaseq_base: Path, smallrna_base: Path) -> str:
-    return "\n".join(
-        [
-            layer_panel(
-                "Input, diagnostic, and provenance files",
-                "project-audit-files",
-                "Machine-readable inputs and diagnostics used to audit sample metadata, FASTQ inspection, strandedness, warnings, and branch provenance.",
-                [
-                    table_link(rnaseq_base / "samples.tsv", "RNA-seq samples", base_dir),
-                    table_link(rnaseq_base / "design.tsv", "RNA-seq design", base_dir),
-                    table_link(rnaseq_base / "fastq_inspection.tsv", "RNA-seq FASTQ inspection", base_dir),
-                    table_link(rnaseq_base / "alignment/strandedness/strandedness_report.tsv", "RNA-seq strandedness", base_dir),
-                    link(rnaseq_base / "biological_warnings/warnings.html", "RNA-seq warnings", base_dir, expected=False),
-                    table_link(rnaseq_base / "provenance/provenance_manifest.tsv", "RNA-seq provenance", base_dir),
-                    table_link(smallrna_base / "samples.tsv", "smallRNA samples", base_dir),
-                    table_link(smallrna_base / "design.tsv", "smallRNA design", base_dir),
-                    table_link(smallrna_base / "fastq_inspection.tsv", "smallRNA FASTQ inspection", base_dir),
-                    link(smallrna_base / "smallrna/length_qc/length_distribution.svg", "smallRNA length distribution", base_dir),
-                    link(smallrna_base / "smallrna/biological_warnings/warnings.html", "smallRNA warnings", base_dir, expected=False),
-                    table_link(smallrna_base / "provenance/provenance_manifest.tsv", "smallRNA provenance", base_dir),
-                ],
-            ),
-        ]
-    )
+def project_audit_links(base_dir: Path, rnaseq_base: Path, smallrna_base: Path) -> str:
+    items = [
+        table_link(rnaseq_base / "samples.tsv", "RNA-seq samples", base_dir),
+        table_link(rnaseq_base / "design.tsv", "RNA-seq design", base_dir),
+        table_link(rnaseq_base / "fastq_inspection.tsv", "RNA-seq FASTQ inspection", base_dir),
+        table_link(rnaseq_base / "alignment/strandedness/strandedness_report.tsv", "RNA-seq strandedness", base_dir),
+        link(rnaseq_base / "biological_warnings/warnings.html", "RNA-seq warnings", base_dir, expected=False),
+        table_link(rnaseq_base / "provenance/provenance_manifest.tsv", "RNA-seq provenance", base_dir),
+        table_link(smallrna_base / "samples.tsv", "smallRNA samples", base_dir),
+        table_link(smallrna_base / "design.tsv", "smallRNA design", base_dir),
+        table_link(smallrna_base / "fastq_inspection.tsv", "smallRNA FASTQ inspection", base_dir),
+        link(smallrna_base / "smallrna/length_qc/length_distribution.svg", "smallRNA length distribution", base_dir),
+        link(smallrna_base / "smallrna/biological_warnings/warnings.html", "smallRNA warnings", base_dir, expected=False),
+        table_link(smallrna_base / "provenance/provenance_manifest.tsv", "smallRNA provenance", base_dir),
+    ]
+    return '<div class="link-list">' + "".join(items) + "</div>"
 
 
 def project_report_map() -> list[dict[str, object]]:
     return [
-        report_map_item("Run dashboard", Path("../../index.html")),
         report_map_item("Project overview", "#project-overview"),
         report_map_item("Contrast evidence matrix", "#contrast-matrix"),
         report_map_item("RNA-seq DE", "#layer-rnaseq-de"),
@@ -1263,21 +1254,7 @@ def project_report_map() -> list[dict[str, object]]:
         report_map_item("smallRNA DE", "#layer-smallrna-de"),
         report_map_item("miRNA targets", "#layer-mirna-targets"),
         report_map_item("Matched miRNA-mRNA", "#layer-matched-mirna-mrna"),
-        report_map_item(
-            "Project QC and design",
-            "#qc-and-design",
-            children=[
-                report_map_item("Sample and design summary", "#sample-design"),
-                report_map_item("QC stage status", "#qc-stage-status"),
-            ],
-        ),
-        report_map_item(
-            "Project provenance and audit",
-            "#project-audit",
-            children=[
-                report_map_item("Input and diagnostic files", "#project-audit-files"),
-            ],
-        ),
+        report_map_item("Project QC, design, and provenance", "#project-validation"),
     ]
 
 
@@ -1385,12 +1362,14 @@ def render(args: argparse.Namespace) -> None:
     .review-order {{ background: #f6f8fa; border: 1px solid #d0d7de; border-radius: 6px; padding: 0.75rem 1rem 0.75rem 2.2rem; }}
     .review-order li {{ margin: 0.35rem 0; }}
     .report-tree-grid section h2 {{ border-bottom: 0; margin-top: 0.9rem; padding-bottom: 0; }}
+    .validation-block {{ border-top: 1px solid #d0d7de; margin-top: 1rem; padding-top: 1rem; }}
+    .validation-label {{ font-size: 1rem; font-weight: 700; margin: 0 0 0.65rem; }}
     {report_map_css()}
   </style>
 </head>
 <body>
   {sidebar}
-  <nav class="breadcrumbs"><a href="../../index.html">ASPIS run dashboard</a> / project / {html.escape(args.project)}</nav>
+  <nav class="breadcrumbs">ASPIS / <a href="../../index.html">Run</a> / Project / {html.escape(args.project)}</nav>
   <h1>{html.escape(args.project)} integrated ASPIS report</h1>
   <p class="note">This project page is the canonical entry point below the run dashboard. It joins assay-specific branches for the same biological project and keeps gene, transcript, miRNA, enrichment, DTU, isoform-switch, target, and integration evidence in one review path. Export: {technical_pdf_link}.</p>
   <div class="metrics">
@@ -1406,28 +1385,31 @@ def render(args: argparse.Namespace) -> None:
     {metric("assay-only contrasts", assay_only_contrast_count(rnaseq_summary, smallrna_summary))}
   </div>
   <h2 id="project-overview">Project Overview</h2>
-  <p class="section-note">This overview lists the evidence layers available for this project and gives compact status/count summaries. Use the contrast matrix below for contrast-level review, then open the self-contained evidence layers for plots, source tables, and method-specific pages.</p>
+  <p class="section-note">A compact inventory of the evidence available for this project. Each card reports layer-level status and counts and links to the corresponding section below.</p>
   <p class="note"><strong>Independent DTU/splicing method results</strong> are the native outputs of methods such as DRIMSeq, DEXSeq, DEXSeqExon, SUPPA2, and rMATS. <strong>Isoform-switch candidates with DTU/splicing support</strong> starts from IsoformSwitchAnalyzeR switch candidates and asks whether those same genes/contrasts also have supporting DTU or splicing evidence. The support layer is a deterministic evidence join, not another statistical test.</p>
   {project_evidence_map(base_dir, rnaseq_base, smallrna_base, rnaseq_summary, rnaseq_enrichment, rnaseq_dtu, rnaseq_dtu_plots, isoform_events, isoform_interpretation_summary, smallrna_summary, smallrna_targets, smallrna_target_feature_sets, mirna_feature_sets, mirna_integration, mirna_mrna_feature_sets)}
   <h2 id="contrast-matrix">Contrast Evidence Matrix</h2>
-  <p class="section-note">This matrix puts gene, transcript, DTU/splicing, and miRNA contrasts on the same row when assays share the same project and contrast labels. The cross-assay state marks integrated contrasts, RNA-seq-only contrasts, smallRNA-only contrasts, and shared contrasts where integration is not present.</p>
+  <p class="section-note">One row per contrast, aligning gene, transcript, DTU/splicing, enrichment, miRNA, and matched-assay evidence when project and contrast identifiers agree.</p>
   <div class="controls"><input id="contrastFilter" placeholder="Filter contrasts"></div>
   {contrast_matrix(base_dir, rnaseq_summary, smallrna_summary, rnaseq_enrichment, mirna_integration, rnaseq_dtu, rnaseq_dtu_plots)}
   <h2 id="evidence-layers">Evidence Layers</h2>
-  <p class="section-note">Each section below is one evidence layer. It keeps the layer purpose, primary entry links, plots, source tables, and deeper assay pages together. These sections are deterministic report navigation, not automated biological interpretation.</p>
+  <p class="section-note">Detailed outputs grouped by biological evidence type. Each layer keeps its report, plots, result tables, and source manifests together without adding automated biological interpretation.</p>
   <div class="layer-grid">
     {evidence_layer_sections(base_dir, rnaseq_base, smallrna_base, rnaseq_summary, rnaseq_enrichment, rnaseq_dtu_plots, isoform_events, gene_display_by_transcript, smallrna_summary, smallrna_targets, smallrna_target_feature_sets, mirna_integration, mirna_mrna_feature_sets)}
   </div>
-  <h2 id="qc-and-design">Project QC And Design</h2>
-  <p class="section-note">This section summarizes the project sample design and links the assay-specific QC stages needed before interpreting the evidence layers above.</p>
-  <h3 id="sample-design">Sample And Design Summary</h3>
-  {assay_sample_summary(rnaseq_base, smallrna_base)}
-  <h3 id="qc-stage-status">QC Stage Status</h3>
-  {workflow_status_matrix(base_dir, rnaseq_base, smallrna_base)}
-  <h2 id="project-audit">Project Provenance And Audit</h2>
-  <p class="section-note">This supporting section keeps machine-readable sample/design inputs, diagnostics, warning pages, and provenance manifests reachable without mixing them into the biological evidence layers.</p>
-  <div class="layer-grid">
-    {raw_artifact_sections(base_dir, rnaseq_base, smallrna_base)}
+  <h2 id="project-validation">Project QC, Design, And Provenance</h2>
+  <p class="section-note">Project-level validation context for the biological results above: assay composition, sample design, processing-stage QC, strandedness diagnostics, warnings, and reproducibility records.</p>
+  <div class="validation-block">
+    <p class="validation-label">Sample and assay summary</p>
+    {assay_sample_summary(rnaseq_base, smallrna_base)}
+  </div>
+  <div class="validation-block">
+    <p class="validation-label">QC stage status</p>
+    {workflow_status_matrix(base_dir, rnaseq_base, smallrna_base)}
+  </div>
+  <div class="validation-block">
+    <p class="validation-label">Diagnostic and provenance files</p>
+    {project_audit_links(base_dir, rnaseq_base, smallrna_base)}
   </div>
   <script>
     const contrastInput = document.getElementById('contrastFilter');
