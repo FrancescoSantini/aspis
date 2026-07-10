@@ -296,14 +296,20 @@ def layer_panel(
     )
 
 
-def html_cell_table(headers: list[str], rows: list[list[str]], empty_message: str) -> str:
+def html_cell_table(
+    headers: list[str],
+    rows: list[list[str]],
+    empty_message: str,
+    table_class: str = "",
+) -> str:
     if not rows:
         return f'<p class="status muted">{html.escape(empty_message)}</p>'
     header_html = "".join(f"<th>{html.escape(header)}</th>" for header in headers)
     row_html = []
     for row in rows:
         row_html.append("<tr>" + "".join(f"<td>{cell}</td>" for cell in row) + "</tr>")
-    return f"<table><thead><tr>{header_html}</tr></thead><tbody>{''.join(row_html)}</tbody></table>"
+    class_attr = f' class="{html.escape(table_class)}"' if table_class else ""
+    return f"<table{class_attr}><thead><tr>{header_html}</tr></thead><tbody>{''.join(row_html)}</tbody></table>"
 
 
 def link_group(row: dict[str, str], specs: list[tuple[str, str]], base_dir: Path, empty: str = "no direct link") -> str:
@@ -1071,6 +1077,7 @@ def evidence_layer_listing_tables(
             ["rank", "contrast", "gene", "class", "switch in/out", "event assets"],
             isoform_rows,
             "No isoform-switch event plots are available.",
+            table_class="isoform-switch-table",
         ),
         "smallrna_de": html_cell_table(
             ["contrast", "status", "features", "significant", "up", "down", "miRNA DE"],
@@ -1348,6 +1355,7 @@ def render(args: argparse.Namespace) -> None:
     .wide-panel {{ grid-column: 1 / -1; }}
     .wide-panel table {{ font-size: 0.86rem; }}
     .wide-panel td {{ overflow-wrap: anywhere; }}
+    .isoform-switch-table th:nth-child(4), .isoform-switch-table td:nth-child(4) {{ min-width: 165px; width: 14%; overflow-wrap: break-word; word-break: normal; }}
     .evidence-card h3, .layer-panel h3 {{ margin-top: 0; }}
     .mini-metrics {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 0.55rem; margin-top: 0.75rem; }}
     .mini-metric {{ background: #f6f8fa; border: 1px solid #d8dee4; border-radius: 6px; padding: 0.45rem 0.55rem; }}
