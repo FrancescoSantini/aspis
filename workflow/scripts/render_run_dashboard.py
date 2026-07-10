@@ -10,7 +10,7 @@ import os
 from collections import Counter
 from pathlib import Path
 
-from report_navigation import report_map_css, report_map_item, report_shell_close, report_shell_open
+from report_navigation import report_map_css, report_map_item, report_map_script, report_shell_close, report_shell_open
 
 
 REQUIRED_PLAN_COLUMNS = {"assay", "project", "status", "reason"}
@@ -935,6 +935,7 @@ def render(args: argparse.Namespace) -> None:
     }}
     ['dashboardSearch', 'dashboardAssay', 'dashboardStatus'].forEach(id => document.getElementById(id).addEventListener('input', applyDashboardFilters));
   </script>
+  {report_map_script()}
   {report_shell_close()}
 </body>
 </html>

@@ -36,14 +36,65 @@ def report_map_css() -> str:
     .report-map ul { list-style: none; margin: 0; padding-left: 0; }
     .report-map ul ul { border-left: 1px solid #d0d7de; margin: 0.35rem 0 0.45rem 0.45rem; padding-left: 0.75rem; }
     .report-map li { margin: 0.35rem 0; }
-    .report-map a { color: #0969da; text-decoration: none; }
-    .report-map a:hover { text-decoration: underline; }
+    .report-map a { border-radius: 4px; color: #0969da; display: block; padding: 0.15rem 0.35rem; text-decoration: none; }
+    .report-map a:hover { background: #f6f8fa; text-decoration: none; }
+    .report-map a.nav-active { background: #0969da; color: #fff; font-weight: 700; }
+    .report-map a.nav-active:hover { background: #0969da; color: #fff; }
     .report-map .nav-missing { color: #57606a; }
     .report-map .nav-current { color: #24292f; font-weight: 700; }
     @media (max-width: 1050px) {
       .report-shell { display: block; }
       .report-map { max-height: none; margin-bottom: 1rem; position: static; }
     }
+    """
+
+
+def report_map_script() -> str:
+    return """
+  <script>
+    (function () {
+      const links = Array.from(document.querySelectorAll('.report-map a[data-report-nav-target]'));
+      if (!links.length) {
+        return;
+      }
+      const sections = links
+        .map(link => document.getElementById(link.dataset.reportNavTarget))
+        .filter(Boolean);
+      function setActive(sectionId) {
+        links.forEach(link => {
+          link.classList.toggle('nav-active', link.dataset.reportNavTarget === sectionId);
+        });
+      }
+      function updateActive() {
+        let current = sections.length ? sections[0].id : '';
+        sections.forEach(section => {
+          const rect = section.getBoundingClientRect();
+          if (rect.top <= 140) {
+            current = section.id;
+          }
+        });
+        if (window.location.hash) {
+          const hashed = window.location.hash.slice(1);
+          if (document.getElementById(hashed)) {
+            const rect = document.getElementById(hashed).getBoundingClientRect();
+            if (rect.top >= -220 && rect.top <= window.innerHeight * 0.6) {
+              current = hashed;
+            }
+          }
+        }
+        if (current) {
+          setActive(current);
+        }
+      }
+      links.forEach(link => {
+        link.addEventListener('click', () => setActive(link.dataset.reportNavTarget));
+      });
+      window.addEventListener('scroll', updateActive, { passive: true });
+      window.addEventListener('resize', updateActive);
+      window.addEventListener('hashchange', updateActive);
+      updateActive();
+    }());
+  </script>
     """
 
 
@@ -86,7 +137,10 @@ def _render_item(item: ReportMapItem, base_dir: Path) -> str:
     planned = bool(item.get("planned", False))
     children = item.get("children") or []
     if href and (exists or planned or not filesystem_target):
-        label_html = f'<a href="{html.escape(href)}">{label}</a>'
+        data_attr = ""
+        if href.startswith("#") and len(href) > 1:
+            data_attr = f' data-report-nav-target="{html.escape(href[1:])}"'
+        label_html = f'<a href="{html.escape(href)}"{data_attr}>{label}</a>'
     elif href:
         label_html = f'<span class="nav-missing">{label}</span>'
     else:

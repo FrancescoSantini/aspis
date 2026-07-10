@@ -11,7 +11,7 @@ from collections import Counter
 from pathlib import Path
 
 from display_labels import gene_display_label
-from report_navigation import report_map_css, report_map_item, report_shell_close, report_shell_open
+from report_navigation import report_map_css, report_map_item, report_map_script, report_shell_close, report_shell_open
 
 
 def parse_args() -> argparse.Namespace:
@@ -215,6 +215,10 @@ def sum_int(rows: list[dict[str, str]], column: str) -> int:
     return sum(as_int(row.get(column, "")) for row in rows)
 
 
+def max_int(rows: list[dict[str, str]], column: str) -> int:
+    return max((as_int(row.get(column, "")) for row in rows), default=0)
+
+
 def rows_with_status(rows: list[dict[str, str]], *statuses: str) -> int:
     wanted = set(statuses)
     return sum(1 for row in rows if (row.get("status", "") or "").strip() in wanted)
@@ -250,22 +254,25 @@ def evidence_card(
     state_label: str,
     description: str,
     metrics: list[tuple[str, str | int]],
-    links: list[str],
+    details: list[tuple[str, str | int]] | None = None,
 ) -> str:
     metric_html = "".join(
         f'<div class="mini-metric"><strong>{html.escape(label)}</strong><span>{html.escape(str(value))}</span></div>'
         for label, value in metrics
     )
-    link_html = grouped_links(links, css_class="card-links")
-    if link_html:
-        link_html = f"<div>{link_html}</div>"
+    detail_html = ""
+    if details:
+        detail_html = '<div class="card-details">' + "".join(
+            f'<div><strong>{html.escape(label)}</strong><span>{html.escape(str(value))}</span></div>'
+            for label, value in details
+        ) + "</div>"
     return (
         f'<article class="evidence-card" id="{html.escape(target_id)}-card">'
         f'<h3><a href="#{html.escape(target_id)}">{html.escape(title)}</a></h3>'
         f'<p><span class="status {html.escape(state_class)}">{html.escape(state_label)}</span></p>'
         f'<p>{html.escape(description)}</p>'
         f'<div class="mini-metrics">{metric_html}</div>'
-        f"{link_html}</article>"
+        f"{detail_html}</article>"
     )
 
 
@@ -674,14 +681,14 @@ def project_evidence_map(
             state[1],
             "Gene and transcript DESeq2 summaries by contrast.",
             [
-                ("gene rows", len(gene_rows)),
+                ("contrasts", len(unique_values(rnaseq_summary, "contrast_id"))),
                 ("gene significant", sum_int(gene_rows, "n_significant")),
                 ("transcript significant", sum_int(transcript_rows, "n_significant")),
             ],
             [
-                link(rnaseq_base / "differential/reports/index.html", "report", base_dir),
-                '<a href="#layer-rnaseq-de">plots and tables</a>',
-                table_link(rnaseq_base / "differential/reports/summaries/summary_manifest.tsv", "manifest", base_dir),
+                ("levels", ", ".join(unique_values(rnaseq_summary, "level")) or "none"),
+                ("gene up/down", f"{sum_int(gene_rows, 'n_up')}/{sum_int(gene_rows, 'n_down')}"),
+                ("transcript up/down", f"{sum_int(transcript_rows, 'n_up')}/{sum_int(transcript_rows, 'n_down')}"),
             ],
         )
     )
@@ -700,9 +707,9 @@ def project_evidence_map(
                 ("ranked terms", sum_int(rnaseq_enrichment, "n_ranked_feature_set_terms")),
             ],
             [
-                link(rnaseq_base / "differential/reports/enrichment/index.html", "overview", base_dir),
-                '<a href="#layer-enrichment">plots and tables</a>',
-                table_link(rnaseq_base / "differential/reports/enrichment/enrichment_manifest.tsv", "manifest", base_dir),
+                ("levels", ", ".join(unique_values(rnaseq_enrichment, "level")) or "none"),
+                ("resources per contrast", max_int(rnaseq_enrichment, "n_feature_set_resources")),
+                ("not configured rows", rows_with_status(rnaseq_enrichment, "not_configured")),
             ],
         )
     )
@@ -721,9 +728,9 @@ def project_evidence_map(
                 ("plot rows", rows_with_status(rnaseq_dtu_plots, "ok")),
             ],
             [
-                '<a href="#layer-dtu">plots and tables</a>',
-                table_link(rnaseq_base / "differential/dtu/dtu_method_manifest.tsv", "method manifest", base_dir),
-                table_link(rnaseq_base / "differential/dtu/plots/dtu_plot_manifest.tsv", "plot manifest", base_dir),
+                ("methods", method_list(rnaseq_dtu)),
+                ("standardized rows", sum_int(rnaseq_dtu, "standardized_result_count")),
+                ("blocked/failed", f"{rows_with_status(rnaseq_dtu, 'blocked')}/{rows_with_status(rnaseq_dtu, 'failed')}"),
             ],
         )
     )
@@ -743,13 +750,9 @@ def project_evidence_map(
                 ("multi-method", iso_summary.get("multi_method_supported_rows", 0)),
             ],
             [
-                link(rnaseq_base / "differential/isoform_switch/report/index.html", "overview", base_dir),
-                '<a href="#layer-isoform-switch">event plots and tables</a>',
-                table_link(
-                    rnaseq_base / "differential/isoform_switch/report/isoform_interpretation_consensus.tsv",
-                    "consensus",
-                    base_dir,
-                ),
+                ("medium/low priority", f"{iso_summary.get('medium_priority_rows', 0)}/{iso_summary.get('low_priority_rows', 0)}"),
+                ("single-method support", iso_summary.get("single_method_supported_rows", 0)),
+                ("no DTU support", iso_summary.get("no_dtu_support_rows", 0)),
             ],
         )
     )
@@ -763,14 +766,14 @@ def project_evidence_map(
             state[1],
             "miRNA differential expression summaries by contrast.",
             [
-                ("miRNA rows", len(smallrna_summary)),
+                ("contrasts", len(unique_values(smallrna_summary, "contrast_id"))),
                 ("significant", sum_int(smallrna_summary, "n_significant")),
                 ("up/down", f"{sum_int(smallrna_summary, 'n_up')}/{sum_int(smallrna_summary, 'n_down')}"),
             ],
             [
-                link(smallrna_base / "smallrna/differential/reports/index.html", "report", base_dir),
-                '<a href="#layer-smallrna-de">plots and tables</a>',
-                table_link(smallrna_base / "smallrna/differential/reports/summaries/summary_manifest.tsv", "manifest", base_dir),
+                ("levels", ", ".join(unique_values(smallrna_summary, "level")) or "miRNA"),
+                ("ok rows", rows_with_status(smallrna_summary, "ok", "completed")),
+                ("blocked/failed", f"{rows_with_status(smallrna_summary, 'blocked')}/{rows_with_status(smallrna_summary, 'failed')}"),
             ],
         )
     )
@@ -791,9 +794,9 @@ def project_evidence_map(
                 ("direct miRNA-ID sets", mirna_feature_state),
             ],
             [
-                link(smallrna_base / "smallrna/differential/reports/targets/index.html", "overview", base_dir),
-                '<a href="#layer-mirna-targets">plots and tables</a>',
-                table_link(smallrna_base / "smallrna/differential/target_enrichment/target_manifest.tsv", "target manifest", base_dir),
+                ("target enrichment", status_counts(smallrna_targets)),
+                ("target feature sets", status_counts(smallrna_target_feature_sets)),
+                ("direct ID sets", status_counts(mirna_feature_sets) if mirna_feature_sets else "not used"),
             ],
         )
     )
@@ -813,17 +816,9 @@ def project_evidence_map(
                 ("feature-set rows", len(mirna_mrna_feature_sets)),
             ],
             [
-                '<a href="#layer-matched-mirna-mrna">plots and tables</a>',
-                table_link(
-                    smallrna_base / "smallrna/differential/mirna_mrna_integration/mirna_mrna_manifest.tsv",
-                    "integration manifest",
-                    base_dir,
-                ),
-                table_link(
-                    smallrna_base / "smallrna/differential/mirna_mrna_target_feature_sets/target_feature_set_manifest.tsv",
-                    "inverse target sets",
-                    base_dir,
-                ),
+                ("integration status", status_counts(mirna_integration)),
+                ("inverse target sets", status_counts(mirna_mrna_feature_sets)),
+                ("assays", "RNA-seq + smallRNA"),
             ],
         )
     )
@@ -1352,6 +1347,9 @@ def render(args: argparse.Namespace) -> None:
     .mini-metric {{ background: #f6f8fa; border: 1px solid #d8dee4; border-radius: 6px; padding: 0.45rem 0.55rem; }}
     .mini-metric strong {{ display: block; color: #57606a; font-size: 0.78rem; }}
     .mini-metric span {{ display: block; font-weight: 700; margin-top: 0.2rem; overflow-wrap: anywhere; }}
+    .card-details {{ border-top: 1px solid #d8dee4; display: grid; gap: 0.35rem; margin-top: 0.75rem; padding-top: 0.65rem; }}
+    .card-details div {{ color: #57606a; font-size: 0.87rem; line-height: 1.35; overflow-wrap: anywhere; }}
+    .card-details strong {{ color: #24292f; margin-right: 0.35rem; }}
     .card-links, .link-list {{ display: flex; flex-wrap: wrap; gap: 0.35rem 0.45rem; align-items: flex-start; }}
     .card-links {{ margin-top: 0.75rem; }}
     .card-links a, .link-list a {{ background: #f6f8fa; border: 1px solid #d0d7de; border-radius: 4px; display: inline-block; line-height: 1.25; padding: 0.16rem 0.42rem; white-space: nowrap; }}
@@ -1438,6 +1436,7 @@ def render(args: argparse.Namespace) -> None:
       }});
     }}
   </script>
+  {report_map_script()}
   {report_shell_close()}
 </body>
 </html>
