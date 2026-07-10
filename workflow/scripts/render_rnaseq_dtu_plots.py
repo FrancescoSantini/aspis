@@ -27,6 +27,7 @@ COLUMNS = [
     "n_standardized",
     "n_significant",
     "top_gene",
+    "top_gene_display",
     "top_padj",
     "plot_qa_status",
     "plot_qa_reason",
@@ -158,6 +159,44 @@ def significant_count(rows: list[dict[str, str]], alpha: float) -> int:
         if padj is not None and padj < alpha:
             count += 1
     return count
+
+
+def load_gene_display_maps(metadata_path: str) -> tuple[dict[str, dict[str, str]], dict[str, dict[str, str]]]:
+    if not metadata_path:
+        return {}, {}
+    rows = read_tsv(Path(metadata_path))
+    by_gene: dict[str, dict[str, str]] = {}
+    by_transcript: dict[str, dict[str, str]] = {}
+    for row in rows:
+        gene_id = row.get("gene_id", "")
+        transcript_id = row.get("transcript_id", "")
+        if gene_id and gene_id not in by_gene:
+            by_gene[gene_id] = row
+        if transcript_id:
+            by_transcript[transcript_id] = row
+    return by_gene, by_transcript
+
+
+def hydrate_gene_display_rows(
+    rows: list[dict[str, str]],
+    by_gene: dict[str, dict[str, str]],
+    by_transcript: dict[str, dict[str, str]],
+) -> None:
+    for row in rows:
+        meta = by_gene.get(row.get("gene_id", ""))
+        if meta is None:
+            meta = by_transcript.get(row.get("feature_id", "") or row.get("event_id", ""))
+        if meta is None:
+            continue
+        if not row.get("gene_id", ""):
+            row["gene_id"] = meta.get("gene_id", "")
+        if not row.get("gene_name", ""):
+            row["gene_name"] = meta.get("gene_name", "")
+        if not row.get("gene_display", ""):
+            row["gene_display"] = meta.get("gene_display", "") or gene_display_label(
+                row.get("gene_id", ""),
+                row.get("gene_name", ""),
+            )
 
 
 def cleaned_identifier(value: str) -> str:
@@ -303,6 +342,15 @@ def select_top_gene(rows: list[dict[str, str]]) -> str:
     scored = [(score, gene) for score, gene in scored if score is not None]
     scored.sort(key=lambda item: item[0])
     return scored[0][1] if scored else ""
+
+
+def select_top_gene_display(rows: list[dict[str, str]], gene_id: str) -> str:
+    if not gene_id:
+        return ""
+    for row in rows:
+        if row.get("gene_id", "") == gene_id:
+            return gene_label(row)
+    return gene_id
 
 
 def render_usage_svg(
@@ -767,6 +815,7 @@ def plot_row(args: argparse.Namespace, row: dict[str, str]) -> dict[str, str]:
         "n_standardized": "0",
         "n_significant": "0",
         "top_gene": "",
+        "top_gene_display": "",
         "top_padj": "",
         "plot_qa_status": "",
         "plot_qa_reason": "",
@@ -783,6 +832,8 @@ def plot_row(args: argparse.Namespace, row: dict[str, str]) -> dict[str, str]:
     if not standardized:
         output["reason"] = "standardized result table has no rows"
         return output
+    by_gene, by_transcript = load_gene_display_maps(row.get("transcript_metadata", ""))
+    hydrate_gene_display_rows(standardized, by_gene, by_transcript)
     method_upper = row.get("method", "").upper()
     if method_upper == "SUPPA2":
         standardized = dedupe_suppa2_rows(standardized)
@@ -790,6 +841,7 @@ def plot_row(args: argparse.Namespace, row: dict[str, str]) -> dict[str, str]:
     output["n_significant"] = str(significant_count(standardized, args.padj))
     top_gene = select_top_gene(standardized)
     output["top_gene"] = top_gene
+    output["top_gene_display"] = select_top_gene_display(standardized, top_gene)
     scored = [(numeric_p(item), item) for item in standardized]
     scored = [(score, item) for score, item in scored if score is not None]
     scored.sort(key=lambda item: item[0])
@@ -799,6 +851,7 @@ def plot_row(args: argparse.Namespace, row: dict[str, str]) -> dict[str, str]:
     usage_path = Path(row.get("transcript_results", ""))
     if top_gene and usage_path.is_file():
         usage_rows = read_tsv(usage_path)
+        hydrate_gene_display_rows(usage_rows, by_gene, by_transcript)
         if method_upper in {"SUPPA2", "RMATS"}:
             rendered = render_delta_psi_svg(
                 Path(output["usage_plot"]),

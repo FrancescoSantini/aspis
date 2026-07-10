@@ -780,6 +780,11 @@ def write_enrichment_svg(path: Path, rows: list[dict[str, str]], top_n: int) -> 
         f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}">',
         '<rect width="100%" height="100%" fill="#ffffff"/>',
         '<text x="40" y="25" font-family="sans-serif" font-size="18" font-weight="700">Feature-set enrichment</text>',
+        '<text x="40" y="40" font-family="sans-serif" font-size="11" fill="#57606a">Label format: description when available, otherwise collection:set ID. X axis is -log10(FDR); larger dots have larger overlap.</text>',
+        '<circle cx="670" cy="24" r="6" fill="#4d4d4d" fill-opacity="0.82"/><text x="682" y="28" font-family="sans-serif" font-size="11">significant</text>',
+        '<circle cx="760" cy="24" r="6" fill="#b2182b" fill-opacity="0.82"/><text x="772" y="28" font-family="sans-serif" font-size="11">up</text>',
+        '<circle cx="815" cy="24" r="6" fill="#2166ac" fill-opacity="0.82"/><text x="827" y="28" font-family="sans-serif" font-size="11">down</text>',
+        '<circle cx="885" cy="24" r="4" fill="#8c959f" fill-opacity="0.82"/><circle cx="905" cy="24" r="10" fill="#8c959f" fill-opacity="0.42"/><text x="920" y="28" font-family="sans-serif" font-size="11">overlap</text>',
         f'<line x1="{margin_left}" y1="{height - margin_bottom}" x2="{width - margin_right}" y2="{height - margin_bottom}" stroke="#777"/>',
     ]
     for index, (row, score) in enumerate(zip(selected, scores)):
@@ -788,7 +793,9 @@ def write_enrichment_svg(path: Path, rows: list[dict[str, str]], top_n: int) -> 
         overlap = int(row.get("overlap", "1") or "1")
         radius = min(16, 4 + overlap * 2)
         prefix = row.get("feature_set_collection") or row.get("feature_set_source", "")
-        label = f"{prefix}:{row['set_id']}" if prefix else row["set_id"]
+        identifier = f"{prefix}:{row['set_id']}" if prefix else row["set_id"]
+        description = row.get("description", "")
+        label = f"{description} ({identifier})" if description and description != row["set_id"] else identifier
         if len(label) > 45:
             label = label[:42] + "..."
         color = colors.get(row["collection"], "#4d4d4d")
@@ -1006,6 +1013,10 @@ def write_ranked_enrichment_svg(path: Path, rows: list[dict[str, str]], top_n: i
         f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}">',
         '<rect width="100%" height="100%" fill="#ffffff"/>',
         '<text x="40" y="25" font-family="sans-serif" font-size="18" font-weight="700">Ranked feature-set enrichment</text>',
+        '<text x="40" y="40" font-family="sans-serif" font-size="11" fill="#57606a">Label format: description when available, otherwise collection:set ID. X axis is normalized enrichment score; dot size is leading-edge size.</text>',
+        '<circle cx="700" cy="24" r="6" fill="#b2182b" fill-opacity="0.82"/><text x="712" y="28" font-family="sans-serif" font-size="11">top enriched</text>',
+        '<circle cx="800" cy="24" r="6" fill="#2166ac" fill-opacity="0.82"/><text x="812" y="28" font-family="sans-serif" font-size="11">bottom enriched</text>',
+        '<circle cx="930" cy="24" r="4" fill="#8c959f" fill-opacity="0.82"/><circle cx="950" cy="24" r="10" fill="#8c959f" fill-opacity="0.42"/><text x="965" y="28" font-family="sans-serif" font-size="11">leading edge</text>',
         f'<line x1="{margin_left}" y1="{height - margin_bottom}" x2="{width - margin_right}" y2="{height - margin_bottom}" stroke="#777"/>',
     ]
     if not selected:
@@ -1015,7 +1026,9 @@ def write_ranked_enrichment_svg(path: Path, rows: list[dict[str, str]], top_n: i
         y = margin_top + index * row_height + 18
         score = parse_float(row.get("normalized_enrichment_score", "")) or 0.0
         x = margin_left + ((score / max_score) + 1.0) * plot_width / 2.0
-        label = f"{row.get('feature_set_collection') or row.get('feature_set_source')}:{row['set_id']}"
+        identifier = f"{row.get('feature_set_collection') or row.get('feature_set_source')}:{row['set_id']}"
+        description = row.get("description", "")
+        label = f"{description} ({identifier})" if description and description != row["set_id"] else identifier
         if len(label) > 48:
             label = label[:45] + "..."
         color = "#b2182b" if score >= 0 else "#2166ac"

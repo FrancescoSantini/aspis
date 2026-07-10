@@ -786,6 +786,11 @@ def write_enrichment_svg(path: Path, rows: list[dict[str, str]], top_n: int) -> 
         f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}">',
         '<rect width="100%" height="100%" fill="#ffffff"/>',
         '<text x="40" y="25" font-family="sans-serif" font-size="18" font-weight="700">miRNA target enrichment</text>',
+        '<text x="40" y="40" font-family="sans-serif" font-size="11" fill="#57606a">X axis is -log10(FDR); dot size is overlap. Collection: all=all significant miRNAs, up/down=direction-specific miRNAs.</text>',
+        '<circle cx="610" cy="24" r="6" fill="#4d4d4d" fill-opacity="0.82"/><text x="622" y="28" font-family="sans-serif" font-size="11">all</text>',
+        '<circle cx="660" cy="24" r="6" fill="#b2182b" fill-opacity="0.82"/><text x="672" y="28" font-family="sans-serif" font-size="11">up</text>',
+        '<circle cx="710" cy="24" r="6" fill="#2166ac" fill-opacity="0.82"/><text x="722" y="28" font-family="sans-serif" font-size="11">down</text>',
+        '<circle cx="780" cy="24" r="4" fill="#8c959f" fill-opacity="0.82"/><circle cx="800" cy="24" r="10" fill="#8c959f" fill-opacity="0.42"/><text x="815" y="28" font-family="sans-serif" font-size="11">overlap</text>',
         f'<line x1="{margin_left}" y1="{height - margin_bottom}" x2="{width - margin_right}" y2="{height - margin_bottom}" stroke="#777"/>',
     ]
     for index, (row, score) in enumerate(zip(selected, scores)):
@@ -800,7 +805,7 @@ def write_enrichment_svg(path: Path, rows: list[dict[str, str]], top_n: int) -> 
         elements.append(f'<text x="40" y="{y + 4}" font-family="sans-serif" font-size="12">{html.escape(label)}</text>')
         elements.append(f'<line x1="{margin_left}" y1="{y}" x2="{width - margin_right}" y2="{y}" stroke="#eeeeee"/>')
         elements.append(f'<circle cx="{x:.1f}" cy="{y}" r="{radius}" fill="{color}" fill-opacity="0.82"/>')
-        elements.append(f'<text x="{x + radius + 6:.1f}" y="{y + 4}" font-family="sans-serif" font-size="11">{html.escape(row["collection"])}</text>')
+        elements.append(f'<text x="{x + radius + 6:.1f}" y="{y + 4}" font-family="sans-serif" font-size="11">overlap {overlap}</text>')
     elements.append(f'<text x="{margin_left}" y="{height - 18}" font-family="sans-serif" font-size="12">0</text>')
     elements.append(f'<text x="{width - margin_right - 80}" y="{height - 18}" font-family="sans-serif" font-size="12">-log10(FDR)</text>')
     elements.append("</svg>")

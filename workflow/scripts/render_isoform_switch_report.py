@@ -1733,6 +1733,7 @@ def build_events(
         event["gene_biotype"] = gene_biotype
         event["switch_biotype_class"] = switch_class
         event["switch_interpretation_label"] = interpretation_label
+        event_context[event_id]["_candidate_rows"] = current_candidate_rows  # type: ignore[index]
         for candidate in current_candidate_rows:
             candidate["switch_biotype_class"] = switch_class
     return candidate_rows, event_rows, event_context, nt_sequences, aa_sequences
@@ -2633,11 +2634,20 @@ def render_event_svg(
     top = 72
     height = top + max(1, len(isoforms)) * row_height + 70
     path.parent.mkdir(parents=True, exist_ok=True)
+    gene_heading = clean_existing_display_label(event.get("gene_display", "")) or display_gene(
+        event.get("gene_id", ""),
+        event.get("gene_name", ""),
+    )
+    transcript_display_by_isoform = {
+        row.get("isoform_id", ""): clean_existing_display_label(row.get("transcript_display", ""))
+        for row in event_context.get("_candidate_rows", [])  # type: ignore[union-attr]
+        if isinstance(row, dict)
+    }
     pieces = [
         '<svg xmlns="http://www.w3.org/2000/svg" '
         f'width="{width}" height="{height}" viewBox="0 0 {width} {height}">',
         '<rect width="100%" height="100%" fill="white"/>',
-        svg_text(24, 30, f"{event['gene_name']} ({event['gene_id']})", 18, "700"),
+        svg_text(24, 30, gene_heading, 18, "700"),
         svg_text(24, 52, f"{event['contrast_id']} | max abs dIF {event['max_abs_dIF']}", 12),
     ]
     if not relevant_models:
@@ -2667,7 +2677,8 @@ def render_event_svg(
         role = role_for_isoform(isoform_id, event["switch_in_isoform"], event["switch_out_isoform"])
         color = {"switch_in": "#1f77b4", "switch_out": "#d62728"}.get(role, "#57606a")
         model = models.get(isoform_id)
-        label = f"{isoform_id} ({role}, dIF {d_if_by_isoform.get(isoform_id, '')})"
+        isoform_label = transcript_display_by_isoform.get(isoform_id, "") or isoform_id
+        label = f"{isoform_label} ({role}, dIF {d_if_by_isoform.get(isoform_id, '')})"
         pieces.append(svg_text(24, y + 14, label, 12, "700" if role != "same_gene" else "400"))
         pieces.append(f'<line x1="{margin_left}" x2="{width - margin_right}" y1="{y}" y2="{y}" stroke="#8c959f" stroke-width="1"/>')
         if model:

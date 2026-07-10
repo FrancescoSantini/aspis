@@ -836,6 +836,7 @@ def evidence_layer_listing_tables(
     smallrna_targets: list[dict[str, str]],
     smallrna_target_feature_sets: list[dict[str, str]],
     mirna_integration: list[dict[str, str]],
+    mirna_mrna_feature_sets: list[dict[str, str]],
 ) -> dict[str, str]:
     rnaseq_rows = []
     for row in sorted(rnaseq_summary, key=lambda item: (item.get("level", ""), item.get("contrast_id", ""))):
@@ -949,13 +950,14 @@ def evidence_layer_listing_tables(
     target_by_contrast = {row.get("contrast_id", ""): row for row in smallrna_targets}
     target_set_by_contrast = {row.get("contrast_id", ""): row for row in smallrna_target_feature_sets}
     integration_by_contrast = {row.get("contrast_id", ""): row for row in mirna_integration}
+    inverse_target_set_by_contrast = {row.get("contrast_id", ""): row for row in mirna_mrna_feature_sets}
     smallrna_de_rows = []
     mirna_target_rows = []
     matched_rows = []
     for contrast_id in sorted(
         {
             row.get("contrast_id", "")
-            for row in smallrna_summary + smallrna_targets + smallrna_target_feature_sets + mirna_integration
+            for row in smallrna_summary + smallrna_targets + smallrna_target_feature_sets + mirna_integration + mirna_mrna_feature_sets
             if row.get("contrast_id", "")
         }
     ):
@@ -963,6 +965,7 @@ def evidence_layer_listing_tables(
         target_row = target_by_contrast.get(contrast_id, {})
         target_set_row = target_set_by_contrast.get(contrast_id, {})
         integration_row = integration_by_contrast.get(contrast_id, {})
+        inverse_target_set_row = inverse_target_set_by_contrast.get(contrast_id, {})
         smallrna_de_rows.append(
             [
                 f"<code>{html.escape(contrast_id)}</code>",
@@ -981,6 +984,10 @@ def evidence_layer_listing_tables(
         mirna_target_rows.append(
             [
                 f"<code>{html.escape(contrast_id)}</code>",
+                (
+                    f"{html.escape(target_row.get('n_targets', '0') or '0')} targets; "
+                    f"{html.escape(target_row.get('n_enrichment_terms', '0') or '0')} terms"
+                ),
                 link_group(
                     target_row,
                     [
@@ -990,6 +997,7 @@ def evidence_layer_listing_tables(
                     base_dir,
                     empty="no target plot",
                 ),
+                f"{html.escape(target_set_row.get('n_target_feature_set_terms', '0') or '0')} terms",
                 link_group(
                     target_set_row,
                     [
@@ -1004,6 +1012,11 @@ def evidence_layer_listing_tables(
         matched_rows.append(
             [
                 f"<code>{html.escape(contrast_id)}</code>",
+                (
+                    f"{html.escape(integration_row.get('n_pairs', '0') or '0')} pairs; "
+                    f"{html.escape(integration_row.get('n_inverse_pairs', '0') or '0')} inverse; "
+                    f"{html.escape(integration_row.get('n_anticorrelated_pairs', '0') or '0')} anticorrelated"
+                ),
                 link_group(
                     integration_row,
                     [
@@ -1012,6 +1025,21 @@ def evidence_layer_listing_tables(
                     ],
                     base_dir,
                     empty="no integration plot",
+                ),
+                (
+                    f"{html.escape(inverse_target_set_row.get('n_feature_set_terms', '0') or '0')} ORA; "
+                    f"{html.escape(inverse_target_set_row.get('n_ranked_feature_set_terms', '0') or '0')} ranked"
+                ),
+                link_group(
+                    inverse_target_set_row,
+                    [
+                        ("mirna_mrna_target_feature_set_plot", "inverse feature-set plot"),
+                        ("mirna_mrna_target_ranked_feature_set_plot", "ranked inverse plot"),
+                        ("mirna_mrna_target_feature_set_results", "inverse feature-set table"),
+                        ("mirna_mrna_target_ranked_feature_set_results", "ranked inverse table"),
+                    ],
+                    base_dir,
+                    empty="no inverse target feature sets",
                 ),
             ]
         )
@@ -1043,12 +1071,12 @@ def evidence_layer_listing_tables(
             "No smallRNA DE plots are available.",
         ),
         "mirna_targets": html_cell_table(
-            ["contrast", "target enrichment", "target feature sets"],
+            ["contrast", "target rows", "target enrichment", "target-set rows", "target feature sets"],
             mirna_target_rows,
             "No miRNA target plots are available.",
         ),
         "matched": html_cell_table(
-            ["contrast", "matched miRNA-mRNA"],
+            ["contrast", "pairs", "matched miRNA-mRNA", "inverse feature-set rows", "inverse feature sets"],
             matched_rows,
             "No matched miRNA-mRNA plots are available.",
         ),
@@ -1068,6 +1096,7 @@ def evidence_layer_sections(
     smallrna_targets: list[dict[str, str]],
     smallrna_target_feature_sets: list[dict[str, str]],
     mirna_integration: list[dict[str, str]],
+    mirna_mrna_feature_sets: list[dict[str, str]],
 ) -> str:
     listing_tables = evidence_layer_listing_tables(
         base_dir,
@@ -1080,6 +1109,7 @@ def evidence_layer_sections(
         smallrna_targets,
         smallrna_target_feature_sets,
         mirna_integration,
+        mirna_mrna_feature_sets,
     )
     return "\n".join(
         [
@@ -1366,9 +1396,11 @@ def render(args: argparse.Namespace) -> None:
     .status.not_configured, .status.muted {{ color: #57606a; font-weight: 400; }}
     .status.blocked, .status.missing {{ color: #9a6700; }}
     .status.failed {{ color: #cf222e; }}
-    .contrast-matrix td {{ min-width: 130px; }}
-    .contrast-matrix td:first-child {{ min-width: 220px; }}
-    .contrast-matrix td:nth-child(5) {{ min-width: 190px; }}
+    .contrast-matrix {{ table-layout: fixed; }}
+    .contrast-matrix th, .contrast-matrix td {{ min-width: 0; overflow-wrap: anywhere; }}
+    .contrast-matrix td:first-child {{ width: 15%; }}
+    .contrast-matrix td:nth-child(5) {{ width: 14%; }}
+    .contrast-matrix code {{ white-space: normal; word-break: break-word; }}
     hr {{ border: 0; border-top: 1px solid #d0d7de; margin: 0.55rem 0; }}
     nav.breadcrumbs {{ color: #57606a; margin-bottom: 1rem; }}
     .controls {{ display: flex; flex-wrap: wrap; gap: 0.75rem; margin: 1rem 0; }}
@@ -1407,7 +1439,7 @@ def render(args: argparse.Namespace) -> None:
   <h2 id="evidence-layers">Evidence Layers</h2>
   <p class="section-note">Each section below is one evidence layer. It keeps the layer purpose, primary entry links, plots, source tables, and deeper assay pages together. These sections are deterministic report navigation, not automated biological interpretation.</p>
   <div class="layer-grid">
-    {evidence_layer_sections(base_dir, rnaseq_base, smallrna_base, rnaseq_summary, rnaseq_enrichment, rnaseq_dtu_plots, isoform_events, gene_display_by_transcript, smallrna_summary, smallrna_targets, smallrna_target_feature_sets, mirna_integration)}
+    {evidence_layer_sections(base_dir, rnaseq_base, smallrna_base, rnaseq_summary, rnaseq_enrichment, rnaseq_dtu_plots, isoform_events, gene_display_by_transcript, smallrna_summary, smallrna_targets, smallrna_target_feature_sets, mirna_integration, mirna_mrna_feature_sets)}
   </div>
   <h2 id="qc-and-design">Run QC And Design</h2>
   <p class="section-note">This section is run-validation context rather than biological evidence. It shows whether the sample metadata, design tables, assay branches, and key workflow outputs are coherent enough to interpret the evidence layers above.</p>
