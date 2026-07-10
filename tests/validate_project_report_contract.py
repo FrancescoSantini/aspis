@@ -306,8 +306,8 @@ def main() -> int:
             "Project Overview",
             "Contrast Evidence Matrix",
             "Evidence Layers",
-            "Run QC And Design",
-            "Source Files And Audit Trail",
+            "Project QC And Design",
+            "Project Provenance And Audit",
         ]
         positions = [html.index(heading) for heading in headings]
         assert positions == sorted(positions)
@@ -336,16 +336,19 @@ def main() -> int:
         assert 'href="#layer-smallrna-listing"' not in html
         assert 'href="#qc-and-design"' in html
         assert 'href="#sample-design"' in html
-        assert 'href="#workflow-status"' in html
-        assert 'href="#raw-artifacts"' in html
-        assert 'href="#raw-qc-design"' in html
+        assert 'href="#qc-stage-status"' in html
+        assert 'href="#project-audit"' in html
+        assert 'href="#project-audit-files"' in html
+        assert 'href="#workflow-status"' not in html
+        assert 'href="#raw-artifacts"' not in html
+        assert 'href="#raw-qc-design"' not in html
         assert 'href="#raw-project-pages"' not in html
         assert 'href="#raw-summary-manifests"' not in html
         assert 'href="#raw-contrast-summary"' not in html
         assert 'href="#status-glossary"' not in html
         assert 'id="status-glossary"' not in html
         assert html.index('href="#layer-matched-mirna-mrna"') < html.index('href="#qc-and-design"')
-        assert html.index('href="#qc-and-design"') < html.index('href="#raw-artifacts"')
+        assert html.index('href="#qc-and-design"') < html.index('href="#project-audit"')
         assert 'id="layer-rnaseq-de"' in html
         assert 'id="layer-dtu"' in html
         assert 'id="layer-matched-mirna-mrna"' in html
@@ -362,6 +365,11 @@ def main() -> int:
         assert "smallRNA DE plots and tables" not in html
         assert "miRNA target plots and tables" not in html
         assert "Matched miRNA-mRNA plots and tables" not in html
+        assert "Workflow Status Matrix" not in html
+        assert "Source Files And Audit Trail" not in html
+        assert "differential report</td>" not in html
+        assert "GO/Reactome detailed report</td>" not in html
+        assert "isoform-switch detailed report</td>" not in html
         assert "Plot Atlas" not in html
         assert 'class="link-list"' in html
         assert "overview plot" in html

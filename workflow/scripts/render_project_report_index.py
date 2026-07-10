@@ -329,37 +329,32 @@ def design_columns(path: Path) -> str:
     return ", ".join(columns)
 
 
-def assay_sample_summary(base_dir: Path, rnaseq_base: Path, smallrna_base: Path) -> str:
+def assay_sample_summary(rnaseq_base: Path, smallrna_base: Path) -> str:
     items = [
         (
             "RNA-seq",
             rnaseq_base / "samples.tsv",
             rnaseq_base / "design.tsv",
-            rnaseq_base / "fastq_inspection.tsv",
         ),
         (
             "smallRNA",
             smallrna_base / "samples.tsv",
             smallrna_base / "design.tsv",
-            smallrna_base / "fastq_inspection.tsv",
         ),
     ]
     rows = []
-    for assay, samples, design, inspection in items:
+    for assay, samples, design in items:
         rows.append(
             "<tr>"
             f"<td>{html.escape(assay)}</td>"
             f"<td>{len(read_table(samples))}</td>"
             f"<td>{len(read_table(design))}</td>"
             f"<td>{html.escape(design_columns(design) or 'not available')}</td>"
-            f"<td>{table_link(samples, 'samples', base_dir)}</td>"
-            f"<td>{table_link(design, 'design', base_dir)}</td>"
-            f"<td>{table_link(inspection, 'FASTQ inspection', base_dir)}</td>"
             "</tr>"
         )
     return (
         "<table><thead><tr><th>assay</th><th>sample rows</th><th>design rows</th>"
-        "<th>design columns</th><th>samples</th><th>design</th><th>FASTQ inspection</th></tr></thead><tbody>"
+        "<th>design columns</th></tr></thead><tbody>"
         + "".join(rows)
         + "</tbody></table>"
     )
@@ -367,21 +362,15 @@ def assay_sample_summary(base_dir: Path, rnaseq_base: Path, smallrna_base: Path)
 
 def workflow_status_matrix(base_dir: Path, rnaseq_base: Path, smallrna_base: Path) -> str:
     checks = [
-        ("RNA-seq", "branch report", rnaseq_base / "report/index.html", True),
         ("RNA-seq", "raw QC", rnaseq_base / "multiqc/multiqc_report.html", False),
         ("RNA-seq", "post-trim QC", rnaseq_base / "preprocess/multiqc/multiqc_report.html", False),
         ("RNA-seq", "alignment QC", rnaseq_base / "alignment/qc/multiqc/multiqc_report.html", False),
-        ("RNA-seq", "differential report", rnaseq_base / "differential/reports/index.html", False),
-        ("RNA-seq", "GO/Reactome detailed report", rnaseq_base / "differential/reports/enrichment/index.html", False),
-        ("RNA-seq", "isoform-switch detailed report", rnaseq_base / "differential/isoform_switch/report/index.html", False),
-        ("RNA-seq", "DTU methods", rnaseq_base / "differential/dtu/dtu_method_manifest.tsv", False),
-        ("RNA-seq", "DTU consensus", rnaseq_base / "differential/dtu/consensus/dtu_consensus_gene_summary.tsv", False),
-        ("smallRNA", "branch report", smallrna_base / "report/index.html", True),
+        ("RNA-seq", "sample-level quantification QC", rnaseq_base / "quantification/sample_qc/sample_qc_manifest.tsv", False),
+        ("RNA-seq", "biotype summary", rnaseq_base / "quantification/biotypes/biotype_summary.html", False),
+        ("RNA-seq", "strandedness diagnostics", rnaseq_base / "alignment/strandedness/strandedness_report.tsv", False),
         ("smallRNA", "raw QC", smallrna_base / "multiqc/multiqc_report.html", False),
         ("smallRNA", "post-trim QC", smallrna_base / "smallrna/preprocess/multiqc/multiqc_report.html", False),
         ("smallRNA", "length/read-fate QC", smallrna_base / "smallrna/length_qc/length_distribution.svg", False),
-        ("smallRNA", "differential report", smallrna_base / "smallrna/differential/reports/index.html", False),
-        ("smallRNA", "target/integration detailed report", smallrna_base / "smallrna/differential/reports/targets/index.html", False),
     ]
     rows = []
     for assay, layer, path, expected in checks:
@@ -1240,18 +1229,22 @@ def raw_artifact_sections(base_dir: Path, rnaseq_base: Path, smallrna_base: Path
     return "\n".join(
         [
             layer_panel(
-                "QC and design source files",
-                "raw-qc-design",
-                "Machine-readable files used to audit sample metadata, FASTQ inspection, QC, alignment, and strandedness.",
+                "Input, diagnostic, and provenance files",
+                "project-audit-files",
+                "Machine-readable inputs and diagnostics used to audit sample metadata, FASTQ inspection, strandedness, warnings, and branch provenance.",
                 [
                     table_link(rnaseq_base / "samples.tsv", "RNA-seq samples", base_dir),
                     table_link(rnaseq_base / "design.tsv", "RNA-seq design", base_dir),
                     table_link(rnaseq_base / "fastq_inspection.tsv", "RNA-seq FASTQ inspection", base_dir),
                     table_link(rnaseq_base / "alignment/strandedness/strandedness_report.tsv", "RNA-seq strandedness", base_dir),
+                    link(rnaseq_base / "biological_warnings/warnings.html", "RNA-seq warnings", base_dir, expected=False),
+                    table_link(rnaseq_base / "provenance/provenance_manifest.tsv", "RNA-seq provenance", base_dir),
                     table_link(smallrna_base / "samples.tsv", "smallRNA samples", base_dir),
                     table_link(smallrna_base / "design.tsv", "smallRNA design", base_dir),
                     table_link(smallrna_base / "fastq_inspection.tsv", "smallRNA FASTQ inspection", base_dir),
                     link(smallrna_base / "smallrna/length_qc/length_distribution.svg", "smallRNA length distribution", base_dir),
+                    link(smallrna_base / "smallrna/biological_warnings/warnings.html", "smallRNA warnings", base_dir, expected=False),
+                    table_link(smallrna_base / "provenance/provenance_manifest.tsv", "smallRNA provenance", base_dir),
                 ],
             ),
         ]
@@ -1271,18 +1264,18 @@ def project_report_map() -> list[dict[str, object]]:
         report_map_item("miRNA targets", "#layer-mirna-targets"),
         report_map_item("Matched miRNA-mRNA", "#layer-matched-mirna-mrna"),
         report_map_item(
-            "Run QC and design",
+            "Project QC and design",
             "#qc-and-design",
             children=[
                 report_map_item("Sample and design summary", "#sample-design"),
-                report_map_item("Workflow status matrix", "#workflow-status"),
+                report_map_item("QC stage status", "#qc-stage-status"),
             ],
         ),
         report_map_item(
-            "Source files and audit trail",
-            "#raw-artifacts",
+            "Project provenance and audit",
+            "#project-audit",
             children=[
-                report_map_item("QC and design source files", "#raw-qc-design"),
+                report_map_item("Input and diagnostic files", "#project-audit-files"),
             ],
         ),
     ]
@@ -1425,14 +1418,14 @@ def render(args: argparse.Namespace) -> None:
   <div class="layer-grid">
     {evidence_layer_sections(base_dir, rnaseq_base, smallrna_base, rnaseq_summary, rnaseq_enrichment, rnaseq_dtu_plots, isoform_events, gene_display_by_transcript, smallrna_summary, smallrna_targets, smallrna_target_feature_sets, mirna_integration, mirna_mrna_feature_sets)}
   </div>
-  <h2 id="qc-and-design">Run QC And Design</h2>
-  <p class="section-note">This section is run-validation context rather than biological evidence. It shows whether the sample metadata, design tables, assay branches, and key workflow outputs are coherent enough to interpret the evidence layers above.</p>
+  <h2 id="qc-and-design">Project QC And Design</h2>
+  <p class="section-note">This section summarizes the project sample design and links the assay-specific QC stages needed before interpreting the evidence layers above.</p>
   <h3 id="sample-design">Sample And Design Summary</h3>
-  {assay_sample_summary(base_dir, rnaseq_base, smallrna_base)}
-  <h3 id="workflow-status">Workflow Status Matrix</h3>
+  {assay_sample_summary(rnaseq_base, smallrna_base)}
+  <h3 id="qc-stage-status">QC Stage Status</h3>
   {workflow_status_matrix(base_dir, rnaseq_base, smallrna_base)}
-  <h2 id="raw-artifacts">Source Files And Audit Trail</h2>
-  <p class="section-note">This section is supporting material. It is grouped last so the main report remains readable while machine-readable QC and design inputs stay reachable for audit or debugging.</p>
+  <h2 id="project-audit">Project Provenance And Audit</h2>
+  <p class="section-note">This supporting section keeps machine-readable sample/design inputs, diagnostics, warning pages, and provenance manifests reachable without mixing them into the biological evidence layers.</p>
   <div class="layer-grid">
     {raw_artifact_sections(base_dir, rnaseq_base, smallrna_base)}
   </div>

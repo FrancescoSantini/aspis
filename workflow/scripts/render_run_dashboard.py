@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Render a run-level ASPIS dashboard linking branch reports and key resources."""
+"""Render a run-level ASPIS dashboard linking project reports and run resources."""
 
 from __future__ import annotations
 
@@ -443,77 +443,25 @@ def write_report_inventory(path: Path, rows: list[dict[str, str]]) -> None:
         writer.writerows(rows)
 
 
-def branch_resources(assay: str, project: str, branch_dir: Path, base_dir: Path) -> list[str]:
-    base = branch_dir / assay / project
-    resources = [
-        optional_link(base / "report/index.html", "branch report", base_dir),
-        link_if_exists(base / "samples.tsv", "samples", base_dir),
-        link_if_exists(base / "design.tsv", "design", base_dir),
-        link_if_exists(base / "multiqc/multiqc_report.html", "raw MultiQC", base_dir),
-    ]
-    if assay == "rnaseq":
-        resources.extend(
-            [
-                optional_link(base / "preprocess/multiqc/multiqc_report.html", "post-trim MultiQC", base_dir),
-                optional_link(base / "alignment/qc/multiqc/multiqc_report.html", "alignment MultiQC", base_dir),
-                optional_link(base / "quantification/biotypes/biotype_summary.html", "biotypes", base_dir),
-                optional_link(base / "quantification/sample_qc/sample_qc_manifest.tsv", "sample QC", base_dir),
-                optional_link(base / "differential/reports/index.html", "differential report", base_dir),
-                optional_link(base / "differential/reports/enrichment/index.html", "GO/Reactome overview", base_dir),
-                optional_link(base / "differential/reports/technical_report.pdf", "technical PDF", base_dir),
-                optional_link(base / "differential/isoform_switch/report/index.html", "isoform-switch overview", base_dir),
-                optional_link(base / "biological_warnings/warnings.html", "warnings", base_dir),
-                optional_link(base / "provenance/provenance_manifest.tsv", "provenance", base_dir),
-            ]
-        )
-    elif assay == "smallrna":
-        small = base / "smallrna"
-        resources.extend(
-            [
-                optional_link(small / "preprocess/multiqc/multiqc_report.html", "post-trim MultiQC", base_dir),
-                optional_link(small / "length_qc/length_distribution.svg", "length QC", base_dir),
-                optional_link(small / "differential/reports/index.html", "differential report", base_dir),
-                optional_link(small / "differential/reports/targets/index.html", "target/integration overview", base_dir),
-                optional_link(small / "differential/reports/technical_report.pdf", "technical PDF", base_dir),
-                optional_link(small / "biological_warnings/warnings.html", "warnings", base_dir),
-                optional_link(base / "provenance/provenance_manifest.tsv", "provenance", base_dir),
-            ]
-        )
-    return resources
-
-
-def project_card(project: str, plan_rows: list[dict[str, str]], branch_dir: Path, base_dir: Path) -> str:
+def project_card(
+    project: str,
+    plan_rows: list[dict[str, str]],
+    branch_dir: Path,
+    base_dir: Path,
+    materialized_counts: Counter[tuple[str, str]],
+) -> str:
     rows = [row for row in plan_rows if row.get("project", "") == project]
     badges = []
     for row in sorted(rows, key=lambda item: item.get("assay", "")):
         assay = row.get("assay", "")
         status = row.get("status", "")
         badges.append(f'<span class="badge {html.escape(status or "unknown")}">{html.escape(assay)} {html.escape(status or "unknown")}</span>')
-    rnaseq = branch_dir / "rnaseq" / project
-    smallrna = branch_dir / "smallrna" / project
     project_report = base_dir / "projects" / project / "index.html"
     project_pdf = base_dir / "projects" / project / "technical_report.pdf"
-    core_links = [
-        link_if_exists(project_report, "integrated project report", base_dir),
-        optional_link(rnaseq / "differential/reports/index.html", "RNA-seq differential", base_dir),
-        optional_link(rnaseq / "differential/reports/enrichment/index.html", "RNA-seq GO/Reactome", base_dir),
-        optional_link(rnaseq / "differential/isoform_switch/report/index.html", "isoform-switch overview", base_dir),
-        optional_link(smallrna / "smallrna/differential/reports/index.html", "smallRNA differential", base_dir),
-        optional_link(smallrna / "smallrna/differential/reports/targets/index.html", "miRNA targets/integration", base_dir),
-    ]
-    qc_links = [
-        optional_link(rnaseq / "multiqc/multiqc_report.html", "RNA-seq raw MultiQC", base_dir),
-        optional_link(rnaseq / "preprocess/multiqc/multiqc_report.html", "RNA-seq post-trim MultiQC", base_dir),
-        optional_link(rnaseq / "alignment/qc/multiqc/multiqc_report.html", "RNA-seq alignment MultiQC", base_dir),
-        optional_link(smallrna / "multiqc/multiqc_report.html", "smallRNA raw MultiQC", base_dir),
-        optional_link(smallrna / "smallrna/preprocess/multiqc/multiqc_report.html", "smallRNA post-trim MultiQC", base_dir),
-        optional_link(smallrna / "smallrna/length_qc/length_distribution.svg", "smallRNA length QC", base_dir),
-    ]
-    pdf_links = [
-        optional_link(project_pdf, "combined project technical PDF", base_dir),
-        optional_link(rnaseq / "differential/reports/technical_report.pdf", "RNA-seq technical PDF", base_dir),
-        optional_link(smallrna / "smallrna/differential/reports/technical_report.pdf", "smallRNA technical PDF", base_dir),
-    ]
+    library_count = sum(materialized_counts.get((row.get("assay", ""), project), 0) for row in rows)
+    sample_count = sum(count_rows(branch_dir / row.get("assay", "") / project / "samples.tsv") for row in rows)
+    ready_count = sum(1 for row in rows if row.get("status", "") == "ready")
+    issue_count = sum(1 for row in rows if row.get("status", "") in {"blocked", "failed", "missing"})
     notes = "; ".join(row.get("reason", "") for row in rows if row.get("reason", ""))
     notes_html = f'<p class="muted">{html.escape(notes)}</p>' if notes else ""
     assay_values = " ".join(sorted(row.get("assay", "") for row in rows if row.get("assay", "")))
@@ -522,9 +470,16 @@ def project_card(project: str, plan_rows: list[dict[str, str]], branch_dir: Path
         f'<article class="project-card" data-project="{html.escape(project)}" data-assay="{html.escape(assay_values)}" data-status="{html.escape(status_values)}">'
         f"<h3>{html.escape(project)}</h3>"
         f'<div class="badges">{"".join(badges)}</div>'
-        f'<p class="card-links"><strong>Biology:</strong> {" | ".join(core_links)}</p>'
-        f'<p class="card-links"><strong>QC:</strong> {" | ".join(qc_links)}</p>'
-        f'<p class="card-links"><strong>PDF:</strong> {" | ".join(pdf_links)}</p>'
+        '<div class="project-metrics">'
+        f'<div><strong>assay libraries</strong><span>{library_count}</span></div>'
+        f'<div><strong>sample rows</strong><span>{sample_count}</span></div>'
+        f'<div><strong>ready branches</strong><span>{ready_count}/{len(rows)}</span></div>'
+        f'<div><strong>branch issues</strong><span>{issue_count}</span></div>'
+        "</div>"
+        '<p class="project-actions">'
+        f'{link_if_exists(project_report, "Open project report", base_dir)}'
+        f'{optional_link(project_pdf, "Project PDF", base_dir)}'
+        "</p>"
         f"{notes_html}"
         "</article>"
     )
@@ -532,43 +487,17 @@ def project_card(project: str, plan_rows: list[dict[str, str]], branch_dir: Path
 
 def dashboard_report_map(
     projects: list[str],
-    branch_dir: Path,
     base_dir: Path,
-    qc_overview_path: Path,
-    report_inventory_path: Path,
 ) -> list[dict[str, object]]:
-    project_items = []
-    for project in projects:
-        rnaseq = branch_dir / "rnaseq" / project
-        smallrna = branch_dir / "smallrna" / project
-        project_items.append(
-            report_map_item(
-                project,
-                base_dir / "projects" / project / "index.html",
-                children=[
-                    report_map_item("Combined PDF", base_dir / "projects" / project / "technical_report.pdf"),
-                    report_map_item("RNA-seq differential", rnaseq / "differential/reports/index.html"),
-                    report_map_item("RNA-seq GO/Reactome", rnaseq / "differential/reports/enrichment/index.html"),
-                    report_map_item("RNA-seq DTU", rnaseq / "differential/dtu/dtu_method_manifest.tsv"),
-                    report_map_item("Isoform switch", rnaseq / "differential/isoform_switch/report/index.html"),
-                    report_map_item("smallRNA differential", smallrna / "smallrna/differential/reports/index.html"),
-                    report_map_item("smallRNA targets/integration", smallrna / "smallrna/differential/reports/targets/index.html"),
-                ],
-            )
-        )
+    project_items = [
+        report_map_item(project, base_dir / "projects" / project / "index.html")
+        for project in projects
+    ]
     return [
-        report_map_item(
-            "Run dashboard",
-            children=[
-                report_map_item("Resources", "#run-resources"),
-                report_map_item("Optional-layer status", "#optional-layer-status"),
-                report_map_item("Projects", "#projects"),
-                report_map_item("Assay branches", "#assay-branches"),
-            ],
-        ),
-        report_map_item("QC overview", qc_overview_path),
-        report_map_item("Report inventory", report_inventory_path),
-        report_map_item("Projects", children=project_items),
+        report_map_item("Run summary", "#run-summary"),
+        report_map_item("Projects", "#projects", children=project_items),
+        report_map_item("Run-wide QC", "#run-qc"),
+        report_map_item("Run provenance and audit", "#run-audit"),
     ]
 
 
@@ -765,55 +694,21 @@ def render(args: argparse.Namespace) -> None:
     assay_counts = Counter(row.get("assay", "unknown") or "unknown" for row in ready)
     materialized_counts = Counter((row.get("assay", ""), row.get("project", "")) for row in manifest_rows)
 
-    branch_table_rows = []
-    for row in sorted(plan_rows, key=lambda item: (item.get("assay", ""), item.get("project", ""))):
-        assay = row.get("assay", "")
-        project = row.get("project", "")
-        status = row.get("status", "")
-        samples_path = branch_dir / assay / project / "samples.tsv"
-        sample_count = count_rows(samples_path)
-        library_count = materialized_counts.get((assay, project), 0)
-        resources = "<br>".join(branch_resources(assay, project, branch_dir, base_dir)) if status == "ready" else ""
-        branch_table_rows.append(
-            f'<tr class="branch-row" data-project="{html.escape(project)}" data-assay="{html.escape(assay)}" data-status="{html.escape(status or "unknown")}">'
-            f"<td>{html.escape(assay)}</td>"
-            f"<td>{html.escape(project)}</td>"
-            f"<td class=\"status {html.escape(status or 'unknown')}\">{html.escape(status or 'unknown')}</td>"
-            f"<td>{html.escape(row.get('reason', ''))}</td>"
-            f"<td>{library_count}</td>"
-            f"<td>{sample_count}</td>"
-            f"<td>{resources}</td>"
-            "</tr>"
-        )
-
     projects = sorted({row.get("project", "") for row in plan_rows if row.get("project", "")})
     qc_overview_path = Path(args.qc_overview) if args.qc_overview else output.parent / "qc/index.html"
     render_qc_overview(qc_overview_path, plan_rows, branch_dir, output)
     report_inventory = build_report_inventory(projects, plan_rows, branch_dir, base_dir, qc_overview_path)
     report_inventory_path = Path(args.report_inventory) if args.report_inventory else output.parent / "report_inventory.tsv"
     write_report_inventory(report_inventory_path, report_inventory)
-    project_cards = "".join(project_card(project, plan_rows, branch_dir, base_dir) for project in projects)
+    project_cards = "".join(
+        project_card(project, plan_rows, branch_dir, base_dir, materialized_counts)
+        for project in projects
+    )
     sidebar = report_shell_open(
         "Report Map",
-        dashboard_report_map(projects, branch_dir, base_dir, qc_overview_path, report_inventory_path),
+        dashboard_report_map(projects, base_dir),
         base_dir,
     )
-    project_table_rows = []
-    for project in projects:
-        project_rows = [row for row in plan_rows if row.get("project", "") == project]
-        project_ready = [row for row in project_rows if row.get("status", "") == "ready"]
-        assays = ", ".join(sorted(row.get("assay", "") for row in project_ready if row.get("assay", "")))
-        project_report = base_dir / "projects" / project / "index.html"
-        project_table_rows.append(
-            "<tr>"
-            f"<td>{link_if_exists(project_report, project, base_dir)}</td>"
-            f"<td>{html.escape(assays or 'none')}</td>"
-            f"<td>{len(project_rows)}</td>"
-            f"<td>{sum(1 for row in project_rows if row.get('status') == 'ready')}</td>"
-            f"<td>{html.escape('; '.join(row.get('reason', '') for row in project_rows if row.get('reason', '')))}</td>"
-            "</tr>"
-        )
-
     env_link = link_if_exists(Path(args.environment_report), "environment report", base_dir)
     exec_link = link_if_exists(Path(args.execution_report), "execution report", base_dir)
     manifest_link = link_if_exists(Path(args.manifest), "materialized manifest", base_dir)
@@ -823,13 +718,16 @@ def render(args: argparse.Namespace) -> None:
     env_failed = sum(1 for row in environment_rows if row.get("status") not in {"ok", "optional_missing", "not_checked", ""})
     execution_failed = sum(1 for row in execution_rows if row.get("status") not in {"ok", "warning", ""})
     inventory_counts = Counter(row.get("report_type", "unknown") for row in report_inventory if row.get("status") == "ok")
-    optional_types = ["enrichment", "isoform_switch", "targets", "warnings", "qc"]
-    optional_strip = "".join(
-        f'<span class="option-pill"><strong>{html.escape(report_type)}</strong> '
-        f'{sum(1 for row in report_inventory if row.get("report_type") == report_type and row.get("status") == "ok")} ok / '
-        f'{sum(1 for row in report_inventory if row.get("report_type") == report_type and row.get("status") != "ok")} not ready</span>'
-        for report_type in optional_types
-    )
+    qc_ok = sum(1 for row in report_inventory if row.get("report_type") == "qc" and row.get("status") == "ok")
+    qc_not_ready = sum(1 for row in report_inventory if row.get("report_type") == "qc" and row.get("status") != "ok")
+    controls_html = ""
+    if len(projects) > 1:
+        controls_html = """
+  <div class="controls">
+    <input id="dashboardSearch" placeholder="Filter projects">
+    <select id="dashboardAssay"><option value="">all assays</option><option value="rnaseq">RNA-seq</option><option value="smallrna">smallRNA</option></select>
+    <select id="dashboardStatus"><option value="">all statuses</option><option value="ready">ready</option><option value="blocked">blocked</option><option value="failed">failed</option></select>
+  </div>"""
 
     content = f"""<!doctype html>
 <html lang=\"en\">
@@ -839,8 +737,6 @@ def render(args: argparse.Namespace) -> None:
   <style>
     body {{ font-family: system-ui, -apple-system, Segoe UI, sans-serif; margin: 24px; max-width: 1680px; color: #24292f; }}
     .note {{ background: #f6f8fa; border-left: 4px solid #57606a; margin: 12px 0 18px; padding: 10px 12px; }}
-    .guide {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 0.75rem; margin: 1rem 0 1.5rem; }}
-    .guide div {{ border: 1px solid #d0d7de; border-radius: 6px; padding: 0.75rem; }}
     h1 {{ margin-bottom: 0.25rem; }}
     .metrics {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 0.75rem; margin: 1rem 0 1.5rem; }}
     .metric {{ border: 1px solid #d0d7de; border-radius: 6px; padding: 0.75rem; }}
@@ -856,7 +752,6 @@ def render(args: argparse.Namespace) -> None:
     .status.blocked, .status.missing {{ color: #9a6700; }}
     .status.failed {{ color: #cf222e; }}
     .status.muted {{ color: #57606a; font-weight: 400; }}
-    .resources {{ margin: 1rem 0; }}
     .project-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap: 1rem; margin: 1rem 0 1.5rem; }}
     .project-card {{ border: 1px solid #d0d7de; border-radius: 6px; padding: 1rem; }}
     .project-card h3 {{ margin: 0 0 0.5rem; }}
@@ -865,28 +760,31 @@ def render(args: argparse.Namespace) -> None:
     .badge.ready {{ background: #dafbe1; color: #1a7f37; }}
     .badge.blocked {{ background: #fff8c5; color: #9a6700; }}
     .badge.failed {{ background: #ffebe9; color: #cf222e; }}
-    .card-links {{ line-height: 1.55; margin: 0.55rem 0; }}
+    .project-metrics {{ display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.55rem; margin: 0.8rem 0; }}
+    .project-metrics div {{ background: #f6f8fa; border: 1px solid #d8dee4; border-radius: 6px; padding: 0.5rem 0.6rem; }}
+    .project-metrics strong {{ color: #57606a; display: block; font-size: 0.78rem; }}
+    .project-metrics span {{ display: block; font-size: 1.05rem; font-weight: 700; margin-top: 0.15rem; }}
+    .project-actions {{ display: flex; flex-wrap: wrap; gap: 0.45rem; margin: 0.75rem 0 0; }}
+    .project-actions a {{ background: #f6f8fa; border: 1px solid #d0d7de; border-radius: 4px; padding: 0.28rem 0.5rem; }}
     .muted {{ color: #57606a; }}
     .breadcrumbs {{ color: #57606a; margin-bottom: 1rem; }}
     .controls {{ display: flex; flex-wrap: wrap; gap: 0.75rem; margin: 1rem 0; }}
     input, select {{ border: 1px solid #d0d7de; border-radius: 6px; padding: 0.45rem 0.55rem; }}
-    .option-strip {{ display: flex; flex-wrap: wrap; gap: 0.5rem; margin: 0.75rem 0 1.25rem; }}
-    .option-pill {{ border: 1px solid #d0d7de; border-radius: 999px; padding: 0.25rem 0.65rem; }}
+    .run-panel {{ border: 1px solid #d0d7de; border-radius: 6px; margin: 1rem 0 1.5rem; padding: 0.85rem 1rem; }}
+    .run-panel h2 {{ margin-top: 0; }}
+    .link-list {{ display: flex; flex-wrap: wrap; gap: 0.45rem; }}
+    .link-list a {{ background: #f6f8fa; border: 1px solid #d0d7de; border-radius: 4px; padding: 0.25rem 0.45rem; }}
     {report_map_css()}
   </style>
 </head>
 <body>
   {sidebar}
-  <nav class="breadcrumbs">ASPIS / Run dashboard</nav>
+  <nav class="breadcrumbs">ASPIS / Run</nav>
   <h1>ASPIS run dashboard</h1>
-  <p class="note">This page is the top-level navigation point for one ASPIS run. Start here to check which assay/project branches were planned, whether they are ready, and where the branch reports, QC summaries, provenance, and technical PDFs live.</p>
-  <div class="guide">
-    <div><strong>Manifests</strong><br>Audit what was materialized from local FASTQs or public accessions.</div>
-    <div><strong>Project reports</strong><br>Start with the integrated project page, then move to assay branches only for deeper QC, differential, and evidence-layer details.</div>
-    <div><strong>Environment</strong><br>Confirm required tools and optional advanced tools before trusting expensive outputs.</div>
-  </div>
-  <div id="run-resources" class=\"resources\">{manifest_link} | {plan_link} | {env_link} | {exec_link} | {inventory_link} | {qc_overview_link}</div>
+  <p class="note">This page summarizes one ASPIS run and connects its biological projects. Open a project report for assay-level results, evidence layers, project QC, and provenance.</p>
+  <h2 id="run-summary">Run Summary</h2>
   <section class=\"metrics\">
+    <div class=\"metric\"><strong>projects</strong><span>{len(projects)}</span></div>
     <div class=\"metric\"><strong>planned branches</strong><span>{len(plan_rows)}</span></div>
     <div class=\"metric\"><strong>ready branches</strong><span>{len(ready)}</span></div>
     <div class=\"metric\"><strong>RNA-seq branches</strong><span>{assay_counts.get('rnaseq', 0)}</span></div>
@@ -895,45 +793,37 @@ def render(args: argparse.Namespace) -> None:
     <div class=\"metric\"><strong>execution issues</strong><span>{execution_failed}</span></div>
     <div class=\"metric\"><strong>available reports</strong><span>{sum(inventory_counts.values())}</span></div>
   </section>
-  <h2 id="optional-layer-status">Optional-Layer Status</h2>
-  <div class="option-strip">{optional_strip}</div>
-  <p class="note">The report inventory is a typed TSV map of the generated report graph. It is intended for auditing, packaging, and programmatic checks without opening every nested HTML page.</p>
-  <div class="controls">
-    <input id="dashboardSearch" placeholder="Filter projects and branches">
-    <select id="dashboardAssay"><option value="">all assays</option><option value="rnaseq">RNA-seq</option><option value="smallrna">smallRNA</option></select>
-    <select id="dashboardStatus"><option value="">all statuses</option><option value="ready">ready</option><option value="blocked">blocked</option><option value="failed">failed</option></select>
-  </div>
   <h2 id="projects">Projects</h2>
-  <p class="note">Project pages join assay branches that share a project identifier, so matched RNA-seq and smallRNA analyses can be reviewed together.</p>
+  <p class="note">Each project report joins the assay branches that share a project identifier. It is the canonical entry point for biological results and project-specific QC.</p>
+  {controls_html}
   <div class="project-grid">{project_cards}</div>
-  <table>
-    <thead>
-      <tr><th>project report</th><th>ready assays</th><th>planned branches</th><th>ready branches</th><th>notes</th></tr>
-    </thead>
-    <tbody>{''.join(project_table_rows)}</tbody>
-  </table>
-  <h2 id="assay-branches">Assay Branches</h2>
-  <table>
-    <thead>
-      <tr><th>assay</th><th>project</th><th>status</th><th>reason</th><th>libraries</th><th>samples</th><th>branch resources</th></tr>
-    </thead>
-    <tbody>{''.join(branch_table_rows)}</tbody>
-  </table>
-  <h2>Status Glossary</h2>
-  <p class="note"><strong>ready</strong> means the branch is planned and can produce reports. <strong>missing</strong> means ASPIS expected a report artifact but it is absent. <strong>not present</strong> means an optional layer was not configured or did not apply. <strong>blocked</strong> and <strong>failed</strong> indicate pipeline or input problems that require inspection before biological interpretation.</p>
+  <section class="run-panel" id="run-qc">
+    <h2>Run-Wide QC</h2>
+    <p>QC artifacts are grouped by project, assay, and processing stage. Available QC reports: <strong>{qc_ok}</strong>; not ready: <strong>{qc_not_ready}</strong>.</p>
+    <div class="link-list">{qc_overview_link}</div>
+  </section>
+  <section class="run-panel" id="run-audit">
+    <h2>Run Provenance And Audit</h2>
+    <p>The files below record run intake, planning, software checks, execution status, and the generated report graph.</p>
+    <div class="link-list">{manifest_link} {plan_link} {env_link} {exec_link} {inventory_link}</div>
+  </section>
   <script>
     function applyDashboardFilters() {{
+      if (!document.getElementById('dashboardSearch')) return;
       const text = document.getElementById('dashboardSearch').value.toLowerCase();
       const assay = document.getElementById('dashboardAssay').value;
       const status = document.getElementById('dashboardStatus').value;
-      document.querySelectorAll('.project-card, .branch-row').forEach(node => {{
+      document.querySelectorAll('.project-card').forEach(node => {{
         const okText = !text || node.textContent.toLowerCase().includes(text);
         const okAssay = !assay || !node.dataset.assay || node.dataset.assay === assay || node.textContent.toLowerCase().includes(assay);
         const okStatus = !status || !node.dataset.status || node.dataset.status === status || node.textContent.toLowerCase().includes(status);
         node.style.display = okText && okAssay && okStatus ? '' : 'none';
       }});
     }}
-    ['dashboardSearch', 'dashboardAssay', 'dashboardStatus'].forEach(id => document.getElementById(id).addEventListener('input', applyDashboardFilters));
+    ['dashboardSearch', 'dashboardAssay', 'dashboardStatus'].forEach(id => {{
+      const control = document.getElementById(id);
+      if (control) control.addEventListener('input', applyDashboardFilters);
+    }});
   </script>
   {report_map_script()}
   {report_shell_close()}
