@@ -338,18 +338,19 @@ def main() -> int:
         assert 'href="#sample-design"' in html
         assert 'href="#workflow-status"' in html
         assert 'href="#raw-artifacts"' in html
-        assert 'href="#raw-project-pages"' in html
         assert 'href="#raw-qc-design"' in html
-        assert 'href="#raw-summary-manifests"' in html
-        assert 'href="#raw-contrast-summary"' in html
+        assert 'href="#raw-project-pages"' not in html
+        assert 'href="#raw-summary-manifests"' not in html
+        assert 'href="#raw-contrast-summary"' not in html
         assert 'href="#status-glossary"' not in html
         assert 'id="status-glossary"' not in html
         assert html.index('href="#layer-matched-mirna-mrna"') < html.index('href="#qc-and-design"')
         assert html.index('href="#qc-and-design"') < html.index('href="#raw-artifacts"')
-        assert html.index('href="#raw-artifacts"') < html.index('href="#raw-contrast-summary"')
         assert 'id="layer-rnaseq-de"' in html
         assert 'id="layer-dtu"' in html
         assert 'id="layer-matched-mirna-mrna"' in html
+        assert "<th>features</th><th>significant</th><th>up</th><th>down</th>" in html
+        assert "Raw Contrast Summary" not in html
         assert "RNA-seq DE plots and tables" not in html
         assert "GO/Reactome plots and tables" not in html
         assert "DTU/splicing method plots and source tables" not in html

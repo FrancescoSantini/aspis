@@ -178,6 +178,39 @@ def index_row(index: dict[str, dict[str, str]], key: str, row: dict[str, str]) -
         index.setdefault(variant, row)
 
 
+def parse_gtf_attributes(text: str) -> dict[str, str]:
+    attrs: dict[str, str] = {}
+    for match in re.finditer(r'([A-Za-z0-9_]+)\s+"([^"]*)"', text):
+        attrs[match.group(1)] = match.group(2)
+    return attrs
+
+
+def add_gtf_gene_display_maps(path_text: str, by_gene: dict[str, dict[str, str]]) -> None:
+    if not path_text:
+        return
+    path = Path(path_text)
+    if not path.is_file():
+        return
+    with path.open(encoding="utf-8", errors="replace") as handle:
+        for line in handle:
+            if not line or line.startswith("#"):
+                continue
+            fields = line.rstrip("\n").split("\t")
+            if len(fields) < 9:
+                continue
+            attrs = parse_gtf_attributes(fields[8])
+            gene_id = attrs.get("gene_id", "")
+            if not gene_id:
+                continue
+            gene_name = attrs.get("gene_name", gene_id)
+            row = {
+                "gene_id": gene_id,
+                "gene_name": gene_name,
+                "gene_display": gene_display_label(gene_id, gene_name),
+            }
+            index_row(by_gene, gene_id, row)
+
+
 def load_gene_display_maps(metadata_path: str) -> tuple[dict[str, dict[str, str]], dict[str, dict[str, str]]]:
     if not metadata_path:
         return {}, {}
@@ -214,6 +247,11 @@ def display_for_gene_id(gene_id: str, by_gene: dict[str, dict[str, str]]) -> str
     return " + ".join(labels)
 
 
+def raw_id_display(value: str) -> bool:
+    parts = gene_id_parts(value)
+    return bool(parts) and all(part.startswith(("ENSG", "MSTRG", "STRG")) for part in parts)
+
+
 def hydrate_gene_display_rows(
     rows: list[dict[str, str]],
     by_gene: dict[str, dict[str, str]],
@@ -222,7 +260,12 @@ def hydrate_gene_display_rows(
     for row in rows:
         gene_id = row.get("gene_id", "")
         gene_display = display_for_gene_id(gene_id, by_gene)
-        if gene_display and (not row.get("gene_display", "") or row.get("gene_display", "") == gene_id):
+        existing_display = row.get("gene_display", "")
+        if gene_display and (
+            not existing_display
+            or existing_display == gene_id
+            or raw_id_display(existing_display)
+        ):
             row["gene_display"] = gene_display
         meta = next((by_gene.get(variant) for variant in identifier_variants(gene_id) if by_gene.get(variant)), None)
         if meta is None:
@@ -278,6 +321,54 @@ def truncate_label(value: str, max_chars: int) -> str:
     if len(value) <= max_chars:
         return value
     return value[: max(1, max_chars - 3)] + "..."
+
+
+def wrapped_label_lines(value: str, max_chars: int, max_lines: int = 2) -> list[str]:
+    value = value.strip()
+    if len(value) <= max_chars:
+        return [value]
+    tokens = re.split(r"(\s+\+\s+|\s+)", value)
+    lines: list[str] = []
+    current = ""
+    for token in tokens:
+        if not token:
+            continue
+        trial = current + token
+        if current and len(trial) > max_chars:
+            lines.append(current.strip())
+            current = token.strip()
+            if len(lines) == max_lines - 1:
+                break
+        else:
+            current = trial
+    remainder = current.strip()
+    if remainder:
+        lines.append(remainder)
+    if not lines:
+        lines = [value[:max_chars]]
+    if len(lines) > max_lines:
+        lines = lines[:max_lines]
+    if len(" ".join(lines)) < len(value):
+        lines[-1] = truncate_label(lines[-1], max_chars)
+    return lines
+
+
+def append_wrapped_svg_text(
+    parts: list[str],
+    x: float,
+    y: float,
+    label: str,
+    max_chars: int,
+    *,
+    anchor: str = "start",
+    size: int = 12,
+    weight: str = "400",
+) -> None:
+    for offset, line in enumerate(wrapped_label_lines(label, max_chars)):
+        parts.append(
+            f'<text x="{x}" y="{y + offset * (size + 2)}" text-anchor="{anchor}" '
+            f'font-size="{size}" font-weight="{weight}">{html.escape(line)}</text>\n'
+        )
 
 
 def event_label(row: dict[str, str], method: str) -> str:
@@ -605,10 +696,13 @@ def render_signed_effect_svg(
         label = dexseq_exon_label(row) if method_upper == "DEXSEQEXON" else event_label(row, method)
         if not filter_gene and method_upper != "RMATS":
             label = f"{gene_label(row)} {label}"
-        label = truncate_label(label, 66)
         padj = row.get("padj", "")
         padj_text = f"; padj {format_number(padj)}" if padj else ""
-        parts.append(f'<text x="{left - 12}" y="{y + 18}" text-anchor="end" font-size="12">{html.escape(label)}</text>\n')
+        if method_upper == "DEXSEQEXON":
+            append_wrapped_svg_text(parts, left - 12, y + 12, label, 54, anchor="end", size=11)
+        else:
+            label = truncate_label(label, 66)
+            parts.append(f'<text x="{left - 12}" y="{y + 18}" text-anchor="end" font-size="12">{html.escape(label)}</text>\n')
         parts.append(f'<rect class="{css_class}" x="{bar_x:.1f}" y="{y + 4}" width="{bar_width:.1f}" height="18" rx="2"/>\n')
         parts.append(f'<text x="{left + bar_w + 12}" y="{y + 19}" font-size="11" class="muted">{html.escape(axis_label)} {format_number(effect)}{html.escape(padj_text)}</text>\n')
     parts.append("</svg>\n")
@@ -726,9 +820,12 @@ def render_top_genes_signed_effect_svg(
     y = top
     for kind, item in grouped:
         if kind == "gene":
-            label = truncate_label(str(item), 72)
             parts.append(f'<line class="rule" x1="24" y1="{y - 7}" x2="{width - 24}" y2="{y - 7}"/>\n')
-            parts.append(f'<text class="gene" x="24" y="{y + 10}" font-size="12">{html.escape(label)}</text>\n')
+            if method.upper() == "DEXSEQEXON":
+                append_wrapped_svg_text(parts, 24, y + 7, str(item), 82, size=11, weight="700")
+            else:
+                label = truncate_label(str(item), 72)
+                parts.append(f'<text class="gene" x="24" y="{y + 10}" font-size="12">{html.escape(label)}</text>\n')
             y += gene_h
             continue
         row = item
@@ -873,9 +970,11 @@ def plot_row(args: argparse.Namespace, row: dict[str, str]) -> dict[str, str]:
     if not standardized:
         output["reason"] = "standardized result table has no rows"
         return output
-    by_gene, by_transcript = load_gene_display_maps(row.get("transcript_metadata", ""))
-    hydrate_gene_display_rows(standardized, by_gene, by_transcript)
     method_upper = row.get("method", "").upper()
+    by_gene, by_transcript = load_gene_display_maps(row.get("transcript_metadata", ""))
+    if method_upper == "DEXSEQEXON":
+        add_gtf_gene_display_maps(row.get("annotation_gtf", ""), by_gene)
+    hydrate_gene_display_rows(standardized, by_gene, by_transcript)
     if method_upper == "SUPPA2":
         standardized = dedupe_suppa2_rows(standardized)
     output["n_standardized"] = str(len(standardized))

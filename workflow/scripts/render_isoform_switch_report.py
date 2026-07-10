@@ -1043,6 +1043,25 @@ def reference_gene_displays(models: list[TranscriptModel]) -> list[str]:
     return displays
 
 
+def candidate_gene_displays(candidate_rows: list[dict[str, str]]) -> list[str]:
+    displays: list[str] = []
+    seen: set[str] = set()
+    for row in candidate_rows:
+        gene_id = row.get("gene_id", "")
+        label = clean_existing_display_label(row.get("gene_display", "")) or display_gene(
+            gene_id,
+            row.get("gene_name", ""),
+        )
+        if not label:
+            continue
+        if looks_like_stringtie_id(gene_id) and label == gene_id:
+            continue
+        if label not in seen:
+            seen.add(label)
+            displays.append(label)
+    return displays
+
+
 def reference_transcript_display(isoform_id: str, model: Optional[TranscriptModel]) -> str:
     if model is None or not model.gene_id or looks_like_stringtie_id(model.gene_id):
         return ""
@@ -2655,26 +2674,37 @@ def render_event_svg(
     isoforms = [row["_isoform_id"] for row in gene_rows]
     isoforms = list(dict.fromkeys(isoforms))
     relevant_models = [models[isoform] for isoform in isoforms if isoform in models and models[isoform].exons]
-    width = 1400
+    width = 1500
     row_height = 94
-    margin_left = 430
+    margin_left = 560
     margin_right = 270
     top = 72
     height = top + max(1, len(isoforms)) * row_height + 70
     path.parent.mkdir(parents=True, exist_ok=True)
+    candidate_rows = [
+        row
+        for row in event_context.get("_candidate_rows", [])  # type: ignore[union-attr]
+        if isinstance(row, dict)
+    ]
     gene_heading = clean_existing_display_label(event.get("gene_display", "")) or display_gene(
         event.get("gene_id", ""),
         event.get("gene_name", ""),
     )
     reference_displays = reference_gene_displays(relevant_models)
+    candidate_displays = candidate_gene_displays(candidate_rows)
     if reference_displays and (not gene_heading or looks_like_stringtie_id(event.get("gene_id", ""))):
         gene_heading = " / ".join(reference_displays[:3])
         if len(reference_displays) > 3:
             gene_heading += f" +{len(reference_displays) - 3} genes"
+    elif candidate_displays and (not gene_heading or looks_like_stringtie_id(event.get("gene_id", ""))):
+        gene_heading = " / ".join(candidate_displays[:3])
+        if len(candidate_displays) > 3:
+            gene_heading += f" +{len(candidate_displays) - 3} genes"
+    elif looks_like_stringtie_id(event.get("gene_id", "")) and gene_heading:
+        gene_heading = f"assembled locus {gene_heading} (no reference gene symbol)"
     transcript_display_by_isoform = {
         row.get("isoform_id", ""): clean_existing_display_label(row.get("transcript_display", ""))
-        for row in event_context.get("_candidate_rows", [])  # type: ignore[union-attr]
-        if isinstance(row, dict)
+        for row in candidate_rows
     }
     pieces = [
         '<svg xmlns="http://www.w3.org/2000/svg" '
@@ -2716,7 +2746,7 @@ def render_event_svg(
             or isoform_id
         )
         label = f"{isoform_label} ({role}, dIF {d_if_by_isoform.get(isoform_id, '')})"
-        pieces.append(svg_text(24, y + 14, short_svg_label(label, 72), 12, "700" if role != "same_gene" else "400"))
+        pieces.append(svg_text(24, y + 14, short_svg_label(label, 82), 12, "700" if role != "same_gene" else "400"))
         pieces.append(f'<line x1="{margin_left}" x2="{width - margin_right}" y1="{y}" y2="{y}" stroke="#8c959f" stroke-width="1"/>')
         if model:
             for exon_start, exon_end in model.exons:

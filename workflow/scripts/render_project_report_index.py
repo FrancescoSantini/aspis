@@ -366,8 +366,8 @@ def workflow_status_matrix(base_dir: Path, rnaseq_base: Path, smallrna_base: Pat
         ("RNA-seq", "post-trim QC", rnaseq_base / "preprocess/multiqc/multiqc_report.html", False),
         ("RNA-seq", "alignment QC", rnaseq_base / "alignment/qc/multiqc/multiqc_report.html", False),
         ("RNA-seq", "differential report", rnaseq_base / "differential/reports/index.html", False),
-        ("RNA-seq", "GO/Reactome overview", rnaseq_base / "differential/reports/enrichment/index.html", False),
-        ("RNA-seq", "isoform-switch overview", rnaseq_base / "differential/isoform_switch/report/index.html", False),
+        ("RNA-seq", "GO/Reactome detailed report", rnaseq_base / "differential/reports/enrichment/index.html", False),
+        ("RNA-seq", "isoform-switch detailed report", rnaseq_base / "differential/isoform_switch/report/index.html", False),
         ("RNA-seq", "DTU methods", rnaseq_base / "differential/dtu/dtu_method_manifest.tsv", False),
         ("RNA-seq", "DTU consensus", rnaseq_base / "differential/dtu/consensus/dtu_consensus_gene_summary.tsv", False),
         ("smallRNA", "branch report", smallrna_base / "report/index.html", True),
@@ -375,7 +375,7 @@ def workflow_status_matrix(base_dir: Path, rnaseq_base: Path, smallrna_base: Pat
         ("smallRNA", "post-trim QC", smallrna_base / "smallrna/preprocess/multiqc/multiqc_report.html", False),
         ("smallRNA", "length/read-fate QC", smallrna_base / "smallrna/length_qc/length_distribution.svg", False),
         ("smallRNA", "differential report", smallrna_base / "smallrna/differential/reports/index.html", False),
-        ("smallRNA", "target/integration overview", smallrna_base / "smallrna/differential/reports/targets/index.html", False),
+        ("smallRNA", "target/integration detailed report", smallrna_base / "smallrna/differential/reports/targets/index.html", False),
     ]
     rows = []
     for assay, layer, path, expected in checks:
@@ -845,11 +845,14 @@ def evidence_layer_listing_tables(
                 html.escape(row.get("level", "")),
                 f"<code>{html.escape(row.get('contrast_id', ''))}</code>",
                 f'<span class="status {html.escape(row.get("status", "unknown") or "unknown")}">{html.escape(row.get("status", "unknown") or "unknown")}</span>',
+                html.escape(row.get("n_features", "")),
                 html.escape(row.get("n_significant", "")),
+                html.escape(row.get("n_up", "")),
+                html.escape(row.get("n_down", "")),
                 link_group(
                     row,
                     [
-                        ("summary_html", "summary page with plots"),
+                        ("summary_html", "detailed report"),
                         ("results", "results table"),
                     ],
                     base_dir,
@@ -969,11 +972,15 @@ def evidence_layer_listing_tables(
         smallrna_de_rows.append(
             [
                 f"<code>{html.escape(contrast_id)}</code>",
+                f'<span class="status {html.escape(summary_row.get("status", "unknown") or "unknown")}">{html.escape(summary_row.get("status", "unknown") or "unknown")}</span>',
+                html.escape(summary_row.get("n_mirnas", summary_row.get("n_features", ""))),
                 html.escape(summary_row.get("n_significant", "")),
+                html.escape(summary_row.get("n_up", "")),
+                html.escape(summary_row.get("n_down", "")),
                 link_group(
                     summary_row,
                     [
-                        ("summary_html", "miRNA summary page"),
+                        ("summary_html", "detailed report"),
                         ("results", "miRNA results"),
                     ],
                     base_dir,
@@ -1046,7 +1053,7 @@ def evidence_layer_listing_tables(
 
     return {
         "rnaseq_de": html_cell_table(
-            ["level", "contrast", "status", "significant", "links"],
+            ["level", "contrast", "status", "features", "significant", "up", "down", "links"],
             rnaseq_rows,
             "No RNA-seq summary plot pages are available.",
         ),
@@ -1066,7 +1073,7 @@ def evidence_layer_listing_tables(
             "No isoform-switch event plots are available.",
         ),
         "smallrna_de": html_cell_table(
-            ["contrast", "miRNA significant", "miRNA DE"],
+            ["contrast", "status", "features", "significant", "up", "down", "miRNA DE"],
             smallrna_de_rows,
             "No smallRNA DE plots are available.",
         ),
@@ -1118,7 +1125,7 @@ def evidence_layer_sections(
                 "layer-rnaseq-de",
                 "Start here for gene- and transcript-level DESeq2 status, summary pages, and source tables.",
                 [
-                    link(rnaseq_base / "differential/reports/index.html", "RNA-seq differential report", base_dir),
+                    link(rnaseq_base / "differential/reports/index.html", "RNA-seq differential detailed report", base_dir),
                     table_link(rnaseq_base / "differential/reports/summaries/summary_manifest.tsv", "summary manifest", base_dir),
                     table_link(rnaseq_base / "differential/gene_deseq2/deseq2_manifest.tsv", "gene DESeq2 manifest", base_dir),
                     table_link(rnaseq_base / "differential/transcript_deseq2/deseq2_manifest.tsv", "transcript DESeq2 manifest", base_dir),
@@ -1131,7 +1138,7 @@ def evidence_layer_sections(
                 "layer-enrichment",
                 "Use this layer to check which feature-set resources were loaded and which ORA/ranked outputs were produced.",
                 [
-                    link(rnaseq_base / "differential/reports/enrichment/index.html", "GO/Reactome overview", base_dir),
+                    link(rnaseq_base / "differential/reports/enrichment/index.html", "GO/Reactome detailed report", base_dir),
                     table_link(rnaseq_base / "differential/reports/enrichment/enrichment_manifest.tsv", "enrichment manifest", base_dir),
                     table_link(rnaseq_base / "differential/reports/feature_set_resources.tsv", "feature-set resources", base_dir),
                 ],
@@ -1154,7 +1161,7 @@ def evidence_layer_sections(
                 "layer-isoform-switch",
                 "Use this layer for IsoformSwitchAnalyzeR switch candidates, sequence/consequence assets, and deterministic joins to independent DTU/splicing method evidence for the same contrast and gene.",
                 [
-                    link(rnaseq_base / "differential/isoform_switch/report/index.html", "isoform-switch overview", base_dir),
+                    link(rnaseq_base / "differential/isoform_switch/report/index.html", "isoform-switch detailed report", base_dir),
                     table_link(rnaseq_base / "differential/isoform_switch/report/switch_candidates.tsv", "switch candidates", base_dir),
                     table_link(rnaseq_base / "differential/isoform_switch/report/switch_event_summary.tsv", "switch event summary", base_dir),
                     table_link(rnaseq_base / "differential/isoform_switch/report/isoform_dtu_evidence.tsv", "isoform DTU evidence", base_dir),
@@ -1171,7 +1178,7 @@ def evidence_layer_sections(
                 "layer-smallrna-de",
                 "Use this layer for miRNA differential-expression summaries and source tables.",
                 [
-                    link(smallrna_base / "smallrna/differential/reports/index.html", "smallRNA differential report", base_dir),
+                    link(smallrna_base / "smallrna/differential/reports/index.html", "smallRNA differential detailed report", base_dir),
                     table_link(smallrna_base / "smallrna/differential/reports/summaries/summary_manifest.tsv", "summary manifest", base_dir),
                     table_link(smallrna_base / "smallrna/differential/mirna_deseq2/deseq2_manifest.tsv", "miRNA DESeq2 manifest", base_dir),
                     link(smallrna_base / "smallrna/differential/reports/technical_report.pdf", "smallRNA technical PDF", base_dir),
@@ -1183,7 +1190,7 @@ def evidence_layer_sections(
                 "layer-mirna-targets",
                 "Use this layer for target-gene enrichment and target-gene feature sets. miRNA identifier feature sets are optional and separate.",
                 [
-                    link(smallrna_base / "smallrna/differential/reports/targets/index.html", "target and integration overview", base_dir),
+                    link(smallrna_base / "smallrna/differential/reports/targets/index.html", "target and integration detailed report", base_dir),
                     table_link(smallrna_base / "smallrna/differential/target_enrichment/target_manifest.tsv", "target enrichment manifest", base_dir),
                     table_link(
                         smallrna_base / "smallrna/differential/target_feature_sets/target_feature_set_manifest.tsv",
@@ -1226,17 +1233,6 @@ def raw_artifact_sections(base_dir: Path, rnaseq_base: Path, smallrna_base: Path
     return "\n".join(
         [
             layer_panel(
-                "Project and assay entry pages",
-                "raw-project-pages",
-                "Stable HTML entry points for the complete project and each assay branch.",
-                [
-                    link(rnaseq_base / "report/index.html", "RNA-seq branch report", base_dir),
-                    link(smallrna_base / "report/index.html", "smallRNA branch report", base_dir),
-                    link(rnaseq_base / "differential/reports/index.html", "RNA-seq differential index", base_dir),
-                    link(smallrna_base / "smallrna/differential/reports/index.html", "smallRNA differential index", base_dir),
-                ],
-            ),
-            layer_panel(
                 "QC and design source files",
                 "raw-qc-design",
                 "Machine-readable files used to audit sample metadata, FASTQ inspection, QC, alignment, and strandedness.",
@@ -1249,22 +1245,6 @@ def raw_artifact_sections(base_dir: Path, rnaseq_base: Path, smallrna_base: Path
                     table_link(smallrna_base / "design.tsv", "smallRNA design", base_dir),
                     table_link(smallrna_base / "fastq_inspection.tsv", "smallRNA FASTQ inspection", base_dir),
                     link(smallrna_base / "smallrna/length_qc/length_distribution.svg", "smallRNA length distribution", base_dir),
-                ],
-            ),
-            layer_panel(
-                "Raw summary manifests",
-                "raw-summary-manifests",
-                "Wide TSV manifests are kept here so the evidence map can stay readable while source rows remain one click away.",
-                [
-                    table_link(rnaseq_base / "differential/reports/summaries/summary_manifest.tsv", "RNA-seq summary manifest", base_dir),
-                    table_link(rnaseq_base / "differential/reports/enrichment/enrichment_manifest.tsv", "RNA-seq enrichment manifest", base_dir),
-                    table_link(rnaseq_base / "differential/dtu/dtu_method_manifest.tsv", "DTU method manifest", base_dir),
-                    table_link(smallrna_base / "smallrna/differential/reports/summaries/summary_manifest.tsv", "smallRNA summary manifest", base_dir),
-                    table_link(
-                        smallrna_base / "smallrna/differential/mirna_mrna_integration/mirna_mrna_manifest.tsv",
-                        "miRNA-mRNA integration manifest",
-                        base_dir,
-                    ),
                 ],
             ),
         ]
@@ -1295,10 +1275,7 @@ def project_report_map() -> list[dict[str, object]]:
             "Source files and audit trail",
             "#raw-artifacts",
             children=[
-                report_map_item("Project and assay entry pages", "#raw-project-pages"),
                 report_map_item("QC and design source files", "#raw-qc-design"),
-                report_map_item("Raw summary manifests", "#raw-summary-manifests"),
-                report_map_item("Raw contrast summary", "#raw-contrast-summary"),
             ],
         ),
     ]
@@ -1447,13 +1424,10 @@ def render(args: argparse.Namespace) -> None:
   <h3 id="workflow-status">Workflow Status Matrix</h3>
   {workflow_status_matrix(base_dir, rnaseq_base, smallrna_base)}
   <h2 id="raw-artifacts">Source Files And Audit Trail</h2>
-  <p class="section-note">This section is supporting material. It is grouped last so the main report remains readable while the machine-readable source manifests and branch entry pages stay reachable for audit or debugging.</p>
+  <p class="section-note">This section is supporting material. It is grouped last so the main report remains readable while machine-readable QC and design inputs stay reachable for audit or debugging.</p>
   <div class="layer-grid">
     {raw_artifact_sections(base_dir, rnaseq_base, smallrna_base)}
   </div>
-  <h3 id="raw-contrast-summary">Raw Contrast Summary</h3>
-  <p class="section-note">This lower table preserves the assay-specific summary rows used to build the matrix above.</p>
-  {summary_table(base_dir, rnaseq_base, smallrna_base)}
   <script>
     const contrastInput = document.getElementById('contrastFilter');
     if (contrastInput) {{

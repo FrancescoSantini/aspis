@@ -474,10 +474,10 @@ def friendly_feature_set_label(row: dict[str, str]) -> str:
 
 def write_enrichment_svg(path: Path, rows: list[dict[str, str]], top_n: int) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    width = 1320
+    width = 1120
     row_height = 36
-    margin_left = 650
-    margin_right = 190
+    margin_left = 360
+    margin_right = 170
     margin_top = 52
     margin_bottom = 50
     selected = rows[:top_n]
@@ -502,10 +502,10 @@ def write_enrichment_svg(path: Path, rows: list[dict[str, str]], top_n: int) -> 
         '<rect width="100%" height="100%" fill="#ffffff"/>',
         '<text x="40" y="25" font-family="sans-serif" font-size="18" font-weight="700">Target feature-set enrichment</text>',
         '<text x="40" y="40" font-family="sans-serif" font-size="11" fill="#57606a">X axis is -log10(FDR); dot size is target overlap. Collection: all=all target genes, up/down=targets from direction-specific miRNAs.</text>',
-        '<circle cx="900" cy="24" r="6" fill="#4d4d4d" fill-opacity="0.82"/><text x="912" y="28" font-family="sans-serif" font-size="11">all</text>',
-        '<circle cx="960" cy="24" r="6" fill="#b2182b" fill-opacity="0.82"/><text x="972" y="28" font-family="sans-serif" font-size="11">up</text>',
-        '<circle cx="1020" cy="24" r="6" fill="#2166ac" fill-opacity="0.82"/><text x="1032" y="28" font-family="sans-serif" font-size="11">down</text>',
-        '<circle cx="1110" cy="24" r="4" fill="#8c959f" fill-opacity="0.82"/><circle cx="1130" cy="24" r="10" fill="#8c959f" fill-opacity="0.42"/><text x="1145" y="28" font-family="sans-serif" font-size="11">overlap</text>',
+        '<circle cx="700" cy="24" r="6" fill="#4d4d4d" fill-opacity="0.82"/><text x="712" y="28" font-family="sans-serif" font-size="11">all</text>',
+        '<circle cx="760" cy="24" r="6" fill="#b2182b" fill-opacity="0.82"/><text x="772" y="28" font-family="sans-serif" font-size="11">up</text>',
+        '<circle cx="820" cy="24" r="6" fill="#2166ac" fill-opacity="0.82"/><text x="832" y="28" font-family="sans-serif" font-size="11">down</text>',
+        '<circle cx="910" cy="24" r="4" fill="#8c959f" fill-opacity="0.82"/><circle cx="930" cy="24" r="10" fill="#8c959f" fill-opacity="0.42"/><text x="945" y="28" font-family="sans-serif" font-size="11">overlap</text>',
         f'<line x1="{margin_left}" y1="{height - margin_bottom}" x2="{width - margin_right}" y2="{height - margin_bottom}" stroke="#777"/>',
     ]
     for index, (row, score) in enumerate(zip(selected, scores)):
@@ -514,8 +514,8 @@ def write_enrichment_svg(path: Path, rows: list[dict[str, str]], top_n: int) -> 
         overlap = int(row.get("overlap", "1") or "1")
         radius = min(16, 4 + overlap * 2)
         label = friendly_feature_set_label(row)
-        if len(label) > 98:
-            label = label[:95] + "..."
+        if len(label) > 48:
+            label = label[:45] + "..."
         color = colors.get(row["collection"], "#4d4d4d")
         elements.append(f'<text x="40" y="{y + 4}" font-family="sans-serif" font-size="12">{html.escape(label)}</text>')
         elements.append(f'<line x1="{margin_left}" y1="{y}" x2="{width - margin_right}" y2="{y}" stroke="#eeeeee"/>')
