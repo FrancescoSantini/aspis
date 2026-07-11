@@ -29,8 +29,8 @@ separate while also building matched cross-assay summaries for review.
   enrichment.
 - Integrate matched RNA-seq and smallRNA-seq contrasts through miRNA-target
   evidence tables.
-- Render project dashboards, branch reports, contrast summaries, plot atlases,
-  technical PDFs, status manifests, and audit tables.
+- Render run dashboards, canonical project evidence-layer reports, contrast
+  summaries, plot atlases, technical PDFs, status manifests, and audit tables.
 
 ## Repository Layout
 
@@ -215,10 +215,12 @@ Main report entry points:
 
 - `results/<run_id>/index.html`: run-level dashboard.
 - `results/<run_id>/projects/<project>/index.html`: integrated project report.
-- `results/<run_id>/branches/rnaseq/<project>/report/index.html`: RNA-seq
-  branch report.
-- `results/<run_id>/branches/smallrna/<project>/report/index.html`:
-  smallRNA branch report, when smallRNA is enabled.
+- `results/<run_id>/projects/<project>/layers/<layer>/index.html`: canonical
+  detailed report for one evidence layer.
+- `results/<run_id>/projects/<project>/layers/<layer>/technical_report.pdf`:
+  portable PDF for one evidence layer.
+- `results/<run_id>/projects/<project>/technical_report.pdf`: combined project
+  PDF assembled from all canonical evidence-layer PDFs.
 
 The project report is organized around:
 

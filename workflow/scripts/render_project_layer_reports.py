@@ -1,0 +1,299 @@
+#!/usr/bin/env python3
+"""Render canonical project evidence-layer pages and PDF source manifests."""
+
+from __future__ import annotations
+
+import argparse
+import csv
+import html
+import os
+from collections import defaultdict
+from pathlib import Path
+
+from report_navigation import report_map_css, report_map_item, report_map_script, report_shell_close, report_shell_open
+
+
+LAYER_DEFINITIONS = [
+    ("rnaseq_de", "RNA-seq differential expression", "Gene- and transcript-level DESeq2 results."),
+    ("enrichment", "GO/Reactome enrichment", "Over-representation and ranked enrichment results."),
+    ("dtu_splicing", "Independent DTU/splicing methods", "DRIMSeq, DEXSeq, DEXSeqExon, SUPPA2, and rMATS results."),
+    ("isoform_switch", "Isoform-switch candidates with DTU/splicing support", "Isoform-switch candidates joined to independent DTU/splicing evidence."),
+    ("smallrna_de", "smallRNA differential expression", "miRNA differential-expression results."),
+    ("mirna_targets", "miRNA targets and target feature sets", "Target-gene and target-feature-set enrichment from differential miRNAs."),
+    ("matched_mirna_mrna", "Matched miRNA-mRNA evidence", "Paired-assay inverse miRNA-target and target-feature-set evidence."),
+]
+
+ASSET_FIELDS = {
+    "rnaseq_de": ["results", "filtered", "summary_html", "volcano_pdf", "volcano_preview", "ma_pdf", "ma_preview", "pca_pdf", "pca_preview", "sample_distance_pdf", "sample_distance_preview", "heatmap_pdf", "heatmap_preview"],
+    "enrichment": ["feature_set_universe", "feature_set_results", "feature_set_plot", "ranked_feature_set_results", "ranked_feature_set_plot", "resource_mapping_qa"],
+    "dtu_splicing": ["source_results", "transcript_results", "overview_plot", "usage_plot", "feature_plot"],
+    "isoform_switch": ["plot_svg", "event_html", "event_nt_fasta", "event_aa_fasta"],
+    "smallrna_de": ["results", "filtered", "summary_html", "volcano_pdf", "volcano_preview", "ma_pdf", "ma_preview", "pca_pdf", "pca_preview", "sample_distance_pdf", "sample_distance_preview", "heatmap_pdf", "heatmap_preview", "length_distribution_plot"],
+    "mirna_targets": [
+        "target_manifest", "mirna_targets", "target_universe", "target_enrichment", "target_summary",
+        "target_source_summary", "target_enrichment_plot", "resource_mapping_qa",
+        "target_feature_set_manifest", "target_feature_set_universe", "target_feature_set_results",
+        "target_feature_set_plot", "mirna_feature_set_results", "mirna_feature_set_plot",
+    ],
+    "matched_mirna_mrna": [
+        "sample_pairing", "mirna_mrna_manifest", "mirna_mrna_pairs", "mirna_mrna_summary", "mirna_mrna_plot",
+        "mirna_mrna_target_modes", "mirna_mrna_target_mode_summary",
+        "mirna_mrna_target_feature_set_manifest", "mirna_mrna_target_feature_set_universe",
+        "mirna_mrna_target_feature_set_results", "mirna_mrna_target_feature_set_plot",
+        "mirna_mrna_target_ranked_feature_set_universe", "mirna_mrna_target_ranked_feature_set_results",
+        "mirna_mrna_target_ranked_feature_set_plot",
+    ],
+}
+
+COUNT_FIELDS = [
+    "n_features", "n_mirnas", "n_significant", "n_up", "n_down", "n_feature_set_terms",
+    "n_ranked_feature_set_terms", "n_standardized", "n_significant", "n_events", "n_targets",
+    "n_target_terms", "n_pairs", "n_inverse_pairs", "n_feature_set_results", "n_ranked_feature_set_results",
+]
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--project", required=True)
+    parser.add_argument("--branch-dir", required=True)
+    parser.add_argument("--output-root", required=True)
+    parser.add_argument("--manifest", required=True)
+    parser.add_argument("--done", required=True)
+    return parser.parse_args()
+
+
+def read_tsv(path: Path) -> list[dict[str, str]]:
+    if not path.exists():
+        return []
+    with path.open(newline="", encoding="utf-8") as handle:
+        reader = csv.DictReader(handle, delimiter="\t")
+        return [{key: (value or "").strip() for key, value in row.items()} for row in reader]
+
+
+def write_tsv(path: Path, rows: list[dict[str, str]], columns: list[str]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=columns, delimiter="\t", lineterminator="\n", extrasaction="ignore")
+        writer.writeheader()
+        writer.writerows(rows)
+
+
+def source_rows(branch_dir: Path, project: str) -> dict[str, list[dict[str, str]]]:
+    rnaseq = branch_dir / "rnaseq" / project
+    small = branch_dir / "smallrna" / project / "smallrna"
+    isoform_rows = read_tsv(rnaseq / "differential/isoform_switch/report/switch_event_summary.tsv")
+    switch_atlas = rnaseq / "differential/isoform_switch/report/switch_plots.pdf"
+    if switch_atlas.exists():
+        isoform_rows.insert(
+            0,
+            {
+                "contrast_id": "project",
+                "status": "ok",
+                "gene_display": "All switch candidates",
+                "plot_svg": switch_atlas.as_posix(),
+                "reason": "Combined vector switch-plot atlas",
+            },
+        )
+    return {
+        "rnaseq_de": read_tsv(rnaseq / "differential/reports/summaries/summary_manifest.tsv"),
+        "enrichment": read_tsv(rnaseq / "differential/reports/enrichment/enrichment_manifest.tsv"),
+        "dtu_splicing": read_tsv(rnaseq / "differential/dtu/plots/dtu_plot_manifest.tsv"),
+        "isoform_switch": isoform_rows,
+        "smallrna_de": read_tsv(small / "differential/reports/summaries/summary_manifest.tsv"),
+        "mirna_targets": (
+            [dict(row, analysis="target enrichment") for row in read_tsv(small / "differential/target_enrichment/target_manifest.tsv")]
+            + [dict(row, analysis="target feature sets") for row in read_tsv(small / "differential/target_feature_sets/target_feature_set_manifest.tsv")]
+            + [dict(row, analysis="miRNA identifier feature sets") for row in read_tsv(small / "differential/mirna_feature_sets/mirna_feature_set_manifest.tsv")]
+        ),
+        "matched_mirna_mrna": (
+            [dict(row, analysis="miRNA-mRNA integration") for row in read_tsv(small / "differential/mirna_mrna_integration/mirna_mrna_manifest.tsv")]
+            + [dict(row, analysis="inverse target feature sets") for row in read_tsv(small / "differential/mirna_mrna_target_feature_sets/target_feature_set_manifest.tsv")]
+        ),
+    }
+
+
+def absolute_path(value: str) -> Path:
+    path = Path(value)
+    return path if path.is_absolute() else Path.cwd() / path
+
+
+def relative_href(value: str, base_dir: Path) -> str:
+    path = absolute_path(value)
+    try:
+        return os.path.relpath(path, start=base_dir.resolve()).replace(os.sep, "/")
+    except ValueError:
+        return path.resolve().as_uri()
+
+
+def asset_kind(field: str, path: Path) -> str:
+    suffix = path.suffix.lower()
+    if suffix in {".svg", ".png", ".jpg", ".jpeg", ".pdf"} and ("plot" in field or "preview" in field or suffix != ".pdf"):
+        return "plot"
+    if suffix in {".html", ".htm"}:
+        return "html"
+    if suffix in {".tsv", ".csv"}:
+        return "table"
+    if suffix in {".fasta", ".fa", ".faa", ".fna"}:
+        return "sequence"
+    return "file"
+
+
+def prepared_assets(project: str, layer_key: str, rows: list[dict[str, str]]) -> list[dict[str, str]]:
+    assets: list[dict[str, str]] = []
+    seen: set[tuple[str, str, str]] = set()
+    for row in rows:
+        contrast = row.get("contrast_id", "project") or "project"
+        for field in ASSET_FIELDS[layer_key]:
+            value = row.get(field, "")
+            if not value:
+                continue
+            key = (contrast, field, value)
+            if key in seen:
+                continue
+            seen.add(key)
+            path = absolute_path(value)
+            assets.append(
+                {
+                    "project": project,
+                    "assay": "smallrna" if layer_key in {"smallrna_de", "mirna_targets", "matched_mirna_mrna"} else "rnaseq",
+                    "level": row.get("level", "") or layer_key,
+                    "contrast_id": contrast,
+                    "status": row.get("status", "") or "unknown",
+                    "asset_group": layer_key,
+                    "asset_label": f"{row.get('analysis', row.get('method', row.get('level', layer_key)))} {field}".strip(),
+                    "asset_kind": asset_kind(field, path),
+                    "path": value,
+                    "exists": "true" if path.exists() else "false",
+                }
+            )
+    return assets
+
+
+def link_buttons(row: dict[str, str], layer_key: str, base_dir: Path) -> str:
+    buttons = []
+    for field in ASSET_FIELDS[layer_key]:
+        value = row.get(field, "")
+        if not value:
+            continue
+        label = field.replace("_", " ")
+        buttons.append(f'<a class="button-link" href="{html.escape(relative_href(value, base_dir))}">{html.escape(label)}</a>')
+    return "".join(buttons) or '<span class="muted">no linked artifacts</span>'
+
+
+def row_label(row: dict[str, str], layer_key: str) -> str:
+    if layer_key == "rnaseq_de":
+        return row.get("level", "differential expression")
+    if layer_key == "dtu_splicing":
+        return row.get("method", "DTU/splicing")
+    if layer_key == "isoform_switch":
+        return row.get("gene_display", "") or row.get("gene_name", "") or row.get("gene_id", "") or row.get("event_id", "isoform switch")
+    if layer_key == "smallrna_de":
+        return "miRNA differential expression"
+    return row.get("analysis", "") or row.get("level", "") or layer_key.replace("_", " ")
+
+
+def row_metrics(row: dict[str, str]) -> str:
+    values = []
+    for field in COUNT_FIELDS:
+        value = row.get(field, "")
+        if value and value not in {"0", "0.0"}:
+            values.append(f"{field[2:].replace('_', ' ')}: {value}")
+    return "; ".join(values[:6]) or "-"
+
+
+def render_layer(project: str, key: str, title: str, description: str, rows: list[dict[str, str]], output: Path) -> None:
+    output.parent.mkdir(parents=True, exist_ok=True)
+    base_dir = output.parent
+    grouped: dict[str, list[dict[str, str]]] = defaultdict(list)
+    for row in rows:
+        grouped[row.get("contrast_id", "project") or "project"].append(row)
+    contrasts = sorted(grouped)
+    map_items = [report_map_item("Layer summary", "#layer-summary")]
+    map_items.extend(report_map_item(contrast, f"#contrast-{index}") for index, contrast in enumerate(contrasts, start=1))
+    sections = []
+    for index, contrast in enumerate(contrasts, start=1):
+        body_rows = []
+        for row in grouped[contrast]:
+            body_rows.append(
+                "<tr>"
+                f"<td>{html.escape(row_label(row, key))}</td>"
+                f"<td><span class=\"status {html.escape(row.get('status', 'unknown') or 'unknown')}\">{html.escape(row.get('status', 'unknown') or 'unknown')}</span></td>"
+                f"<td>{html.escape(row_metrics(row))}</td>"
+                f"<td><div class=\"button-list\">{link_buttons(row, key, base_dir)}</div></td>"
+                f"<td>{html.escape(row.get('reason', ''))}</td>"
+                "</tr>"
+            )
+        sections.append(
+            f'<section class="panel" id="contrast-{index}" data-report-nav-target="contrast-{index}">'
+            f"<h2>{html.escape(contrast)}</h2>"
+            '<div class="table-scroll"><table><thead><tr><th>analysis</th><th>status</th><th>counts</th><th>tables and plots</th><th>reason</th></tr></thead>'
+            f"<tbody>{''.join(body_rows)}</tbody></table></div></section>"
+        )
+    pdf_href = "technical_report.pdf"
+    css = f"""
+    body {{ color:#1f2328; font-family:Arial,sans-serif; line-height:1.4; margin:0; padding:18px; }}
+    a {{ color:#0969da; }} .breadcrumbs {{ color:#57606a; margin-bottom:14px; }}
+    h1,h2 {{ letter-spacing:0; }} h1 {{ margin:0 0 6px; }} h2 {{ border-bottom:1px solid #d0d7de; padding-bottom:6px; }}
+    .panel {{ border:1px solid #d0d7de; border-radius:6px; margin:0 0 18px; padding:16px; }}
+    .muted {{ color:#57606a; }} .export {{ margin:10px 0 0; }}
+    table {{ border-collapse:collapse; width:100%; }} th,td {{ border:1px solid #d0d7de; padding:8px; text-align:left; vertical-align:top; }} th {{ background:#f6f8fa; }}
+    .table-scroll {{ overflow-x:auto; }} .button-list {{ display:flex; flex-wrap:wrap; gap:6px; }}
+    .button-link {{ background:#f6f8fa; border:1px solid #d0d7de; border-radius:4px; display:inline-block; padding:2px 7px; text-decoration:none; }}
+    .status {{ font-weight:700; }} .status.ok,.status.completed {{ color:#1a7f37; }} .status.blocked,.status.failed,.status.missing {{ color:#cf222e; }}
+    {report_map_css()}
+    """
+    shell = report_shell_open("Layer Map", map_items, base_dir)
+    page = f"""<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{html.escape(project)} - {html.escape(title)}</title><style>{css}</style></head><body>
+    <nav class="breadcrumbs"><a href="../../../../index.html">ASPIS</a> / <a href="../../../../index.html">Run</a> / <a href="../../index.html">Project</a> / Evidence layer / {html.escape(title)}</nav>
+    {shell}<section class="panel" id="layer-summary" data-report-nav-target="layer-summary"><h1>{html.escape(title)}</h1><p>{html.escape(description)}</p>
+    <p class="export"><a class="button-link" href="{pdf_href}">Download layer technical PDF</a> &middot; {len(contrasts)} contrast(s) &middot; {len(rows)} result row(s)</p></section>
+    {''.join(sections) if sections else '<section class="panel"><h2>No configured results</h2><p class="muted">This evidence layer has no result rows for this project.</p></section>'}
+    {report_shell_close()}{report_map_script()}</body></html>"""
+    output.write_text(page, encoding="utf-8")
+
+
+def main() -> int:
+    args = parse_args()
+    branch_dir = Path(args.branch_dir)
+    output_root = Path(args.output_root)
+    rows_by_layer = source_rows(branch_dir, args.project)
+    manifest_rows = []
+    for order, (key, title, description) in enumerate(LAYER_DEFINITIONS, start=1):
+        layer_dir = output_root / key
+        rows = rows_by_layer[key]
+        render_layer(args.project, key, title, description, rows, layer_dir / "index.html")
+        summary_rows = rows if key in {"rnaseq_de", "smallrna_de"} else []
+        summary_columns = sorted({column for row in summary_rows for column in row}) or ["project", "contrast_id", "status"]
+        write_tsv(layer_dir / "source_summary_manifest.tsv", summary_rows, summary_columns)
+        assets = prepared_assets(args.project, key, rows)
+        asset_columns = ["project", "assay", "level", "contrast_id", "status", "asset_group", "asset_label", "asset_kind", "path", "exists"]
+        write_tsv(layer_dir / "source_asset_manifest.tsv", assets, asset_columns)
+        status = "ok" if rows else "not_present"
+        manifest_rows.append(
+            {
+                "report_id": f"project:{args.project}:layer:{key}",
+                "parent_report_id": f"project:{args.project}",
+                "navigation_level": "layer",
+                "scope": "project",
+                "display_order": str(order),
+                "project": args.project,
+                "layer_key": key,
+                "title": title,
+                "status": status,
+                "n_contrasts": str(len({row.get('contrast_id', '') for row in rows if row.get('contrast_id', '') not in {'', 'project'}})),
+                "n_rows": str(len(rows)),
+                "html": (layer_dir / "index.html").as_posix(),
+                "pdf": (layer_dir / "technical_report.pdf").as_posix(),
+                "qa": (layer_dir / "technical_report.qa.tsv").as_posix(),
+            }
+        )
+    columns = ["report_id", "parent_report_id", "navigation_level", "scope", "display_order", "project", "layer_key", "title", "status", "n_contrasts", "n_rows", "html", "pdf", "qa"]
+    write_tsv(Path(args.manifest), manifest_rows, columns)
+    done = Path(args.done)
+    done.parent.mkdir(parents=True, exist_ok=True)
+    done.write_text(f"status\tlayers_ok\tlayers_total\n{'ok' if manifest_rows else 'not_present'}\t{sum(row['status'] == 'ok' for row in manifest_rows)}\t{len(manifest_rows)}\n", encoding="utf-8")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

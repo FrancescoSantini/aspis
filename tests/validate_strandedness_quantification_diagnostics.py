@@ -94,39 +94,6 @@ def prepare_branch_inputs() -> tuple[Path, Path]:
     return branch_dir, base
 
 
-def validate_branch_report(branch_dir: Path, base: Path) -> None:
-    output = base / "report/index.html"
-    done = base / "report/index.done"
-    run_script(
-        "workflow/scripts/render_branch_report_index.py",
-        "--assay",
-        "rnaseq",
-        "--project",
-        "TEST",
-        "--branch-dir",
-        str(branch_dir),
-        "--output",
-        str(output),
-        "--done",
-        str(done),
-    )
-    html = output.read_text(encoding="utf-8")
-    required = [
-        "Strandedness And Quantification Diagnostics",
-        "diagnostic status",
-        "warning",
-        "configured sense but inferred antisense",
-        "Review protocol and rerun quantification",
-        "featureCounts -s",
-        "StringTie stranded mode",
-        "DEXSeqExon count strandedness",
-        "strandedness inference report",
-    ]
-    missing = [needle for needle in required if needle not in html]
-    if missing:
-        raise AssertionError(f"branch strandedness diagnostics missing content: {missing}")
-
-
 def prepare_differential_inputs(base: Path) -> Path:
     report = base / "differential/reports"
     columns_plan = [
@@ -298,8 +265,7 @@ def validate_snakefile_optional_args() -> None:
 def main() -> int:
     if OUT.exists():
         shutil.rmtree(OUT)
-    branch_dir, base = prepare_branch_inputs()
-    validate_branch_report(branch_dir, base)
+    _branch_dir, base = prepare_branch_inputs()
     report = prepare_differential_inputs(base)
     validate_differential_index(base, report)
     validate_inference_schema()

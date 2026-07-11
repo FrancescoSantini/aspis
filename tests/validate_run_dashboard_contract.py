@@ -148,6 +148,24 @@ def main() -> int:
         assert "report inventory" in dashboard
         assert qc_overview.exists()
         assert inventory.exists()
+        inventory_rows = list(csv.DictReader(inventory.open(newline="", encoding="utf-8"), delimiter="\t"))
+        assert inventory_rows[0]["report_id"] == "run"
+        assert inventory_rows[0]["navigation_level"] == "entry"
+        assert not any(row["report_type"] == "branch" for row in inventory_rows)
+        assert sum(row["navigation_level"] == "layer" for row in inventory_rows) == 14
+        assert all(row["canonical_html"] == row["html"] for row in inventory_rows)
+        inventory_validation = results / "report_inventory_validation.tsv"
+        run(
+            [
+                sys.executable,
+                str(repo / "workflow" / "scripts" / "validate_report_inventory.py"),
+                "--inventory",
+                str(inventory),
+                "--output",
+                str(inventory_validation),
+            ]
+        )
+        assert inventory_validation.read_text(encoding="utf-8").splitlines()[1].startswith("ok\t")
         assert done.read_text(encoding="utf-8").splitlines()[1].startswith("ok\t3\t3\t0\t0")
 
     return 0

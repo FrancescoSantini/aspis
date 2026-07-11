@@ -9,6 +9,11 @@ from pathlib import Path
 
 
 REQUIRED_COLUMNS = {
+    "report_id",
+    "parent_report_id",
+    "navigation_level",
+    "scope",
+    "display_order",
     "report_type",
     "report_label",
     "project",
@@ -16,12 +21,15 @@ REQUIRED_COLUMNS = {
     "contrast_id",
     "status",
     "html",
+    "canonical_html",
     "pdf",
     "summary_tsv",
     "primary_tables",
     "source_manifests",
 }
 ALLOWED_STATUSES = {"ok", "missing", "not_present"}
+ALLOWED_NAVIGATION_LEVELS = {"entry", "layer", "leaf", "artifact"}
+ALLOWED_SCOPES = {"run", "project", "assay", "contrast"}
 
 
 def parse_args() -> argparse.Namespace:
@@ -49,6 +57,10 @@ def read_inventory(path: Path) -> list[dict[str, str]]:
 def validate(rows: list[dict[str, str]]) -> list[str]:
     errors: list[str] = []
     seen: set[tuple[str, str, str, str, str]] = set()
+    report_ids = [row["report_id"] for row in rows]
+    known_ids = set(report_ids)
+    if len(report_ids) != len(known_ids):
+        errors.append("report_id values are not unique")
     for index, row in enumerate(rows, start=2):
         key = (
             row["report_type"],
@@ -62,11 +74,25 @@ def validate(rows: list[dict[str, str]]) -> list[str]:
         seen.add(key)
         if row["status"] not in ALLOWED_STATUSES:
             errors.append(f"line {index}: unsupported status {row['status']!r}")
+        if not row["report_id"]:
+            errors.append(f"line {index}: report_id is blank")
+        if row["report_id"] != "run" and row["parent_report_id"] not in known_ids:
+            errors.append(f"line {index}: parent_report_id does not exist: {row['parent_report_id']!r}")
+        if row["navigation_level"] not in ALLOWED_NAVIGATION_LEVELS:
+            errors.append(f"line {index}: unsupported navigation_level {row['navigation_level']!r}")
+        if row["scope"] not in ALLOWED_SCOPES:
+            errors.append(f"line {index}: unsupported scope {row['scope']!r}")
+        try:
+            int(row["display_order"])
+        except ValueError:
+            errors.append(f"line {index}: display_order is not an integer")
         if not row["report_type"]:
             errors.append(f"line {index}: report_type is blank")
         if not row["report_label"]:
             errors.append(f"line {index}: report_label is blank")
         html_paths = split_paths(row["html"])
+        if row["canonical_html"] and row["canonical_html"] != row["html"]:
+            errors.append(f"line {index}: canonical_html differs from html")
         linked_paths = (
             html_paths
             + split_paths(row["pdf"])

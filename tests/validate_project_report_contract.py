@@ -282,6 +282,20 @@ def main() -> int:
         pdf_done = project_dir / "technical_report.done"
         pdf_qa = project_dir / "technical_report.qa.tsv"
         done = project_dir / "index.done"
+        layer_keys = [
+            "rnaseq_de",
+            "enrichment",
+            "dtu_splicing",
+            "isoform_switch",
+            "smallrna_de",
+            "mirna_targets",
+            "matched_mirna_mrna",
+        ]
+        for layer_key in layer_keys:
+            layer_dir = project_dir / "layers" / layer_key
+            layer_dir.mkdir(parents=True, exist_ok=True)
+            (layer_dir / "index.html").write_text("<html><body>layer</body></html>", encoding="utf-8")
+            (layer_dir / "technical_report.pdf").write_text("%PDF placeholder\n", encoding="utf-8")
 
         run(
             [
@@ -313,6 +327,10 @@ def main() -> int:
         assert "combined project technical PDF" in html
         assert "technical_report.pdf" in html
         assert "Combined technical PDF" not in html
+        assert 'href="layers/rnaseq_de/index.html"' in html
+        assert 'href="layers/rnaseq_de/technical_report.pdf"' in html
+        assert 'href="layers/dtu_splicing/index.html"' in html
+        assert 'href="layers/matched_mirna_mrna/index.html"' in html
         assert "combined project technical PDF: not present" not in html
         assert "Gene A (geneA)" in html
         assert 'aria-label="Report map"' in html
@@ -417,17 +435,17 @@ def main() -> int:
         cwd = Path.cwd()
         try:
             os.chdir(tmp)
-            sidebar_target = Path("results/branches/rnaseq") / project / "report/index.html"
+            sidebar_target = Path("results/projects") / project / "layers/rnaseq_de/index.html"
             sidebar_target.parent.mkdir(parents=True, exist_ok=True)
             sidebar_target.write_text("<html></html>", encoding="utf-8")
             sidebar_html = report_map_sidebar(
                 "Report Map",
-                [report_map_item("RNA-seq branch report", sidebar_target)],
+                [report_map_item("RNA-seq layer report", sidebar_target)],
                 Path("results/projects") / project,
             )
         finally:
             os.chdir(cwd)
-        assert 'href="../../branches/rnaseq/TEST_PROJECT/report/index.html"' in sidebar_html
+        assert 'href="layers/rnaseq_de/index.html"' in sidebar_html
         assert "nav-missing" not in sidebar_html
 
         if importlib.util.find_spec("reportlab") is None or importlib.util.find_spec("pypdf") is None:
