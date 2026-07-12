@@ -12,6 +12,8 @@ import shutil
 import subprocess
 from pathlib import Path
 
+from report_navigation import report_map_css, report_map_item, report_map_script, report_shell_close, report_shell_open
+
 
 PLAN_COLUMNS = {
     "project",
@@ -785,13 +787,23 @@ def render_html(
     run_root = summary_path.parents[7] if len(summary_path.parents) > 7 else summary_path.parent
     project_index = run_root / "projects" / plan_row["project"] / "index.html"
     layer_index = run_root / "projects" / plan_row["project"] / "layers" / "smallrna_de" / "index.html"
+    map_items = [
+        report_map_item("Metrics", "#metrics"),
+        report_map_item("Plots", "#plots"),
+        report_map_item("Top miRNAs", "#mirnas"),
+        report_map_item("Target summary", "#targets"),
+        report_map_item("miRNA-mRNA integration", "#integration"),
+        report_map_item("Read-length QC", "#length-qc"),
+        report_map_item("Residual reads", "#residuals"),
+    ]
+    shell = report_shell_open("Summary Map", map_items, summary_path.parent)
     content = f"""<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
   <title>{html.escape(title)}</title>
   <style>
-    body {{ font-family: system-ui, -apple-system, Segoe UI, sans-serif; margin: 2rem; color: #222; }}
+    body {{ font-family: system-ui, -apple-system, Segoe UI, sans-serif; margin: 0; padding: 24px; color: #222; }}
     h1, h2 {{ line-height: 1.2; }}
     .metrics-table {{ margin: 1rem 0; }}
     .metrics-table th {{ width: 12%; }}
@@ -807,10 +819,12 @@ def render_html(
     .plot img {{ border: 1px solid #ddd; display: block; height: auto; max-width: 100%; }}
     .plot-source, .plot-note {{ color: #666; margin: 0.4rem 0 0; }}
     .svg-panel svg {{ max-width: 100%; height: auto; border: 1px solid #ddd; }}
+    {report_map_css()}
   </style>
 </head>
 <body>
-  <nav class="breadcrumbs"><a href="{html.escape(local_href(str(run_root / 'index.html'), summary_path.parent))}">ASPIS</a> / <a href="{html.escape(local_href(str(run_root / 'index.html'), summary_path.parent))}">Run</a> / <a href="{html.escape(local_href(str(project_index), summary_path.parent))}">Project</a> / <a href="{html.escape(local_href(str(layer_index), summary_path.parent))}">Evidence layer</a> / smallRNA differential expression / {html.escape(plan_row['contrast_id'])}</nav>
+  {shell}
+  <nav class="breadcrumbs"><a href="{html.escape(local_href(str(run_root / 'index.html'), summary_path.parent))}">ASPIS</a> / <a href="{html.escape(local_href(str(run_root / 'index.html'), summary_path.parent))}">Run</a> / <a href="{html.escape(local_href(str(project_index), summary_path.parent))}">Project</a> / <a href="{html.escape(local_href(str(project_index), summary_path.parent))}">{html.escape(plan_row['project'])}</a> / <a href="{html.escape(local_href(str(layer_index), summary_path.parent))}">Evidence layer</a> / <a href="{html.escape(local_href(str(layer_index), summary_path.parent))}">smallRNA differential expression</a> / {html.escape(plan_row['contrast_id'])}</nav>
   <h1>{html.escape(title)}</h1>
   <section id="metrics">{metric_html}</section>
   <p class="note">The metrics above summarize the miRNA differential run, target lookup, optional miRNA-mRNA integration, optional feature-set enrichment, and smallRNA-specific QC layers for this contrast.</p>
@@ -823,7 +837,7 @@ def render_html(
   <h2 id="mirnas">Top significant miRNAs</h2>
   <p class="note">This table previews the strongest filtered miRNAs. The full differential table should be used for complete ranking, filtering, and downstream analysis.</p>
   {html_table(significant, significant_columns)}
-  <h2>Target summary</h2>
+  <h2 id="targets">Target summary</h2>
   <p class="note">Target tables summarize database links from differential miRNAs to putative target genes. These are evidence resources, not proof of regulation by themselves.</p>
   {html_table(target_summary, summary_columns)}
   <h2>Target source summary</h2>
@@ -849,7 +863,7 @@ def render_html(
   {html_table(length_stage_summary, length_stage_columns)}
   {html_table(arm_summary, arm_columns)}
   {html_table(isomir_length_summary, isomir_columns)}
-  <h2 id="targets">Potentially regulated target processes</h2>
+  <h2 id="target-processes">Potentially regulated target processes</h2>
   <p class="note">Target-gene enrichment summarizes processes associated with database targets of differential miRNAs. It is not direct evidence of pathway activation or repression unless matched RNA-seq target expression supports the direction.</p>
   {embedded_svg(plan_row.get("target_enrichment_plot", ""))}
   {html_table(enrichment_preview, enrichment_columns)}
@@ -869,6 +883,7 @@ def render_html(
   {html_table(residual_biotype_preview, residual_biotype_columns)}
   <h2>Top residual annotated features</h2>
   {html_table(residual_feature_preview, residual_feature_columns)}
+  {report_shell_close()}{report_map_script()}
 </body>
 </html>
 """

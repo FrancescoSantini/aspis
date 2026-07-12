@@ -627,6 +627,7 @@ def validate_outputs(paths: dict[str, Path]) -> None:
         or "Volcano" not in text
         or "smallRNA differential expression" not in text
         or 'class="metrics-table"' not in text
+        or "Summary Map" not in text
         or 'aria-label="Page sections"' in text
         or 'class="metrics "' in text
         or "DESeq2 results | significant miRNAs" in text

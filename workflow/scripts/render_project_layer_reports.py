@@ -342,8 +342,8 @@ def render_contrast_summary(
             f'<section class="panel" id="tables" data-report-nav-target="tables"><h2>Tables and pages</h2>{asset_button_group(rows, layer_key, base_dir, want_plots=False)}</section>'
         )
     page = f"""<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{html.escape(project)} - {html.escape(title)} - {html.escape(contrast)}</title><style>{css}</style></head><body>
-    <nav class="breadcrumbs"><a href="../../../../../index.html">ASPIS</a> / <a href="../../../../../index.html">Run</a> / <a href="../../../index.html">Project</a> / {html.escape(project)} / <a href="{layer_href}">Evidence layer</a> / {html.escape(title)} / {html.escape(contrast)}</nav>
-    {shell}<section class="panel" id="summary" data-report-nav-target="summary"><h1>{html.escape(title)} - <code>{html.escape(contrast)}</code></h1><p>{html.escape(description)}</p>
+    {shell}<nav class="breadcrumbs"><a href="../../../../../index.html">ASPIS</a> / <a href="../../../../../index.html">Run</a> / <a href="../../../index.html">Project</a> / <a href="../../../index.html">{html.escape(project)}</a> / <a href="{layer_href}">Evidence layer</a> / <a href="{layer_href}">{html.escape(title)}</a> / {html.escape(contrast)}</nav>
+    <section class="panel" id="summary" data-report-nav-target="summary"><h1>{html.escape(title)} - <code>{html.escape(contrast)}</code></h1><p>{html.escape(description)}</p>
     <div class="table-scroll"><table><thead>{header}</thead><tbody>{''.join(table_rows)}</tbody></table></div></section>
     {detail_sections}
     {report_shell_close()}{report_map_script()}</body></html>"""
@@ -495,8 +495,8 @@ def render_layer(project: str, key: str, title: str, description: str, rows: lis
     """
     shell = report_shell_open("Layer Map", map_items, base_dir)
     page = f"""<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{html.escape(project)} - {html.escape(title)}</title><style>{css}</style></head><body>
-    <nav class="breadcrumbs"><a href="../../../../index.html">ASPIS</a> / <a href="../../../../index.html">Run</a> / <a href="../../index.html">Project</a> / {html.escape(project)} / Evidence layer / {html.escape(title)}</nav>
-    {shell}<section class="panel" id="layer-summary" data-report-nav-target="layer-summary"><h1>{html.escape(title)}</h1><p>{html.escape(description)}</p>
+    {shell}<nav class="breadcrumbs"><a href="../../../../index.html">ASPIS</a> / <a href="../../../../index.html">Run</a> / <a href="../../index.html">Project</a> / <a href="../../index.html">{html.escape(project)}</a> / Evidence layer / {html.escape(title)}</nav>
+    <section class="panel" id="layer-summary" data-report-nav-target="layer-summary"><h1>{html.escape(title)}</h1><p>{html.escape(description)}</p>
     <p class="export"><a class="button-link" href="{pdf_href}">Download layer technical PDF</a> &middot; {len(contrasts)} contrast(s) &middot; {len(rows)} result row(s)</p>
     {compact_layer_summary(rows, key)}</section>
     {''.join(sections) if sections else '<section class="panel"><h2>No configured results</h2><p class="muted">This evidence layer has no result rows for this project.</p></section>'}

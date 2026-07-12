@@ -12,6 +12,7 @@ import subprocess
 from pathlib import Path
 
 from display_labels import feature_display_label
+from report_navigation import report_map_css, report_map_item, report_map_script, report_shell_close, report_shell_open
 
 
 REQUIRED_PLAN_COLUMNS = {
@@ -623,13 +624,21 @@ def render_html(
     run_root = output.parents[7] if len(output.parents) > 7 else output.parent.parent.parent
     project_index = run_root / "projects" / row["project"] / "index.html"
     layer_index = project_index.parent / "layers" / "rnaseq_de" / "index.html"
+    map_items = [
+        report_map_item("Metrics", "#metrics"),
+        report_map_item("Plots", "#plots"),
+        report_map_item("Feature-set status", "#enrichment"),
+        report_map_item("Top features", "#features"),
+        report_map_item("Files", "#files"),
+    ]
+    shell = report_shell_open("Summary Map", map_items, output.parent)
     return f"""<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
   <title>{html.escape(title)}</title>
   <style>
-    body {{ font-family: system-ui, -apple-system, Segoe UI, sans-serif; margin: 24px; max-width: 1200px; }}
+    body {{ font-family: system-ui, -apple-system, Segoe UI, sans-serif; margin: 0; padding: 24px; }}
     table {{ border-collapse: collapse; margin: 16px 0; width: 100%; }}
     th, td {{ border: 1px solid #d0d7de; padding: 6px 8px; text-align: left; vertical-align: top; overflow-wrap: anywhere; }}
     th {{ background: #f6f8fa; }}
@@ -643,10 +652,12 @@ def render_html(
     .status.ok {{ color: #1a7f37; font-weight: 700; }}
     .status.not_configured {{ color: #57606a; font-weight: 700; }}
     .status.resource_missing, .status.invalid_resource, .status.insufficient_mapping {{ color: #9a6700; font-weight: 700; }}
+    {report_map_css()}
   </style>
 </head>
 <body>
-  <nav class="breadcrumbs"><a href="{html.escape(relative_link(run_root / 'index.html', output))}">ASPIS</a> / <a href="{html.escape(relative_link(run_root / 'index.html', output))}">Run</a> / <a href="{html.escape(relative_link(project_index, output))}">Project</a> / {html.escape(row['project'])} / <a href="{html.escape(relative_link(layer_index, output))}">Evidence layer</a> / RNA-seq differential expression / {html.escape(row['level'])} / {html.escape(row['contrast_id'])}</nav>
+  {shell}
+  <nav class="breadcrumbs"><a href="{html.escape(relative_link(run_root / 'index.html', output))}">ASPIS</a> / <a href="{html.escape(relative_link(run_root / 'index.html', output))}">Run</a> / <a href="{html.escape(relative_link(project_index, output))}">Project</a> / <a href="{html.escape(relative_link(project_index, output))}">{html.escape(row['project'])}</a> / <a href="{html.escape(relative_link(layer_index, output))}">Evidence layer</a> / <a href="{html.escape(relative_link(layer_index, output))}">RNA-seq differential expression</a> / {html.escape(row['level'])} / {html.escape(row['contrast_id'])}</nav>
   <h1>{html.escape(title)}</h1>
   <h2 id="metrics">Metrics</h2>
   <p class="note">These values summarize the contrast-level differential-expression run: how many features were tested, how many passed the configured significance filters, and how many changed upward or downward in the test group relative to the control group.</p>
@@ -671,6 +682,7 @@ def render_html(
   <ul>
 {artifact_rows}
   </ul>
+  {report_shell_close()}{report_map_script()}
 </body>
 </html>
 """
