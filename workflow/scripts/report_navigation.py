@@ -29,9 +29,9 @@ def report_map_item(
 
 def report_map_css() -> str:
     return """
-    .report-shell { align-items: start; display: grid; gap: 24px; grid-template-columns: 260px minmax(0, 1fr); }
+    .report-shell { align-items: start; display: grid; font-family: system-ui, -apple-system, Segoe UI, sans-serif; gap: 24px; grid-template-columns: 260px minmax(0, 1fr); line-height: 1.4; }
     .report-content { min-width: 0; }
-    .report-map { background: #fff; border: 1px solid #d0d7de; border-radius: 6px; max-height: calc(100vh - 32px); overflow: auto; padding: 0.85rem; position: sticky; top: 16px; }
+    .report-map { background: #fff; border: 1px solid #d0d7de; border-radius: 6px; font-family: inherit; font-size: 1rem; max-height: calc(100vh - 32px); overflow: auto; padding: 0.85rem; position: sticky; top: 16px; }
     .report-map-title { border-bottom: 1px solid #d0d7de; color: #24292f; font-size: 1rem; font-weight: 700; margin: 0 0 0.65rem; padding-bottom: 0.45rem; }
     .report-map ul { list-style: none; margin: 0; padding-left: 0; }
     .report-map ul ul { border-left: 1px solid #d0d7de; margin: 0.35rem 0 0.45rem 0.45rem; padding-left: 0.75rem; }

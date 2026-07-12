@@ -824,7 +824,7 @@ def render_html(
 </head>
 <body>
   {shell}
-  <nav class="breadcrumbs"><a href="{html.escape(local_href(str(run_root / 'index.html'), summary_path.parent))}">ASPIS</a> / <a href="{html.escape(local_href(str(run_root / 'index.html'), summary_path.parent))}">Run</a> / <a href="{html.escape(local_href(str(project_index), summary_path.parent))}">Project</a> / <a href="{html.escape(local_href(str(project_index), summary_path.parent))}">{html.escape(plan_row['project'])}</a> / <a href="{html.escape(local_href(str(layer_index), summary_path.parent))}">Evidence layer</a> / <a href="{html.escape(local_href(str(layer_index), summary_path.parent))}">smallRNA differential expression</a> / {html.escape(plan_row['contrast_id'])}</nav>
+  <nav class="breadcrumbs"><a href="{html.escape(local_href(str(run_root / 'index.html'), summary_path.parent))}">ASPIS run</a> / <a href="{html.escape(local_href(str(project_index), summary_path.parent))}">{html.escape(plan_row['project'])}</a> / <a href="{html.escape(local_href(str(layer_index), summary_path.parent))}">smallRNA differential expression</a> / {html.escape(plan_row['contrast_id'])}</nav>
   <h1>{html.escape(title)}</h1>
   <section id="metrics">{metric_html}</section>
   <p class="note">The metrics above summarize the miRNA differential run, target lookup, optional miRNA-mRNA integration, optional feature-set enrichment, and smallRNA-specific QC layers for this contrast.</p>

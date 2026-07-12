@@ -591,12 +591,7 @@ def render_html(
                 preview_paths["sample_distance_preview"],
             )
         )
-    plot_panels.extend(
-        [
-            plot_panel("Heatmap", row["heatmap_pdf"], output, preview_paths["heatmap_preview"]),
-            enrichment_panel(resources, output),
-        ]
-    )
+    plot_panels.append(plot_panel("Heatmap", row["heatmap_pdf"], output, preview_paths["heatmap_preview"]))
     plots = "\n".join(plot_panels)
     artifacts = [
         ("Full DESeq2 results", row["results"]),
@@ -605,17 +600,7 @@ def render_html(
         ("Heatmap panels", row.get("heatmap_panel_tsv", "")),
         ("Plot groups", row.get("plot_group_tsv", "")),
         ("Transcript novelty summary", row.get("novelty_summary_tsv", "")),
-        ("Enrichment manifest", row["enrichment_manifest"]),
     ]
-    feature_set_results = resources.get("feature_set_results", {}).get("path", "")
-    if feature_set_results:
-        artifacts.append(("Feature-set enrichment", feature_set_results))
-    feature_set_universe = resources.get("feature_set_universe", {}).get("path", "")
-    if feature_set_universe:
-        artifacts.append(("Feature-set universe", feature_set_universe))
-    ranked_feature_set_results = resources.get("ranked_feature_set_results", {}).get("path", "")
-    if ranked_feature_set_results:
-        artifacts.append(("Ranked feature-set enrichment", ranked_feature_set_results))
     artifact_rows = "\n".join(
         f"<li><a href=\"{html.escape(relative_link(path, output))}\">{html.escape(label)}</a></li>"
         for label, path in artifacts
@@ -627,7 +612,6 @@ def render_html(
     map_items = [
         report_map_item("Metrics", "#metrics"),
         report_map_item("Plots", "#plots"),
-        report_map_item("Feature-set status", "#enrichment"),
         report_map_item("Top features", "#features"),
         report_map_item("Files", "#files"),
     ]
@@ -657,7 +641,7 @@ def render_html(
 </head>
 <body>
   {shell}
-  <nav class="breadcrumbs"><a href="{html.escape(relative_link(run_root / 'index.html', output))}">ASPIS</a> / <a href="{html.escape(relative_link(run_root / 'index.html', output))}">Run</a> / <a href="{html.escape(relative_link(project_index, output))}">Project</a> / <a href="{html.escape(relative_link(project_index, output))}">{html.escape(row['project'])}</a> / <a href="{html.escape(relative_link(layer_index, output))}">Evidence layer</a> / <a href="{html.escape(relative_link(layer_index, output))}">RNA-seq differential expression</a> / {html.escape(row['level'])} / {html.escape(row['contrast_id'])}</nav>
+  <nav class="breadcrumbs"><a href="{html.escape(relative_link(run_root / 'index.html', output))}">ASPIS run</a> / <a href="{html.escape(relative_link(project_index, output))}">{html.escape(row['project'])}</a> / <a href="{html.escape(relative_link(layer_index, output))}">RNA-seq differential expression</a> / {html.escape(row['level'])} / {html.escape(row['contrast_id'])}</nav>
   <h1>{html.escape(title)}</h1>
   <h2 id="metrics">Metrics</h2>
   <p class="note">These values summarize the contrast-level differential-expression run: how many features were tested, how many passed the configured significance filters, and how many changed upward or downward in the test group relative to the control group.</p>
@@ -671,9 +655,6 @@ def render_html(
   <div class="plots">
 {plots}
   </div>
-  <h2 id="enrichment">Feature-Set Enrichment Status</h2>
-  <p class="note">This section records whether optional ORA/GSEA-style feature-set resources were configured, whether enough features mapped to them, and where the resulting tables or plots were written. If resources are not configured, no enrichment dotplot can be generated.</p>
-  {enrichment_status_table(resources, output)}
   <h2 id="features">Top Significant Features</h2>
   <p class="note">This table lists the strongest filtered features by adjusted p-value and fold change. It is a compact preview; the complete DESeq2 output remains in the linked files below.</p>
   {top_feature_table(filtered_rows, top_n)}

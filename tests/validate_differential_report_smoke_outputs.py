@@ -205,7 +205,7 @@ def main() -> int:
                 summary_text = summary_html.read_text(encoding="utf-8")
                 if (
                     "RNA-seq differential expression" not in summary_text
-                    or "Evidence layer" not in summary_text
+                    or "ASPIS run" not in summary_text
                     or 'aria-label="Page sections"' in summary_text
                 ):
                     raise ValueError(f"{summary_html} lacks canonical breadcrumb or still has legacy mini table of contents")

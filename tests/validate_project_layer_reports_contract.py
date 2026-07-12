@@ -66,20 +66,19 @@ def main() -> int:
         for row in rows:
             layer_html = Path(row["html"])
             text = layer_html.read_text(encoding="utf-8")
-            assert "ASPIS</a> / <a" in text
-            assert f"Project</a> / <a href=\"../../index.html\">{project}</a> / Evidence layer" in text
-            assert "Evidence layer" in text
+            assert f"ASPIS run</a> / <a href=\"../../index.html\">{project}</a> /" in text
             assert "Download layer technical PDF" in text
             assert contrast in text
             if row["layer_key"] == "isoform_switch":
                 assert "contrast summary" not in text
+            elif row["layer_key"] in {"rnaseq_de", "smallrna_de"}:
+                assert f"{contrast}/summary.html" not in text
             else:
                 assert f"{contrast}/summary.html" in text
             summary_html = layer_html.parent / contrast / "summary.html"
             assert summary_html.exists()
             summary_text = summary_html.read_text(encoding="utf-8")
-            assert f"Project</a> / <a href=\"../../../index.html\">{project}</a> / <a" in summary_text
-            assert "Evidence layer" in summary_text
+            assert f"ASPIS run</a> / <a href=\"../../../index.html\">{project}</a> / <a" in summary_text
             if row["layer_key"] == "isoform_switch":
                 assert "event assets" in summary_text
             else:

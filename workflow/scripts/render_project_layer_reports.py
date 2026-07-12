@@ -24,11 +24,11 @@ LAYER_DEFINITIONS = [
 ]
 
 ASSET_FIELDS = {
-    "rnaseq_de": ["results", "filtered", "summary_html", "volcano_pdf", "volcano_preview", "ma_pdf", "ma_preview", "pca_pdf", "pca_preview", "sample_distance_pdf", "sample_distance_preview", "heatmap_pdf", "heatmap_preview"],
+    "rnaseq_de": ["results", "filtered", "volcano_pdf", "volcano_preview", "ma_pdf", "ma_preview", "pca_pdf", "pca_preview", "sample_distance_pdf", "sample_distance_preview", "heatmap_pdf", "heatmap_preview"],
     "enrichment": ["feature_set_universe", "feature_set_results", "feature_set_plot", "ranked_feature_set_results", "ranked_feature_set_plot", "resource_mapping_qa"],
     "dtu_splicing": ["source_results", "transcript_results", "overview_plot", "usage_plot", "feature_plot"],
     "isoform_switch": ["plot_svg", "event_html", "event_nt_fasta", "event_aa_fasta"],
-    "smallrna_de": ["results", "filtered", "summary_html", "volcano_pdf", "volcano_preview", "ma_pdf", "ma_preview", "pca_pdf", "pca_preview", "sample_distance_pdf", "sample_distance_preview", "heatmap_pdf", "heatmap_preview", "length_distribution_plot"],
+    "smallrna_de": ["results", "filtered", "volcano_pdf", "volcano_preview", "ma_pdf", "ma_preview", "pca_pdf", "pca_preview", "sample_distance_pdf", "sample_distance_preview", "heatmap_pdf", "heatmap_preview", "length_distribution_plot"],
     "mirna_targets": [
         "target_manifest", "mirna_targets", "target_universe", "target_enrichment", "target_summary",
         "target_source_summary", "target_enrichment_plot", "resource_mapping_qa",
@@ -178,10 +178,10 @@ def link_buttons(row: dict[str, str], layer_key: str, base_dir: Path) -> str:
     return "".join(buttons) or '<span class="muted">no linked artifacts</span>'
 
 
-def plot_asset_figure(field: str, value: str, base_dir: Path) -> str:
+def plot_asset_figure(field: str, value: str, base_dir: Path, label_override: str = "") -> str:
     path = absolute_path(value)
     href = html.escape(relative_href(value, base_dir))
-    label = html.escape(field.replace("_", " "))
+    label = html.escape(label_override or field.replace("_", " "))
     suffix = path.suffix.lower()
     if suffix in {".svg", ".png", ".jpg", ".jpeg"}:
         return (
@@ -268,7 +268,11 @@ def contrast_plot_sections(layer_key: str, rows: list[dict[str, str]], base_dir:
             if key in seen:
                 continue
             seen.add(key)
-            figure = plot_asset_figure(field, value, base_dir)
+            label = field.replace("_", " ")
+            if layer_key == "enrichment":
+                level = row.get("level", "") or row.get("analysis", "")
+                label = f"{level} {label}".strip()
+            figure = plot_asset_figure(field, value, base_dir, label)
             if figure:
                 figures.append(figure)
     grid_class = "plot-grid plot-grid-two" if layer_key == "enrichment" else "plot-grid"
@@ -342,7 +346,7 @@ def render_contrast_summary(
             f'<section class="panel" id="tables" data-report-nav-target="tables"><h2>Tables and pages</h2>{asset_button_group(rows, layer_key, base_dir, want_plots=False)}</section>'
         )
     page = f"""<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{html.escape(project)} - {html.escape(title)} - {html.escape(contrast)}</title><style>{css}</style></head><body>
-    {shell}<nav class="breadcrumbs"><a href="../../../../../index.html">ASPIS</a> / <a href="../../../../../index.html">Run</a> / <a href="../../../index.html">Project</a> / <a href="../../../index.html">{html.escape(project)}</a> / <a href="{layer_href}">Evidence layer</a> / <a href="{layer_href}">{html.escape(title)}</a> / {html.escape(contrast)}</nav>
+    {shell}<nav class="breadcrumbs"><a href="../../../../../index.html">ASPIS run</a> / <a href="../../../index.html">{html.escape(project)}</a> / <a href="{layer_href}">{html.escape(title)}</a> / {html.escape(contrast)}</nav>
     <section class="panel" id="summary" data-report-nav-target="summary"><h1>{html.escape(title)} - <code>{html.escape(contrast)}</code></h1><p>{html.escape(description)}</p>
     <div class="table-scroll"><table><thead>{header}</thead><tbody>{''.join(table_rows)}</tbody></table></div></section>
     {detail_sections}
@@ -459,7 +463,9 @@ def render_layer(project: str, key: str, title: str, description: str, rows: lis
     for index, contrast in enumerate(contrasts, start=1):
         summary_path = output.parent / safe_token(contrast) / "summary.html"
         render_contrast_summary(project, key, title, description, contrast, grouped[contrast], summary_path, output)
-        summary_href = html.escape(os.path.relpath(summary_path.resolve(), start=base_dir.resolve()).replace(os.sep, "/"))
+        primary_summary = next((row.get("summary_html", "") for row in grouped[contrast] if row.get("summary_html", "")), "")
+        summary_target = absolute_path(primary_summary) if key in {"rnaseq_de", "smallrna_de"} and primary_summary else summary_path
+        summary_href = html.escape(os.path.relpath(summary_target.resolve(), start=base_dir.resolve()).replace(os.sep, "/"))
         summary_button = "" if key == "isoform_switch" else f'<p><a class="button-link" href="{summary_href}">contrast summary</a></p>'
         body_rows = []
         for row in grouped[contrast]:
@@ -495,7 +501,7 @@ def render_layer(project: str, key: str, title: str, description: str, rows: lis
     """
     shell = report_shell_open("Layer Map", map_items, base_dir)
     page = f"""<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{html.escape(project)} - {html.escape(title)}</title><style>{css}</style></head><body>
-    {shell}<nav class="breadcrumbs"><a href="../../../../index.html">ASPIS</a> / <a href="../../../../index.html">Run</a> / <a href="../../index.html">Project</a> / <a href="../../index.html">{html.escape(project)}</a> / Evidence layer / {html.escape(title)}</nav>
+    {shell}<nav class="breadcrumbs"><a href="../../../../index.html">ASPIS run</a> / <a href="../../index.html">{html.escape(project)}</a> / {html.escape(title)}</nav>
     <section class="panel" id="layer-summary" data-report-nav-target="layer-summary"><h1>{html.escape(title)}</h1><p>{html.escape(description)}</p>
     <p class="export"><a class="button-link" href="{pdf_href}">Download layer technical PDF</a> &middot; {len(contrasts)} contrast(s) &middot; {len(rows)} result row(s)</p>
     {compact_layer_summary(rows, key)}</section>

@@ -1036,7 +1036,7 @@ def write_ranked_enrichment_svg(path: Path, rows: list[dict[str, str]], top_n: i
         elements.append(f'<text x="40" y="{y + 4}" font-family="sans-serif" font-size="12">{html.escape(label)}</text>')
         elements.append(f'<line x1="{margin_left}" y1="{y}" x2="{width - margin_right}" y2="{y}" stroke="#eeeeee"/>')
         elements.append(f'<circle cx="{x:.1f}" cy="{y}" r="{radius}" fill="{color}" fill-opacity="0.82"/>')
-        elements.append(f'<text x="{x + radius + 6:.1f}" y="{y + 4}" font-family="sans-serif" font-size="11">NES {score:.3g}</text>')
+        elements.append(f'<text x="{x + radius + 6:.1f}" y="{y + 4}" font-family="sans-serif" font-size="11">{score:.3g}</text>')
     elements.append(
         f'<text x="{margin_left + plot_width / 2 - 30:.1f}" y="{height - 18}" font-family="sans-serif" font-size="12">normalized enrichment score</text>'
     )
