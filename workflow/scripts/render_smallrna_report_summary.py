@@ -139,7 +139,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--report-plan", required=True, help="SmallRNA report plan TSV")
     parser.add_argument("--manifest", required=True, help="Output summary manifest TSV")
     parser.add_argument("--done", required=True, help="Completion sentinel")
-    parser.add_argument("--top-n", type=int, default=25, help="Maximum significant miRNAs in HTML tables")
+    parser.add_argument("--top-n", type=int, default=50, help="Maximum significant miRNAs in HTML tables")
     return parser.parse_args()
 
 
@@ -378,7 +378,7 @@ HEADER_LABELS = {
 }
 
 
-def html_table(rows: list[dict[str, str]], columns: list[str]) -> str:
+def html_table(rows: list[dict[str, str]], columns: list[str], class_name: str = "") -> str:
     if not rows:
         return "<p>No rows.</p>"
     header = "".join(f"<th>{html.escape(HEADER_LABELS.get(column, column))}</th>" for column in columns)
@@ -386,7 +386,8 @@ def html_table(rows: list[dict[str, str]], columns: list[str]) -> str:
     for row in rows:
         cells = "".join(f"<td>{html.escape(row.get(column, ''))}</td>" for column in columns)
         body.append(f"<tr>{cells}</tr>")
-    return f"<table><thead><tr>{header}</tr></thead><tbody>{''.join(body)}</tbody></table>"
+    class_attr = f' class="{html.escape(class_name)}"' if class_name else ""
+    return f"<table{class_attr}><thead><tr>{header}</tr></thead><tbody>{''.join(body)}</tbody></table>"
 
 
 def numeric_total(row: dict[str, str], skip: set[str]) -> int:
@@ -576,32 +577,16 @@ def render_html(
         ("PCA status", pca_metrics.get("status", "")),
         ("PC1 variance %", pca_metrics.get("pc1_variance_percent", "")),
         ("PC2 variance %", pca_metrics.get("pc2_variance_percent", "")),
-        ("Target rows", str(len(target_mapping))),
-        ("Target genes", str(len({row.get("target_id", "") for row in target_mapping if row.get("target_id", "")}))),
-        ("Enrichment terms", str(len(target_enrichment))),
-        ("miRNA-mRNA pairs", str(len(integration_pairs))),
-        ("Inverse pairs", str(len(inverse_pairs))),
-        ("Anticorrelated pairs", str(len(anticorrelated_pairs))),
-        ("Expressed targets", str(len(expressed_targets))),
-        ("Inverse integrated targets", str(len(inverse_integrated_targets))),
-        ("Inverse anticorrelated targets", str(len(inverse_anticorrelated_targets))),
-        ("Inverse target feature-set terms", str(len(mirna_mrna_target_feature_sets))),
-        ("Ranked inverse target feature-set terms", str(len(mirna_mrna_target_ranked_feature_sets))),
-        ("Target feature-set terms", str(len(target_feature_sets))),
-        ("miRNA-ID feature-set terms", str(len(mirna_feature_sets))),
-        ("Ranked miRNA-ID feature-set terms", str(len(mirna_ranked_feature_sets))),
         ("Length QC stages", str(len({row.get("stage", "") for row in length_stage_summary}))),
         ("Arm classes", str(len(arm_summary))),
         ("Residual reads", str(residual_input_reads)),
         ("Residual genome-aligned", str(residual_aligned_reads)),
         ("Residual genome-unmapped", str(residual_unmapped_reads)),
     ]
-    metric_rows = []
-    for index in range(0, len(metrics), 4):
-        cells = []
-        for label, value in metrics[index:index + 4]:
-            cells.append(f"<th>{html.escape(label)}</th><td>{html.escape(value)}</td>")
-        metric_rows.append("<tr>" + "".join(cells) + "</tr>")
+    metric_rows = [
+        f"<tr><th>{html.escape(label)}</th><td>{html.escape(value)}</td></tr>"
+        for label, value in metrics
+    ]
     metric_html = (
         '<table class="metrics-table"><tbody>'
         + "".join(metric_rows)
@@ -791,8 +776,6 @@ def render_html(
         report_map_item("Metrics", "#metrics"),
         report_map_item("Plots", "#plots"),
         report_map_item("Top miRNAs", "#mirnas"),
-        report_map_item("Target summary", "#targets"),
-        report_map_item("miRNA-mRNA integration", "#integration"),
         report_map_item("Read-length QC", "#length-qc"),
         report_map_item("Residual reads", "#residuals"),
     ]
@@ -806,8 +789,11 @@ def render_html(
     body {{ font-family: system-ui, -apple-system, Segoe UI, sans-serif; margin: 0; padding: 24px; color: #222; }}
     h1, h2 {{ line-height: 1.2; }}
     .metrics-table {{ margin: 1rem 0; }}
-    .metrics-table th {{ width: 12%; }}
-    .metrics-table td {{ width: 13%; }}
+    .metrics-table th {{ width: 26%; }}
+    .metrics-table td {{ width: 74%; }}
+    .wide-table {{ table-layout:auto; }}
+    .wide-table th, .wide-table td {{ min-width: 7rem; }}
+    .wide-table th:last-child, .wide-table td:last-child {{ min-width: 28rem; }}
     table {{ border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: 0.92rem; }}
     th, td {{ border: 1px solid #ddd; padding: 0.45rem; text-align: left; vertical-align: top; overflow-wrap: anywhere; }}
     th {{ background: #f2f2f2; }}
@@ -827,7 +813,7 @@ def render_html(
   <nav class="breadcrumbs"><a href="{html.escape(local_href(str(run_root / 'index.html'), summary_path.parent))}">ASPIS run</a> / <a href="{html.escape(local_href(str(project_index), summary_path.parent))}">{html.escape(plan_row['project'])}</a> / <a href="{html.escape(local_href(str(layer_index), summary_path.parent))}">smallRNA differential expression</a> / {html.escape(plan_row['contrast_id'])}</nav>
   <h1>{html.escape(title)}</h1>
   <section id="metrics">{metric_html}</section>
-  <p class="note">The metrics above summarize the miRNA differential run, target lookup, optional miRNA-mRNA integration, optional feature-set enrichment, and smallRNA-specific QC layers for this contrast.</p>
+  <p class="note">The metrics above summarize the miRNA differential run and smallRNA-specific QC layers for this contrast. Target and matched-assay evidence are reported in their dedicated evidence layers.</p>
   <p class="note">{html.escape(PCA_INTERPRETATION_NOTE)}</p>
   <h2 id="plots">Plots</h2>
   <p class="note">These plots summarize statistical signal, abundance behavior, sample structure, and selected-miRNA expression patterns for the same contrast.</p>
@@ -835,49 +821,14 @@ def render_html(
 {plot_panels}
   </div>
   <h2 id="mirnas">Top significant miRNAs</h2>
-  <p class="note">This table previews the strongest filtered miRNAs. The full differential table should be used for complete ranking, filtering, and downstream analysis.</p>
+  <p class="note">This table previews filtered miRNAs sorted by adjusted p-value and fold change. The full differential table should be used for complete ranking, filtering, and downstream analysis.</p>
   {html_table(significant, significant_columns)}
-  <h2 id="targets">Target summary</h2>
-  <p class="note">Target tables summarize database links from differential miRNAs to putative target genes. These are evidence resources, not proof of regulation by themselves.</p>
-  {html_table(target_summary, summary_columns)}
-  <h2>Target source summary</h2>
-  {html_table(target_source_summary, source_summary_columns)}
-  <h2 id="integration">miRNA-mRNA integration</h2>
-  <p class="note">This section joins differential miRNAs to matched RNA-seq target-gene results when available. Inverse direction is biologically suggestive for canonical repression, but it should be interpreted with target-source confidence and sample design in mind.</p>
-  {embedded_svg(plan_row.get("mirna_mrna_plot", ""))}
-  {html_table(integration_summary, integration_summary_columns)}
-  {html_table(integration_preview, integration_columns)}
-  <h2>Expressed and inverse target modes</h2>
-  <p class="note">Expressed-target mode keeps database targets that are present in matched RNA-seq differential results. Inverse-integrated mode further requires opposite miRNA and mRNA log2 fold-change directions, with a separate anticorrelated subset when sample-level matched counts support it.</p>
-  {html_table(target_mode_summary, target_mode_summary_columns)}
-  <h2>Inverse miRNA-target feature sets</h2>
-  {embedded_svg(plan_row.get("mirna_mrna_target_feature_set_plot", ""))}
-  {html_table(mirna_mrna_feature_set_preview, mirna_mrna_feature_set_columns)}
-  <h2>Ranked inverse miRNA-target feature sets</h2>
-  <p class="note">Ranked target feature-set enrichment ranks matched RNA-seq target genes by the target DE statistic when available, then by signed p-value or log2 fold change. This is a GSEA-style running-score summary, not a permutation-based fgsea p-value.</p>
-  {embedded_svg(plan_row.get("mirna_mrna_target_ranked_feature_set_plot", ""))}
-  {html_table(mirna_mrna_ranked_feature_set_preview, mirna_mrna_ranked_feature_set_columns)}
   <h2 id="length-qc">Read-length and arm QC</h2>
   <p class="note">These tables and plots summarize whether retained reads have expected smallRNA lengths and whether miRNA arm assignments look plausible after preprocessing, alignment, and quantification.</p>
   {embedded_svg(plan_row.get("smallrna_length_plot", ""))}
   {html_table(length_stage_summary, length_stage_columns)}
   {html_table(arm_summary, arm_columns)}
   {html_table(isomir_length_summary, isomir_columns)}
-  <h2 id="target-processes">Potentially regulated target processes</h2>
-  <p class="note">Target-gene enrichment summarizes processes associated with database targets of differential miRNAs. It is not direct evidence of pathway activation or repression unless matched RNA-seq target expression supports the direction.</p>
-  {embedded_svg(plan_row.get("target_enrichment_plot", ""))}
-  {html_table(enrichment_preview, enrichment_columns)}
-  <h2>Target-gene feature sets</h2>
-  {embedded_svg(plan_row.get("target_feature_set_plot", ""))}
-  {html_table(feature_set_preview, feature_set_columns)}
-  <h2>miRNA-ID feature sets</h2>
-  <p class="note">miRNA-ID feature sets are separate from target-gene enrichment. They are only meaningful when the supplied resource contains miRNA identifiers, such as miRNA families, seed groups, genomic clusters, or curated miRNA classes.</p>
-  {embedded_svg(plan_row.get("mirna_feature_set_plot", ""))}
-  {html_table(mirna_feature_set_preview, mirna_feature_set_columns)}
-  <h2>Ranked miRNA-ID feature sets</h2>
-  <p class="note">Ranked miRNA-ID feature-set enrichment ranks tested miRNAs by the DESeq2 statistic when available, then by signed p-value or log2 fold change. This is a GSEA-style running-score summary, not a permutation-based fgsea p-value.</p>
-  {embedded_svg(plan_row.get("mirna_ranked_feature_set_plot", ""))}
-  {html_table(mirna_ranked_feature_set_preview, mirna_ranked_feature_set_columns)}
   <h2 id="residuals">Residual genome read fate</h2>
   <p class="note">Residual-read summaries describe genome-aligned reads that were not assigned to the main miRNA quantification layer. They help diagnose contamination, other smallRNA classes, degradation products, or annotation gaps.</p>
   {html_table(residual_biotype_preview, residual_biotype_columns)}

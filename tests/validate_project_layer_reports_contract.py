@@ -69,9 +69,7 @@ def main() -> int:
             assert f"ASPIS run</a> / <a href=\"../../index.html\">{project}</a> /" in text
             assert "Download layer technical PDF" in text
             assert contrast in text
-            if row["layer_key"] == "isoform_switch":
-                assert "contrast summary" not in text
-            elif row["layer_key"] in {"rnaseq_de", "smallrna_de"}:
+            if row["layer_key"] in {"rnaseq_de", "smallrna_de"}:
                 assert f"{contrast}/summary.html" not in text
             else:
                 assert f"{contrast}/summary.html" in text

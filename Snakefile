@@ -422,7 +422,7 @@ SMALLRNA_REPORTS_RUN = (
     as_bool(SMALLRNA.get("reports", True), True)
     and SMALLRNA_DIFFERENTIAL_RUN
 )
-SMALLRNA_REPORT_TOP_N = SMALLRNA.get("report_top_n", SMALLRNA.get("target_top_n", 25))
+SMALLRNA_REPORT_TOP_N = SMALLRNA.get("report_top_n", SMALLRNA.get("target_top_n", 50))
 SMALLRNA_REFERENCE_RUN = as_bool(SMALLRNA.get("reference_run", False), False)
 SMALLRNA_BUILD_BOWTIE_INDEX = as_bool(SMALLRNA.get("build_bowtie_index", False), False)
 SMALLRNA_BUILD_CONTAMINANT_INDEX = as_bool(SMALLRNA.get("build_contaminant_index", False), False)

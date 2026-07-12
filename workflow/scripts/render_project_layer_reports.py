@@ -310,6 +310,8 @@ def render_contrast_summary(
     if layer_key != "isoform_switch":
         map_items.append(report_map_item("Plots", "#plots"))
         map_items.append(report_map_item("Tables and pages", "#tables"))
+    else:
+        map_items.append(report_map_item("Switch events", "#events"))
     css = f"""
     body {{ color:#1f2328; font-family:system-ui,-apple-system,Segoe UI,sans-serif; line-height:1.4; margin:0; padding:24px; }}
     a {{ color:#0969da; text-decoration:none; }} a:hover {{ text-decoration:underline; }} .breadcrumbs {{ color:#57606a; margin-bottom:14px; }}
@@ -344,6 +346,10 @@ def render_contrast_summary(
         detail_sections = (
             f'<section class="panel" id="plots" data-report-nav-target="plots"><h2>Plots</h2>{contrast_plot_sections(layer_key, rows, base_dir)}</section>'
             f'<section class="panel" id="tables" data-report-nav-target="tables"><h2>Tables and pages</h2>{asset_button_group(rows, layer_key, base_dir, want_plots=False)}</section>'
+        )
+    else:
+        detail_sections = (
+            f'<section class="panel" id="events" data-report-nav-target="events"><h2>Switch event pages and sequences</h2>{asset_button_group(rows, layer_key, base_dir, want_plots=False)}</section>'
         )
     page = f"""<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{html.escape(project)} - {html.escape(title)} - {html.escape(contrast)}</title><style>{css}</style></head><body>
     {shell}<nav class="breadcrumbs"><a href="../../../../../index.html">ASPIS run</a> / <a href="../../../index.html">{html.escape(project)}</a> / <a href="{layer_href}">{html.escape(title)}</a> / {html.escape(contrast)}</nav>
@@ -388,6 +394,17 @@ def row_label(row: dict[str, str], layer_key: str) -> str:
 
 
 def row_metrics(row: dict[str, str]) -> str:
+    if row.get("max_abs_dIF", "") or row.get("padj_qvalue", ""):
+        values = []
+        for field, label in [
+            ("max_abs_dIF", "max abs dIF"),
+            ("padj_qvalue", "q/p"),
+            ("switch_in_dIF", "switch-in dIF"),
+            ("switch_out_dIF", "switch-out dIF"),
+        ]:
+            if row.get(field, ""):
+                values.append(f"{label}: {row[field]}")
+        return "; ".join(values) or "-"
     values = []
     for field in COUNT_FIELDS:
         value = row.get(field, "")
@@ -466,7 +483,7 @@ def render_layer(project: str, key: str, title: str, description: str, rows: lis
         primary_summary = next((row.get("summary_html", "") for row in grouped[contrast] if row.get("summary_html", "")), "")
         summary_target = absolute_path(primary_summary) if key in {"rnaseq_de", "smallrna_de"} and primary_summary else summary_path
         summary_href = html.escape(os.path.relpath(summary_target.resolve(), start=base_dir.resolve()).replace(os.sep, "/"))
-        summary_button = "" if key == "isoform_switch" else f'<p><a class="button-link" href="{summary_href}">contrast summary</a></p>'
+        summary_button = f'<p><a class="button-link" href="{summary_href}">contrast summary</a></p>'
         body_rows = []
         for row in grouped[contrast]:
             body_rows.append(

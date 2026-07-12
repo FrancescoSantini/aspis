@@ -620,19 +620,20 @@ def validate_outputs(paths: dict[str, Path]) -> None:
     text = summary_html.read_text(encoding="utf-8")
     if (
         "hsa-miR-1-3p" not in text
-        or "Potentially regulated target processes" not in text
-        or "Target-gene feature sets" not in text
-        or "miRNA-ID feature sets" not in text
-        or "target_evidence_type" not in text
+        or "Read-length and arm QC" not in text
+        or "Residual genome read fate" not in text
         or "Volcano" not in text
         or "smallRNA differential expression" not in text
         or 'class="metrics-table"' not in text
+        or "Potentially regulated target processes" in text
+        or "Target-gene feature sets" in text
+        or "miRNA-mRNA integration" in text
         or "Summary Map" not in text
         or 'aria-label="Page sections"' in text
         or 'class="metrics "' in text
         or "DESeq2 results | significant miRNAs" in text
     ):
-        raise ValueError("Summary HTML lacks expected metrics, miRNA, target-enrichment, feature-set, or plot content")
+        raise ValueError("Summary HTML lacks expected smallRNA DE/QC content or still includes target-layer content")
     index_text = paths["index"].read_text(encoding="utf-8")
     if (
         "treated_vs_control__time_h_24" not in index_text

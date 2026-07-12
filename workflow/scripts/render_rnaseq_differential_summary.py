@@ -656,7 +656,7 @@ def render_html(
 {plots}
   </div>
   <h2 id="features">Top Significant Features</h2>
-  <p class="note">This table lists the strongest filtered features by adjusted p-value and fold change. It is a compact preview; the complete DESeq2 output remains in the linked files below.</p>
+  <p class="note">This table lists filtered features sorted by adjusted p-value and fold change, capped at the configured report preview limit for readability. The complete DESeq2 output remains in the linked files below.</p>
   {top_feature_table(filtered_rows, top_n)}
   <h2 id="files">Files</h2>
   <p class="note">These links point to the machine-readable files used to build this page. Use them for downstream analysis, reproducibility checks, or manual inspection.</p>

@@ -321,6 +321,7 @@ smallrna:
   target_tables: []
   target_cache: ""
   target_min_overlap: 1
+  report_top_n: 50
   target_top_n: 20
   target_mapping_warn_fraction: 0.05
   target_mapping_fail_fraction: 0.001
