@@ -782,7 +782,9 @@ def render_html(
     residual_biotype_columns = list(residual_biotype_preview[0]) if residual_biotype_preview else []
     residual_feature_columns = list(residual_feature_preview[0]) if residual_feature_preview else []
     title = f"{plan_row['project']} {plan_row['contrast_id']} miRNA differential report"
-    report_index = summary_path.parent.parent.parent / "index.html"
+    run_root = summary_path.parents[7] if len(summary_path.parents) > 7 else summary_path.parent
+    project_index = run_root / "projects" / plan_row["project"] / "index.html"
+    layer_index = run_root / "projects" / plan_row["project"] / "layers" / "smallrna_de" / "index.html"
     content = f"""<!doctype html>
 <html lang="en">
 <head>
@@ -808,7 +810,7 @@ def render_html(
   </style>
 </head>
 <body>
-  <nav class="breadcrumbs"><a href="{html.escape(local_href(str(report_index), summary_path.parent))}">smallRNA differential report</a> / {html.escape(plan_row['contrast_id'])}</nav>
+  <nav class="breadcrumbs"><a href="{html.escape(local_href(str(run_root / 'index.html'), summary_path.parent))}">ASPIS</a> / <a href="{html.escape(local_href(str(run_root / 'index.html'), summary_path.parent))}">Run</a> / <a href="{html.escape(local_href(str(project_index), summary_path.parent))}">Project</a> / <a href="{html.escape(local_href(str(layer_index), summary_path.parent))}">Evidence layer</a> / smallRNA differential expression / {html.escape(plan_row['contrast_id'])}</nav>
   <h1>{html.escape(title)}</h1>
   <section id="metrics">{metric_html}</section>
   <p class="note">The metrics above summarize the miRNA differential run, target lookup, optional miRNA-mRNA integration, optional feature-set enrichment, and smallRNA-specific QC layers for this contrast.</p>

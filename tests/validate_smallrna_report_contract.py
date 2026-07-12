@@ -625,7 +625,7 @@ def validate_outputs(paths: dict[str, Path]) -> None:
         or "miRNA-ID feature sets" not in text
         or "target_evidence_type" not in text
         or "Volcano" not in text
-        or "smallRNA differential report" not in text
+        or "smallRNA differential expression" not in text
         or 'class="metrics-table"' not in text
     ):
         raise ValueError("Summary HTML lacks expected metrics, miRNA, target-enrichment, feature-set, or plot content")

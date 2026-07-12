@@ -460,6 +460,7 @@ def render_layer(project: str, key: str, title: str, description: str, rows: lis
         summary_path = output.parent / safe_token(contrast) / "summary.html"
         render_contrast_summary(project, key, title, description, contrast, grouped[contrast], summary_path, output)
         summary_href = html.escape(os.path.relpath(summary_path.resolve(), start=base_dir.resolve()).replace(os.sep, "/"))
+        summary_button = "" if key == "isoform_switch" else f'<p><a class="button-link" href="{summary_href}">contrast summary</a></p>'
         body_rows = []
         for row in grouped[contrast]:
             body_rows.append(
@@ -474,7 +475,7 @@ def render_layer(project: str, key: str, title: str, description: str, rows: lis
         sections.append(
             f'<section class="panel" id="contrast-{index}" data-report-nav-target="contrast-{index}">'
             f"<h2>{html.escape(contrast)}</h2>"
-            f'<p><a class="button-link" href="{summary_href}">contrast summary</a></p>'
+            f"{summary_button}"
             '<div class="table-scroll"><table><thead><tr><th>analysis</th><th>status</th><th>counts</th><th>tables and plots</th><th>reason</th></tr></thead>'
             f"<tbody>{''.join(body_rows)}</tbody></table></div></section>"
         )

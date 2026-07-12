@@ -70,7 +70,10 @@ def main() -> int:
             assert "Evidence layer" in text
             assert "Download layer technical PDF" in text
             assert contrast in text
-            assert f'{contrast}/summary.html' in text or f'{contrast.replace("_", "_")}/summary.html' in text
+            if row["layer_key"] == "isoform_switch":
+                assert "contrast summary" not in text
+            else:
+                assert f"{contrast}/summary.html" in text
             summary_html = layer_html.parent / contrast / "summary.html"
             assert summary_html.exists()
             summary_text = summary_html.read_text(encoding="utf-8")
