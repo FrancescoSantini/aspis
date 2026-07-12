@@ -82,18 +82,6 @@ def source_rows(branch_dir: Path, project: str) -> dict[str, list[dict[str, str]
     rnaseq = branch_dir / "rnaseq" / project
     small = branch_dir / "smallrna" / project / "smallrna"
     isoform_rows = read_tsv(rnaseq / "differential/isoform_switch/report/switch_event_summary.tsv")
-    switch_atlas = rnaseq / "differential/isoform_switch/report/switch_plots.pdf"
-    if switch_atlas.exists():
-        isoform_rows.insert(
-            0,
-            {
-                "contrast_id": "project",
-                "status": "ok",
-                "gene_display": "All switch candidates",
-                "plot_svg": switch_atlas.as_posix(),
-                "reason": "Combined vector switch-plot atlas",
-            },
-        )
     return {
         "rnaseq_de": read_tsv(rnaseq / "differential/reports/summaries/summary_manifest.tsv"),
         "enrichment": read_tsv(rnaseq / "differential/reports/enrichment/enrichment_manifest.tsv"),
@@ -201,6 +189,60 @@ def row_metrics(row: dict[str, str]) -> str:
     return "; ".join(values[:6]) or "-"
 
 
+METHOD_DESCRIPTIONS = {
+    "DRIMSeq": "Gene-level differential transcript usage from transcript counts.",
+    "DEXSeq": "Transcript-feature usage grouped by gene from transcript counts.",
+    "DEXSeqExon": "Exon-bin usage from flattened annotation and aligned BAM counts.",
+    "SUPPA2": "Transcript-event differential splicing from transcript expression.",
+    "rMATS": "Junction-event differential splicing from aligned BAMs.",
+}
+
+
+def row_reason(row: dict[str, str]) -> str:
+    reason = row.get("reason", "")
+    if reason:
+        return reason
+    method = row.get("method", "")
+    return METHOD_DESCRIPTIONS.get(method, "")
+
+
+def compact_layer_summary(rows: list[dict[str, str]], layer_key: str) -> str:
+    if not rows:
+        return '<p class="muted">No result rows were available for this layer.</p>'
+    grouped: dict[str, list[dict[str, str]]] = defaultdict(list)
+    for row in rows:
+        grouped[row.get("contrast_id", "project") or "project"].append(row)
+    body = []
+    for contrast in sorted(grouped):
+        group = grouped[contrast]
+        status_counts: dict[str, int] = defaultdict(int)
+        for row in group:
+            status_counts[row.get("status", "unknown") or "unknown"] += 1
+        status_text = ", ".join(f"{status}:{count}" for status, count in sorted(status_counts.items()))
+        metrics = []
+        for field in COUNT_FIELDS:
+            total = 0
+            for row in group:
+                value = row.get(field, "")
+                if value and value.replace(".", "", 1).isdigit():
+                    total += int(float(value))
+            if total:
+                metrics.append(f"{field[2:].replace('_', ' ')}: {total}")
+        body.append(
+            "<tr>"
+            f"<td><code>{html.escape(contrast)}</code></td>"
+            f"<td>{len(group)}</td>"
+            f"<td>{html.escape(status_text)}</td>"
+            f"<td>{html.escape('; '.join(metrics[:6]) or '-')}</td>"
+            "</tr>"
+        )
+    return (
+        '<div class="table-scroll"><table class="summary-table">'
+        "<thead><tr><th>contrast</th><th>rows</th><th>status</th><th>summary counts</th></tr></thead>"
+        f"<tbody>{''.join(body)}</tbody></table></div>"
+    )
+
+
 def render_layer(project: str, key: str, title: str, description: str, rows: list[dict[str, str]], output: Path) -> None:
     output.parent.mkdir(parents=True, exist_ok=True)
     base_dir = output.parent
@@ -220,7 +262,7 @@ def render_layer(project: str, key: str, title: str, description: str, rows: lis
                 f"<td><span class=\"status {html.escape(row.get('status', 'unknown') or 'unknown')}\">{html.escape(row.get('status', 'unknown') or 'unknown')}</span></td>"
                 f"<td>{html.escape(row_metrics(row))}</td>"
                 f"<td><div class=\"button-list\">{link_buttons(row, key, base_dir)}</div></td>"
-                f"<td>{html.escape(row.get('reason', ''))}</td>"
+                f"<td>{html.escape(row_reason(row))}</td>"
                 "</tr>"
             )
         sections.append(
@@ -236,6 +278,7 @@ def render_layer(project: str, key: str, title: str, description: str, rows: lis
     h1,h2 {{ letter-spacing:0; }} h1 {{ margin:0 0 6px; }} h2 {{ border-bottom:1px solid #d0d7de; padding-bottom:6px; }}
     .panel {{ border:1px solid #d0d7de; border-radius:6px; margin:0 0 18px; padding:16px; }}
     .muted {{ color:#57606a; }} .export {{ margin:10px 0 0; }}
+    .summary-table {{ margin-top:12px; }}
     table {{ border-collapse:collapse; width:100%; }} th,td {{ border:1px solid #d0d7de; padding:8px; text-align:left; vertical-align:top; }} th {{ background:#f6f8fa; }}
     .table-scroll {{ overflow-x:auto; }} .button-list {{ display:flex; flex-wrap:wrap; gap:6px; }}
     .button-link {{ background:#f6f8fa; border:1px solid #d0d7de; border-radius:4px; display:inline-block; padding:2px 7px; text-decoration:none; }}
@@ -246,7 +289,8 @@ def render_layer(project: str, key: str, title: str, description: str, rows: lis
     page = f"""<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{html.escape(project)} - {html.escape(title)}</title><style>{css}</style></head><body>
     <nav class="breadcrumbs"><a href="../../../../index.html">ASPIS</a> / <a href="../../../../index.html">Run</a> / <a href="../../index.html">Project</a> / Evidence layer / {html.escape(title)}</nav>
     {shell}<section class="panel" id="layer-summary" data-report-nav-target="layer-summary"><h1>{html.escape(title)}</h1><p>{html.escape(description)}</p>
-    <p class="export"><a class="button-link" href="{pdf_href}">Download layer technical PDF</a> &middot; {len(contrasts)} contrast(s) &middot; {len(rows)} result row(s)</p></section>
+    <p class="export"><a class="button-link" href="{pdf_href}">Download layer technical PDF</a> &middot; {len(contrasts)} contrast(s) &middot; {len(rows)} result row(s)</p>
+    {compact_layer_summary(rows, key)}</section>
     {''.join(sections) if sections else '<section class="panel"><h2>No configured results</h2><p class="muted">This evidence layer has no result rows for this project.</p></section>'}
     {report_shell_close()}{report_map_script()}</body></html>"""
     output.write_text(page, encoding="utf-8")

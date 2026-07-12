@@ -793,8 +793,8 @@ def render_html(
     a {{ color: #0969da; text-decoration: none; }}
     a:hover {{ text-decoration: underline; }}
     .breadcrumbs {{ color: #57606a; margin-bottom: 1rem; }}
-    .toc {{ display: flex; flex-wrap: wrap; gap: 0.5rem 0.85rem; margin: 1rem 0 1.25rem; }}
-    .toc a {{ border: 1px solid #d0d7de; border-radius: 999px; padding: 0.25rem 0.65rem; }}
+    .toc {{ display: flex; flex-wrap: wrap; gap: 0.35rem 0.85rem; margin: 1rem 0 1.25rem; }}
+    .toc a {{ border-bottom: 1px solid #d0d7de; padding: 0.1rem 0; }}
     .note {{ background: #f6f8fa; border-left: 4px solid #666; margin: 1rem 0; padding: 0.75rem; }}
     .links {{ margin: 1rem 0; }}
     .plots {{ display: grid; gap: 28px; grid-template-columns: 1fr; }}

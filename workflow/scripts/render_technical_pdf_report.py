@@ -581,9 +581,9 @@ def image_flowables(
     return [
         PageBreak(),
         para(title, styles["h1"]),
-        para(explanation, styles["body"]),
         image,
         Spacer(1, 5 * mm),
+        para(explanation, styles["caption"]),
         para(f"Embedded preview: {compact_path(path.as_posix())}", styles["caption"]),
     ]
 
@@ -701,9 +701,9 @@ def vector_plot_flowables(
     return [
         PageBreak(),
         para(title, styles["h1"]),
-        para(explanation, styles["body"]),
         plot,
         Spacer(1, 5 * mm),
+        para(explanation, styles["caption"]),
         para(f"Embedded vector plot from {source_label}: {compact_path(path.as_posix())}", styles["caption"]),
     ]
 
@@ -1222,17 +1222,6 @@ def infer_rnaseq_layout_assets(assets: list[dict[str, str]], asset_manifest_text
         label="plot_manifest",
         kind="manifest",
         path=branch_base / "differential/isoform_switch/report/switch_plot_manifest.tsv",
-    )
-    add_inferred_asset(
-        expanded,
-        seen,
-        project=project,
-        assay="rnaseq",
-        level="isoform_switch",
-        group="isoform_switch",
-        label="plots_pdf",
-        kind="plot",
-        path=branch_base / "differential/isoform_switch/report/switch_plots.pdf",
     )
     add_inferred_asset(
         expanded,
