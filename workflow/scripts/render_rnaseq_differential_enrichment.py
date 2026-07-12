@@ -747,7 +747,14 @@ def enrichment_rows(
     return rows
 
 
-def write_enrichment_svg(path: Path, rows: list[dict[str, str]], top_n: int) -> None:
+def level_title(level: str, title: str) -> str:
+    level = (level or "").strip()
+    if not level:
+        return title
+    return f"{level.capitalize()} {title[0].lower()}{title[1:]}"
+
+
+def write_enrichment_svg(path: Path, rows: list[dict[str, str]], top_n: int, level: str = "") -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     width = 1400
     row_height = 36
@@ -779,7 +786,7 @@ def write_enrichment_svg(path: Path, rows: list[dict[str, str]], top_n: int) -> 
     elements = [
         f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}">',
         '<rect width="100%" height="100%" fill="#ffffff"/>',
-        '<text x="40" y="25" font-family="sans-serif" font-size="18" font-weight="700">Feature-set enrichment</text>',
+        f'<text x="40" y="25" font-family="sans-serif" font-size="18" font-weight="700">{html.escape(level_title(level, "Feature-set enrichment"))}</text>',
         '<text x="40" y="40" font-family="sans-serif" font-size="11" fill="#57606a">Label format: description when available, otherwise collection:set ID. X axis is -log10(FDR); larger dots have larger overlap.</text>',
         '<circle cx="930" cy="24" r="6" fill="#4d4d4d" fill-opacity="0.82"/><text x="942" y="28" font-family="sans-serif" font-size="11">significant</text>',
         '<circle cx="1045" cy="24" r="6" fill="#b2182b" fill-opacity="0.82"/><text x="1057" y="28" font-family="sans-serif" font-size="11">up</text>',
@@ -996,7 +1003,7 @@ def feature_set_universe_rows(
     return rows
 
 
-def write_ranked_enrichment_svg(path: Path, rows: list[dict[str, str]], top_n: int) -> None:
+def write_ranked_enrichment_svg(path: Path, rows: list[dict[str, str]], top_n: int, level: str = "") -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     width = 1400
     row_height = 36
@@ -1012,7 +1019,7 @@ def write_ranked_enrichment_svg(path: Path, rows: list[dict[str, str]], top_n: i
     elements = [
         f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}">',
         '<rect width="100%" height="100%" fill="#ffffff"/>',
-        '<text x="40" y="25" font-family="sans-serif" font-size="18" font-weight="700">Ranked feature-set enrichment</text>',
+        f'<text x="40" y="25" font-family="sans-serif" font-size="18" font-weight="700">{html.escape(level_title(level, "Ranked feature-set enrichment"))}</text>',
         '<text x="40" y="40" font-family="sans-serif" font-size="11" fill="#57606a">Label format: description when available, otherwise collection:set ID. X axis is normalized enrichment score; dot size is leading-edge size.</text>',
         '<circle cx="930" cy="24" r="6" fill="#b2182b" fill-opacity="0.82"/><text x="942" y="28" font-family="sans-serif" font-size="11">top enriched</text>',
         '<circle cx="1055" cy="24" r="6" fill="#2166ac" fill-opacity="0.82"/><text x="1067" y="28" font-family="sans-serif" font-size="11">bottom enriched</text>',
@@ -1148,9 +1155,9 @@ def write_feature_lists(
     write_table(paths["feature_set_universe"], FEATURE_SET_UNIVERSE_COLUMNS, universe_rows)
     write_table(paths["resource_mapping_qa"], RESOURCE_MAPPING_QA_COLUMNS, qa_rows)
     write_table(paths["feature_set_results"], FEATURE_SET_COLUMNS, term_rows)
-    write_enrichment_svg(paths["feature_set_plot"], term_rows, top_n)
+    write_enrichment_svg(paths["feature_set_plot"], term_rows, top_n, row.get("level", ""))
     write_table(paths["ranked_feature_set_results"], RANKED_FEATURE_SET_COLUMNS, ranked_term_rows)
-    write_ranked_enrichment_svg(paths["ranked_feature_set_plot"], ranked_term_rows, top_n)
+    write_ranked_enrichment_svg(paths["ranked_feature_set_plot"], ranked_term_rows, top_n, row.get("level", ""))
 
     outputs = {
         "ranked_features": str(paths["ranked_features"]),

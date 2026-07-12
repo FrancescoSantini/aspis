@@ -336,7 +336,7 @@ def main() -> int:
         assert 'aria-label="Report map"' in html
         assert "Report Map" in html
         assert '<li><a href="../../index.html">Run dashboard</a></li>' not in html
-        assert '<nav class="breadcrumbs">ASPIS / <a href="../../index.html">Run</a> / Project / TEST_PROJECT</nav>' in html
+        assert '<nav class="breadcrumbs"><a href="../../index.html">ASPIS run</a> / TEST_PROJECT</nav>' in html
         assert 'href="#project-overview"' in html
         assert 'href="#contrast-matrix"' in html
         assert 'id="evidence-layers"' in html

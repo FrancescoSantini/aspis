@@ -1376,7 +1376,7 @@ def render(args: argparse.Namespace) -> None:
 </head>
 <body>
   {sidebar}
-  <nav class="breadcrumbs">ASPIS / <a href="../../index.html">Run</a> / Project / {html.escape(args.project)}</nav>
+  <nav class="breadcrumbs"><a href="../../index.html">ASPIS run</a> / {html.escape(args.project)}</nav>
   <h1>{html.escape(args.project)} integrated ASPIS report</h1>
   <p class="note">This project page is the canonical entry point below the run dashboard. It organizes gene, transcript, miRNA, enrichment, DTU, isoform-switch, target, and integration evidence into one review path with one detailed report per evidence layer. Export: {technical_pdf_link}.</p>
   <div class="metrics">

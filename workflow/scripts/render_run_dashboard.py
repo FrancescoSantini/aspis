@@ -849,7 +849,7 @@ def render(args: argparse.Namespace) -> None:
 </head>
 <body>
   {sidebar}
-  <nav class="breadcrumbs">ASPIS / Run</nav>
+  <nav class="breadcrumbs">ASPIS run</nav>
   <h1>ASPIS run dashboard</h1>
   <p class="note">This page summarizes one ASPIS run and connects its biological projects. Open a project report for assay-level results, evidence layers, project QC, and provenance.</p>
   <h2 id="run-summary">Run Summary</h2>

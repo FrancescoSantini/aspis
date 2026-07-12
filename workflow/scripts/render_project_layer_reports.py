@@ -311,7 +311,7 @@ def render_contrast_summary(
         map_items.append(report_map_item("Plots", "#plots"))
         map_items.append(report_map_item("Tables and pages", "#tables"))
     css = f"""
-    body {{ color:#1f2328; font-family:Arial,sans-serif; line-height:1.4; margin:0; padding:18px; }}
+    body {{ color:#1f2328; font-family:system-ui,-apple-system,Segoe UI,sans-serif; line-height:1.4; margin:0; padding:24px; }}
     a {{ color:#0969da; }} .breadcrumbs {{ color:#57606a; margin-bottom:14px; }}
     h1,h2 {{ letter-spacing:0; }} h1 {{ margin:0 0 6px; }} h2 {{ border-bottom:1px solid #d0d7de; padding-bottom:6px; }}
     .panel {{ border:1px solid #d0d7de; border-radius:6px; margin:0 0 18px; padding:16px; }}
@@ -487,7 +487,7 @@ def render_layer(project: str, key: str, title: str, description: str, rows: lis
         )
     pdf_href = "technical_report.pdf"
     css = f"""
-    body {{ color:#1f2328; font-family:Arial,sans-serif; line-height:1.4; margin:0; padding:18px; }}
+    body {{ color:#1f2328; font-family:system-ui,-apple-system,Segoe UI,sans-serif; line-height:1.4; margin:0; padding:24px; }}
     a {{ color:#0969da; }} .breadcrumbs {{ color:#57606a; margin-bottom:14px; }}
     h1,h2 {{ letter-spacing:0; }} h1 {{ margin:0 0 6px; }} h2 {{ border-bottom:1px solid #d0d7de; padding-bottom:6px; }}
     .panel {{ border:1px solid #d0d7de; border-radius:6px; margin:0 0 18px; padding:16px; }}
