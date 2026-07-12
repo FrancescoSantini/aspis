@@ -219,6 +219,62 @@ def asset_button_group(rows: list[dict[str, str]], layer_key: str, base_dir: Pat
     return '<div class="button-list">' + "".join(links) + "</div>" if links else '<p class="muted">No linked assets in this group.</p>'
 
 
+def row_asset_links(row: dict[str, str], layer_key: str, base_dir: Path, want_plots: bool | None = None) -> str:
+    links = []
+    for field in ASSET_FIELDS[layer_key]:
+        value = row.get(field, "")
+        if not value:
+            continue
+        is_plot = asset_kind(field, absolute_path(value)) in PLOT_ASSET_KINDS
+        if want_plots is not None and is_plot != want_plots:
+            continue
+        links.append(f'<a class="button-link" href="{html.escape(relative_href(value, base_dir))}">{html.escape(field.replace("_", " "))}</a>')
+    return '<div class="button-list">' + "".join(links) + "</div>" if links else '<span class="muted">no linked assets</span>'
+
+
+def contrast_plot_sections(layer_key: str, rows: list[dict[str, str]], base_dir: Path) -> str:
+    if layer_key == "isoform_switch":
+        return ""
+    if layer_key == "dtu_splicing":
+        method_sections = []
+        for row in rows:
+            figures = []
+            for field in ["overview_plot", "usage_plot", "feature_plot"]:
+                value = row.get(field, "")
+                if value:
+                    figure = plot_asset_figure(field, value, base_dir)
+                    if figure:
+                        figures.append(figure)
+            if figures:
+                method_sections.append(
+                    '<section class="method-row">'
+                    f"<h3>{html.escape(row.get('method', 'DTU/splicing'))}</h3>"
+                    f'<div class="plot-grid plot-grid-three">{"".join(figures)}</div>'
+                    "</section>"
+                )
+        return "".join(method_sections) or '<p class="muted">No plot assets are linked for this contrast in this layer.</p>'
+
+    figures = []
+    seen: set[tuple[str, str]] = set()
+    for row in rows:
+        for field in ASSET_FIELDS[layer_key]:
+            value = row.get(field, "")
+            if not value:
+                continue
+            path = absolute_path(value)
+            if asset_kind(field, path) not in PLOT_ASSET_KINDS:
+                continue
+            key = (field, value)
+            if key in seen:
+                continue
+            seen.add(key)
+            figure = plot_asset_figure(field, value, base_dir)
+            if figure:
+                figures.append(figure)
+    grid_class = "plot-grid plot-grid-two" if layer_key == "enrichment" else "plot-grid"
+    return f'<div class="{grid_class}">{"".join(figures)}</div>' if figures else '<p class="muted">No plot assets are linked for this contrast in this layer.</p>'
+
+
 def render_contrast_summary(
     project: str,
     layer_key: str,
@@ -232,37 +288,24 @@ def render_contrast_summary(
     output.parent.mkdir(parents=True, exist_ok=True)
     base_dir = output.parent
     table_rows = []
-    plot_figures = []
-    seen_plots: set[tuple[str, str]] = set()
     for row in rows:
+        asset_cell = ""
+        if layer_key == "isoform_switch":
+            asset_cell = f"<td>{row_asset_links(row, layer_key, base_dir, want_plots=False)}</td>"
         table_rows.append(
             "<tr>"
             f"<td>{html.escape(row_label(row, layer_key))}</td>"
             f"<td><span class=\"status {html.escape(row.get('status', 'unknown') or 'unknown')}\">{html.escape(row.get('status', 'unknown') or 'unknown')}</span></td>"
             f"<td>{html.escape(row_metrics(row))}</td>"
             f"<td>{html.escape(row_reason(row))}</td>"
+            f"{asset_cell}"
             "</tr>"
         )
-        for field in ASSET_FIELDS[layer_key]:
-            value = row.get(field, "")
-            if not value:
-                continue
-            path = absolute_path(value)
-            if asset_kind(field, path) not in PLOT_ASSET_KINDS:
-                continue
-            key = (field, value)
-            if key in seen_plots:
-                continue
-            seen_plots.add(key)
-            figure = plot_asset_figure(field, value, base_dir)
-            if figure:
-                plot_figures.append(figure)
 
-    map_items = [
-        report_map_item("Summary", "#summary"),
-        report_map_item("Plots", "#plots"),
-        report_map_item("Tables and pages", "#tables"),
-    ]
+    map_items = [report_map_item("Summary", "#summary")]
+    if layer_key != "isoform_switch":
+        map_items.append(report_map_item("Plots", "#plots"))
+        map_items.append(report_map_item("Tables and pages", "#tables"))
     css = f"""
     body {{ color:#1f2328; font-family:Arial,sans-serif; line-height:1.4; margin:0; padding:18px; }}
     a {{ color:#0969da; }} .breadcrumbs {{ color:#57606a; margin-bottom:14px; }}
@@ -273,21 +316,36 @@ def render_contrast_summary(
     .table-scroll {{ overflow-x:auto; }} .button-list {{ display:flex; flex-wrap:wrap; gap:6px; }}
     .button-link {{ background:#f6f8fa; border:1px solid #d0d7de; border-radius:4px; display:inline-block; padding:2px 7px; text-decoration:none; }}
     .plot-grid {{ display:grid; grid-template-columns:repeat(auto-fit,minmax(360px,1fr)); gap:18px; }}
+    .plot-grid-two {{ grid-template-columns:repeat(2,minmax(420px,1fr)); }}
+    .plot-grid-three {{ grid-template-columns:repeat(auto-fit,minmax(320px,1fr)); }}
     .plot-asset {{ border:1px solid #d0d7de; border-radius:6px; margin:0; padding:10px; }}
     .plot-asset img {{ max-width:100%; height:auto; display:block; }}
     .plot-asset object {{ width:100%; height:520px; display:block; }}
     .plot-asset figcaption {{ color:#57606a; font-size:0.85rem; margin-top:8px; }}
+    .method-row {{ border-top:1px solid #d0d7de; padding-top:14px; margin-top:16px; }}
+    .method-row:first-child {{ border-top:0; padding-top:0; margin-top:0; }}
+    @media (max-width: 1100px) {{ .plot-grid-two {{ grid-template-columns:1fr; }} }}
     .status {{ font-weight:700; }} .status.ok,.status.completed {{ color:#1a7f37; }} .status.blocked,.status.failed,.status.missing {{ color:#cf222e; }}
     {report_map_css()}
     """
     layer_href = html.escape(os.path.relpath(layer_index.resolve(), start=base_dir.resolve()).replace(os.sep, "/"))
     shell = report_shell_open("Summary Map", map_items, base_dir)
+    header = (
+        "<tr><th>analysis</th><th>status</th><th>counts</th><th>reason</th><th>event assets</th></tr>"
+        if layer_key == "isoform_switch"
+        else "<tr><th>analysis</th><th>status</th><th>counts</th><th>reason</th></tr>"
+    )
+    detail_sections = ""
+    if layer_key != "isoform_switch":
+        detail_sections = (
+            f'<section class="panel" id="plots" data-report-nav-target="plots"><h2>Plots</h2>{contrast_plot_sections(layer_key, rows, base_dir)}</section>'
+            f'<section class="panel" id="tables" data-report-nav-target="tables"><h2>Tables and pages</h2>{asset_button_group(rows, layer_key, base_dir, want_plots=False)}</section>'
+        )
     page = f"""<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{html.escape(project)} - {html.escape(title)} - {html.escape(contrast)}</title><style>{css}</style></head><body>
     <nav class="breadcrumbs"><a href="../../../../../index.html">ASPIS</a> / <a href="../../../../../index.html">Run</a> / <a href="../../../index.html">Project</a> / <a href="{layer_href}">Evidence layer</a> / {html.escape(title)} / {html.escape(contrast)}</nav>
     {shell}<section class="panel" id="summary" data-report-nav-target="summary"><h1>{html.escape(title)} - <code>{html.escape(contrast)}</code></h1><p>{html.escape(description)}</p>
-    <div class="table-scroll"><table><thead><tr><th>analysis</th><th>status</th><th>counts</th><th>reason</th></tr></thead><tbody>{''.join(table_rows)}</tbody></table></div></section>
-    <section class="panel" id="plots" data-report-nav-target="plots"><h2>Plots</h2>{'<div class="plot-grid">' + ''.join(plot_figures) + '</div>' if plot_figures else '<p class="muted">No plot assets are linked for this contrast in this layer.</p>'}</section>
-    <section class="panel" id="tables" data-report-nav-target="tables"><h2>Tables and pages</h2>{asset_button_group(rows, layer_key, base_dir, want_plots=False)}</section>
+    <div class="table-scroll"><table><thead>{header}</thead><tbody>{''.join(table_rows)}</tbody></table></div></section>
+    {detail_sections}
     {report_shell_close()}{report_map_script()}</body></html>"""
     output.write_text(page, encoding="utf-8")
 

@@ -594,9 +594,16 @@ def render_html(
         ("Residual genome-aligned", str(residual_aligned_reads)),
         ("Residual genome-unmapped", str(residual_unmapped_reads)),
     ]
-    metric_html = "".join(
-        f"<div><strong>{html.escape(label)}</strong><span>{html.escape(value)}</span></div>"
-        for label, value in metrics
+    metric_rows = []
+    for index in range(0, len(metrics), 4):
+        cells = []
+        for label, value in metrics[index:index + 4]:
+            cells.append(f"<th>{html.escape(label)}</th><td>{html.escape(value)}</td>")
+        metric_rows.append("<tr>" + "".join(cells) + "</tr>")
+    metric_html = (
+        '<table class="metrics-table"><tbody>'
+        + "".join(metric_rows)
+        + "</tbody></table>"
     )
     significant_columns = [
         column for column in ["Geneid", "mirna_id", "baseMean", "log2FoldChange", "pvalue", "padj"] if significant and column in significant[0]
@@ -784,19 +791,16 @@ def render_html(
   <style>
     body {{ font-family: system-ui, -apple-system, Segoe UI, sans-serif; margin: 2rem; color: #222; }}
     h1, h2 {{ line-height: 1.2; }}
-    .metrics {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 0.75rem; margin: 1rem 0; }}
-    .metrics div {{ border: 1px solid #ddd; padding: 0.75rem; border-radius: 4px; }}
-    .metrics span {{ display: block; margin-top: 0.35rem; font-size: 1.3rem; }}
+    .metrics-table {{ margin: 1rem 0; }}
+    .metrics-table th {{ width: 12%; }}
+    .metrics-table td {{ width: 13%; }}
     table {{ border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: 0.92rem; }}
     th, td {{ border: 1px solid #ddd; padding: 0.45rem; text-align: left; vertical-align: top; overflow-wrap: anywhere; }}
     th {{ background: #f2f2f2; }}
     a {{ color: #0969da; text-decoration: none; }}
     a:hover {{ text-decoration: underline; }}
     .breadcrumbs {{ color: #57606a; margin-bottom: 1rem; }}
-    .toc {{ display: flex; flex-wrap: wrap; gap: 0.35rem 0.85rem; margin: 1rem 0 1.25rem; }}
-    .toc a {{ border-bottom: 1px solid #d0d7de; padding: 0.1rem 0; }}
     .note {{ background: #f6f8fa; border-left: 4px solid #666; margin: 1rem 0; padding: 0.75rem; }}
-    .links {{ margin: 1rem 0; }}
     .plots {{ display: grid; gap: 28px; grid-template-columns: 1fr; }}
     .plot img {{ border: 1px solid #ddd; display: block; height: auto; max-width: 100%; }}
     .plot-source, .plot-note {{ color: #666; margin: 0.4rem 0 0; }}
@@ -806,17 +810,7 @@ def render_html(
 <body>
   <nav class="breadcrumbs"><a href="{html.escape(local_href(str(report_index), summary_path.parent))}">smallRNA differential report</a> / {html.escape(plan_row['contrast_id'])}</nav>
   <h1>{html.escape(title)}</h1>
-  <nav class="toc" aria-label="Page sections">
-    <a href="#metrics">Metrics</a>
-    <a href="#plots">Plots</a>
-    <a href="#mirnas">Top miRNAs</a>
-    <a href="#integration">miRNA-mRNA integration</a>
-    <a href="#length-qc">Length QC</a>
-    <a href="#targets">Targets and feature sets</a>
-    <a href="#residuals">Residual read fate</a>
-  </nav>
-  <p class="links">{links_html}</p>
-  <section id="metrics" class="metrics">{metric_html}</section>
+  <section id="metrics">{metric_html}</section>
   <p class="note">The metrics above summarize the miRNA differential run, target lookup, optional miRNA-mRNA integration, optional feature-set enrichment, and smallRNA-specific QC layers for this contrast.</p>
   <p class="note">{html.escape(PCA_INTERPRETATION_NOTE)}</p>
   <h2 id="plots">Plots</h2>

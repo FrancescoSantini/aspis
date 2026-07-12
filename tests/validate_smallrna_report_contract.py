@@ -624,11 +624,11 @@ def validate_outputs(paths: dict[str, Path]) -> None:
         or "Target-gene feature sets" not in text
         or "miRNA-ID feature sets" not in text
         or "target_evidence_type" not in text
-        or "volcano plot" not in text
+        or "Volcano" not in text
         or "smallRNA differential report" not in text
-        or 'aria-label="Page sections"' not in text
+        or 'class="metrics-table"' not in text
     ):
-        raise ValueError("Summary HTML lacks expected navigation, miRNA, target-enrichment, feature-set, or plot content")
+        raise ValueError("Summary HTML lacks expected metrics, miRNA, target-enrichment, feature-set, or plot content")
     index_text = paths["index"].read_text(encoding="utf-8")
     if (
         "treated_vs_control__time_h_24" not in index_text

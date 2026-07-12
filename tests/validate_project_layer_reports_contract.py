@@ -75,7 +75,10 @@ def main() -> int:
             assert summary_html.exists()
             summary_text = summary_html.read_text(encoding="utf-8")
             assert "Evidence layer" in summary_text
-            assert "Tables and pages" in summary_text
+            if row["layer_key"] == "isoform_switch":
+                assert "event assets" in summary_text
+            else:
+                assert "Tables and pages" in summary_text
             assert (layer_html.parent / "source_asset_manifest.tsv").exists()
 
         if importlib.util.find_spec("reportlab") is None or importlib.util.find_spec("pypdf") is None:
