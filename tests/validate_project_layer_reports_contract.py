@@ -67,6 +67,7 @@ def main() -> int:
             layer_html = Path(row["html"])
             text = layer_html.read_text(encoding="utf-8")
             assert "ASPIS</a> / <a" in text
+            assert f"Project</a> / {project} / Evidence layer" in text
             assert "Evidence layer" in text
             assert "Download layer technical PDF" in text
             assert contrast in text
@@ -77,6 +78,7 @@ def main() -> int:
             summary_html = layer_html.parent / contrast / "summary.html"
             assert summary_html.exists()
             summary_text = summary_html.read_text(encoding="utf-8")
+            assert f"Project</a> / {project} / <a" in summary_text
             assert "Evidence layer" in summary_text
             if row["layer_key"] == "isoform_switch":
                 assert "event assets" in summary_text

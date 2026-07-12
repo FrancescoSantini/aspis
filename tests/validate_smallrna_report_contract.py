@@ -627,6 +627,9 @@ def validate_outputs(paths: dict[str, Path]) -> None:
         or "Volcano" not in text
         or "smallRNA differential expression" not in text
         or 'class="metrics-table"' not in text
+        or 'aria-label="Page sections"' in text
+        or 'class="metrics "' in text
+        or "DESeq2 results | significant miRNAs" in text
     ):
         raise ValueError("Summary HTML lacks expected metrics, miRNA, target-enrichment, feature-set, or plot content")
     index_text = paths["index"].read_text(encoding="utf-8")

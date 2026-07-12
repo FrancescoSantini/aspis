@@ -203,8 +203,12 @@ def main() -> int:
                 if not summary_html.exists():
                     raise FileNotFoundError(f"Missing differential summary HTML: {summary_html}")
                 summary_text = summary_html.read_text(encoding="utf-8")
-                if "RNA-seq differential report" not in summary_text or 'aria-label="Page sections"' not in summary_text:
-                    raise ValueError(f"{summary_html} lacks breadcrumb or mini table of contents")
+                if (
+                    "RNA-seq differential expression" not in summary_text
+                    or "Evidence layer" not in summary_text
+                    or 'aria-label="Page sections"' in summary_text
+                ):
+                    raise ValueError(f"{summary_html} lacks canonical breadcrumb or still has legacy mini table of contents")
         for row in summary_rows:
             if row.get("level") != "transcript":
                 continue

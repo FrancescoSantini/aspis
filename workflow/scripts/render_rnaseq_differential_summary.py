@@ -620,7 +620,9 @@ def render_html(
         for label, path in artifacts
         if path
     )
-    report_index = output.parent.parent.parent / "index.html"
+    run_root = output.parents[7] if len(output.parents) > 7 else output.parent.parent.parent
+    project_index = run_root / "projects" / row["project"] / "index.html"
+    layer_index = project_index.parent / "layers" / "rnaseq_de" / "index.html"
     return f"""<!doctype html>
 <html lang="en">
 <head>
@@ -634,8 +636,6 @@ def render_html(
     a {{ color: #0969da; text-decoration: none; }}
     a:hover {{ text-decoration: underline; }}
     .breadcrumbs {{ color: #57606a; margin-bottom: 1rem; }}
-    .toc {{ display: flex; flex-wrap: wrap; gap: 0.5rem 0.85rem; margin: 1rem 0 1.25rem; }}
-    .toc a {{ border: 1px solid #d0d7de; border-radius: 999px; padding: 0.25rem 0.65rem; }}
     .note {{ background: #f6f8fa; border-left: 4px solid #57606a; margin: 12px 0 18px; padding: 10px 12px; }}
     .plots {{ display: grid; gap: 28px; grid-template-columns: 1fr; }}
     .plot img {{ border: 1px solid #d0d7de; display: block; height: auto; max-width: 100%; }}
@@ -646,15 +646,8 @@ def render_html(
   </style>
 </head>
 <body>
-  <nav class="breadcrumbs"><a href="{html.escape(relative_link(report_index, output))}">RNA-seq differential report</a> / {html.escape(row['level'])} / {html.escape(row['contrast_id'])}</nav>
+  <nav class="breadcrumbs"><a href="{html.escape(relative_link(run_root / 'index.html', output))}">ASPIS</a> / <a href="{html.escape(relative_link(run_root / 'index.html', output))}">Run</a> / <a href="{html.escape(relative_link(project_index, output))}">Project</a> / {html.escape(row['project'])} / <a href="{html.escape(relative_link(layer_index, output))}">Evidence layer</a> / RNA-seq differential expression / {html.escape(row['level'])} / {html.escape(row['contrast_id'])}</nav>
   <h1>{html.escape(title)}</h1>
-  <nav class="toc" aria-label="Page sections">
-    <a href="#metrics">Metrics</a>
-    <a href="#plots">Plots</a>
-    <a href="#enrichment">Feature-set status</a>
-    <a href="#features">Top features</a>
-    <a href="#files">Files</a>
-  </nav>
   <h2 id="metrics">Metrics</h2>
   <p class="note">These values summarize the contrast-level differential-expression run: how many features were tested, how many passed the configured significance filters, and how many changed upward or downward in the test group relative to the control group.</p>
   <table>
