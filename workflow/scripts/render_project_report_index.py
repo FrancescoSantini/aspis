@@ -137,6 +137,13 @@ def rel_href(path: Path, base_dir: Path) -> str:
         return path.resolve().as_uri()
 
 
+def safe_token(value: str) -> str:
+    token = "".join(ch if ch.isalnum() else "_" for ch in (value or "").strip()).strip("_")
+    while "__" in token:
+        token = token.replace("__", "_")
+    return token or "project"
+
+
 def link(path: Path, label: str, base_dir: Path, expected: bool = False) -> str:
     label_html = html.escape(label)
     if path.exists():
@@ -148,6 +155,10 @@ def link(path: Path, label: str, base_dir: Path, expected: bool = False) -> str:
 
 def planned_link(path: Path, label: str, base_dir: Path) -> str:
     return f'<a href="{html.escape(rel_href(path, base_dir))}">{html.escape(label)}</a>'
+
+
+def layer_summary_link(layer_key: str, contrast_id: str, label: str, base_dir: Path) -> str:
+    return link(base_dir / "layers" / layer_key / safe_token(contrast_id) / "summary.html", label, base_dir)
 
 
 def table_link(path: Path, label: str, base_dir: Path, expected: bool = False) -> str:
@@ -428,8 +439,7 @@ def summary_cell(row: dict[str, str] | None, base_dir: Path, feature_label: str 
     up = row.get("n_up", "")
     down = row.get("n_down", "")
     summary = optional_row_link(row, "summary_html", "summary", base_dir)
-    result = optional_row_link(row, "results", "results", base_dir)
-    links = grouped_links([summary, result])
+    links = grouped_links([summary])
     parts = [
         f'<span class="status {html.escape(status)}">{html.escape(status)}</span>',
         f"{html.escape(features)} {html.escape(feature_label)}" if features else "",
@@ -449,26 +459,23 @@ def enrichment_cell(
     base_dir: Path,
 ) -> str:
     items = []
+    first_contrast = ""
     for label, row in [("gene", gene_row), ("transcript", transcript_row)]:
         if not row:
             continue
+        first_contrast = first_contrast or row.get("contrast_id", "")
         status = row.get("status", "")
         terms = row.get("n_feature_set_terms", "")
         ranked_terms = row.get("n_ranked_feature_set_terms", "")
-        links = [
-            optional_row_link(row, "feature_set_plot", "ORA plot", base_dir),
-            optional_row_link(row, "ranked_feature_set_plot", "ranked plot", base_dir),
-            optional_row_link(row, "feature_set_results", "ORA table", base_dir),
-            optional_row_link(row, "ranked_feature_set_results", "ranked table", base_dir),
-        ]
-        link_text = grouped_links(links)
         items.append(
             f"<strong>{html.escape(label)}</strong>: "
             f'<span class="status {html.escape(status or "unknown")}">{html.escape(status or "unknown")}</span>'
             f" ({html.escape(terms)} ORA, {html.escape(ranked_terms)} ranked)"
-            + (f"<br>{link_text}" if link_text else "")
         )
-    return "<hr>".join(items) if items else '<span class="status muted">not present</span>'
+    if not items:
+        return '<span class="status muted">not present</span>'
+    summary = layer_summary_link("enrichment", first_contrast, "summary", base_dir) if first_contrast else ""
+    return "<hr>".join(items + ([grouped_links([summary])] if summary else []))
 
 
 def smallrna_target_cell(
@@ -493,14 +500,12 @@ def smallrna_target_cell(
         if row.get("n_target_feature_set_terms")
         else "",
     ]
-    links = [
-        optional_row_link(row, "target_enrichment_plot", "target enrichment plot", base_dir),
-        optional_row_link(row, "target_enrichment", "target enrichment table", base_dir),
-        optional_row_link(row, "target_feature_set_plot", "target feature sets", base_dir),
-        optional_row_link(integration_row, "sample_pairing", "sample pairing", base_dir),
-        optional_row_link(integration_row, "mirna_mrna_pairs", "miRNA-mRNA pairs", base_dir),
-        optional_row_link(integration_row, "mirna_mrna_plot", "integration plot", base_dir),
-    ]
+    contrast_id = row.get("contrast_id", "") or integration_row.get("contrast_id", "")
+    links = []
+    if row:
+        links.append(layer_summary_link("mirna_targets", contrast_id, "target summary", base_dir))
+    if integration_row:
+        links.append(layer_summary_link("matched_mirna_mrna", contrast_id, "matched summary", base_dir))
     return "<br>".join(part for part in [", ".join(item for item in metrics if item), grouped_links(links)] if part)
 
 
@@ -533,12 +538,6 @@ def integration_state_cell(
             f"{html.escape(integration_row.get('n_pairs', ''))} miRNA-target pairs"
             if integration_row.get("n_pairs")
             else "",
-            grouped_links(
-                [
-                    optional_row_link(integration_row, "sample_pairing", "pairing table", base_dir),
-                    optional_row_link(integration_row, "mirna_mrna_summary", "integration summary", base_dir),
-                ]
-            ),
         ]
         reason = integration_row.get("reason", "")
         if reason:
@@ -577,7 +576,7 @@ def dtu_cell(
         f"{html.escape(status_text)}",
         f"{standardized} standardized rows" if standardized else "",
         f"{plot_ok} plot sets" if plot_rows else "",
-        grouped_links(['<a href="#layer-dtu">DTU layer</a>']),
+        grouped_links([layer_summary_link("dtu_splicing", contrast_id, "summary", base_dir)]),
     ]
     return "<br>".join(part for part in details if part)
 

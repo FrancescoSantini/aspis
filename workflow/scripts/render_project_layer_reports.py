@@ -52,6 +52,16 @@ COUNT_FIELDS = [
 ]
 
 
+PLOT_ASSET_KINDS = {"plot"}
+
+
+def safe_token(value: str) -> str:
+    token = "".join(ch if ch.isalnum() else "_" for ch in (value or "").strip()).strip("_")
+    while "__" in token:
+        token = token.replace("__", "_")
+    return token or "project"
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--project", required=True)
@@ -168,6 +178,141 @@ def link_buttons(row: dict[str, str], layer_key: str, base_dir: Path) -> str:
     return "".join(buttons) or '<span class="muted">no linked artifacts</span>'
 
 
+def plot_asset_figure(field: str, value: str, base_dir: Path) -> str:
+    path = absolute_path(value)
+    href = html.escape(relative_href(value, base_dir))
+    label = html.escape(field.replace("_", " "))
+    suffix = path.suffix.lower()
+    if suffix in {".svg", ".png", ".jpg", ".jpeg"}:
+        return (
+            '<figure class="plot-asset">'
+            f'<a href="{href}"><img src="{href}" alt="{label}"></a>'
+            f"<figcaption>{label}</figcaption></figure>"
+        )
+    if suffix == ".pdf":
+        return (
+            '<figure class="plot-asset">'
+            f'<object data="{href}" type="application/pdf"><a href="{href}">{label}</a></object>'
+            f"<figcaption>{label}</figcaption></figure>"
+        )
+    return ""
+
+
+def asset_button_group(rows: list[dict[str, str]], layer_key: str, base_dir: Path, want_plots: bool) -> str:
+    links = []
+    seen: set[tuple[str, str]] = set()
+    for row in rows:
+        for field in ASSET_FIELDS[layer_key]:
+            value = row.get(field, "")
+            if not value:
+                continue
+            path = absolute_path(value)
+            is_plot = asset_kind(field, path) in PLOT_ASSET_KINDS
+            if is_plot != want_plots:
+                continue
+            key = (field, value)
+            if key in seen:
+                continue
+            seen.add(key)
+            label = field.replace("_", " ")
+            links.append(f'<a class="button-link" href="{html.escape(relative_href(value, base_dir))}">{html.escape(label)}</a>')
+    return '<div class="button-list">' + "".join(links) + "</div>" if links else '<p class="muted">No linked assets in this group.</p>'
+
+
+def render_contrast_summary(
+    project: str,
+    layer_key: str,
+    title: str,
+    description: str,
+    contrast: str,
+    rows: list[dict[str, str]],
+    output: Path,
+    layer_index: Path,
+) -> None:
+    output.parent.mkdir(parents=True, exist_ok=True)
+    base_dir = output.parent
+    table_rows = []
+    plot_figures = []
+    seen_plots: set[tuple[str, str]] = set()
+    for row in rows:
+        table_rows.append(
+            "<tr>"
+            f"<td>{html.escape(row_label(row, layer_key))}</td>"
+            f"<td><span class=\"status {html.escape(row.get('status', 'unknown') or 'unknown')}\">{html.escape(row.get('status', 'unknown') or 'unknown')}</span></td>"
+            f"<td>{html.escape(row_metrics(row))}</td>"
+            f"<td>{html.escape(row_reason(row))}</td>"
+            "</tr>"
+        )
+        for field in ASSET_FIELDS[layer_key]:
+            value = row.get(field, "")
+            if not value:
+                continue
+            path = absolute_path(value)
+            if asset_kind(field, path) not in PLOT_ASSET_KINDS:
+                continue
+            key = (field, value)
+            if key in seen_plots:
+                continue
+            seen_plots.add(key)
+            figure = plot_asset_figure(field, value, base_dir)
+            if figure:
+                plot_figures.append(figure)
+
+    map_items = [
+        report_map_item("Summary", "#summary"),
+        report_map_item("Plots", "#plots"),
+        report_map_item("Tables and pages", "#tables"),
+    ]
+    css = f"""
+    body {{ color:#1f2328; font-family:Arial,sans-serif; line-height:1.4; margin:0; padding:18px; }}
+    a {{ color:#0969da; }} .breadcrumbs {{ color:#57606a; margin-bottom:14px; }}
+    h1,h2 {{ letter-spacing:0; }} h1 {{ margin:0 0 6px; }} h2 {{ border-bottom:1px solid #d0d7de; padding-bottom:6px; }}
+    .panel {{ border:1px solid #d0d7de; border-radius:6px; margin:0 0 18px; padding:16px; }}
+    .muted {{ color:#57606a; }}
+    table {{ border-collapse:collapse; width:100%; }} th,td {{ border:1px solid #d0d7de; padding:8px; text-align:left; vertical-align:top; }} th {{ background:#f6f8fa; }}
+    .table-scroll {{ overflow-x:auto; }} .button-list {{ display:flex; flex-wrap:wrap; gap:6px; }}
+    .button-link {{ background:#f6f8fa; border:1px solid #d0d7de; border-radius:4px; display:inline-block; padding:2px 7px; text-decoration:none; }}
+    .plot-grid {{ display:grid; grid-template-columns:repeat(auto-fit,minmax(360px,1fr)); gap:18px; }}
+    .plot-asset {{ border:1px solid #d0d7de; border-radius:6px; margin:0; padding:10px; }}
+    .plot-asset img {{ max-width:100%; height:auto; display:block; }}
+    .plot-asset object {{ width:100%; height:520px; display:block; }}
+    .plot-asset figcaption {{ color:#57606a; font-size:0.85rem; margin-top:8px; }}
+    .status {{ font-weight:700; }} .status.ok,.status.completed {{ color:#1a7f37; }} .status.blocked,.status.failed,.status.missing {{ color:#cf222e; }}
+    {report_map_css()}
+    """
+    layer_href = html.escape(os.path.relpath(layer_index.resolve(), start=base_dir.resolve()).replace(os.sep, "/"))
+    shell = report_shell_open("Summary Map", map_items, base_dir)
+    page = f"""<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{html.escape(project)} - {html.escape(title)} - {html.escape(contrast)}</title><style>{css}</style></head><body>
+    <nav class="breadcrumbs"><a href="../../../../../index.html">ASPIS</a> / <a href="../../../../../index.html">Run</a> / <a href="../../../index.html">Project</a> / <a href="{layer_href}">Evidence layer</a> / {html.escape(title)} / {html.escape(contrast)}</nav>
+    {shell}<section class="panel" id="summary" data-report-nav-target="summary"><h1>{html.escape(title)} - <code>{html.escape(contrast)}</code></h1><p>{html.escape(description)}</p>
+    <div class="table-scroll"><table><thead><tr><th>analysis</th><th>status</th><th>counts</th><th>reason</th></tr></thead><tbody>{''.join(table_rows)}</tbody></table></div></section>
+    <section class="panel" id="plots" data-report-nav-target="plots"><h2>Plots</h2>{'<div class="plot-grid">' + ''.join(plot_figures) + '</div>' if plot_figures else '<p class="muted">No plot assets are linked for this contrast in this layer.</p>'}</section>
+    <section class="panel" id="tables" data-report-nav-target="tables"><h2>Tables and pages</h2>{asset_button_group(rows, layer_key, base_dir, want_plots=False)}</section>
+    {report_shell_close()}{report_map_script()}</body></html>"""
+    output.write_text(page, encoding="utf-8")
+
+
+def contrast_summary_assets(project: str, layer_key: str, rows: list[dict[str, str]], layer_dir: Path) -> list[dict[str, str]]:
+    assets = []
+    for contrast in sorted({row.get("contrast_id", "project") or "project" for row in rows}):
+        path = layer_dir / safe_token(contrast) / "summary.html"
+        assets.append(
+            {
+                "project": project,
+                "assay": "smallrna" if layer_key in {"smallrna_de", "mirna_targets", "matched_mirna_mrna"} else "rnaseq",
+                "level": layer_key,
+                "contrast_id": contrast,
+                "status": "ok" if path.exists() else "missing",
+                "asset_group": layer_key,
+                "asset_label": "contrast summary html",
+                "asset_kind": "html",
+                "path": path.as_posix(),
+                "exists": "true" if path.exists() else "false",
+            }
+        )
+    return assets
+
+
 def row_label(row: dict[str, str], layer_key: str) -> str:
     if layer_key == "rnaseq_de":
         return row.get("level", "differential expression")
@@ -254,6 +399,9 @@ def render_layer(project: str, key: str, title: str, description: str, rows: lis
     map_items.extend(report_map_item(contrast, f"#contrast-{index}") for index, contrast in enumerate(contrasts, start=1))
     sections = []
     for index, contrast in enumerate(contrasts, start=1):
+        summary_path = output.parent / safe_token(contrast) / "summary.html"
+        render_contrast_summary(project, key, title, description, contrast, grouped[contrast], summary_path, output)
+        summary_href = html.escape(os.path.relpath(summary_path.resolve(), start=base_dir.resolve()).replace(os.sep, "/"))
         body_rows = []
         for row in grouped[contrast]:
             body_rows.append(
@@ -268,6 +416,7 @@ def render_layer(project: str, key: str, title: str, description: str, rows: lis
         sections.append(
             f'<section class="panel" id="contrast-{index}" data-report-nav-target="contrast-{index}">'
             f"<h2>{html.escape(contrast)}</h2>"
+            f'<p><a class="button-link" href="{summary_href}">contrast summary</a></p>'
             '<div class="table-scroll"><table><thead><tr><th>analysis</th><th>status</th><th>counts</th><th>tables and plots</th><th>reason</th></tr></thead>'
             f"<tbody>{''.join(body_rows)}</tbody></table></div></section>"
         )
@@ -309,7 +458,7 @@ def main() -> int:
         summary_rows = rows if key in {"rnaseq_de", "smallrna_de"} else []
         summary_columns = sorted({column for row in summary_rows for column in row}) or ["project", "contrast_id", "status"]
         write_tsv(layer_dir / "source_summary_manifest.tsv", summary_rows, summary_columns)
-        assets = prepared_assets(args.project, key, rows)
+        assets = prepared_assets(args.project, key, rows) + contrast_summary_assets(args.project, key, rows, layer_dir)
         asset_columns = ["project", "assay", "level", "contrast_id", "status", "asset_group", "asset_label", "asset_kind", "path", "exists"]
         write_tsv(layer_dir / "source_asset_manifest.tsv", assets, asset_columns)
         status = "ok" if rows else "not_present"

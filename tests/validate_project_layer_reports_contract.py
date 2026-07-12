@@ -70,6 +70,12 @@ def main() -> int:
             assert "Evidence layer" in text
             assert "Download layer technical PDF" in text
             assert contrast in text
+            assert f'{contrast}/summary.html' in text or f'{contrast.replace("_", "_")}/summary.html' in text
+            summary_html = layer_html.parent / contrast / "summary.html"
+            assert summary_html.exists()
+            summary_text = summary_html.read_text(encoding="utf-8")
+            assert "Evidence layer" in summary_text
+            assert "Tables and pages" in summary_text
             assert (layer_html.parent / "source_asset_manifest.tsv").exists()
 
         if importlib.util.find_spec("reportlab") is None or importlib.util.find_spec("pypdf") is None:
