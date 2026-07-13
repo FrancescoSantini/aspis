@@ -738,9 +738,7 @@ def render_layer(project: str, key: str, title: str, description: str, rows: lis
     for index, contrast in enumerate(contrasts, start=1):
         summary_path = output.parent / safe_token(contrast) / "summary.html"
         render_contrast_summary(project, key, title, description, contrast, grouped[contrast], summary_path, output)
-        primary_summary = next((row.get("summary_html", "") for row in grouped[contrast] if row.get("summary_html", "")), "")
-        summary_target = absolute_path(primary_summary) if key in {"rnaseq_de", "smallrna_de"} and primary_summary else summary_path
-        summary_href = html.escape(os.path.relpath(summary_target.resolve(), start=base_dir.resolve()).replace(os.sep, "/"))
+        summary_href = html.escape(os.path.relpath(summary_path.resolve(), start=base_dir.resolve()).replace(os.sep, "/"))
         summary_button = f'<p><a class="button-link" href="{summary_href}">contrast summary</a></p>'
         body_rows = []
         if key == "isoform_switch":

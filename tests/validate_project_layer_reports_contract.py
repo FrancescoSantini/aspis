@@ -69,10 +69,7 @@ def main() -> int:
             assert f"ASPIS run</a> / <a href=\"../../index.html\">{project}</a> /" in text
             assert "Download layer technical PDF" in text
             assert contrast in text
-            if row["layer_key"] in {"rnaseq_de", "smallrna_de"}:
-                assert f"{contrast}/summary.html" not in text
-            else:
-                assert f"{contrast}/summary.html" in text
+            assert f"{contrast}/summary.html" in text
             summary_html = layer_html.parent / contrast / "summary.html"
             assert summary_html.exists()
             summary_text = summary_html.read_text(encoding="utf-8")
