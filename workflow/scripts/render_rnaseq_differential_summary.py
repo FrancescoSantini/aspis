@@ -111,7 +111,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--plan", required=True, help="Differential report plan TSV")
     parser.add_argument("--manifest", required=True, help="Rendered summary manifest TSV")
     parser.add_argument("--done", required=True, help="Completion sentinel")
-    parser.add_argument("--top-n", type=int, default=20, help="Top filtered features to show")
+    parser.add_argument("--top-n", type=int, default=50, help="Top filtered features to show")
     return parser.parse_args()
 
 

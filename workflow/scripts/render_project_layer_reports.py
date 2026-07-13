@@ -55,6 +55,20 @@ COUNT_FIELDS = [
 PLOT_ASSET_KINDS = {"plot"}
 
 
+def parse_float(value: str) -> float | None:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def short_value(value: str, limit: int = 220) -> str:
+    text = (value or "").strip()
+    if len(text) <= limit:
+        return text
+    return text[: max(0, limit - 1)].rstrip() + "..."
+
+
 def safe_token(value: str) -> str:
     token = "".join(ch if ch.isalnum() else "_" for ch in (value or "").strip()).strip("_")
     while "__" in token:
@@ -78,6 +92,12 @@ def read_tsv(path: Path) -> list[dict[str, str]]:
     with path.open(newline="", encoding="utf-8") as handle:
         reader = csv.DictReader(handle, delimiter="\t")
         return [{key: (value or "").strip() for key, value in row.items()} for row in reader]
+
+
+def read_existing_tsv(value: str) -> list[dict[str, str]]:
+    if not value:
+        return []
+    return read_tsv(absolute_path(value))
 
 
 def write_tsv(path: Path, rows: list[dict[str, str]], columns: list[str]) -> None:
@@ -176,6 +196,67 @@ def link_buttons(row: dict[str, str], layer_key: str, base_dir: Path) -> str:
         label = field.replace("_", " ")
         buttons.append(f'<a class="button-link" href="{html.escape(relative_href(value, base_dir))}">{html.escape(label)}</a>')
     return "".join(buttons) or '<span class="muted">no linked artifacts</span>'
+
+
+def display_gene(row: dict[str, str]) -> str:
+    gene_id = (
+        row.get("gene_id", "")
+        or row.get("switch_gene_id", "")
+        or row.get("event_gene_id", "")
+        or row.get("event_id", "")
+        or row.get("analysis", "")
+    )
+    symbol = row.get("gene_symbol", "") or row.get("gene_name", "") or row.get("switch_gene_symbol", "")
+    display = row.get("gene_display", "")
+    if display and display.upper() != "NA":
+        return display
+    if symbol and symbol.upper() != "NA":
+        return f"{symbol} ({gene_id})" if gene_id and gene_id != symbol else symbol
+    return gene_id or row.get("event_id", "") or "isoform switch"
+
+
+def sort_layer_rows(layer_key: str, rows: list[dict[str, str]]) -> list[dict[str, str]]:
+    if layer_key == "isoform_switch":
+        return sorted(
+            rows,
+            key=lambda row: (
+                parse_float(row.get("padj_qvalue", "")) is None,
+                parse_float(row.get("padj_qvalue", "")) if parse_float(row.get("padj_qvalue", "")) is not None else float("inf"),
+                -(abs(parse_float(row.get("max_abs_dIF", "")) or 0.0)),
+                display_gene(row),
+            ),
+        )
+    return rows
+
+
+def html_preview_table(rows: list[dict[str, str]], columns: list[tuple[str, str]], max_rows: int = 50) -> str:
+    if not rows:
+        return '<p class="muted">No rows available.</p>'
+    body = []
+    for row in rows[:max_rows]:
+        cells = []
+        for key, label in columns:
+            cells.append(f"<td>{html.escape(short_value(row.get(key, '')))}</td>")
+        body.append("<tr>" + "".join(cells) + "</tr>")
+    head = "".join(f"<th>{html.escape(label)}</th>" for _, label in columns)
+    note = f'<p class="muted">Showing first {min(len(rows), max_rows)} of {len(rows)} row(s).</p>' if len(rows) > max_rows else ""
+    return f'{note}<div class="table-scroll"><table><thead><tr>{head}</tr></thead><tbody>{"".join(body)}</tbody></table></div>'
+
+
+def sort_preview_rows(rows: list[dict[str, str]]) -> list[dict[str, str]]:
+    def key(row: dict[str, str]) -> tuple[bool, float, float]:
+        padj = parse_float(row.get("padj", "") or row.get("qvalue", "") or row.get("FDR", "") or row.get("fdr", ""))
+        overlap = parse_float(row.get("overlap", "") or row.get("n_overlap", "") or row.get("inverse_pairs", ""))
+        return (padj is None, padj if padj is not None else float("inf"), -(overlap or 0.0))
+
+    return sorted(rows, key=key)
+
+
+def preview_section(title: str, rows: list[dict[str, str]], columns: list[tuple[str, str]], table_href: str = "", base_dir: Path | None = None) -> str:
+    link = ""
+    if table_href and base_dir is not None:
+        link = f'<p><a class="button-link" href="{html.escape(relative_href(table_href, base_dir))}">full table</a></p>'
+    return f'<section class="method-row"><h3>{html.escape(title)}</h3>{html_preview_table(sort_preview_rows(rows), columns)}{link}</section>'
 
 
 def plot_asset_figure(field: str, value: str, base_dir: Path, label_override: str = "") -> str:
@@ -279,6 +360,165 @@ def contrast_plot_sections(layer_key: str, rows: list[dict[str, str]], base_dir:
     return f'<div class="{grid_class}">{"".join(figures)}</div>' if figures else '<p class="muted">No plot assets are linked for this contrast in this layer.</p>'
 
 
+def contrast_table_preview_sections(layer_key: str, rows: list[dict[str, str]], base_dir: Path) -> str:
+    sections: list[str] = []
+    if layer_key == "mirna_targets":
+        for row in rows:
+            analysis = row.get("analysis", "")
+            if analysis == "target enrichment":
+                sections.append(
+                    preview_section(
+                        "Target enrichment rows",
+                        read_existing_tsv(row.get("target_enrichment", "")),
+                        [
+                            ("collection", "collection"),
+                            ("target_id", "target"),
+                            ("target_symbol", "symbol"),
+                            ("overlap", "overlap"),
+                            ("query_size", "query size"),
+                            ("padj", "padj"),
+                            ("mirnas", "miRNAs"),
+                        ],
+                        row.get("target_enrichment", ""),
+                        base_dir,
+                    )
+                )
+                sections.append(
+                    preview_section(
+                        "Target-source summary",
+                        read_existing_tsv(row.get("target_source_summary", "")),
+                        [
+                            ("target_source", "source"),
+                            ("target_source_type", "source type"),
+                            ("targets", "targets"),
+                            ("mirnas", "miRNAs"),
+                            ("rows", "rows"),
+                        ],
+                        row.get("target_source_summary", ""),
+                        base_dir,
+                    )
+                )
+            elif analysis == "target feature sets":
+                sections.append(
+                    preview_section(
+                        "Target feature-set enrichment rows",
+                        read_existing_tsv(row.get("target_feature_set_results", "")),
+                        [
+                            ("collection", "collection"),
+                            ("set_id", "set"),
+                            ("description", "description"),
+                            ("overlap", "overlap"),
+                            ("query_size", "query size"),
+                            ("padj", "padj"),
+                            ("targets", "targets"),
+                        ],
+                        row.get("target_feature_set_results", ""),
+                        base_dir,
+                    )
+                )
+                sections.append(
+                    preview_section(
+                        "miRNA identifier feature-set rows",
+                        read_existing_tsv(row.get("mirna_feature_set_results", "")),
+                        [
+                            ("collection", "collection"),
+                            ("set_id", "set"),
+                            ("description", "description"),
+                            ("overlap", "overlap"),
+                            ("query_size", "query size"),
+                            ("padj", "padj"),
+                        ],
+                        row.get("mirna_feature_set_results", ""),
+                        base_dir,
+                    )
+                )
+    elif layer_key == "matched_mirna_mrna":
+        for row in rows:
+            analysis = row.get("analysis", "")
+            if analysis == "miRNA-mRNA integration":
+                sections.append(
+                    preview_section(
+                        "miRNA-mRNA inverse pairs",
+                        read_existing_tsv(row.get("mirna_mrna_pairs", "")),
+                        [
+                            ("mirna_id", "miRNA"),
+                            ("target_id", "target"),
+                            ("target_symbol", "symbol"),
+                            ("target_source", "source"),
+                            ("mirna_log2FoldChange", "miRNA log2FC"),
+                            ("target_log2FoldChange", "target log2FC"),
+                            ("pair_class", "pair class"),
+                        ],
+                        row.get("mirna_mrna_pairs", ""),
+                        base_dir,
+                    )
+                )
+                sections.append(
+                    preview_section(
+                        "miRNA-mRNA integration summary",
+                        read_existing_tsv(row.get("mirna_mrna_summary", "")),
+                        [
+                            ("metric", "metric"),
+                            ("value", "value"),
+                            ("status", "status"),
+                            ("reason", "reason"),
+                        ],
+                        row.get("mirna_mrna_summary", ""),
+                        base_dir,
+                    )
+                )
+                sections.append(
+                    preview_section(
+                        "Target-mode rows",
+                        read_existing_tsv(row.get("mirna_mrna_target_modes", "")),
+                        [
+                            ("target_id", "target"),
+                            ("target_symbol", "symbol"),
+                            ("mode", "mode"),
+                            ("mirnas", "miRNAs"),
+                            ("inverse_pairs", "inverse pairs"),
+                        ],
+                        row.get("mirna_mrna_target_modes", ""),
+                        base_dir,
+                    )
+                )
+            elif analysis == "inverse target feature sets":
+                sections.append(
+                    preview_section(
+                        "Inverse target feature-set rows",
+                        read_existing_tsv(row.get("mirna_mrna_target_feature_set_results", "")),
+                        [
+                            ("collection", "collection"),
+                            ("set_id", "set"),
+                            ("description", "description"),
+                            ("overlap", "overlap"),
+                            ("query_size", "query size"),
+                            ("padj", "padj"),
+                            ("targets", "targets"),
+                        ],
+                        row.get("mirna_mrna_target_feature_set_results", ""),
+                        base_dir,
+                    )
+                )
+                sections.append(
+                    preview_section(
+                        "Ranked inverse target feature-set rows",
+                        read_existing_tsv(row.get("mirna_mrna_target_ranked_feature_set_results", "")),
+                        [
+                            ("collection", "collection"),
+                            ("set_id", "set"),
+                            ("description", "description"),
+                            ("score", "score"),
+                            ("padj", "padj"),
+                            ("targets", "targets"),
+                        ],
+                        row.get("mirna_mrna_target_ranked_feature_set_results", ""),
+                        base_dir,
+                    )
+                )
+    return "".join(sections)
+
+
 def render_contrast_summary(
     project: str,
     layer_key: str,
@@ -292,7 +532,7 @@ def render_contrast_summary(
     output.parent.mkdir(parents=True, exist_ok=True)
     base_dir = output.parent
     table_rows = []
-    for row in rows:
+    for row in sort_layer_rows(layer_key, rows):
         asset_cell = ""
         if layer_key == "isoform_switch":
             asset_cell = f"<td>{row_asset_links(row, layer_key, base_dir, want_plots=False)}</td>"
@@ -310,6 +550,8 @@ def render_contrast_summary(
     if layer_key != "isoform_switch":
         map_items.append(report_map_item("Plots", "#plots"))
         map_items.append(report_map_item("Tables and pages", "#tables"))
+        if layer_key in {"mirna_targets", "matched_mirna_mrna"}:
+            map_items.append(report_map_item("Preview tables", "#preview-tables"))
     else:
         map_items.append(report_map_item("Switch events", "#events"))
     css = f"""
@@ -343,18 +585,25 @@ def render_contrast_summary(
     )
     detail_sections = ""
     if layer_key != "isoform_switch":
+        preview_sections = contrast_table_preview_sections(layer_key, rows, base_dir)
         detail_sections = (
             f'<section class="panel" id="plots" data-report-nav-target="plots"><h2>Plots</h2>{contrast_plot_sections(layer_key, rows, base_dir)}</section>'
             f'<section class="panel" id="tables" data-report-nav-target="tables"><h2>Tables and pages</h2>{asset_button_group(rows, layer_key, base_dir, want_plots=False)}</section>'
+            + (f'<section class="panel" id="preview-tables" data-report-nav-target="preview-tables"><h2>Preview tables</h2>{preview_sections}</section>' if preview_sections else "")
         )
     else:
         detail_sections = (
-            f'<section class="panel" id="events" data-report-nav-target="events"><h2>Switch event pages and sequences</h2>{asset_button_group(rows, layer_key, base_dir, want_plots=False)}</section>'
+            '<section class="panel" id="events" data-report-nav-target="events">'
+            '<h2>Switch events</h2>'
+            '<p class="muted">Rows are sorted by adjusted significance when available, then by absolute isoform-fraction change.</p>'
+            '<div class="table-scroll"><table><thead>'
+            '<tr><th>gene/event</th><th>status</th><th>counts</th><th>reason</th><th>event assets</th></tr>'
+            f'</thead><tbody>{"".join(table_rows)}</tbody></table></div></section>'
         )
     page = f"""<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{html.escape(project)} - {html.escape(title)} - {html.escape(contrast)}</title><style>{css}</style></head><body>
     {shell}<nav class="breadcrumbs"><a href="../../../../../index.html">ASPIS run</a> / <a href="../../../index.html">{html.escape(project)}</a> / <a href="{layer_href}">{html.escape(title)}</a> / {html.escape(contrast)}</nav>
     <section class="panel" id="summary" data-report-nav-target="summary"><h1>{html.escape(title)} - <code>{html.escape(contrast)}</code></h1><p>{html.escape(description)}</p>
-    <div class="table-scroll"><table><thead>{header}</thead><tbody>{''.join(table_rows)}</tbody></table></div></section>
+    {'' if layer_key == 'isoform_switch' else f'<div class="table-scroll"><table><thead>{header}</thead><tbody>{"".join(table_rows)}</tbody></table></div>'}</section>
     {detail_sections}
     {report_shell_close()}{report_map_script()}</body></html>"""
     output.write_text(page, encoding="utf-8")
@@ -387,7 +636,7 @@ def row_label(row: dict[str, str], layer_key: str) -> str:
     if layer_key == "dtu_splicing":
         return row.get("method", "DTU/splicing")
     if layer_key == "isoform_switch":
-        return row.get("gene_display", "") or row.get("gene_name", "") or row.get("gene_id", "") or row.get("event_id", "isoform switch")
+        return display_gene(row)
     if layer_key == "smallrna_de":
         return "miRNA differential expression"
     return row.get("analysis", "") or row.get("level", "") or layer_key.replace("_", " ")
@@ -467,6 +716,15 @@ def compact_layer_summary(rows: list[dict[str, str]], layer_key: str) -> str:
     )
 
 
+def isoform_contrast_summary_text(rows: list[dict[str, str]]) -> str:
+    if not rows:
+        return "-"
+    max_dif = max((abs(parse_float(row.get("max_abs_dIF", "")) or 0.0) for row in rows), default=0.0)
+    with_nt = sum(1 for row in rows if row.get("event_nt_fasta", ""))
+    with_aa = sum(1 for row in rows if row.get("event_aa_fasta", ""))
+    return f"switch events: {len(rows)}; top max abs dIF: {max_dif:.3g}; NT FASTA: {with_nt}; AA FASTA: {with_aa}"
+
+
 def render_layer(project: str, key: str, title: str, description: str, rows: list[dict[str, str]], output: Path) -> None:
     output.parent.mkdir(parents=True, exist_ok=True)
     base_dir = output.parent
@@ -485,16 +743,29 @@ def render_layer(project: str, key: str, title: str, description: str, rows: lis
         summary_href = html.escape(os.path.relpath(summary_target.resolve(), start=base_dir.resolve()).replace(os.sep, "/"))
         summary_button = f'<p><a class="button-link" href="{summary_href}">contrast summary</a></p>'
         body_rows = []
-        for row in grouped[contrast]:
+        if key == "isoform_switch":
+            statuses = sorted({row.get("status", "unknown") or "unknown" for row in grouped[contrast]})
+            status = "ok" if "ok" in statuses else (statuses[0] if statuses else "unknown")
             body_rows.append(
                 "<tr>"
-                f"<td>{html.escape(row_label(row, key))}</td>"
-                f"<td><span class=\"status {html.escape(row.get('status', 'unknown') or 'unknown')}\">{html.escape(row.get('status', 'unknown') or 'unknown')}</span></td>"
-                f"<td>{html.escape(row_metrics(row))}</td>"
-                f"<td><div class=\"button-list\">{link_buttons(row, key, base_dir)}</div></td>"
-                f"<td>{html.escape(row_reason(row))}</td>"
+                "<td>switch-event candidates</td>"
+                f"<td><span class=\"status {html.escape(status)}\">{html.escape(status)}</span></td>"
+                f"<td>{html.escape(isoform_contrast_summary_text(grouped[contrast]))}</td>"
+                f"<td><a class=\"button-link\" href=\"{summary_href}\">contrast summary</a></td>"
+                "<td>Individual event pages and sequence links are listed in the contrast summary.</td>"
                 "</tr>"
             )
+        else:
+            for row in grouped[contrast]:
+                body_rows.append(
+                    "<tr>"
+                    f"<td>{html.escape(row_label(row, key))}</td>"
+                    f"<td><span class=\"status {html.escape(row.get('status', 'unknown') or 'unknown')}\">{html.escape(row.get('status', 'unknown') or 'unknown')}</span></td>"
+                    f"<td>{html.escape(row_metrics(row))}</td>"
+                    f"<td><div class=\"button-list\">{link_buttons(row, key, base_dir)}</div></td>"
+                    f"<td>{html.escape(row_reason(row))}</td>"
+                    "</tr>"
+                )
         sections.append(
             f'<section class="panel" id="contrast-{index}" data-report-nav-target="contrast-{index}">'
             f"<h2>{html.escape(contrast)}</h2>"
