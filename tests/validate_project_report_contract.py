@@ -380,7 +380,10 @@ def main() -> int:
         assert "Independent DTU/splicing method results" in html
         assert "Isoform-switch candidates with DTU/splicing support" in html
         assert "support layer is a deterministic evidence join" in html
-        assert "tx1 (Gene A (geneA)) / tx2 (Gene A (geneA))" in html
+        assert "<th>contrast</th><th>events</th><th>genes</th><th>classes</th><th>priority tiers</th>" in html
+        assert "coding_switch:1" in html
+        assert "contrast summary" in html
+        assert "tx1 (Gene A (geneA)) / tx2 (Gene A (geneA))" not in html
         assert "Isoform-switch event plots and tables" not in html
         assert "smallRNA DE plots and tables" not in html
         assert "miRNA target plots and tables" not in html
@@ -399,10 +402,10 @@ def main() -> int:
         assert 'class="link-list"' in html
         assert "overview plot" in html
         assert "ranked candidate plot" in html
-        assert "switch plot" in html
-        assert "event page" in html
-        assert "NT FASTA" in html
-        assert "AA FASTA" in html
+        assert "switch plot" not in html
+        assert "event page" not in html
+        assert "NT FASTA" not in html
+        assert "AA FASTA" not in html
         assert "without adding automated biological interpretation" in html
         assert "Direct miRNA-ID set enrichment is a separate optional layer" in html
         assert "direct miRNA-ID sets" in html

@@ -24,6 +24,7 @@ REQUIRED_PLAN_COLUMNS = {
     "results",
     "filtered",
     "deseq2_summary",
+    "feature_metadata",
     "volcano_pdf",
     "ma_pdf",
     "pca_pdf",
@@ -303,6 +304,72 @@ def first_clean(row: dict[str, str], columns: list[str]) -> str:
         if value and value.upper() not in {"NA", "N/A", "NULL", "NONE", "."}:
             return value
     return ""
+
+
+FEATURE_ID_COLUMNS = [
+    "Geneid",
+    "gene_id",
+    "transcript_id",
+    "feature_id",
+    "id",
+]
+
+
+def metadata_path_for_row(row: dict[str, str]) -> Path | None:
+    planned = row.get("feature_metadata", "")
+    if planned:
+        return Path(planned)
+    summary_html = row.get("summary_html", "")
+    if not summary_html:
+        return None
+    output = Path(summary_html)
+    if len(output.parents) <= 4:
+        return None
+    branch_root = output.parents[4]
+    if row.get("level") == "gene":
+        return branch_root / "quantification" / "featurecounts" / "gene_metadata.tsv"
+    if row.get("level") == "transcript":
+        return branch_root / "quantification" / "counts" / "transcript_metadata.tsv"
+    return None
+
+
+def feature_row_ids(row: dict[str, str], feature_column: str) -> set[str]:
+    candidates = {row.get(feature_column, "")}
+    for column in FEATURE_ID_COLUMNS:
+        candidates.add(row.get(column, ""))
+    return {candidate.strip() for candidate in candidates if candidate and candidate.strip()}
+
+
+def metadata_lookup(path: Path | None) -> dict[str, dict[str, str]]:
+    if path is None or not path.exists():
+        return {}
+    _columns, rows = read_table(path)
+    lookup: dict[str, dict[str, str]] = {}
+    for row in rows:
+        for column in FEATURE_ID_COLUMNS:
+            value = row.get(column, "").strip()
+            if value:
+                lookup.setdefault(value, row)
+    return lookup
+
+
+def enrich_rows_with_feature_metadata(rows: list[dict[str, str]], plan_row: dict[str, str]) -> list[dict[str, str]]:
+    if not rows:
+        return rows
+    lookup = metadata_lookup(metadata_path_for_row(plan_row))
+    if not lookup:
+        return rows
+    feature_column = first_feature_column(rows)
+    enriched = []
+    for row in rows:
+        metadata = next((lookup[item] for item in feature_row_ids(row, feature_column) if item in lookup), None)
+        if metadata is None:
+            enriched.append(row)
+            continue
+        merged = dict(metadata)
+        merged.update({key: value for key, value in row.items() if value != ""})
+        enriched.append(merged)
+    return enriched
 
 
 def feature_location(row: dict[str, str]) -> str:
@@ -741,6 +808,8 @@ def render_ready_row(row: dict[str, str], top_n: int) -> dict[str, str]:
     resources = enrichment_resources(enrichment_path)
     _, result_rows = read_table(results_path)
     _, filtered_rows = read_table(filtered_path)
+    result_rows = enrich_rows_with_feature_metadata(result_rows, row)
+    filtered_rows = enrich_rows_with_feature_metadata(filtered_rows, row)
     summary = first_summary_row(summary_path)
     pca_metrics = first_existing_row(row.get("pca_metrics_tsv", ""))
     n_up, n_down = count_direction(filtered_rows)

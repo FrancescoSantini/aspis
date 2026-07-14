@@ -4,13 +4,14 @@
 from __future__ import annotations
 
 import sys
+import tempfile
 from pathlib import Path
 
 
 sys.path.insert(0, str(Path("workflow/scripts").resolve()))
 
 from display_labels import feature_display_label, gene_display_label  # noqa: E402
-from render_rnaseq_differential_summary import top_feature_table  # noqa: E402
+from render_rnaseq_differential_summary import enrich_rows_with_feature_metadata, top_feature_table  # noqa: E402
 
 
 def assert_contains(text: str, expected: str) -> None:
@@ -82,6 +83,21 @@ def main() -> int:
     assert_contains(html, "MSTRG.11769")
     assert_contains(html, "chr3:1200-1800 (+)")
     assert_not_contains(html, "NA (MSTRG.11769)")
+
+    with tempfile.TemporaryDirectory(prefix="aspis_report_display_") as tmp_text:
+        metadata = Path(tmp_text) / "feature_metadata.tsv"
+        metadata.write_text(
+            "transcript_id\tgene_id\tgene_name\tseqname\tstart\tend\tstrand\n"
+            "txA\tgeneA\tGENEA\tchr2\t100\t250\t+\n",
+            encoding="utf-8",
+        )
+        enriched = enrich_rows_with_feature_metadata(
+            [{"transcript_id": "txA", "log2FoldChange": "1.5", "padj": "0.01"}],
+            {"feature_metadata": str(metadata), "level": "transcript"},
+        )
+    html = top_feature_table(enriched, top_n=10)
+    assert_contains(html, "GENEA (geneA) | txA")
+    assert_contains(html, "chr2:100-250 (+)")
     print("report display label contract ok")
     return 0
 

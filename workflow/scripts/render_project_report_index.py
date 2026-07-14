@@ -223,6 +223,18 @@ def as_int(value: str | int | None) -> int:
         return 0
 
 
+def as_float(value: str | int | float | None) -> float | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    if not text or text.upper() in {"NA", "N/A", "NULL", "NONE"}:
+        return None
+    try:
+        return float(text)
+    except ValueError:
+        return None
+
+
 def sum_int(rows: list[dict[str, str]], column: str) -> int:
     return sum(as_int(row.get(column, "")) for row in rows)
 
@@ -234,6 +246,11 @@ def max_int(rows: list[dict[str, str]], column: str) -> int:
 def rows_with_status(rows: list[dict[str, str]], *statuses: str) -> int:
     wanted = set(statuses)
     return sum(1 for row in rows if (row.get("status", "") or "").strip() in wanted)
+
+
+def compact_counts(values: list[str]) -> str:
+    counts = Counter(value for value in values if value)
+    return ", ".join(f"{name}:{count}" for name, count in sorted(counts.items())) or "-"
 
 
 def evidence_state(rows: list[dict[str, str]], ok_statuses: tuple[str, ...] = ("ok", "completed")) -> tuple[str, str]:
@@ -916,32 +933,25 @@ def evidence_layer_listing_tables(
         )
 
     isoform_rows = []
-    for row in sorted(isoform_events, key=lambda item: as_int(item.get("switch_rank", "0")) or 10**9):
-        gene_label = row.get("gene_display", "") or gene_display_label(
-            row.get("gene_id", ""),
-            row.get("gene_name", ""),
-        )
+    isoform_by_contrast: dict[str, list[dict[str, str]]] = {}
+    for row in isoform_events:
+        contrast_id = row.get("contrast_id", "")
+        if contrast_id:
+            isoform_by_contrast.setdefault(contrast_id, []).append(row)
+    for contrast_id, rows in sorted(isoform_by_contrast.items()):
+        genes = {row.get("gene_id", "") for row in rows if row.get("gene_id", "")}
+        max_abs_dif = max((as_float(row.get("max_abs_dIF", "")) or 0.0 for row in rows), default=0.0)
+        best_rank = min((as_int(row.get("switch_rank", "")) for row in rows if as_int(row.get("switch_rank", ""))), default=0)
         isoform_rows.append(
             [
-                html.escape(row.get("switch_rank", "")),
-                f"<code>{html.escape(row.get('contrast_id', ''))}</code>",
-                html.escape(gene_label),
-                html.escape(row.get("switch_interpretation_label", row.get("switch_biotype_class", ""))),
-                (
-                    f'{html.escape(display_isoform_id(row.get("switch_in_isoform", ""), gene_display_by_transcript))}'
-                    f' / {html.escape(display_isoform_id(row.get("switch_out_isoform", ""), gene_display_by_transcript))}'
-                ),
-                link_group(
-                    row,
-                    [
-                        ("plot_svg", "switch plot"),
-                        ("event_html", "event page"),
-                        ("event_nt_fasta", "NT FASTA"),
-                        ("event_aa_fasta", "AA FASTA"),
-                    ],
-                    base_dir,
-                    empty="no event plot",
-                ),
+                f"<code>{html.escape(contrast_id)}</code>",
+                html.escape(str(len(rows))),
+                html.escape(str(len(genes))),
+                html.escape(compact_counts([row.get("switch_interpretation_label", row.get("switch_biotype_class", "")) for row in rows])),
+                html.escape(compact_counts([row.get("coding_priority_tier", "") for row in rows])),
+                html.escape(f"{max_abs_dif:.3g}" if max_abs_dif else ""),
+                html.escape(str(best_rank) if best_rank else ""),
+                layer_summary_link("isoform_switch", contrast_id, "contrast summary", base_dir),
             ]
         )
 
@@ -1063,9 +1073,9 @@ def evidence_layer_listing_tables(
             "No DTU method plots are available.",
         ),
         "isoform_switch": html_cell_table(
-            ["rank", "contrast", "gene", "class", "switch in/out", "event assets"],
+            ["contrast", "events", "genes", "classes", "priority tiers", "max abs dIF", "best rank", "summary"],
             isoform_rows,
-            "No isoform-switch event plots are available.",
+            "No isoform-switch event summaries are available.",
             table_class="isoform-switch-table",
         ),
         "smallrna_de": html_cell_table(
