@@ -902,33 +902,32 @@ def evidence_layer_listing_tables(
         )
 
     dtu_rows = []
-    for row in sorted(rnaseq_dtu_plots, key=lambda item: (item.get("method", ""), item.get("contrast_id", ""))):
+    dtu_by_contrast: dict[str, list[dict[str, str]]] = {}
+    for row in rnaseq_dtu_plots:
+        contrast_id = row.get("contrast_id", "")
+        if contrast_id:
+            dtu_by_contrast.setdefault(contrast_id, []).append(row)
+    for contrast_id, rows in sorted(dtu_by_contrast.items()):
+        methods = sorted({row.get("method", "") for row in rows if row.get("method", "")})
+        completed = sum(1 for row in rows if row.get("status", "") in {"ok", "completed"})
+        significant = sum_int(rows, "n_significant")
+        standardized = sum_int(rows, "n_standardized")
+        plot_sets = sum(
+            1
+            for row in rows
+            if row.get("overview_plot", "") or row.get("feature_plot", "") or row.get("usage_plot", "")
+        )
         dtu_rows.append(
             [
-                html.escape(row.get("method", "")),
-                f"<code>{html.escape(row.get('contrast_id', ''))}</code>",
-                f'<span class="status {html.escape(row.get("status", "unknown") or "unknown")}">{html.escape(row.get("status", "unknown") or "unknown")}</span>',
-                html.escape(row.get("n_significant", "")),
-                html.escape(row.get("top_gene_display", "") or row.get("top_gene", "")),
-                link_group(
-                    row,
-                    [
-                        ("overview_plot", "overview plot"),
-                        ("feature_plot", "ranked candidate plot"),
-                        ("usage_plot", "top genes detail plot"),
-                    ],
-                    base_dir,
-                    empty="no direct method plot",
-                ),
-                link_group(
-                    row,
-                    [
-                        ("source_results", "standardized results"),
-                        ("transcript_results", "feature/event table"),
-                    ],
-                    base_dir,
-                    empty="no source table",
-                ),
+                f"<code>{html.escape(contrast_id)}</code>",
+                html.escape(str(len(methods))),
+                html.escape(", ".join(methods)),
+                html.escape(f"{completed}/{len(rows)}"),
+                html.escape(status_counts(rows)),
+                html.escape(str(significant)),
+                html.escape(str(standardized)),
+                html.escape(str(plot_sets)),
+                layer_summary_link("dtu_splicing", contrast_id, "contrast summary", base_dir),
             ]
         )
 
@@ -1068,7 +1067,7 @@ def evidence_layer_listing_tables(
             "No enrichment plots are available.",
         ),
         "dtu": html_cell_table(
-            ["method", "contrast", "status", "padj<0.05", "top gene/event", "plots", "source tables"],
+            ["contrast", "methods", "method set", "completed", "status", "padj<0.05", "standardized rows", "plot sets", "summary"],
             dtu_rows,
             "No DTU method plots are available.",
         ),

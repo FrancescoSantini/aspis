@@ -7,6 +7,7 @@ import argparse
 import csv
 import html
 import os
+import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -306,6 +307,38 @@ def first_clean(row: dict[str, str], columns: list[str]) -> str:
     return ""
 
 
+def split_coordinate_values(value: str) -> list[str]:
+    return [item.strip() for item in re.split(r"[;,]", value or "") if item.strip()]
+
+
+def compact_unique(values: list[str]) -> list[str]:
+    seen: set[str] = set()
+    compacted = []
+    for value in values:
+        if value not in seen:
+            seen.add(value)
+            compacted.append(value)
+    return compacted
+
+
+def coordinate_span(chrom_text: str, start_text: str, end_text: str, strand_text: str) -> str:
+    chroms = compact_unique(split_coordinate_values(chrom_text))
+    starts = split_coordinate_values(start_text)
+    ends = split_coordinate_values(end_text)
+    strands = compact_unique(split_coordinate_values(strand_text))
+    if not chroms or not starts or not ends:
+        return ""
+    try:
+        start = min(int(float(value)) for value in starts)
+        end = max(int(float(value)) for value in ends)
+    except ValueError:
+        return ""
+    chrom = chroms[0] if len(chroms) == 1 else ",".join(chroms[:3]) + ("..." if len(chroms) > 3 else "")
+    strand = strands[0] if len(strands) == 1 else ""
+    suffix = f" ({strand})" if strand else ""
+    return f"{chrom}:{start}-{end}{suffix}"
+
+
 FEATURE_ID_COLUMNS = [
     "Geneid",
     "gene_id",
@@ -381,6 +414,9 @@ def feature_location(row: dict[str, str]) -> str:
     end = first_clean(row, ["end", "End", "gene_end", "transcript_end", "tx_end"])
     strand = first_clean(row, ["strand", "Strand"])
     if chrom and start and end:
+        span = coordinate_span(chrom, start, end, strand)
+        if span:
+            return span
         suffix = f" ({strand})" if strand else ""
         return f"{chrom}:{start}-{end}{suffix}"
     if chrom:

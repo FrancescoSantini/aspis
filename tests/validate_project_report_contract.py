@@ -332,7 +332,6 @@ def main() -> int:
         assert 'href="layers/dtu_splicing/index.html"' in html
         assert 'href="layers/matched_mirna_mrna/index.html"' in html
         assert "combined project technical PDF: not present" not in html
-        assert "Gene A (geneA)" in html
         assert 'aria-label="Report map"' in html
         assert "Report Map" in html
         assert '<li><a href="../../index.html">Run dashboard</a></li>' not in html
@@ -400,8 +399,13 @@ def main() -> int:
         assert "isoform-switch detailed report</td>" not in html
         assert "Plot Atlas" not in html
         assert 'class="link-list"' in html
-        assert "overview plot" in html
-        assert "ranked candidate plot" in html
+        assert "<th>method set</th>" in html
+        assert "<th>completed</th>" in html
+        assert "<th>standardized rows</th>" in html
+        assert "<th>plot sets</th>" in html
+        assert "DRIMSeq" in html
+        assert "overview plot" not in html
+        assert "ranked candidate plot" not in html
         assert "switch plot" not in html
         assert "event page" not in html
         assert "NT FASTA" not in html

@@ -83,6 +83,23 @@ def main() -> int:
     assert_contains(html, "MSTRG.11769")
     assert_contains(html, "chr3:1200-1800 (+)")
     assert_not_contains(html, "NA (MSTRG.11769)")
+    html = top_feature_table(
+        [
+            {
+                "Geneid": "ENSG00000119138",
+                "gene_name": "KLF9",
+                "Chr": "chr9;chr9;chr9",
+                "Start": "70384604;70412859;70388005",
+                "End": "70388005;70414657;70412859",
+                "Strand": "-;-;-",
+                "log2FoldChange": "-1.2",
+                "padj": "1e-6",
+            }
+        ],
+        top_n=10,
+    )
+    assert_contains(html, "KLF9 (ENSG00000119138)")
+    assert_contains(html, "chr9:70384604-70414657 (-)")
 
     with tempfile.TemporaryDirectory(prefix="aspis_report_display_") as tmp_text:
         metadata = Path(tmp_text) / "feature_metadata.tsv"
