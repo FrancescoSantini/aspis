@@ -244,6 +244,19 @@ def html_preview_table(rows: list[dict[str, str]], columns: list[tuple[str, str]
     return f'{note}<div class="table-scroll"><table><thead><tr>{head}</tr></thead><tbody>{"".join(body)}</tbody></table></div>'
 
 
+def preview_columns(rows: list[dict[str, str]], preferred: list[tuple[str, str]], max_columns: int = 8) -> list[tuple[str, str]]:
+    if not rows:
+        return preferred[:max_columns]
+    available = set(rows[0])
+    columns = [(key, label) for key, label in preferred if key in available]
+    for key in rows[0]:
+        if len(columns) >= max_columns:
+            break
+        if key not in {column for column, _label in columns}:
+            columns.append((key, key.replace("_", " ")))
+    return columns[:max_columns]
+
+
 def sort_preview_rows(rows: list[dict[str, str]]) -> list[dict[str, str]]:
     def key(row: dict[str, str]) -> tuple[bool, float, float]:
         padj = parse_float(row.get("padj", "") or row.get("qvalue", "") or row.get("FDR", "") or row.get("fdr", ""))
@@ -320,6 +333,16 @@ def row_asset_links(row: dict[str, str], layer_key: str, base_dir: Path, want_pl
     return '<div class="button-list">' + "".join(links) + "</div>" if links else '<span class="muted">no linked assets</span>'
 
 
+def layer_row_links(row: dict[str, str], layer_key: str, base_dir: Path, summary_href: str) -> str:
+    links = []
+    if layer_key == "enrichment":
+        level = row.get("level", "")
+        if level:
+            links.append(f'<a class="button-link" href="{summary_href}#{html.escape(safe_token(level))}">{html.escape(level)} summary</a>')
+    links.append(link_buttons(row, layer_key, base_dir))
+    return "".join(links)
+
+
 def contrast_plot_sections(layer_key: str, rows: list[dict[str, str]], base_dir: Path) -> str:
     if layer_key == "isoform_switch":
         return ""
@@ -369,7 +392,55 @@ def contrast_plot_sections(layer_key: str, rows: list[dict[str, str]], base_dir:
 
 def contrast_table_preview_sections(layer_key: str, rows: list[dict[str, str]], base_dir: Path) -> str:
     sections: list[str] = []
-    if layer_key == "mirna_targets":
+    if layer_key == "enrichment":
+        for row in rows:
+            level = row.get("level", "feature")
+            feature_rows = read_existing_tsv(row.get("feature_set_results", ""))
+            ranked_rows = read_existing_tsv(row.get("ranked_feature_set_results", ""))
+            if feature_rows:
+                sections.append(
+                    preview_section(
+                        f"{level} ORA feature-set rows",
+                        feature_rows,
+                        preview_columns(
+                            feature_rows,
+                            [
+                                ("collection", "collection"),
+                                ("set_id", "set"),
+                                ("description", "description"),
+                                ("direction", "direction"),
+                                ("overlap", "overlap"),
+                                ("query_size", "query size"),
+                                ("universe_size", "universe size"),
+                                ("padj", "padj"),
+                            ],
+                        ),
+                        row.get("feature_set_results", ""),
+                        base_dir,
+                    )
+                )
+            if ranked_rows:
+                sections.append(
+                    preview_section(
+                        f"{level} ranked feature-set rows",
+                        ranked_rows,
+                        preview_columns(
+                            ranked_rows,
+                            [
+                                ("collection", "collection"),
+                                ("set_id", "set"),
+                                ("description", "description"),
+                                ("NES", "NES"),
+                                ("score", "score"),
+                                ("leading_edge_size", "leading edge"),
+                                ("padj", "padj"),
+                            ],
+                        ),
+                        row.get("ranked_feature_set_results", ""),
+                        base_dir,
+                    )
+                )
+    elif layer_key == "mirna_targets":
         for row in rows:
             analysis = row.get("analysis", "")
             if analysis == "target enrichment":
@@ -588,6 +659,40 @@ def rnaseq_de_detail_sections(rows: list[dict[str, str]], base_dir: Path) -> str
     return "".join(sections)
 
 
+def enrichment_detail_sections(rows: list[dict[str, str]], base_dir: Path) -> str:
+    sections: list[str] = []
+    order = {"gene": 0, "transcript": 1}
+    for row in sorted(rows, key=lambda item: order.get(item.get("level", ""), 99)):
+        level = row.get("level", "feature")
+        section_id = safe_token(level)
+        figures = []
+        for field, label in [
+            ("feature_set_plot", "ORA dotplot"),
+            ("ranked_feature_set_plot", "ranked enrichment plot"),
+        ]:
+            value = row.get(field, "")
+            if value:
+                figure = plot_asset_figure(field, value, base_dir, f"{level} {label}")
+                if figure:
+                    figures.append(figure)
+        plot_html = (
+            f'<div class="plot-grid plot-grid-two">{"".join(figures)}</div>'
+            if figures
+            else '<p class="muted">No plot assets are linked for this level.</p>'
+        )
+        sections.append(
+            '<section class="panel" '
+            f'id="{html.escape(section_id)}" data-report-nav-target="{html.escape(section_id)}">'
+            f'<h2>{html.escape(level.title())} enrichment summary</h2>'
+            f'<p class="muted">Total counts: {html.escape(row_metrics(row))}</p>'
+            f'{plot_html}'
+            f'{contrast_table_preview_sections("enrichment", [row], base_dir)}'
+            f'<section class="method-row"><h3>Files</h3>{row_asset_links(row, "enrichment", base_dir, want_plots=False)}</section>'
+            '</section>'
+        )
+    return "".join(sections)
+
+
 def render_contrast_summary(
     project: str,
     layer_key: str,
@@ -619,6 +724,9 @@ def render_contrast_summary(
     if layer_key == "rnaseq_de":
         map_items.append(report_map_item("Gene detailed summary", "#gene"))
         map_items.append(report_map_item("Transcript detailed summary", "#transcript"))
+    elif layer_key == "enrichment":
+        map_items.append(report_map_item("Gene enrichment summary", "#gene"))
+        map_items.append(report_map_item("Transcript enrichment summary", "#transcript"))
     elif layer_key != "isoform_switch":
         map_items.append(report_map_item("Plots", "#plots"))
         map_items.append(report_map_item("Tables and pages", "#tables"))
@@ -661,6 +769,8 @@ def render_contrast_summary(
     detail_sections = ""
     if layer_key == "rnaseq_de":
         detail_sections = rnaseq_de_detail_sections(rows, base_dir)
+    elif layer_key == "enrichment":
+        detail_sections = enrichment_detail_sections(rows, base_dir)
     elif layer_key != "isoform_switch":
         preview_sections = contrast_table_preview_sections(layer_key, rows, base_dir)
         detail_sections = (
@@ -763,6 +873,12 @@ def compact_layer_summary(rows: list[dict[str, str]], layer_key: str) -> str:
         label = field[2:].replace("_", " ")
         if layer_key == "rnaseq_de" and field == "n_features":
             return "total tested features"
+        if layer_key == "enrichment" and field == "n_significant":
+            return "total significant features"
+        if layer_key == "enrichment" and field == "n_feature_set_terms":
+            return "total ORA terms"
+        if layer_key == "enrichment" and field == "n_ranked_feature_set_terms":
+            return "total ranked terms"
         return label
 
     grouped: dict[str, list[dict[str, str]]] = defaultdict(list)
@@ -794,7 +910,7 @@ def compact_layer_summary(rows: list[dict[str, str]], layer_key: str) -> str:
         )
     return (
         '<div class="table-scroll"><table class="summary-table">'
-        f"<thead><tr><th>contrast</th><th>rows</th><th>status</th><th>{'total gene+transcript counts' if layer_key == 'rnaseq_de' else 'summary counts'}</th></tr></thead>"
+        f"<thead><tr><th>contrast</th><th>rows</th><th>status</th><th>{'total gene+transcript counts' if layer_key in {'rnaseq_de', 'enrichment'} else 'summary counts'}</th></tr></thead>"
         f"<tbody>{''.join(body)}</tbody></table></div>"
     )
 
@@ -843,7 +959,7 @@ def render_layer(project: str, key: str, title: str, description: str, rows: lis
                     f"<td>{html.escape(row_label(row, key))}</td>"
                     f"<td><span class=\"status {html.escape(row.get('status', 'unknown') or 'unknown')}\">{html.escape(row.get('status', 'unknown') or 'unknown')}</span></td>"
                     f"<td>{html.escape(row_metrics(row))}</td>"
-                    f"<td><div class=\"button-list\">{link_buttons(row, key, base_dir)}</div></td>"
+                    f"<td><div class=\"button-list\">{layer_row_links(row, key, base_dir, summary_href)}</div></td>"
                     f"<td>{html.escape(row_reason(row))}</td>"
                     "</tr>"
                 )

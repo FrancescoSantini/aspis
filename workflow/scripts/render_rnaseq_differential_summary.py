@@ -255,6 +255,21 @@ def first_feature_column(rows: list[dict[str, str]]) -> str:
         "symbol",
         "gene_biotype",
         "transcript_biotype",
+        "seqname",
+        "seqnames",
+        "chrom",
+        "chr",
+        "chromosome",
+        "start",
+        "end",
+        "gene_start",
+        "gene_end",
+        "transcript_start",
+        "transcript_end",
+        "strand",
+        "genomic_span",
+        "genomic_region",
+        "coordinates",
     }
     for column in rows[0]:
         if column not in stat_columns:
@@ -274,6 +289,30 @@ def count_direction(rows: list[dict[str, str]]) -> tuple[int, int]:
         elif log2fc < 0:
             n_down += 1
     return n_up, n_down
+
+
+def first_clean(row: dict[str, str], columns: list[str]) -> str:
+    for column in columns:
+        value = (row.get(column, "") or "").strip()
+        if value and value.upper() not in {"NA", "N/A", "NULL", "NONE", "."}:
+            return value
+    return ""
+
+
+def feature_location(row: dict[str, str]) -> str:
+    existing = first_clean(row, ["genomic_span", "genomic_region", "coordinates", "location"])
+    if existing:
+        return existing
+    chrom = first_clean(row, ["seqname", "seqnames", "chrom", "chr", "chromosome"])
+    start = first_clean(row, ["start", "gene_start", "transcript_start", "tx_start"])
+    end = first_clean(row, ["end", "gene_end", "transcript_end", "tx_end"])
+    strand = first_clean(row, ["strand"])
+    if chrom and start and end:
+        suffix = f" ({strand})" if strand else ""
+        return f"{chrom}:{start}-{end}{suffix}"
+    if chrom:
+        return chrom
+    return ""
 
 
 def fraction_text(numerator: int, denominator: int) -> str:
@@ -428,6 +467,7 @@ def top_feature_table(rows: list[dict[str, str]], top_n: int) -> str:
     body = "\n".join(
         "<tr>"
         f"<td>{html.escape(feature_display_label(feature, feature_column))}</td>"
+        f"<td>{html.escape(feature_location(feature) or '-')}</td>"
         f"<td>{html.escape(feature.get('log2FoldChange', ''))}</td>"
         f"<td>{html.escape(feature.get('padj', ''))}</td>"
         "</tr>"
@@ -435,7 +475,7 @@ def top_feature_table(rows: list[dict[str, str]], top_n: int) -> str:
     )
     return f"""{note}
   <table>
-    <tr><th>feature</th><th>log2FC</th><th>padj</th></tr>
+    <tr><th>feature</th><th>genomic coordinates</th><th>log2FC</th><th>padj</th></tr>
 {body}
   </table>"""
 

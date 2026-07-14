@@ -52,7 +52,13 @@ def main() -> int:
                 {**common, "level": "transcript", "results": str(table), "filtered": str(table), "summary_html": str(page), "volcano_preview": str(plot), "n_features": "20", "n_significant": "3"},
             ],
         )
-        write_tsv(rnaseq / "differential/reports/enrichment/enrichment_manifest.tsv", [{**common, "level": "gene", "feature_set_results": str(table), "feature_set_plot": str(plot), "n_feature_set_terms": "2"}])
+        write_tsv(
+            rnaseq / "differential/reports/enrichment/enrichment_manifest.tsv",
+            [
+                {**common, "level": "gene", "feature_set_results": str(table), "ranked_feature_set_results": str(table), "feature_set_plot": str(plot), "ranked_feature_set_plot": str(plot), "n_feature_set_terms": "2", "n_ranked_feature_set_terms": "4"},
+                {**common, "level": "transcript", "feature_set_results": str(table), "ranked_feature_set_results": str(table), "feature_set_plot": str(plot), "ranked_feature_set_plot": str(plot), "n_feature_set_terms": "3", "n_ranked_feature_set_terms": "5"},
+            ],
+        )
         write_tsv(rnaseq / "differential/dtu/plots/dtu_plot_manifest.tsv", [{**common, "method": "DRIMSeq", "source_results": str(table), "overview_plot": str(plot), "n_standardized": "10", "n_significant": "1"}])
         write_tsv(rnaseq / "differential/isoform_switch/report/switch_event_summary.tsv", [{**common, "event_id": "eventA", "gene_id": "geneA", "gene_display": "GENEA (geneA)", "plot_svg": str(plot), "event_html": str(page)}])
         write_tsv(small / "differential/reports/summaries/summary_manifest.tsv", [{**common, "level": "mirna", "results": str(table), "filtered": str(table), "summary_html": str(page), "volcano_preview": str(plot), "n_features": "8", "n_significant": "1"}])
@@ -87,6 +93,14 @@ def main() -> int:
                 assert "detail" in summary_text
                 assert "gene summary" in text
                 assert "transcript summary" in text
+            elif row["layer_key"] == "enrichment":
+                assert "total gene+transcript counts" in text
+                assert "gene summary" in text
+                assert "transcript summary" in text
+                assert "Gene enrichment summary" in summary_text
+                assert "Transcript enrichment summary" in summary_text
+                assert "gene ORA feature-set rows" in summary_text
+                assert "transcript ranked feature-set rows" in summary_text
             elif row["layer_key"] == "isoform_switch":
                 assert "event assets" in summary_text
             else:
