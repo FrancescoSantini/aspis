@@ -292,6 +292,38 @@ def preview_section(title: str, rows: list[dict[str, str]], columns: list[tuple[
     return f'<section class="method-row"><h3>{html.escape(title)}</h3>{html_preview_table(sort_preview_rows(rows), columns)}{link}</section>'
 
 
+def dtu_preview_rows(rows: list[dict[str, str]]) -> list[dict[str, str]]:
+    def key(row: dict[str, str]) -> tuple[bool, float, float]:
+        padj = parse_float(
+            row.get("padj", "")
+            or row.get("qvalue", "")
+            or row.get("FDR", "")
+            or row.get("fdr", "")
+            or row.get("PValue", "")
+        )
+        effect = parse_float(
+            row.get("delta_usage", "")
+            or row.get("delta_psi", "")
+            or row.get("IncLevelDifference", "")
+            or row.get("log2FC", "")
+            or row.get("statistic", "")
+        )
+        return (padj is None, padj if padj is not None else float("inf"), -(abs(effect or 0.0)))
+
+    return sorted(rows, key=key)
+
+
+def dtu_preview_section(title: str, rows: list[dict[str, str]], columns: list[tuple[str, str]], table_href: str, base_dir: Path) -> str:
+    if not rows:
+        return ""
+    link = f'<p><a class="button-link" href="{html.escape(relative_href(table_href, base_dir))}">full table</a></p>' if table_href else ""
+    return (
+        f'<section class="method-row"><h3>{html.escape(title)}</h3>'
+        f'{html_preview_table(dtu_preview_rows(rows), columns, max_rows=50)}'
+        f'{link}</section>'
+    )
+
+
 def plot_asset_figure(field: str, value: str, base_dir: Path, label_override: str = "") -> str:
     path = absolute_path(value)
     href = html.escape(relative_href(value, base_dir))
@@ -379,7 +411,7 @@ def contrast_plot_sections(layer_key: str, rows: list[dict[str, str]], base_dir:
                 method_sections.append(
                     '<section class="method-row">'
                     f"<h3>{html.escape(row.get('method', 'DTU/splicing'))}</h3>"
-                    f'<div class="plot-grid plot-grid-three">{"".join(figures)}</div>'
+                    f'<div class="plot-list">{"".join(figures)}</div>'
                     "</section>"
                 )
         return "".join(method_sections) or '<p class="muted">No plot assets are linked for this contrast in this layer.</p>'
@@ -616,6 +648,101 @@ def contrast_table_preview_sections(layer_key: str, rows: list[dict[str, str]], 
     return "".join(sections)
 
 
+def dtu_splicing_detail_sections(rows: list[dict[str, str]], base_dir: Path) -> str:
+    if not rows:
+        return ""
+    sections: list[str] = []
+    for row in sorted(rows, key=lambda item: item.get("method", "")):
+        method = row.get("method", "DTU/splicing")
+        section_id = safe_token(method)
+        figures = []
+        for field, label in [
+            ("overview_plot", "significance overview"),
+            ("usage_plot", "top genes or features detail"),
+            ("feature_plot", "ranked candidates"),
+        ]:
+            value = row.get(field, "")
+            if value:
+                figure = plot_asset_figure(field, value, base_dir, f"{method} {label}")
+                if figure:
+                    figures.append(figure)
+        source_rows = read_existing_tsv(row.get("source_results", ""))
+        feature_rows = read_existing_tsv(row.get("transcript_results", ""))
+        previews = []
+        if source_rows:
+            previews.append(
+                dtu_preview_section(
+                    f"{method} standardized candidates",
+                    source_rows,
+                    preview_columns(
+                        source_rows,
+                        [
+                            ("gene_display", "gene"),
+                            ("gene_id", "gene"),
+                            ("feature_display", "feature/event"),
+                            ("feature_id", "feature/event"),
+                            ("event_id", "event"),
+                            ("event_type", "event type"),
+                            ("delta_usage", "delta usage"),
+                            ("delta_psi", "delta PSI"),
+                            ("IncLevelDifference", "delta PSI"),
+                            ("log2FC", "log2FC"),
+                            ("padj", "padj"),
+                            ("FDR", "FDR"),
+                        ],
+                        max_columns=9,
+                    ),
+                    row.get("source_results", ""),
+                    base_dir,
+                )
+            )
+        if feature_rows and row.get("transcript_results", "") != row.get("source_results", ""):
+            previews.append(
+                dtu_preview_section(
+                    f"{method} feature/event source rows",
+                    feature_rows,
+                    preview_columns(
+                        feature_rows,
+                        [
+                            ("gene_display", "gene"),
+                            ("gene_id", "gene"),
+                            ("feature_display", "feature/event"),
+                            ("feature_id", "feature/event"),
+                            ("event_id", "event"),
+                            ("event_type", "event type"),
+                            ("delta_usage", "delta usage"),
+                            ("delta_psi", "delta PSI"),
+                            ("log2FC", "log2FC"),
+                            ("padj", "padj"),
+                        ],
+                        max_columns=9,
+                    ),
+                    row.get("transcript_results", ""),
+                    base_dir,
+                )
+            )
+        plot_block = (
+            f'<div class="plot-list">{"".join(figures)}</div>'
+            if figures
+            else '<p class="muted">No plots were linked for this method.</p>'
+        )
+        preview_block = (
+            "".join(previews)
+            if previews
+            else '<p class="muted">No preview tables were available for this method.</p>'
+        )
+        sections.append(
+            '<section class="panel" '
+            f'id="{html.escape(section_id)}" data-report-nav-target="{html.escape(section_id)}">'
+            f'<h2>{html.escape(method)}</h2>'
+            f'<p class="muted">{html.escape(row_metrics(row))}. {html.escape(row_reason(row))}</p>'
+            f"{plot_block}"
+            f"{preview_block}"
+            '</section>'
+        )
+    return "".join(sections)
+
+
 def rewrite_embedded_report_links(content: str, source_file: Path, base_dir: Path) -> str:
     source_dir = source_file.parent
 
@@ -778,6 +905,10 @@ def render_contrast_summary(
     elif layer_key == "enrichment":
         map_items.append(report_map_item("Gene enrichment summary", "#gene"))
         map_items.append(report_map_item("Transcript enrichment summary", "#transcript"))
+    elif layer_key == "dtu_splicing":
+        for row in sorted(rows, key=lambda item: item.get("method", "")):
+            method = row.get("method", "DTU/splicing")
+            map_items.append(report_map_item(method, f"#{safe_token(method)}"))
     elif layer_key != "isoform_switch":
         map_items.append(report_map_item("Plots", "#plots"))
         map_items.append(report_map_item("Tables and pages", "#tables"))
@@ -797,9 +928,12 @@ def render_contrast_summary(
     .plot-grid {{ display:grid; grid-template-columns:repeat(auto-fit,minmax(360px,1fr)); gap:18px; }}
     .plot-grid-two {{ grid-template-columns:repeat(2,minmax(420px,1fr)); }}
     .plot-grid-three {{ grid-template-columns:repeat(auto-fit,minmax(320px,1fr)); }}
+    .plot-list {{ display:grid; grid-template-columns:1fr; gap:18px; }}
     .plot-asset {{ border:1px solid #d0d7de; border-radius:6px; margin:0; padding:10px; }}
     .plot-asset img {{ max-width:100%; height:auto; display:block; }}
     .plot-asset object {{ width:100%; height:520px; display:block; }}
+    .plot-list .plot-asset img {{ width:100%; max-height:none; }}
+    .plot-list .plot-asset object {{ height:620px; }}
     .plot-asset figcaption {{ color:#57606a; font-size:0.85rem; margin-top:8px; }}
     .inlined-summary > :first-child {{ margin-top:0; }}
     .inlined-summary .report-shell {{ display:block; }}
@@ -824,6 +958,8 @@ def render_contrast_summary(
         detail_sections = smallrna_de_detail_sections(rows, base_dir)
     elif layer_key == "enrichment":
         detail_sections = enrichment_detail_sections(rows, base_dir)
+    elif layer_key == "dtu_splicing":
+        detail_sections = dtu_splicing_detail_sections(rows, base_dir)
     elif layer_key != "isoform_switch":
         preview_sections = contrast_table_preview_sections(layer_key, rows, base_dir)
         detail_sections = (

@@ -449,10 +449,15 @@ def main() -> int:
         assert any(row["tool_name"] == "coding_potential" and row["parser_status"] == "ok" for row in external_tool_rows), external_tool_rows
         assert any(row["match_type"] == "isoform_id" for row in annotation_rows), annotation_rows
         assert Path(plots[0]["plot_svg"]).exists(), plots
+        plot_svg = Path(plots[0]["plot_svg"]).read_text(encoding="utf-8")
+        if "Genomic span: chr1:" not in plot_svg:
+            raise AssertionError("isoform-switch SVG genomic span lacks chromosome")
         assert Path(plots[0]["event_html"]).exists(), plots
         event_html = Path(plots[0]["event_html"]).read_text(encoding="utf-8")
-        if "Isoform-switch overview" not in event_html or 'aria-label="Page sections"' not in event_html:
-            raise AssertionError("event-specific isoform-switch page lacks breadcrumb or mini table of contents")
+        if "Event Map" not in event_html or 'class="report-shell"' not in event_html:
+            raise AssertionError("event-specific isoform-switch page lacks shared report navigation")
+        if "Isoform-switch candidates with DTU/splicing support" not in event_html or "ASPIS run" not in event_html:
+            raise AssertionError("event-specific isoform-switch page lacks canonical breadcrumb")
         if "#annotations" not in event_html or "#sequences" not in event_html:
             raise AssertionError("event-specific isoform-switch page lacks deep section links")
         if "Candidate novel isoform" not in event_html or "GeneA (geneA) | tx_novel" not in event_html:

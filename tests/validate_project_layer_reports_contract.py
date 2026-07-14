@@ -109,6 +109,10 @@ def main() -> int:
                 assert "miRNA detailed summary" in summary_text
                 assert "detail" in summary_text
                 assert "<iframe" not in summary_text
+            elif row["layer_key"] == "dtu_splicing":
+                assert "DRIMSeq" in summary_text
+                assert "standardized candidates" in summary_text
+                assert "significance overview" in summary_text
             else:
                 assert "Tables and pages" in summary_text
             assert (layer_html.parent / "source_asset_manifest.tsv").exists()

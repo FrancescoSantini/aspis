@@ -22,7 +22,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, Optional
 
-from report_navigation import report_map_css, report_map_item, report_shell_close, report_shell_open
+from report_navigation import report_map_css, report_map_item, report_map_script, report_shell_close, report_shell_open
 
 
 MANIFEST_REQUIRED = {
@@ -2832,7 +2832,13 @@ def render_event_svg(
                     pieces.append(svg_text(feature_x, anno_y + 22, label_text[:42], 9, "700"))
         else:
             pieces.append(svg_text(margin_left, anno_y + 4, "No imported protein/domain annotations", 10))
-    pieces.append(svg_text(margin_left, height - 22, f"Genomic span: {start}-{end}", 11))
+    chroms = {model.chrom for model in relevant_models if model.chrom}
+    strands = {model.strand for model in relevant_models if model.strand}
+    chrom_label = next(iter(chroms)) if len(chroms) == 1 else ";".join(sorted(chroms))
+    strand_label = next(iter(strands)) if len(strands) == 1 else ""
+    strand_suffix = f" ({strand_label})" if strand_label else ""
+    span_label = f"{chrom_label}:{start}-{end}{strand_suffix}" if chrom_label else f"{start}-{end}"
+    pieces.append(svg_text(margin_left, height - 22, f"Genomic span: {span_label}", 11))
     pieces.append("</svg>")
     path.write_text("\n".join(pieces), encoding="utf-8")
 
@@ -2906,15 +2912,29 @@ def render_event_html(
             "Sequence blocks expose the nucleotide, amino-acid, and affected-region "
             "sequences used for manual inspection or external validation of the switch event."
         )
-    report_index = out_path.parent.parent.parent / "index.html"
+    project = out_path.parents[5].name if len(out_path.parents) > 5 else ""
+    run_root = out_path.parents[8] if len(out_path.parents) > 8 else out_path.parent
+    project_index = run_root / "projects" / project / "index.html"
+    layer_index = run_root / "projects" / project / "layers" / "isoform_switch" / "index.html"
+    contrast_summary = layer_index.parent / safe_id(event["contrast_id"]) / "summary.html"
+    map_items = [
+        report_map_item("Diagram", "#diagram"),
+        report_map_item("Candidates", "#candidates"),
+        report_map_item("Coding evidence", "#coding"),
+        report_map_item("ncRNA evidence", "#ncrna"),
+        report_map_item("Functional annotations", "#annotations"),
+        report_map_item("Sequences", "#sequences"),
+    ]
+    shell = report_shell_open("Event Map", map_items, out_path.parent)
     html_text = f"""<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
   <title>{html.escape(event['event_id'])}</title>
   <style>
-    body {{ font-family: system-ui, -apple-system, Segoe UI, sans-serif; margin: 24px; max-width: 1280px; }}
+    body {{ font-family: system-ui, -apple-system, Segoe UI, sans-serif; margin: 0; padding: 24px; }}
     h1 {{ margin-bottom: 4px; }}
+    h2 {{ border-bottom: 1px solid #d0d7de; padding-bottom: 6px; }}
     .muted {{ color: #57606a; }}
     table {{ border-collapse: collapse; width: 100%; margin: 12px 0 24px; }}
     th, td {{ border: 1px solid #d0d7de; padding: 6px 8px; text-align: left; vertical-align: top; overflow-wrap: anywhere; }}
@@ -2926,22 +2946,14 @@ def render_event_html(
     .note {{ background: #f6f8fa; border-left: 4px solid #57606a; margin: 12px 0 18px; padding: 10px 12px; }}
     table {{ display: block; overflow-x: auto; }}
     .breadcrumbs {{ color: #57606a; margin-bottom: 1rem; }}
-    .toc {{ display: flex; flex-wrap: wrap; gap: 0.5rem 0.85rem; margin: 1rem 0 1.25rem; }}
-    .toc a {{ border: 1px solid #d0d7de; border-radius: 999px; padding: 0.25rem 0.65rem; }}
+    {report_map_css()}
   </style>
 </head>
 <body>
-  <nav class="breadcrumbs"><a href="{html.escape(relative(str(report_index), out_path))}">Isoform-switch overview</a> / {html.escape(event['contrast_id'])} / {html.escape(event['event_id'])}</nav>
+  {shell}
+  <nav class="breadcrumbs"><a href="{html.escape(relative(str(run_root / 'index.html'), out_path))}">ASPIS run</a> / <a href="{html.escape(relative(str(project_index), out_path))}">{html.escape(project)}</a> / <a href="{html.escape(relative(str(layer_index), out_path))}">Isoform-switch candidates with DTU/splicing support</a> / <a href="{html.escape(relative(str(contrast_summary), out_path))}">{html.escape(event['contrast_id'])}</a> / {html.escape(event['event_id'])}</nav>
   <h1>{html.escape(event.get('gene_display', '') or event['gene_name'])} isoform switch</h1>
   <div class="muted">{html.escape(event['event_id'])} | contrast {html.escape(event['contrast_id'])}</div>
-  <nav class="toc" aria-label="Page sections">
-    <a href="#diagram">Diagram</a>
-    <a href="#candidates">Candidates</a>
-    <a href="#coding">Coding evidence</a>
-    <a href="#ncrna">ncRNA evidence</a>
-    <a href="#annotations">Functional annotations</a>
-    <a href="#sequences">Sequences</a>
-  </nav>
   <p>Class: <strong>{html.escape(event.get('switch_biotype_class', ''))}</strong>;
      gene biotype: <strong>{html.escape(event.get('gene_biotype', '') or 'not annotated')}</strong>;
      interpretation: <strong>{html.escape(event.get('switch_interpretation_label', ''))}</strong>.</p>
@@ -2964,6 +2976,7 @@ def render_event_html(
   <h2 id="sequences">Sequences</h2>
   <p class="note">{html.escape(sequence_note)}</p>
   {''.join(sequence_blocks) if sequence_blocks else '<p>No sequence rows available.</p>'}
+  {report_shell_close()}{report_map_script()}
 </body>
 </html>
 """
