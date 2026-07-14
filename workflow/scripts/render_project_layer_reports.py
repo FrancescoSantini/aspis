@@ -235,6 +235,15 @@ def row_coordinates(row: dict[str, str]) -> str:
     return chrom
 
 
+def row_reference_context(row: dict[str, str]) -> str:
+    return (
+        row.get("reference_gene_context", "")
+        or row.get("proximal_reference_gene_context", "")
+        or row.get("reference_gene_context_status", "")
+        or "-"
+    )
+
+
 def sort_layer_rows(layer_key: str, rows: list[dict[str, str]]) -> list[dict[str, str]]:
     if layer_key == "isoform_switch":
         return sorted(
@@ -879,6 +888,7 @@ def render_contrast_summary(
                 f"<td>{html.escape(display_gene(row))}</td>"
                 f"<td><code>{html.escape(row.get('event_id', ''))}</code></td>"
                 f"<td>{html.escape(row_coordinates(row) or '-')}</td>"
+                f"<td>{html.escape(row_reference_context(row))}</td>"
                 f"<td><span class=\"status {html.escape(row.get('status', 'unknown') or 'unknown')}\">{html.escape(row.get('status', 'unknown') or 'unknown')}</span></td>"
                 f"<td>{html.escape(row_metrics(row))}</td>"
                 f"<td>{html.escape(row_reason(row))}</td>"
@@ -947,7 +957,7 @@ def render_contrast_summary(
     layer_href = html.escape(os.path.relpath(layer_index.resolve(), start=base_dir.resolve()).replace(os.sep, "/"))
     shell = report_shell_open("Summary Map", map_items, base_dir)
     header = (
-        "<tr><th>gene</th><th>event</th><th>genomic coordinates</th><th>status</th><th>counts</th><th>reason</th><th>event assets</th></tr>"
+        "<tr><th>gene</th><th>event</th><th>genomic coordinates</th><th>reference context</th><th>status</th><th>counts</th><th>reason</th><th>event assets</th></tr>"
         if layer_key == "isoform_switch"
         else "<tr><th>analysis</th><th>status</th><th>counts</th><th>reason</th></tr>"
     )
@@ -973,7 +983,7 @@ def render_contrast_summary(
             '<h2>Switch events</h2>'
             f'<p class="muted">Rows are sorted by adjusted significance when available, then by absolute isoform-fraction change. Showing {min(len(displayed_rows), 50)} of {len(sorted_rows)} switch event(s).</p>'
             '<div class="table-scroll"><table><thead>'
-            '<tr><th>gene</th><th>event</th><th>genomic coordinates</th><th>status</th><th>counts</th><th>reason</th><th>event assets</th></tr>'
+            '<tr><th>gene</th><th>event</th><th>genomic coordinates</th><th>reference context</th><th>status</th><th>counts</th><th>reason</th><th>event assets</th></tr>'
             f'</thead><tbody>{"".join(table_rows)}</tbody></table></div></section>'
         )
     page = f"""<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{html.escape(project)} - {html.escape(title)} - {html.escape(contrast)}</title><style>{css}</style></head><body>

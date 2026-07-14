@@ -60,7 +60,22 @@ def main() -> int:
             ],
         )
         write_tsv(rnaseq / "differential/dtu/plots/dtu_plot_manifest.tsv", [{**common, "method": "DRIMSeq", "source_results": str(table), "overview_plot": str(plot), "n_standardized": "10", "n_significant": "1"}])
-        write_tsv(rnaseq / "differential/isoform_switch/report/switch_event_summary.tsv", [{**common, "event_id": "eventA", "gene_id": "geneA", "gene_display": "GENEA (geneA)", "genomic_coordinates": "chr1:10-20:+", "plot_svg": str(plot), "event_html": str(page)}])
+        write_tsv(
+            rnaseq / "differential/isoform_switch/report/switch_event_summary.tsv",
+            [
+                {
+                    **common,
+                    "event_id": "eventA",
+                    "gene_id": "geneA",
+                    "gene_display": "GENEA (geneA)",
+                    "genomic_coordinates": "chr1:10-20:+",
+                    "reference_gene_context_status": "direct_reference_overlap",
+                    "reference_gene_context": "overlap:GENEA (geneA)(protein_coding;same_strand;distance=0bp)",
+                    "plot_svg": str(plot),
+                    "event_html": str(page),
+                }
+            ],
+        )
         write_tsv(small / "differential/reports/summaries/summary_manifest.tsv", [{**common, "level": "mirna", "results": str(table), "filtered": str(table), "summary_html": str(page), "volcano_preview": str(plot), "n_features": "8", "n_significant": "1"}])
         write_tsv(small / "differential/target_enrichment/target_manifest.tsv", [{**common, "target_enrichment": str(table), "target_enrichment_plot": str(plot), "n_targets": "3"}])
         write_tsv(small / "differential/target_feature_sets/target_feature_set_manifest.tsv", [{**common, "target_feature_set_results": str(table), "target_feature_set_plot": str(plot), "n_target_feature_set_terms": "2"}])
@@ -104,6 +119,8 @@ def main() -> int:
             elif row["layer_key"] == "isoform_switch":
                 assert "event assets" in summary_text
                 assert "genomic coordinates" in summary_text
+                assert "reference context" in summary_text
+                assert "overlap:GENEA" in summary_text
                 assert "chr1:10-20:+" in summary_text
             elif row["layer_key"] == "smallrna_de":
                 assert "miRNA detailed summary" in summary_text

@@ -81,6 +81,9 @@ EVENT_COLUMNS = [
     "end",
     "strand",
     "genomic_coordinates",
+    "reference_gene_context_status",
+    "reference_gene_context",
+    "proximal_reference_gene_context",
     "switch_biotype_class",
     "switch_interpretation_label",
     "coding_priority_rank",
@@ -413,6 +416,15 @@ def to_float(value: str) -> Optional[float]:
     if math.isnan(parsed):
         return None
     return parsed
+
+
+def to_int(value: str) -> Optional[int]:
+    if value is None or str(value).strip() == "":
+        return None
+    try:
+        return int(float(str(value)))
+    except ValueError:
+        return None
 
 
 def annotation_row(
@@ -1644,6 +1656,7 @@ def build_events(
     aa_sequences: dict[str, str] = {}
     event_groups: dict[tuple[str, str], list[dict[str, str]]] = defaultdict(list)
     all_gene_rows: dict[tuple[str, str], list[dict[str, str]]] = defaultdict(list)
+    gene_loci = gene_loci_from_models(models)
 
     for manifest in manifest_rows:
         if manifest.get("status") != "ok":
@@ -1700,6 +1713,8 @@ def build_events(
         gene_name = switch_in.get("_gene_name") or switch_out.get("_gene_name") or gene_id
         event_id = f"{safe_id(contrast_id)}__{safe_id(gene_id)}"
         candidate_isoforms = {row["_isoform_id"] for row in candidates}
+        event_span = event_genomic_span(switch_in["_isoform_id"], switch_out["_isoform_id"], models)
+        reference_context = event_reference_context(event_span, gene_loci)
         best_stat = min(
             [to_float(row.get("_statistic", "")) for row in candidates if to_float(row.get("_statistic", "")) is not None],
             default=None,
@@ -1710,7 +1725,8 @@ def build_events(
             "gene_id": gene_id,
             "gene_name": gene_name,
             "gene_biotype": "",
-            **event_genomic_span(switch_in["_isoform_id"], switch_out["_isoform_id"], models),
+            **event_span,
+            **reference_context,
             "switch_biotype_class": "",
             "switch_interpretation_label": "",
             "switch_rank": str(switch_rank),
@@ -2058,6 +2074,77 @@ def distance_to_locus(point: int, locus: GeneLocus) -> int:
     if locus.start <= point <= locus.end:
         return 0
     return min(abs(point - locus.start), abs(point - locus.end))
+
+
+def interval_distance(start: int, end: int, locus: GeneLocus) -> int:
+    if start <= locus.end and end >= locus.start:
+        return 0
+    return min(abs(start - locus.end), abs(locus.start - end))
+
+
+def reference_gene_loci(gene_loci: list[GeneLocus]) -> list[GeneLocus]:
+    return [
+        locus
+        for locus in gene_loci
+        if locus.gene_id and not looks_like_stringtie_id(locus.gene_id)
+    ]
+
+
+def reference_locus_label(locus: GeneLocus, relation: str, distance: int, strand: str = "") -> str:
+    strand_relation = ""
+    if strand and locus.strand:
+        strand_relation = "same_strand" if strand == locus.strand else "opposite_strand"
+    pieces = [
+        display_gene(locus.gene_id, locus.gene_name),
+        locus.gene_biotype or "biotype_unknown",
+    ]
+    if strand_relation:
+        pieces.append(strand_relation)
+    pieces.append(f"distance={distance}bp")
+    return f"{relation}:{pieces[0]}(" + ";".join(pieces[1:]) + ")"
+
+
+def event_reference_context(
+    event_span: dict[str, str],
+    gene_loci: list[GeneLocus],
+    radius_bp: int = 50000,
+) -> dict[str, str]:
+    chrom = event_span.get("chrom", "")
+    start = to_int(event_span.get("start", ""))
+    end = to_int(event_span.get("end", ""))
+    strand = event_span.get("strand", "")
+    if not chrom or start is None or end is None:
+        return {
+            "reference_gene_context_status": "not_available",
+            "reference_gene_context": "",
+            "proximal_reference_gene_context": "",
+        }
+    candidates = [locus for locus in reference_gene_loci(gene_loci) if locus.chrom == chrom]
+    distances = sorted(
+        ((interval_distance(start, end, locus), locus) for locus in candidates),
+        key=lambda item: (item[0], item[1].gene_name or item[1].gene_id),
+    )
+    overlaps = [
+        reference_locus_label(locus, "overlap", distance, strand)
+        for distance, locus in distances
+        if distance == 0
+    ]
+    proximal = [
+        reference_locus_label(locus, "nearest", distance, strand)
+        for distance, locus in distances
+        if 0 < distance <= radius_bp
+    ][:5]
+    if overlaps:
+        status = "direct_reference_overlap"
+    elif proximal:
+        status = f"nearest_reference_within_{radius_bp}bp"
+    else:
+        status = f"no_reference_within_{radius_bp}bp"
+    return {
+        "reference_gene_context_status": status,
+        "reference_gene_context": "; ".join(overlaps),
+        "proximal_reference_gene_context": "; ".join(proximal),
+    }
 
 
 def proximal_gene_context(
@@ -2926,6 +3013,16 @@ def render_event_html(
         report_map_item("Sequences", "#sequences"),
     ]
     shell = report_shell_open("Event Map", map_items, out_path.parent)
+    reference_context_status = event.get("reference_gene_context_status", "") or "not_available"
+    reference_context = (
+        event.get("reference_gene_context", "")
+        or event.get("proximal_reference_gene_context", "")
+        or ""
+    )
+    reference_context_html = (
+        f"<p>Reference context: <strong>{html.escape(reference_context_status)}</strong>"
+        f"{': ' + html.escape(reference_context) if reference_context else ''}.</p>"
+    )
     html_text = f"""<!doctype html>
 <html lang="en">
 <head>
@@ -2957,6 +3054,7 @@ def render_event_html(
   <p>Class: <strong>{html.escape(event.get('switch_biotype_class', ''))}</strong>;
      gene biotype: <strong>{html.escape(event.get('gene_biotype', '') or 'not annotated')}</strong>;
      interpretation: <strong>{html.escape(event.get('switch_interpretation_label', ''))}</strong>.</p>
+  {reference_context_html}
   <p>Switch-in isoform: <strong>{html.escape(event['switch_in_isoform'])}</strong>;
      switch-out isoform: <strong>{html.escape(event['switch_out_isoform'])}</strong>.</p>
   <p class="note">The exon diagram compares the switch-in and switch-out isoforms in genomic coordinates. It is a structural view of which transcript model gains relative usage and which loses usage in the test group.</p>

@@ -414,6 +414,8 @@ def main() -> int:
         pseudogene_events = [row for row in events if row["gene_id"] == "geneC"]
         assert pseudogene_events, events
         assert pseudogene_events[0]["switch_interpretation_label"] == "pseudogene_transcript_architecture_change", pseudogene_events
+        assert all("reference_gene_context_status" in row for row in events), events
+        assert any("GeneA" in row.get("reference_gene_context", "") for row in events), events
         pseudogene_rows = [row for row in ncrna_rows if row["gene_id"] == "geneC"]
         assert pseudogene_rows, ncrna_rows
         assert all(row["pseudogene_caution"] == "interpret_as_transcript_architecture_not_protein_consequence" for row in pseudogene_rows), pseudogene_rows
@@ -462,6 +464,8 @@ def main() -> int:
             raise AssertionError("event-specific isoform-switch page lacks deep section links")
         if "Candidate novel isoform" not in event_html or "GeneA (geneA) | tx_novel" not in event_html:
             raise AssertionError("event-specific isoform-switch page lacks display/evidence labels")
+        if "Reference context:" not in event_html:
+            raise AssertionError("event-specific isoform-switch page lacks reference gene context")
         assert Path(plots[0]["nt_fasta"]).exists(), plots
         assert Path(plots[0]["aa_fasta"]).exists(), plots
         assert (outdir / "switch_plots.pdf").exists()
