@@ -83,6 +83,8 @@ def main() -> int:
             if row["layer_key"] == "rnaseq_de":
                 assert "Gene detailed summary" in summary_text
                 assert "Transcript detailed summary" in summary_text
+                assert "<iframe" not in summary_text
+                assert "detail" in summary_text
                 assert "gene summary" in text
                 assert "transcript summary" in text
             elif row["layer_key"] == "isoform_switch":

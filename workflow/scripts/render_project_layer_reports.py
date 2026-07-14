@@ -7,6 +7,7 @@ import argparse
 import csv
 import html
 import os
+import re
 from collections import defaultdict
 from pathlib import Path
 
@@ -525,6 +526,49 @@ def contrast_table_preview_sections(layer_key: str, rows: list[dict[str, str]], 
     return "".join(sections)
 
 
+def rewrite_embedded_report_links(content: str, source_file: Path, base_dir: Path) -> str:
+    source_dir = source_file.parent
+
+    def replace(match: re.Match[str]) -> str:
+        attr = match.group(1)
+        quote = match.group(2)
+        value = match.group(3)
+        if (
+            not value
+            or value.startswith("#")
+            or "://" in value
+            or value.startswith("data:")
+            or value.startswith("mailto:")
+            or value.startswith("/")
+        ):
+            return match.group(0)
+        path_part, sep, suffix = value.partition("#")
+        query_part = ""
+        if "?" in path_part:
+            path_part, query_part = path_part.split("?", 1)
+            query_part = "?" + query_part
+        rewritten = os.path.relpath((source_dir / path_part).resolve(), start=base_dir.resolve()).replace(os.sep, "/")
+        return f'{attr}={quote}{html.escape(rewritten + query_part + (sep + suffix if sep else ""), quote=True)}{quote}'
+
+    return re.sub(r'\b(href|src)=([\'"])([^\'"]+)\2', replace, content)
+
+
+def embedded_summary_body(summary_html: str, base_dir: Path) -> str:
+    path = absolute_path(summary_html)
+    if not path.exists():
+        return f'<p class="muted">Detailed summary not found: {html.escape(summary_html)}</p>'
+    text = path.read_text(encoding="utf-8")
+    body_match = re.search(r"<body[^>]*>(.*?)</body>", text, flags=re.IGNORECASE | re.DOTALL)
+    body = body_match.group(1) if body_match else text
+    main_match = re.search(r'<main class="report-content">(.*?)</main>\s*</div>', body, flags=re.IGNORECASE | re.DOTALL)
+    if main_match:
+        body = main_match.group(1)
+    body = re.sub(r'<nav class="breadcrumbs"[^>]*>.*?</nav>', "", body, flags=re.IGNORECASE | re.DOTALL)
+    body = re.sub(r"<h1[^>]*>.*?</h1>", "", body, count=1, flags=re.IGNORECASE | re.DOTALL)
+    body = re.sub(r"<script\b[^>]*>.*?</script>", "", body, flags=re.IGNORECASE | re.DOTALL)
+    return rewrite_embedded_report_links(body.strip(), path, base_dir)
+
+
 def rnaseq_de_detail_sections(rows: list[dict[str, str]], base_dir: Path) -> str:
     sections: list[str] = []
     order = {"gene": 0, "transcript": 1}
@@ -533,13 +577,12 @@ def rnaseq_de_detail_sections(rows: list[dict[str, str]], base_dir: Path) -> str
         level = row.get("level", "RNA-seq")
         if not summary_html:
             continue
-        href = html.escape(relative_href(summary_html, base_dir))
+        body = embedded_summary_body(summary_html, base_dir)
         sections.append(
             '<section class="panel rnaseq-detail" '
             f'id="{html.escape(safe_token(level))}" data-report-nav-target="{html.escape(safe_token(level))}">'
             f'<h2>{html.escape(level.title())} detailed summary</h2>'
-            f'<p><a class="button-link" href="{href}">open {html.escape(level)} summary as full page</a></p>'
-            f'<iframe class="embedded-summary" src="{href}" title="{html.escape(level)} summary"></iframe>'
+            f'<div class="inlined-summary">{body}</div>'
             '</section>'
         )
     return "".join(sections)
@@ -599,7 +642,9 @@ def render_contrast_summary(
     .plot-asset img {{ max-width:100%; height:auto; display:block; }}
     .plot-asset object {{ width:100%; height:520px; display:block; }}
     .plot-asset figcaption {{ color:#57606a; font-size:0.85rem; margin-top:8px; }}
-    .embedded-summary {{ border:1px solid #d0d7de; border-radius:6px; display:block; height:980px; width:100%; }}
+    .inlined-summary > :first-child {{ margin-top:0; }}
+    .inlined-summary .report-shell {{ display:block; }}
+    .inlined-summary .report-map,.inlined-summary .breadcrumbs {{ display:none; }}
     .method-row {{ border-top:1px solid #d0d7de; padding-top:14px; margin-top:16px; }}
     .method-row:first-child {{ border-top:0; padding-top:0; margin-top:0; }}
     @media (max-width: 1100px) {{ .plot-grid-two {{ grid-template-columns:1fr; }} }}
