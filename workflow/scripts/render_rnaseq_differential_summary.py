@@ -421,6 +421,10 @@ def top_feature_table(rows: list[dict[str, str]], top_n: int) -> str:
         ),
     )
     selected = ordered[:top_n]
+    note = (
+        f'<p class="plot-note">Showing {len(selected)} of {len(ordered)} filtered feature(s), '
+        "sorted by adjusted p-value and absolute log2 fold-change.</p>"
+    )
     body = "\n".join(
         "<tr>"
         f"<td>{html.escape(feature_display_label(feature, feature_column))}</td>"
@@ -429,7 +433,8 @@ def top_feature_table(rows: list[dict[str, str]], top_n: int) -> str:
         "</tr>"
         for feature in selected
     )
-    return f"""<table>
+    return f"""{note}
+  <table>
     <tr><th>feature</th><th>log2FC</th><th>padj</th></tr>
 {body}
   </table>"""
@@ -606,6 +611,14 @@ def render_html(
         for label, path in artifacts
         if path
     )
+    feature_table_links = " ".join(
+        f'<a href="{html.escape(relative_link(path, output))}">{html.escape(label)}</a>'
+        for label, path in [
+            ("Open full filtered feature table", row.get("filtered", "")),
+            ("Open complete DESeq2 table", row.get("results", "")),
+        ]
+        if path
+    )
     run_root = output.parents[7] if len(output.parents) > 7 else output.parent.parent.parent
     project_index = run_root / "projects" / row["project"] / "index.html"
     layer_index = project_index.parent / "layers" / "rnaseq_de" / "index.html"
@@ -658,6 +671,7 @@ def render_html(
   <h2 id="features">Top Significant Features</h2>
   <p class="note">This table lists filtered features sorted by adjusted p-value and fold change, capped at the configured report preview limit for readability. The complete DESeq2 output remains in the linked files below.</p>
   {top_feature_table(filtered_rows, top_n)}
+  <p class="plot-source">{feature_table_links}</p>
   <h2 id="files">Files</h2>
   <p class="note">These links point to the machine-readable files used to build this page. Use them for downstream analysis, reproducibility checks, or manual inspection.</p>
   <ul>

@@ -24,7 +24,7 @@ LAYER_DEFINITIONS = [
 ]
 
 ASSET_FIELDS = {
-    "rnaseq_de": ["results", "filtered", "volcano_pdf", "volcano_preview", "ma_pdf", "ma_preview", "pca_pdf", "pca_preview", "sample_distance_pdf", "sample_distance_preview", "heatmap_pdf", "heatmap_preview"],
+    "rnaseq_de": ["summary_html", "results", "filtered", "volcano_pdf", "volcano_preview", "ma_pdf", "ma_preview", "pca_pdf", "pca_preview", "sample_distance_pdf", "sample_distance_preview", "heatmap_pdf", "heatmap_preview"],
     "enrichment": ["feature_set_universe", "feature_set_results", "feature_set_plot", "ranked_feature_set_results", "ranked_feature_set_plot", "resource_mapping_qa"],
     "dtu_splicing": ["source_results", "transcript_results", "overview_plot", "usage_plot", "feature_plot"],
     "isoform_switch": ["plot_svg", "event_html", "event_nt_fasta", "event_aa_fasta"],
@@ -193,7 +193,7 @@ def link_buttons(row: dict[str, str], layer_key: str, base_dir: Path) -> str:
         value = row.get(field, "")
         if not value:
             continue
-        label = field.replace("_", " ")
+        label = asset_label(field, row)
         buttons.append(f'<a class="button-link" href="{html.escape(relative_href(value, base_dir))}">{html.escape(label)}</a>')
     return "".join(buttons) or '<span class="muted">no linked artifacts</span>'
 
@@ -300,6 +300,12 @@ def asset_button_group(rows: list[dict[str, str]], layer_key: str, base_dir: Pat
     return '<div class="button-list">' + "".join(links) + "</div>" if links else '<p class="muted">No linked assets in this group.</p>'
 
 
+def asset_label(field: str, row: dict[str, str]) -> str:
+    if field == "summary_html" and row.get("level", ""):
+        return f"{row['level']} summary"
+    return field.replace("_", " ")
+
+
 def row_asset_links(row: dict[str, str], layer_key: str, base_dir: Path, want_plots: bool | None = None) -> str:
     links = []
     for field in ASSET_FIELDS[layer_key]:
@@ -309,7 +315,7 @@ def row_asset_links(row: dict[str, str], layer_key: str, base_dir: Path, want_pl
         is_plot = asset_kind(field, absolute_path(value)) in PLOT_ASSET_KINDS
         if want_plots is not None and is_plot != want_plots:
             continue
-        links.append(f'<a class="button-link" href="{html.escape(relative_href(value, base_dir))}">{html.escape(field.replace("_", " "))}</a>')
+        links.append(f'<a class="button-link" href="{html.escape(relative_href(value, base_dir))}">{html.escape(asset_label(field, row))}</a>')
     return '<div class="button-list">' + "".join(links) + "</div>" if links else '<span class="muted">no linked assets</span>'
 
 
@@ -519,6 +525,26 @@ def contrast_table_preview_sections(layer_key: str, rows: list[dict[str, str]], 
     return "".join(sections)
 
 
+def rnaseq_de_detail_sections(rows: list[dict[str, str]], base_dir: Path) -> str:
+    sections: list[str] = []
+    order = {"gene": 0, "transcript": 1}
+    for row in sorted(rows, key=lambda item: order.get(item.get("level", ""), 99)):
+        summary_html = row.get("summary_html", "")
+        level = row.get("level", "RNA-seq")
+        if not summary_html:
+            continue
+        href = html.escape(relative_href(summary_html, base_dir))
+        sections.append(
+            '<section class="panel rnaseq-detail" '
+            f'id="{html.escape(safe_token(level))}" data-report-nav-target="{html.escape(safe_token(level))}">'
+            f'<h2>{html.escape(level.title())} detailed summary</h2>'
+            f'<p><a class="button-link" href="{href}">open {html.escape(level)} summary as full page</a></p>'
+            f'<iframe class="embedded-summary" src="{href}" title="{html.escape(level)} summary"></iframe>'
+            '</section>'
+        )
+    return "".join(sections)
+
+
 def render_contrast_summary(
     project: str,
     layer_key: str,
@@ -547,7 +573,10 @@ def render_contrast_summary(
         )
 
     map_items = [report_map_item("Summary", "#summary")]
-    if layer_key != "isoform_switch":
+    if layer_key == "rnaseq_de":
+        map_items.append(report_map_item("Gene detailed summary", "#gene"))
+        map_items.append(report_map_item("Transcript detailed summary", "#transcript"))
+    elif layer_key != "isoform_switch":
         map_items.append(report_map_item("Plots", "#plots"))
         map_items.append(report_map_item("Tables and pages", "#tables"))
         if layer_key in {"mirna_targets", "matched_mirna_mrna"}:
@@ -570,6 +599,7 @@ def render_contrast_summary(
     .plot-asset img {{ max-width:100%; height:auto; display:block; }}
     .plot-asset object {{ width:100%; height:520px; display:block; }}
     .plot-asset figcaption {{ color:#57606a; font-size:0.85rem; margin-top:8px; }}
+    .embedded-summary {{ border:1px solid #d0d7de; border-radius:6px; display:block; height:980px; width:100%; }}
     .method-row {{ border-top:1px solid #d0d7de; padding-top:14px; margin-top:16px; }}
     .method-row:first-child {{ border-top:0; padding-top:0; margin-top:0; }}
     @media (max-width: 1100px) {{ .plot-grid-two {{ grid-template-columns:1fr; }} }}
@@ -584,7 +614,9 @@ def render_contrast_summary(
         else "<tr><th>analysis</th><th>status</th><th>counts</th><th>reason</th></tr>"
     )
     detail_sections = ""
-    if layer_key != "isoform_switch":
+    if layer_key == "rnaseq_de":
+        detail_sections = rnaseq_de_detail_sections(rows, base_dir)
+    elif layer_key != "isoform_switch":
         preview_sections = contrast_table_preview_sections(layer_key, rows, base_dir)
         detail_sections = (
             f'<section class="panel" id="plots" data-report-nav-target="plots"><h2>Plots</h2>{contrast_plot_sections(layer_key, rows, base_dir)}</section>'
@@ -682,6 +714,12 @@ def row_reason(row: dict[str, str]) -> str:
 def compact_layer_summary(rows: list[dict[str, str]], layer_key: str) -> str:
     if not rows:
         return '<p class="muted">No result rows were available for this layer.</p>'
+    def metric_label(field: str) -> str:
+        label = field[2:].replace("_", " ")
+        if layer_key == "rnaseq_de" and field == "n_features":
+            return "total tested features"
+        return label
+
     grouped: dict[str, list[dict[str, str]]] = defaultdict(list)
     for row in rows:
         grouped[row.get("contrast_id", "project") or "project"].append(row)
@@ -700,7 +738,7 @@ def compact_layer_summary(rows: list[dict[str, str]], layer_key: str) -> str:
                 if value and value.replace(".", "", 1).isdigit():
                     total += int(float(value))
             if total:
-                metrics.append(f"{field[2:].replace('_', ' ')}: {total}")
+                metrics.append(f"{metric_label(field)}: {total}")
         body.append(
             "<tr>"
             f"<td><code>{html.escape(contrast)}</code></td>"
@@ -711,7 +749,7 @@ def compact_layer_summary(rows: list[dict[str, str]], layer_key: str) -> str:
         )
     return (
         '<div class="table-scroll"><table class="summary-table">'
-        "<thead><tr><th>contrast</th><th>rows</th><th>status</th><th>summary counts</th></tr></thead>"
+        f"<thead><tr><th>contrast</th><th>rows</th><th>status</th><th>{'total gene+transcript counts' if layer_key == 'rnaseq_de' else 'summary counts'}</th></tr></thead>"
         f"<tbody>{''.join(body)}</tbody></table></div>"
     )
 

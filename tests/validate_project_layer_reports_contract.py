@@ -45,7 +45,13 @@ def main() -> int:
         page.write_text("<html><body>detail</body></html>", encoding="utf-8")
         contrast = "treated_vs_control"
         common = {"project": project, "contrast_id": contrast, "status": "ok", "reason": ""}
-        write_tsv(rnaseq / "differential/reports/summaries/summary_manifest.tsv", [{**common, "level": "gene", "results": str(table), "filtered": str(table), "summary_html": str(page), "volcano_preview": str(plot), "n_features": "10", "n_significant": "2"}])
+        write_tsv(
+            rnaseq / "differential/reports/summaries/summary_manifest.tsv",
+            [
+                {**common, "level": "gene", "results": str(table), "filtered": str(table), "summary_html": str(page), "volcano_preview": str(plot), "n_features": "10", "n_significant": "2"},
+                {**common, "level": "transcript", "results": str(table), "filtered": str(table), "summary_html": str(page), "volcano_preview": str(plot), "n_features": "20", "n_significant": "3"},
+            ],
+        )
         write_tsv(rnaseq / "differential/reports/enrichment/enrichment_manifest.tsv", [{**common, "level": "gene", "feature_set_results": str(table), "feature_set_plot": str(plot), "n_feature_set_terms": "2"}])
         write_tsv(rnaseq / "differential/dtu/plots/dtu_plot_manifest.tsv", [{**common, "method": "DRIMSeq", "source_results": str(table), "overview_plot": str(plot), "n_standardized": "10", "n_significant": "1"}])
         write_tsv(rnaseq / "differential/isoform_switch/report/switch_event_summary.tsv", [{**common, "event_id": "eventA", "gene_id": "geneA", "gene_display": "GENEA (geneA)", "plot_svg": str(plot), "event_html": str(page)}])
@@ -74,7 +80,12 @@ def main() -> int:
             assert summary_html.exists()
             summary_text = summary_html.read_text(encoding="utf-8")
             assert f"ASPIS run</a> / <a href=\"../../../index.html\">{project}</a> / <a" in summary_text
-            if row["layer_key"] == "isoform_switch":
+            if row["layer_key"] == "rnaseq_de":
+                assert "Gene detailed summary" in summary_text
+                assert "Transcript detailed summary" in summary_text
+                assert "gene summary" in text
+                assert "transcript summary" in text
+            elif row["layer_key"] == "isoform_switch":
                 assert "event assets" in summary_text
             else:
                 assert "Tables and pages" in summary_text
