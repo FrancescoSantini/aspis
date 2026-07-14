@@ -392,6 +392,8 @@ def main() -> int:
         plots = read_rows(outdir / "switch_plot_manifest.tsv")
         assert len(events) == 3, events
         assert {row["switch_biotype_class"] for row in events} >= {"coding", "noncoding"}, events
+        assert all("genomic_coordinates" in row for row in events), events
+        assert any(row["genomic_coordinates"].startswith("chr1:") for row in events), events
         assert coding_rows, "coding_switch_summary.tsv is empty"
         assert coding_rows[0]["gene_id"] == "geneA", coding_rows
         assert coding_rows[0]["coding_priority_tier"] == "high", coding_rows

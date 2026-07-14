@@ -76,6 +76,11 @@ EVENT_COLUMNS = [
     "gene_name",
     "gene_display",
     "gene_biotype",
+    "chrom",
+    "start",
+    "end",
+    "strand",
+    "genomic_coordinates",
     "switch_biotype_class",
     "switch_interpretation_label",
     "coding_priority_rank",
@@ -1502,6 +1507,33 @@ def model_unique_context(
     }
 
 
+def event_genomic_span(
+    switch_in: str,
+    switch_out: str,
+    models: dict[str, TranscriptModel],
+) -> dict[str, str]:
+    selected = [model for model in (models.get(switch_in), models.get(switch_out)) if model]
+    if not selected:
+        return {"chrom": "", "start": "", "end": "", "strand": "", "genomic_coordinates": ""}
+    chroms = {model.chrom for model in selected if model.chrom}
+    strands = {model.strand for model in selected if model.strand}
+    intervals = [interval for model in selected for interval in model.exons]
+    chrom = next(iter(chroms)) if len(chroms) == 1 else ";".join(sorted(chroms))
+    strand = next(iter(strands)) if len(strands) == 1 else ";".join(sorted(strands))
+    if not intervals or not chrom or ";" in chrom:
+        return {"chrom": chrom, "start": "", "end": "", "strand": strand, "genomic_coordinates": chrom}
+    start = min(start for start, _end in intervals)
+    end = max(end for _start, end in intervals)
+    suffix = f":{strand}" if strand else ""
+    return {
+        "chrom": chrom,
+        "start": str(start),
+        "end": str(end),
+        "strand": strand,
+        "genomic_coordinates": f"{chrom}:{start}-{end}{suffix}",
+    }
+
+
 def first_available_feature(row: dict[str, str], names: Iterable[str]) -> str:
     value = first_existing(row, names)
     return value if value else ""
@@ -1678,6 +1710,7 @@ def build_events(
             "gene_id": gene_id,
             "gene_name": gene_name,
             "gene_biotype": "",
+            **event_genomic_span(switch_in["_isoform_id"], switch_out["_isoform_id"], models),
             "switch_biotype_class": "",
             "switch_interpretation_label": "",
             "switch_rank": str(switch_rank),

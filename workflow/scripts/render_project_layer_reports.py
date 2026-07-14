@@ -216,6 +216,25 @@ def display_gene(row: dict[str, str]) -> str:
     return gene_id or row.get("event_id", "") or "isoform switch"
 
 
+def row_coordinates(row: dict[str, str]) -> str:
+    existing = (
+        row.get("genomic_coordinates", "")
+        or row.get("genomic_span", "")
+        or row.get("coordinates", "")
+        or row.get("location", "")
+    )
+    if existing:
+        return existing
+    chrom = row.get("chrom", "") or row.get("chr", "") or row.get("seqname", "")
+    start = row.get("start", "")
+    end = row.get("end", "")
+    strand = row.get("strand", "")
+    if chrom and start and end:
+        suffix = f":{strand}" if strand else ""
+        return f"{chrom}:{start}-{end}{suffix}"
+    return chrom
+
+
 def sort_layer_rows(layer_key: str, rows: list[dict[str, str]]) -> list[dict[str, str]]:
     if layer_key == "isoform_switch":
         return sorted(
@@ -722,10 +741,24 @@ def render_contrast_summary(
     output.parent.mkdir(parents=True, exist_ok=True)
     base_dir = output.parent
     table_rows = []
-    for row in sort_layer_rows(layer_key, rows):
+    sorted_rows = sort_layer_rows(layer_key, rows)
+    displayed_rows = sorted_rows[:50] if layer_key == "isoform_switch" else sorted_rows
+    for row in displayed_rows:
         asset_cell = ""
         if layer_key == "isoform_switch":
             asset_cell = f"<td>{row_asset_links(row, layer_key, base_dir, want_plots=False)}</td>"
+            table_rows.append(
+                "<tr>"
+                f"<td>{html.escape(display_gene(row))}</td>"
+                f"<td><code>{html.escape(row.get('event_id', ''))}</code></td>"
+                f"<td>{html.escape(row_coordinates(row) or '-')}</td>"
+                f"<td><span class=\"status {html.escape(row.get('status', 'unknown') or 'unknown')}\">{html.escape(row.get('status', 'unknown') or 'unknown')}</span></td>"
+                f"<td>{html.escape(row_metrics(row))}</td>"
+                f"<td>{html.escape(row_reason(row))}</td>"
+                f"{asset_cell}"
+                "</tr>"
+            )
+            continue
         table_rows.append(
             "<tr>"
             f"<td>{html.escape(row_label(row, layer_key))}</td>"
@@ -780,7 +813,7 @@ def render_contrast_summary(
     layer_href = html.escape(os.path.relpath(layer_index.resolve(), start=base_dir.resolve()).replace(os.sep, "/"))
     shell = report_shell_open("Summary Map", map_items, base_dir)
     header = (
-        "<tr><th>analysis</th><th>status</th><th>counts</th><th>reason</th><th>event assets</th></tr>"
+        "<tr><th>gene</th><th>event</th><th>genomic coordinates</th><th>status</th><th>counts</th><th>reason</th><th>event assets</th></tr>"
         if layer_key == "isoform_switch"
         else "<tr><th>analysis</th><th>status</th><th>counts</th><th>reason</th></tr>"
     )
@@ -802,9 +835,9 @@ def render_contrast_summary(
         detail_sections = (
             '<section class="panel" id="events" data-report-nav-target="events">'
             '<h2>Switch events</h2>'
-            '<p class="muted">Rows are sorted by adjusted significance when available, then by absolute isoform-fraction change.</p>'
+            f'<p class="muted">Rows are sorted by adjusted significance when available, then by absolute isoform-fraction change. Showing {min(len(displayed_rows), 50)} of {len(sorted_rows)} switch event(s).</p>'
             '<div class="table-scroll"><table><thead>'
-            '<tr><th>gene/event</th><th>status</th><th>counts</th><th>reason</th><th>event assets</th></tr>'
+            '<tr><th>gene</th><th>event</th><th>genomic coordinates</th><th>status</th><th>counts</th><th>reason</th><th>event assets</th></tr>'
             f'</thead><tbody>{"".join(table_rows)}</tbody></table></div></section>'
         )
     page = f"""<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{html.escape(project)} - {html.escape(title)} - {html.escape(contrast)}</title><style>{css}</style></head><body>
