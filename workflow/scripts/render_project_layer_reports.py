@@ -48,7 +48,7 @@ ASSET_FIELDS = {
 
 COUNT_FIELDS = [
     "n_features", "n_mirnas", "n_significant", "n_up", "n_down", "n_feature_set_terms",
-    "n_ranked_feature_set_terms", "n_standardized", "n_significant", "n_events", "n_targets",
+    "n_ranked_feature_set_terms", "n_standardized", "n_events", "n_targets",
     "n_target_terms", "n_pairs", "n_inverse_pairs", "n_feature_set_results", "n_ranked_feature_set_results",
 ]
 
@@ -659,6 +659,22 @@ def rnaseq_de_detail_sections(rows: list[dict[str, str]], base_dir: Path) -> str
     return "".join(sections)
 
 
+def smallrna_de_detail_sections(rows: list[dict[str, str]], base_dir: Path) -> str:
+    if not rows:
+        return ""
+    row = rows[0]
+    summary_html = row.get("summary_html", "")
+    if not summary_html:
+        return ""
+    body = embedded_summary_body(summary_html, base_dir)
+    return (
+        '<section class="panel smallrna-detail" id="mirna" data-report-nav-target="mirna">'
+        '<h2>miRNA detailed summary</h2>'
+        f'<div class="inlined-summary">{body}</div>'
+        '</section>'
+    )
+
+
 def enrichment_detail_sections(rows: list[dict[str, str]], base_dir: Path) -> str:
     sections: list[str] = []
     order = {"gene": 0, "transcript": 1}
@@ -724,6 +740,8 @@ def render_contrast_summary(
     if layer_key == "rnaseq_de":
         map_items.append(report_map_item("Gene detailed summary", "#gene"))
         map_items.append(report_map_item("Transcript detailed summary", "#transcript"))
+    elif layer_key == "smallrna_de":
+        map_items.append(report_map_item("miRNA detailed summary", "#mirna"))
     elif layer_key == "enrichment":
         map_items.append(report_map_item("Gene enrichment summary", "#gene"))
         map_items.append(report_map_item("Transcript enrichment summary", "#transcript"))
@@ -769,6 +787,8 @@ def render_contrast_summary(
     detail_sections = ""
     if layer_key == "rnaseq_de":
         detail_sections = rnaseq_de_detail_sections(rows, base_dir)
+    elif layer_key == "smallrna_de":
+        detail_sections = smallrna_de_detail_sections(rows, base_dir)
     elif layer_key == "enrichment":
         detail_sections = enrichment_detail_sections(rows, base_dir)
     elif layer_key != "isoform_switch":

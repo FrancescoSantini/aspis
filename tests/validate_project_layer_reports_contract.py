@@ -103,6 +103,10 @@ def main() -> int:
                 assert "transcript ranked feature-set rows" in summary_text
             elif row["layer_key"] == "isoform_switch":
                 assert "event assets" in summary_text
+            elif row["layer_key"] == "smallrna_de":
+                assert "miRNA detailed summary" in summary_text
+                assert "detail" in summary_text
+                assert "<iframe" not in summary_text
             else:
                 assert "Tables and pages" in summary_text
             assert (layer_html.parent / "source_asset_manifest.tsv").exists()
