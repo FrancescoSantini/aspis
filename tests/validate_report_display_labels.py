@@ -57,12 +57,20 @@ def main() -> int:
             {
                 "Geneid": "ENSG00000141510",
                 "gene_name": "TP53",
+                "Chr": "chr17",
+                "Start": "7661779",
+                "End": "7687550",
+                "Strand": "-",
                 "log2FoldChange": "2.5",
                 "padj": "1e-8",
             },
             {
                 "Geneid": "MSTRG.11769",
                 "gene_name": "NA",
+                "Chr": "chr3",
+                "Start": "1200",
+                "End": "1800",
+                "Strand": "+",
                 "log2FoldChange": "-1.3",
                 "padj": "0.02",
             },
@@ -70,7 +78,9 @@ def main() -> int:
         top_n=10,
     )
     assert_contains(html, "TP53 (ENSG00000141510)")
+    assert_contains(html, "chr17:7661779-7687550 (-)")
     assert_contains(html, "MSTRG.11769")
+    assert_contains(html, "chr3:1200-1800 (+)")
     assert_not_contains(html, "NA (MSTRG.11769)")
     print("report display label contract ok")
     return 0

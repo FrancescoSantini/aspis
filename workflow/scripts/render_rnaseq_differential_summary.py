@@ -260,13 +260,19 @@ def first_feature_column(rows: list[dict[str, str]]) -> str:
         "chrom",
         "chr",
         "chromosome",
+        "Chr",
+        "Chromosome",
         "start",
         "end",
+        "Start",
+        "End",
         "gene_start",
         "gene_end",
         "transcript_start",
         "transcript_end",
         "strand",
+        "Strand",
+        "Length",
         "genomic_span",
         "genomic_region",
         "coordinates",
@@ -303,10 +309,10 @@ def feature_location(row: dict[str, str]) -> str:
     existing = first_clean(row, ["genomic_span", "genomic_region", "coordinates", "location"])
     if existing:
         return existing
-    chrom = first_clean(row, ["seqname", "seqnames", "chrom", "chr", "chromosome"])
-    start = first_clean(row, ["start", "gene_start", "transcript_start", "tx_start"])
-    end = first_clean(row, ["end", "gene_end", "transcript_end", "tx_end"])
-    strand = first_clean(row, ["strand"])
+    chrom = first_clean(row, ["seqname", "seqnames", "chrom", "chr", "chromosome", "Chr", "Chromosome"])
+    start = first_clean(row, ["start", "Start", "gene_start", "transcript_start", "tx_start"])
+    end = first_clean(row, ["end", "End", "gene_end", "transcript_end", "tx_end"])
+    strand = first_clean(row, ["strand", "Strand"])
     if chrom and start and end:
         suffix = f" ({strand})" if strand else ""
         return f"{chrom}:{start}-{end}{suffix}"
