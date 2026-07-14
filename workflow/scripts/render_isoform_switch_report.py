@@ -2104,6 +2104,28 @@ def reference_locus_label(locus: GeneLocus, relation: str, distance: int, strand
     return f"{relation}:{pieces[0]}(" + ";".join(pieces[1:]) + ")"
 
 
+def readable_reference_context(status: str, context: str) -> str:
+    raw = context or status or "not_available"
+    replacements = {
+        "direct_reference_overlap": "overlaps reference gene",
+        "nearest_reference_within_50000bp": "nearest reference gene within 50 kb",
+        "no_reference_within_50000bp": "no reference gene within 50 kb",
+        "not_available": "reference context not available",
+        "nearest_upstream:": "nearest upstream reference: ",
+        "nearest_downstream:": "nearest downstream reference: ",
+        "nearest:": "nearest reference: ",
+        "overlap:": "overlapping reference: ",
+        "same_strand": "same strand",
+        "opposite_strand": "opposite strand",
+        "biotype_unknown": "biotype unknown",
+    }
+    text = raw
+    for before, after in replacements.items():
+        text = text.replace(before, after)
+    text = text.replace(";", "; ")
+    return re.sub(r"\s+", " ", text).strip()
+
+
 def event_reference_context(
     event_span: dict[str, str],
     gene_loci: list[GeneLocus],
@@ -2129,11 +2151,19 @@ def event_reference_context(
         for distance, locus in distances
         if distance == 0
     ]
-    proximal = [
-        reference_locus_label(locus, "nearest", distance, strand)
-        for distance, locus in distances
-        if 0 < distance <= radius_bp
-    ][:5]
+    proximal = []
+    for distance, locus in distances:
+        if not (0 < distance <= radius_bp):
+            continue
+        if locus.end < start:
+            relation = "nearest_upstream"
+        elif locus.start > end:
+            relation = "nearest_downstream"
+        else:
+            relation = "nearest"
+        proximal.append(reference_locus_label(locus, relation, distance, strand))
+        if len(proximal) >= 5:
+            break
     if overlaps:
         status = "direct_reference_overlap"
     elif proximal:
@@ -2954,11 +2984,11 @@ def render_event_html(
         for row in rows:
             body.append("<tr>" + "".join(f"<td>{html.escape(row.get(header, ''))}</td>" for header in headers) + "</tr>")
         return (
-            "<table><thead><tr>"
+            '<div class="data-table"><table><thead><tr>'
             + "".join(f"<th>{html.escape(header)}</th>" for header in headers)
             + "</tr></thead><tbody>"
             + "\n".join(body)
-            + "</tbody></table>"
+            + "</tbody></table></div>"
         )
 
     sequence_blocks = []
@@ -3019,9 +3049,18 @@ def render_event_html(
         or event.get("proximal_reference_gene_context", "")
         or ""
     )
-    reference_context_html = (
-        f"<p>Reference context: <strong>{html.escape(reference_context_status)}</strong>"
-        f"{': ' + html.escape(reference_context) if reference_context else ''}.</p>"
+    reference_context_html = f"<p>Reference context: <strong>{html.escape(readable_reference_context(reference_context_status, reference_context))}</strong>.</p>"
+    event_label = event["event_id"]
+    prefix = f"{event['contrast_id']}__"
+    if event_label.startswith(prefix):
+        event_label = event_label[len(prefix) :]
+    sequence_asset_links = " ".join(
+        link
+        for link in [
+            file_link("NT FASTA", event.get("event_nt_fasta", ""), out_path),
+            file_link("AA FASTA", event.get("event_aa_fasta", ""), out_path),
+        ]
+        if link
     )
     html_text = f"""<!doctype html>
 <html lang="en">
@@ -3041,14 +3080,19 @@ def render_event_html(
     pre {{ white-space: pre-wrap; word-break: break-word; background: #f6f8fa; padding: 12px; }}
     img {{ max-width: 100%; border: 1px solid #d0d7de; }}
     .note {{ background: #f6f8fa; border-left: 4px solid #57606a; margin: 12px 0 18px; padding: 10px 12px; }}
-    table {{ display: block; overflow-x: auto; }}
+    .report-content {{ max-width: 1680px; }}
+    .data-table {{ overflow-x: auto; }}
+    .data-table table {{ display: table; font-size: 0.88rem; min-width: 1180px; }}
+    .data-table th {{ white-space: normal; }}
+    .data-table td {{ max-width: 260px; }}
+    .asset-links {{ display:flex; flex-wrap:wrap; gap:8px; margin:10px 0 18px; }}
     .breadcrumbs {{ color: #57606a; margin-bottom: 1rem; }}
     {report_map_css()}
   </style>
 </head>
 <body>
   {shell}
-  <nav class="breadcrumbs"><a href="{html.escape(relative(str(run_root / 'index.html'), out_path))}">ASPIS run</a> / <a href="{html.escape(relative(str(project_index), out_path))}">{html.escape(project)}</a> / <a href="{html.escape(relative(str(layer_index), out_path))}">Isoform-switch candidates with DTU/splicing support</a> / <a href="{html.escape(relative(str(contrast_summary), out_path))}">{html.escape(event['contrast_id'])}</a> / {html.escape(event['event_id'])}</nav>
+  <nav class="breadcrumbs"><a href="{html.escape(relative(str(run_root / 'index.html'), out_path))}">ASPIS run</a> / <a href="{html.escape(relative(str(project_index), out_path))}">{html.escape(project)}</a> / <a href="{html.escape(relative(str(layer_index), out_path))}">Isoform-switch candidates with DTU/splicing support</a> / <a href="{html.escape(relative(str(contrast_summary), out_path))}">{html.escape(event['contrast_id'])}</a> / {html.escape(event_label)}</nav>
   <h1>{html.escape(event.get('gene_display', '') or event['gene_name'])} isoform switch</h1>
   <div class="muted">{html.escape(event['event_id'])} | contrast {html.escape(event['contrast_id'])}</div>
   <p>Class: <strong>{html.escape(event.get('switch_biotype_class', ''))}</strong>;
@@ -3073,6 +3117,7 @@ def render_event_html(
   {table(['isoform_id', 'source', 'feature_type', 'feature_id', 'feature_name', 'start_aa', 'end_aa', 'score', 'feature_change', 'description'], event_annotations)}
   <h2 id="sequences">Sequences</h2>
   <p class="note">{html.escape(sequence_note)}</p>
+  <p class="asset-links">{sequence_asset_links}</p>
   {''.join(sequence_blocks) if sequence_blocks else '<p>No sequence rows available.</p>'}
   {report_shell_close()}{report_map_script()}
 </body>

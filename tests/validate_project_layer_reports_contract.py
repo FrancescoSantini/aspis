@@ -120,7 +120,7 @@ def main() -> int:
                 assert "event assets" in summary_text
                 assert "genomic coordinates" in summary_text
                 assert "reference context" in summary_text
-                assert "overlap:GENEA" in summary_text
+                assert "overlapping reference: GENEA" in summary_text
                 assert "chr1:10-20:+" in summary_text
             elif row["layer_key"] == "smallrna_de":
                 assert "miRNA detailed summary" in summary_text

@@ -236,12 +236,43 @@ def row_coordinates(row: dict[str, str]) -> str:
 
 
 def row_reference_context(row: dict[str, str]) -> str:
-    return (
+    raw = (
         row.get("reference_gene_context", "")
         or row.get("proximal_reference_gene_context", "")
         or row.get("reference_gene_context_status", "")
         or "-"
     )
+    if raw in {"-", ""}:
+        return "-"
+    text = raw
+    replacements = {
+        "direct_reference_overlap": "overlaps reference gene",
+        "nearest_reference_within_50000bp": "nearest reference gene within 50 kb",
+        "no_reference_within_50000bp": "no reference gene within 50 kb",
+        "not_available": "reference context not available",
+        "nearest_upstream:": "nearest upstream reference: ",
+        "nearest_downstream:": "nearest downstream reference: ",
+        "nearest:": "nearest reference: ",
+        "overlap:": "overlapping reference: ",
+        "same_strand": "same strand",
+        "opposite_strand": "opposite strand",
+        "biotype_unknown": "biotype unknown",
+    }
+    for before, after in replacements.items():
+        text = text.replace(before, after)
+    text = text.replace(";", "; ")
+    text = re.sub(r"\s+", " ", text).strip()
+    return text
+
+
+def short_event_label(row: dict[str, str]) -> str:
+    event_id = row.get("event_id", "")
+    contrast = row.get("contrast_id", "")
+    gene = row.get("gene_id", "") or display_gene(row)
+    prefix = f"{contrast}__"
+    if event_id.startswith(prefix):
+        return event_id[len(prefix) :]
+    return gene or event_id
 
 
 def sort_layer_rows(layer_key: str, rows: list[dict[str, str]]) -> list[dict[str, str]]:
@@ -886,7 +917,7 @@ def render_contrast_summary(
             table_rows.append(
                 "<tr>"
                 f"<td>{html.escape(display_gene(row))}</td>"
-                f"<td><code>{html.escape(row.get('event_id', ''))}</code></td>"
+                f"<td><code>{html.escape(short_event_label(row))}</code></td>"
                 f"<td>{html.escape(row_coordinates(row) or '-')}</td>"
                 f"<td>{html.escape(row_reference_context(row))}</td>"
                 f"<td><span class=\"status {html.escape(row.get('status', 'unknown') or 'unknown')}\">{html.escape(row.get('status', 'unknown') or 'unknown')}</span></td>"
@@ -952,6 +983,9 @@ def render_contrast_summary(
     .method-row:first-child {{ border-top:0; padding-top:0; margin-top:0; }}
     @media (max-width: 1100px) {{ .plot-grid-two {{ grid-template-columns:1fr; }} }}
     .status {{ font-weight:700; }} .status.ok,.status.completed {{ color:#1a7f37; }} .status.blocked,.status.failed,.status.missing {{ color:#cf222e; }}
+    .report-content {{ max-width:1280px; }}
+    .table-scroll table {{ min-width:1040px; }}
+    .table-scroll td,.table-scroll th {{ overflow-wrap:anywhere; }}
     {report_map_css()}
     """
     layer_href = html.escape(os.path.relpath(layer_index.resolve(), start=base_dir.resolve()).replace(os.sep, "/"))
@@ -982,7 +1016,7 @@ def render_contrast_summary(
             '<section class="panel" id="events" data-report-nav-target="events">'
             '<h2>Switch events</h2>'
             f'<p class="muted">Rows are sorted by adjusted significance when available, then by absolute isoform-fraction change. Showing {min(len(displayed_rows), 50)} of {len(sorted_rows)} switch event(s).</p>'
-            '<div class="table-scroll"><table><thead>'
+            '<div class="table-scroll"><table class="event-summary-table"><thead>'
             '<tr><th>gene</th><th>event</th><th>genomic coordinates</th><th>reference context</th><th>status</th><th>counts</th><th>reason</th><th>event assets</th></tr>'
             f'</thead><tbody>{"".join(table_rows)}</tbody></table></div></section>'
         )
