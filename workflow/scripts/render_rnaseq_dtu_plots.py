@@ -480,7 +480,7 @@ def render_overview_svg(path: Path, rows: list[dict[str, str]], alpha: float, ma
     if max_points > 0:
         scored = scored[:max_points]
     width, height = 900, 520
-    left, right, top, bottom = 78, 28, 48, 72
+    left, right, top, bottom = 78, 28, 86, 72
     plot_w = width - left - right
     plot_h = height - top - bottom
     plot_floor = 1e-300
@@ -490,7 +490,7 @@ def render_overview_svg(path: Path, rows: list[dict[str, str]], alpha: float, ma
     parts = [svg_header(width, height)]
     parts.append('<rect width="100%" height="100%" fill="white"/>\n')
     parts.append('<text x="24" y="30" font-size="20" font-weight="700">DTU significance overview</text>\n')
-    parts.append(f'<text x="24" y="50" font-size="12" class="muted">Showing top {len(scored)} features by adjusted p-value or p-value</text>\n')
+    parts.append(f'<text x="24" y="54" font-size="12" class="muted">Showing top {len(scored)} features by adjusted p-value or p-value</text>\n')
     for tick in range(0, int(ymax) + 1):
         y = top + plot_h - (tick / ymax * plot_h)
         parts.append(f'<line class="grid" x1="{left}" y1="{y:.1f}" x2="{left + plot_w}" y2="{y:.1f}"/>\n')
