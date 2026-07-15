@@ -37,7 +37,7 @@ COLUMNS = [
 ]
 
 EXPANDED_TOP_N = 50
-PLOT_PAGE_SIZE = 20
+PLOT_PAGE_SIZE = 50
 
 
 def parse_args() -> argparse.Namespace:
@@ -554,7 +554,7 @@ def display_group_sizes(
     top_features_per_gene: int = 0,
 ) -> tuple[int, int]:
     if top_gene_count <= 0:
-        top_gene_count = min(10, max(4, math.ceil(max(1, top_n) / 3)))
+        top_gene_count = min(max(1, top_n), max(20, math.ceil(max(1, top_n) / 2)))
     if top_features_per_gene <= 0:
         top_features_per_gene = max(2, math.ceil(max(1, top_n) / top_gene_count))
     return top_gene_count, top_features_per_gene

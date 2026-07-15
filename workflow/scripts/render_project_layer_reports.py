@@ -352,6 +352,8 @@ def dtu_preview_columns(rows: list[dict[str, str]], preferred: list[tuple[str, s
             continue
         if key == "log2FC" and all(value == "NA" for value in values):
             continue
+        if key in {"delta_psi", "IncLevelDifference"} and len(set(values)) <= 1 and set(values) <= {"NA", "nan", "NaN"}:
+            continue
         columns.append((key, label))
         seen.add(key)
         if len(columns) >= max_columns:
@@ -363,6 +365,8 @@ def dtu_preview_columns(rows: list[dict[str, str]], preferred: list[tuple[str, s
             continue
         values = useful_values(rows, key)
         if not values or len(set(values)) <= 1:
+            continue
+        if key == "event_type":
             continue
         columns.append((key, key.replace("_", " ")))
         seen.add(key)
@@ -784,7 +788,10 @@ def dtu_splicing_detail_sections(rows: list[dict[str, str]], base_dir: Path) -> 
                         source_rows,
                         [
                             ("gene_display", "gene"),
+                            ("gene_symbol", "gene symbol"),
                             ("gene_id", "gene"),
+                            ("genomic_coordinates", "genomic coordinates"),
+                            ("coordinates", "genomic coordinates"),
                             ("feature_display", "feature/event"),
                             ("feature_id", "feature/event"),
                             ("event_id", "event"),
@@ -795,6 +802,8 @@ def dtu_splicing_detail_sections(rows: list[dict[str, str]], base_dir: Path) -> 
                             ("log2FC", "log2FC"),
                             ("padj", "padj"),
                             ("FDR", "FDR"),
+                            ("statistic", "test statistic"),
+                            ("pvalue", "p-value"),
                         ],
                         max_columns=9,
                     ),
@@ -811,7 +820,10 @@ def dtu_splicing_detail_sections(rows: list[dict[str, str]], base_dir: Path) -> 
                         feature_rows,
                         [
                             ("gene_display", "gene"),
+                            ("gene_symbol", "gene symbol"),
                             ("gene_id", "gene"),
+                            ("genomic_coordinates", "genomic coordinates"),
+                            ("coordinates", "genomic coordinates"),
                             ("feature_display", "feature/event"),
                             ("feature_id", "feature/event"),
                             ("event_id", "event"),
@@ -820,6 +832,14 @@ def dtu_splicing_detail_sections(rows: list[dict[str, str]], base_dir: Path) -> 
                             ("delta_psi", "delta PSI"),
                             ("log2FC", "log2FC"),
                             ("padj", "padj"),
+                            ("FDR", "FDR"),
+                            ("statistic", "test statistic"),
+                            ("pvalue", "p-value"),
+                            ("mean_usage_control", "mean usage control"),
+                            ("mean_usage_test", "mean usage test"),
+                            ("mean_count_control", "mean count control"),
+                            ("mean_count_test", "mean count test"),
+                            ("status", "status"),
                         ],
                         max_columns=9,
                     ),
@@ -988,7 +1008,6 @@ def render_contrast_summary(
                 f"<td>{html.escape(row_reference_context(row))}</td>"
                 f"<td><span class=\"status {html.escape(row.get('status', 'unknown') or 'unknown')}\">{html.escape(row.get('status', 'unknown') or 'unknown')}</span></td>"
                 f"<td>{html.escape(row_metrics(row))}</td>"
-                f"<td>{html.escape(row_reason(row))}</td>"
                 f"{asset_cell}"
                 "</tr>"
             )
@@ -1052,16 +1071,22 @@ def render_contrast_summary(
     .report-content {{ max-width:1280px; }}
     .table-scroll table {{ min-width:1040px; }}
     .table-scroll td,.table-scroll th {{ overflow-wrap:anywhere; }}
-    .dtu-summary-table th:nth-child(1),.dtu-summary-table td:nth-child(1) {{ width:8rem; white-space:nowrap; }}
+    .dtu-summary-table th:nth-child(1),.dtu-summary-table td:nth-child(1) {{ width:9rem; white-space:nowrap; }}
     .dtu-summary-table th:nth-child(2),.dtu-summary-table td:nth-child(2) {{ width:5rem; white-space:nowrap; }}
-    .dtu-summary-table th:nth-child(3),.dtu-summary-table td:nth-child(3) {{ width:14rem; }}
-    .dtu-summary-table th:nth-child(4),.dtu-summary-table td:nth-child(4) {{ max-width:38rem; }}
+    .dtu-summary-table th:nth-child(3),.dtu-summary-table td:nth-child(3) {{ width:24rem; min-width:22rem; }}
+    .dtu-summary-table th:nth-child(4),.dtu-summary-table td:nth-child(4) {{ max-width:26rem; }}
+    .event-summary-table th:nth-child(1),.event-summary-table td:nth-child(1) {{ width:10rem; min-width:9rem; white-space:nowrap; overflow-wrap:normal; }}
+    .event-summary-table th:nth-child(2),.event-summary-table td:nth-child(2) {{ width:18rem; min-width:16rem; white-space:nowrap; overflow-wrap:normal; }}
+    .event-summary-table th:nth-child(3),.event-summary-table td:nth-child(3) {{ width:16rem; }}
+    .event-summary-table th:nth-child(4),.event-summary-table td:nth-child(4) {{ min-width:20rem; }}
+    .event-summary-table th:nth-child(5),.event-summary-table td:nth-child(5) {{ width:5rem; white-space:nowrap; overflow-wrap:normal; }}
+    .event-summary-table th:nth-child(7),.event-summary-table td:nth-child(7) {{ width:12rem; }}
     {report_map_css()}
     """
     layer_href = html.escape(os.path.relpath(layer_index.resolve(), start=base_dir.resolve()).replace(os.sep, "/"))
     shell = report_shell_open("Summary Map", map_items, base_dir)
     header = (
-        "<tr><th>gene</th><th>event</th><th>genomic coordinates</th><th>reference context</th><th>status</th><th>counts</th><th>reason</th><th>event assets</th></tr>"
+        "<tr><th>gene</th><th>event</th><th>genomic coordinates</th><th>reference context</th><th>status</th><th>counts</th><th>event assets</th></tr>"
         if layer_key == "isoform_switch"
         else "<tr><th>analysis</th><th>status</th><th>counts</th><th>reason</th></tr>"
     )
@@ -1087,7 +1112,7 @@ def render_contrast_summary(
             '<h2>Switch events</h2>'
             f'<p class="muted">Rows are sorted by adjusted significance when available, then by absolute isoform-fraction change. Showing {min(len(displayed_rows), 50)} of {len(sorted_rows)} switch event(s).</p>'
             '<div class="table-scroll"><table class="event-summary-table"><thead>'
-            '<tr><th>gene</th><th>event</th><th>genomic coordinates</th><th>reference context</th><th>status</th><th>counts</th><th>reason</th><th>event assets</th></tr>'
+            '<tr><th>gene</th><th>event</th><th>genomic coordinates</th><th>reference context</th><th>status</th><th>counts</th><th>event assets</th></tr>'
             f'</thead><tbody>{"".join(table_rows)}</tbody></table></div></section>'
         )
     summary_table = ""
@@ -1263,7 +1288,7 @@ def render_layer(project: str, key: str, title: str, description: str, rows: lis
                 "</tr>"
             )
         else:
-            for row in grouped[contrast]:
+            for row in sort_layer_rows(key, grouped[contrast]):
                 body_rows.append(
                     "<tr>"
                     f"<td>{html.escape(row_label(row, key))}</td>"
@@ -1273,11 +1298,12 @@ def render_layer(project: str, key: str, title: str, description: str, rows: lis
                     f"<td>{html.escape(row_reason(row))}</td>"
                     "</tr>"
                 )
+        layer_table_class = "dtu-layer-table" if key == "dtu_splicing" else ""
         sections.append(
             f'<section class="panel" id="contrast-{index}" data-report-nav-target="contrast-{index}">'
             f"<h2>{html.escape(contrast)}</h2>"
             f"{summary_button}"
-            '<div class="table-scroll"><table><thead><tr><th>analysis</th><th>status</th><th>counts</th><th>tables and plots</th><th>reason</th></tr></thead>'
+            f'<div class="table-scroll"><table class="{layer_table_class}"><thead><tr><th>analysis</th><th>status</th><th>counts</th><th>tables and plots</th><th>reason</th></tr></thead>'
             f"<tbody>{''.join(body_rows)}</tbody></table></div></section>"
         )
     pdf_href = "technical_report.pdf"
@@ -1292,6 +1318,11 @@ def render_layer(project: str, key: str, title: str, description: str, rows: lis
     .table-scroll {{ overflow-x:auto; }} .button-list {{ display:flex; flex-wrap:wrap; gap:6px; }}
     .button-link {{ background:#f6f8fa; border:1px solid #d0d7de; border-radius:4px; display:inline-block; padding:2px 7px; text-decoration:none; }}
     .status {{ font-weight:700; }} .status.ok,.status.completed {{ color:#1a7f37; }} .status.blocked,.status.failed,.status.missing {{ color:#cf222e; }}
+    .dtu-layer-table th:nth-child(1),.dtu-layer-table td:nth-child(1) {{ width:9rem; white-space:nowrap; }}
+    .dtu-layer-table th:nth-child(2),.dtu-layer-table td:nth-child(2) {{ width:5rem; white-space:nowrap; }}
+    .dtu-layer-table th:nth-child(3),.dtu-layer-table td:nth-child(3) {{ width:24rem; min-width:22rem; }}
+    .dtu-layer-table th:nth-child(4),.dtu-layer-table td:nth-child(4) {{ min-width:26rem; }}
+    .dtu-layer-table th:nth-child(5),.dtu-layer-table td:nth-child(5) {{ max-width:26rem; }}
     {report_map_css()}
     """
     shell = report_shell_open("Layer Map", map_items, base_dir)
