@@ -491,10 +491,13 @@ def render_overview_svg(path: Path, rows: list[dict[str, str]], alpha: float, ma
     parts.append('<rect width="100%" height="100%" fill="white"/>\n')
     parts.append('<text x="24" y="30" font-size="20" font-weight="700">DTU significance overview</text>\n')
     parts.append(f'<text x="24" y="54" font-size="12" class="muted">Showing top {len(scored)} features by adjusted p-value or p-value</text>\n')
-    for tick in range(0, int(ymax) + 1):
+    tick_count = 8
+    for tick_index in range(tick_count + 1):
+        tick = tick_index * ymax / tick_count
         y = top + plot_h - (tick / ymax * plot_h)
         parts.append(f'<line class="grid" x1="{left}" y1="{y:.1f}" x2="{left + plot_w}" y2="{y:.1f}"/>\n')
-        parts.append(f'<text x="{left - 10}" y="{y + 4:.1f}" text-anchor="end" font-size="11">{tick}</text>\n')
+        label = f"{tick:.0f}" if ymax >= 10 else f"{tick:.1f}".rstrip("0").rstrip(".")
+        parts.append(f'<text x="{left - 10}" y="{y + 4:.1f}" text-anchor="end" font-size="11">{label}</text>\n')
     parts.append(f'<line class="axis" x1="{left}" y1="{top}" x2="{left}" y2="{top + plot_h}"/>\n')
     parts.append(f'<line class="axis" x1="{left}" y1="{top + plot_h}" x2="{left + plot_w}" y2="{top + plot_h}"/>\n')
     for idx, (score, row) in enumerate(scored, start=1):

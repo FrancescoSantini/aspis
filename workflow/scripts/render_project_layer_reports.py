@@ -631,6 +631,23 @@ def row_asset_links(row: dict[str, str], layer_key: str, base_dir: Path, want_pl
     return '<div class="button-list">' + "".join(links) + "</div>" if links else '<span class="muted">no linked assets</span>'
 
 
+def isoform_summary_asset_links(row: dict[str, str], base_dir: Path) -> str:
+    labels = {
+        "event_html": "HTML",
+        "event_nt_fasta": "NT",
+        "event_aa_fasta": "AA",
+    }
+    links = []
+    for field, label in labels.items():
+        value = row.get(field, "")
+        if not value:
+            continue
+        links.append(
+            f'<a class="button-link compact-asset" href="{html.escape(relative_href(value, base_dir))}">{html.escape(label)}</a>'
+        )
+    return '<div class="button-list compact-assets">' + "".join(links) + "</div>" if links else '<span class="muted">no linked assets</span>'
+
+
 def layer_row_links(row: dict[str, str], layer_key: str, base_dir: Path, summary_href: str) -> str:
     links = []
     if layer_key == "enrichment":
@@ -1131,7 +1148,7 @@ def render_contrast_summary(
     for row in displayed_rows:
         asset_cell = ""
         if layer_key == "isoform_switch":
-            asset_cell = f"<td>{row_asset_links(row, layer_key, base_dir, want_plots=False)}</td>"
+            asset_cell = f"<td>{isoform_summary_asset_links(row, base_dir)}</td>"
             table_rows.append(
                 "<tr>"
                 f"<td>{html.escape(display_gene(row))}</td>"
@@ -1209,15 +1226,18 @@ def render_contrast_summary(
     .dtu-summary-table th:nth-child(2),.dtu-summary-table td:nth-child(2) {{ width:5rem; white-space:nowrap; }}
     .dtu-summary-table th:nth-child(3),.dtu-summary-table td:nth-child(3) {{ width:24rem; min-width:22rem; }}
     .dtu-summary-table th:nth-child(4),.dtu-summary-table td:nth-child(4) {{ max-width:26rem; }}
+    .event-summary-table {{ table-layout:fixed; }}
     .event-summary-table th:nth-child(1),.event-summary-table td:nth-child(1) {{ width:8rem; min-width:7rem; white-space:nowrap; overflow-wrap:normal; }}
-    .event-summary-table th:nth-child(2),.event-summary-table td:nth-child(2) {{ width:8rem; min-width:7rem; white-space:nowrap; overflow-wrap:normal; }}
-    .event-summary-table th:nth-child(3),.event-summary-table td:nth-child(3) {{ width:14rem; min-width:12rem; }}
-    .event-summary-table th:nth-child(4),.event-summary-table td:nth-child(4) {{ width:18rem; min-width:15rem; }}
+    .event-summary-table th:nth-child(2),.event-summary-table td:nth-child(2) {{ width:7rem; min-width:6rem; white-space:nowrap; overflow-wrap:normal; }}
+    .event-summary-table th:nth-child(3),.event-summary-table td:nth-child(3) {{ width:13rem; min-width:11rem; }}
+    .event-summary-table th:nth-child(4),.event-summary-table td:nth-child(4) {{ width:17rem; min-width:14rem; }}
     .event-summary-table th:nth-child(5),.event-summary-table td:nth-child(5) {{ width:4rem; white-space:nowrap; overflow-wrap:normal; }}
     .event-summary-table th:nth-child(6),.event-summary-table td:nth-child(6),
     .event-summary-table th:nth-child(7),.event-summary-table td:nth-child(7),
     .event-summary-table th:nth-child(8),.event-summary-table td:nth-child(8) {{ width:6rem; white-space:nowrap; overflow-wrap:normal; }}
-    .event-summary-table th:nth-child(9),.event-summary-table td:nth-child(9) {{ width:11rem; }}
+    .event-summary-table th:nth-child(9),.event-summary-table td:nth-child(9) {{ width:7rem; white-space:nowrap; overflow-wrap:normal; }}
+    .event-summary-table .compact-assets {{ flex-wrap:nowrap; gap:4px; }}
+    .event-summary-table .compact-asset {{ font-size:.85rem; padding:2px 6px; }}
     {report_map_css()}
     """
     layer_href = html.escape(os.path.relpath(layer_index.resolve(), start=base_dir.resolve()).replace(os.sep, "/"))
