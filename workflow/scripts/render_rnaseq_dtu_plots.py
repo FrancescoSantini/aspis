@@ -37,7 +37,7 @@ COLUMNS = [
 ]
 
 EXPANDED_TOP_N = 50
-PLOT_PAGE_SIZE = 25
+PLOT_PAGE_SIZE = 10
 
 
 def parse_args() -> argparse.Namespace:

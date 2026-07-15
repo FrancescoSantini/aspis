@@ -2977,12 +2977,45 @@ def render_event_html(
     event_ncrna_rows = [row for row in ncrna_rows if row["event_id"] == event["event_id"]]
     event_coding_rows = [row for row in coding_switch_rows if row["event_id"] == event["event_id"]]
 
+    def format_table_value(header: str, value: str) -> str:
+        text = (value or "").strip()
+        if text in {"", "-", "NA", "N/A", "nan", "NaN", "None", "none"}:
+            return text
+        key = header.lower().replace("-", "_").replace(" ", "_")
+        numeric_keys = {
+            "dif",
+            "padj_qvalue",
+            "isoform_fraction_control",
+            "isoform_fraction_test",
+            "coding_priority_score",
+            "orf_length_change_aa",
+            "start_aa",
+            "end_aa",
+            "score",
+            "transcript_length_change",
+            "tss_change",
+            "tes_change",
+        }
+        if key not in numeric_keys:
+            return text
+        try:
+            parsed = float(text)
+        except ValueError:
+            return text
+        if key == "padj_qvalue" and parsed == 0.0:
+            return "<1e-300"
+        return f"{parsed:.4g}"
+
     def table(headers: list[str], rows: list[dict[str, str]]) -> str:
         if not rows:
             return "<p>No rows.</p>"
         body = []
         for row in rows:
-            body.append("<tr>" + "".join(f"<td>{html.escape(row.get(header, ''))}</td>" for header in headers) + "</tr>")
+            body.append(
+                "<tr>"
+                + "".join(f"<td>{html.escape(format_table_value(header, row.get(header, '')))}</td>" for header in headers)
+                + "</tr>"
+            )
         return (
             '<div class="data-table"><table><thead><tr>'
             + "".join(f"<th>{html.escape(header)}</th>" for header in headers)
