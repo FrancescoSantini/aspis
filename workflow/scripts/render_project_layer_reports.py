@@ -64,6 +64,15 @@ DROP_DTU_PREVIEW_COLUMNS = {
     "transcript_results",
 }
 DTU_RAW_GENE_COLUMNS = {"gene", "GeneID", "gene_id", "gene_name", "geneName", "gene_symbol", "symbol"}
+DTU_EMPTY_VALUES = {"", "-", "NA", "N/A", "nan", "NaN", "None", "none"}
+DTU_ID_RE = re.compile(r"(ENS(?:G|T)\d+(?:\.\d+)?|MSTRG\.\d+(?:\.\d+)?)")
+DTU_GENE_ID_KEYS = ["gene_id", "gene", "GeneID", "geneID", "geneid", "geneId"]
+DTU_TRANSCRIPT_ID_KEYS = ["transcript_id", "transcript", "tx_id", "target_id", "feature_id", "isoform_id"]
+DTU_SYMBOL_KEYS = ["gene_symbol", "symbol", "external_gene_name", "gene_name", "geneName"]
+DTU_CHROM_KEYS = ["chromosome", "chr", "Chr", "seqname", "chrom", "reference_name", "contig"]
+DTU_START_KEYS = ["start", "Start", "gene_start", "transcript_start", "genomic_start"]
+DTU_END_KEYS = ["end", "End", "gene_end", "transcript_end", "genomic_end"]
+DTU_STRAND_KEYS = ["strand", "Strand"]
 
 
 def parse_float(value: str) -> float | None:
@@ -375,16 +384,179 @@ def preview_columns(rows: list[dict[str, str]], preferred: list[tuple[str, str]]
 
 
 def useful_values(rows: list[dict[str, str]], key: str) -> list[str]:
-    empty = {"", "-", "NA", "N/A", "nan", "NaN", "None", "none"}
-    return [row.get(key, "").strip() for row in rows if row.get(key, "").strip() not in empty]
+    return [row.get(key, "").strip() for row in rows if row.get(key, "").strip() not in DTU_EMPTY_VALUES]
 
 
 def first_value(row: dict[str, str], keys: list[str]) -> str:
     for key in keys:
         value = row.get(key, "").strip()
-        if value and value not in {"-", "NA", "N/A", "nan", "NaN", "None", "none"}:
+        if value and value not in DTU_EMPTY_VALUES:
             return value
     return ""
+
+
+def first_int_value(row: dict[str, str], keys: list[str]) -> str:
+    for key in keys:
+        value = row.get(key, "").strip()
+        if not value or value in DTU_EMPTY_VALUES:
+            continue
+        try:
+            return str(int(float(value)))
+        except ValueError:
+            continue
+    return ""
+
+
+def normalize_dtu_id(value: str) -> str:
+    text = (value or "").strip().strip('"').strip("'")
+    if not text or text in DTU_EMPTY_VALUES:
+        return ""
+    if text.startswith("ENS"):
+        return text.split(".", 1)[0]
+    return text
+
+
+def dtu_gene_root(value: str) -> str:
+    text = normalize_dtu_id(value)
+    if text.startswith("MSTRG."):
+        parts = text.split(".")
+        if len(parts) >= 2:
+            return ".".join(parts[:2])
+    return text
+
+
+def dtu_row_ids(row: dict[str, str]) -> list[str]:
+    keys = [
+        "gene_display",
+        "gene",
+        "gene_id",
+        "GeneID",
+        "gene_name",
+        "gene_symbol",
+        "feature_display",
+        "feature_id",
+        "event_id",
+        "event",
+        "transcript_id",
+        "transcript",
+        "isoform_id",
+    ]
+    ids: list[str] = []
+    for key in keys:
+        for match in DTU_ID_RE.findall(row.get(key, "")):
+            normalized = normalize_dtu_id(match)
+            root = dtu_gene_root(normalized)
+            for candidate in [normalized, root]:
+                if candidate and candidate not in ids:
+                    ids.append(candidate)
+    return ids
+
+
+def dtu_coordinate_entry(row: dict[str, str]) -> dict[str, str]:
+    gene_id = normalize_dtu_id(first_value(row, DTU_GENE_ID_KEYS))
+    transcript_id = normalize_dtu_id(first_value(row, DTU_TRANSCRIPT_ID_KEYS))
+    symbol = first_value(row, DTU_SYMBOL_KEYS)
+    if symbol in {gene_id, transcript_id}:
+        symbol = ""
+    chrom = first_value(row, DTU_CHROM_KEYS)
+    start = first_int_value(row, DTU_START_KEYS)
+    end = first_int_value(row, DTU_END_KEYS)
+    strand = first_value(row, DTU_STRAND_KEYS)
+    coordinates = ""
+    if chrom and start and end:
+        suffix = f" ({strand})" if strand else ""
+        coordinates = f"{chrom}:{start}-{end}{suffix}"
+    return {
+        "gene_id": gene_id,
+        "transcript_id": transcript_id,
+        "symbol": symbol,
+        "chrom": chrom,
+        "start": start,
+        "end": end,
+        "strand": strand,
+        "genomic_coordinates": coordinates,
+    }
+
+
+def merge_dtu_annotation(existing: dict[str, str], new: dict[str, str]) -> dict[str, str]:
+    merged = dict(existing or {})
+    for key in ["gene_id", "transcript_id", "symbol", "chrom", "strand"]:
+        if not merged.get(key) and new.get(key):
+            merged[key] = new[key]
+    for key, choose in [("start", min), ("end", max)]:
+        if not new.get(key):
+            continue
+        if not merged.get(key):
+            merged[key] = new[key]
+            continue
+        try:
+            merged[key] = str(choose(int(merged[key]), int(new[key])))
+        except ValueError:
+            pass
+    if merged.get("chrom") and merged.get("start") and merged.get("end"):
+        suffix = f" ({merged.get('strand')})" if merged.get("strand") else ""
+        merged["genomic_coordinates"] = f"{merged['chrom']}:{merged['start']}-{merged['end']}{suffix}"
+    elif not merged.get("genomic_coordinates") and new.get("genomic_coordinates"):
+        merged["genomic_coordinates"] = new["genomic_coordinates"]
+    return merged
+
+
+def load_dtu_annotation_index(transcript_metadata: str) -> dict[str, dict[str, str]]:
+    rows = read_existing_tsv(transcript_metadata)
+    index: dict[str, dict[str, str]] = {}
+    for row in rows:
+        entry = dtu_coordinate_entry(row)
+        keys = [
+            entry.get("gene_id", ""),
+            dtu_gene_root(entry.get("gene_id", "")),
+            entry.get("transcript_id", ""),
+            dtu_gene_root(entry.get("transcript_id", "")),
+        ]
+        for key in keys:
+            if key:
+                index[key] = merge_dtu_annotation(index.get(key, {}), entry)
+    return index
+
+
+def dtu_annotation_matches(row: dict[str, str], annotation_index: dict[str, dict[str, str]]) -> list[dict[str, str]]:
+    matches: list[dict[str, str]] = []
+    seen: set[tuple[str, str, str]] = set()
+    for row_id in dtu_row_ids(row):
+        entry = annotation_index.get(row_id) or annotation_index.get(dtu_gene_root(row_id))
+        if not entry:
+            continue
+        marker = (entry.get("gene_id", ""), entry.get("symbol", ""), entry.get("genomic_coordinates", ""))
+        if marker in seen:
+            continue
+        seen.add(marker)
+        matches.append(entry)
+    return matches
+
+
+def format_dtu_gene_display(matches: list[dict[str, str]], fallback: str) -> str:
+    labels: list[str] = []
+    for entry in matches:
+        gene_id = entry.get("gene_id", "")
+        symbol = entry.get("symbol", "")
+        label = f"{symbol} ({gene_id})" if symbol and gene_id and symbol != gene_id else symbol or gene_id
+        if label and label not in labels:
+            labels.append(label)
+    if labels:
+        if len(labels) > 3:
+            return f"{' + '.join(labels[:3])} + {len(labels) - 3} genes"
+        return " + ".join(labels)
+    return fallback
+
+
+def format_dtu_coordinates(matches: list[dict[str, str]]) -> str:
+    coordinates: list[str] = []
+    for entry in matches:
+        value = entry.get("genomic_coordinates", "")
+        if value and value not in coordinates:
+            coordinates.append(value)
+    if len(coordinates) > 3:
+        return f"{'; '.join(coordinates[:3])}; + {len(coordinates) - 3} loci"
+    return "; ".join(coordinates)
 
 
 def numeric_coordinate_values(row: dict[str, str]) -> list[int]:
@@ -433,7 +605,8 @@ def synthesize_genomic_coordinates(row: dict[str, str]) -> str:
     return f"{chrom}:{min(values)}-{max(values)}{suffix}"
 
 
-def augment_dtu_preview_rows(rows: list[dict[str, str]]) -> list[dict[str, str]]:
+def augment_dtu_preview_rows(rows: list[dict[str, str]], annotation_index: dict[str, dict[str, str]] | None = None) -> list[dict[str, str]]:
+    annotation_index = annotation_index or {}
     augmented: list[dict[str, str]] = []
     for row in rows:
         copy = dict(row)
@@ -448,6 +621,17 @@ def augment_dtu_preview_rows(rows: list[dict[str, str]]) -> list[dict[str, str]]
         coordinates = synthesize_genomic_coordinates(copy)
         if coordinates:
             copy.setdefault("genomic_coordinates", coordinates)
+        matches = dtu_annotation_matches(copy, annotation_index)
+        fallback_gene = copy.get("gene_display", "") or gene_name or gene_id
+        gene_display = format_dtu_gene_display(matches, fallback_gene)
+        feature_display = first_value(copy, ["feature_display", "feature_id", "event_id", "event", "transcript_id", "transcript"])
+        annotated_coordinates = format_dtu_coordinates(matches)
+        if gene_display:
+            copy["_dtu_gene_display"] = gene_display
+        if annotated_coordinates or coordinates:
+            copy["_dtu_genomic_coordinates"] = annotated_coordinates or coordinates
+        if feature_display:
+            copy["_dtu_feature_display"] = feature_display
         augmented.append(copy)
     return augmented
 
@@ -458,7 +642,7 @@ def dtu_preview_columns(rows: list[dict[str, str]], preferred: list[tuple[str, s
     columns: list[tuple[str, str]] = []
     seen: set[str] = set()
     seen_labels: set[str] = set()
-    has_gene_display = "gene_display" in rows[0] and bool(useful_values(rows, "gene_display"))
+    has_gene_display = bool(useful_values(rows, "_dtu_gene_display") or useful_values(rows, "gene_display"))
     for key, label in preferred:
         if key not in rows[0] or key in DROP_DTU_PREVIEW_COLUMNS or key in seen:
             continue
@@ -913,6 +1097,7 @@ def dtu_splicing_detail_sections(rows: list[dict[str, str]], base_dir: Path) -> 
     if not rows:
         return ""
     sections: list[str] = []
+    annotation_cache: dict[str, dict[str, dict[str, str]]] = {}
     for row in sort_layer_rows("dtu_splicing", rows):
         method = row.get("method", "DTU/splicing")
         section_id = safe_token(method)
@@ -923,8 +1108,18 @@ def dtu_splicing_detail_sections(rows: list[dict[str, str]], base_dir: Path) -> 
             ("feature_plot", "ranked candidates"),
         ]:
             figures.extend(plot_asset_figures(field, row, base_dir, f"{method} {label}"))
-        source_rows = augment_dtu_preview_rows(read_existing_tsv(row.get("source_results", "")))
-        feature_rows = augment_dtu_preview_rows(read_existing_tsv(row.get("transcript_results", "")))
+        annotation_path = row.get("transcript_metadata", "")
+        if annotation_path not in annotation_cache:
+            annotation_cache[annotation_path] = load_dtu_annotation_index(annotation_path)
+        annotation_index = annotation_cache.get(annotation_path, {})
+        source_rows = augment_dtu_preview_rows(
+            read_existing_tsv(row.get("source_results", "")),
+            annotation_index,
+        )
+        feature_rows = augment_dtu_preview_rows(
+            read_existing_tsv(row.get("transcript_results", "")),
+            annotation_index,
+        )
         previews = []
         if source_rows:
             previews.append(
@@ -934,13 +1129,9 @@ def dtu_splicing_detail_sections(rows: list[dict[str, str]], base_dir: Path) -> 
                     dtu_preview_columns(
                         source_rows,
                         [
-                            ("gene_display", "gene"),
-                            ("gene_symbol", "gene symbol"),
-                            ("gene_name", "gene name"),
-                            ("gene_id", "gene"),
-                            ("genomic_coordinates", "genomic coordinates"),
-                            ("coordinates", "genomic coordinates"),
-                            ("feature_display", "feature/event"),
+                            ("_dtu_gene_display", "gene"),
+                            ("_dtu_genomic_coordinates", "genomic coordinates"),
+                            ("_dtu_feature_display", "feature/event"),
                             ("feature_id", "feature/event"),
                             ("event_id", "event"),
                             ("event_type", "event type"),
@@ -967,13 +1158,9 @@ def dtu_splicing_detail_sections(rows: list[dict[str, str]], base_dir: Path) -> 
                     dtu_preview_columns(
                         feature_rows,
                         [
-                            ("gene_display", "gene"),
-                            ("gene_symbol", "gene symbol"),
-                            ("gene_name", "gene name"),
-                            ("gene_id", "gene"),
-                            ("genomic_coordinates", "genomic coordinates"),
-                            ("coordinates", "genomic coordinates"),
-                            ("feature_display", "feature/event"),
+                            ("_dtu_gene_display", "gene"),
+                            ("_dtu_genomic_coordinates", "genomic coordinates"),
+                            ("_dtu_feature_display", "feature/event"),
                             ("feature_id", "feature/event"),
                             ("event_id", "event"),
                             ("event_type", "event type"),
