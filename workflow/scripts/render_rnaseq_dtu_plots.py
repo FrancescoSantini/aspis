@@ -475,7 +475,7 @@ def svg_header(width: int, height: int) -> str:
 
 def render_overview_svg(path: Path, rows: list[dict[str, str]], alpha: float, max_points: int) -> None:
     scored = [(numeric_p(row), row) for row in rows]
-    scored = [(score, row) for score, row in scored if score is not None and score > 0]
+    scored = [(score, row) for score, row in scored if score is not None and score >= 0]
     scored.sort(key=lambda item: item[0])
     if max_points > 0:
         scored = scored[:max_points]
@@ -483,7 +483,8 @@ def render_overview_svg(path: Path, rows: list[dict[str, str]], alpha: float, ma
     left, right, top, bottom = 78, 28, 48, 72
     plot_w = width - left - right
     plot_h = height - top - bottom
-    ymax = max([-math.log10(score) for score, _row in scored], default=1.0)
+    plot_floor = 1e-300
+    ymax = max([-math.log10(max(score, plot_floor)) for score, _row in scored], default=1.0)
     ymax = max(1.0, math.ceil(ymax))
     n = max(1, len(scored))
     parts = [svg_header(width, height)]
@@ -497,7 +498,7 @@ def render_overview_svg(path: Path, rows: list[dict[str, str]], alpha: float, ma
     parts.append(f'<line class="axis" x1="{left}" y1="{top}" x2="{left}" y2="{top + plot_h}"/>\n')
     parts.append(f'<line class="axis" x1="{left}" y1="{top + plot_h}" x2="{left + plot_w}" y2="{top + plot_h}"/>\n')
     for idx, (score, row) in enumerate(scored, start=1):
-        yval = -math.log10(score)
+        yval = -math.log10(max(score, plot_floor))
         x = left + ((idx - 1) / max(1, n - 1) * plot_w)
         y = top + plot_h - (yval / ymax * plot_h)
         padj = safe_float(row.get("padj", ""))

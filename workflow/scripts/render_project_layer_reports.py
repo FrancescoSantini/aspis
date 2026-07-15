@@ -63,6 +63,7 @@ DROP_DTU_PREVIEW_COLUMNS = {
     "source_results",
     "transcript_results",
 }
+DTU_RAW_GENE_COLUMNS = {"gene", "GeneID", "gene_id", "gene_name", "geneName", "gene_symbol", "symbol"}
 
 
 def parse_float(value: str) -> float | None:
@@ -446,8 +447,15 @@ def dtu_preview_columns(rows: list[dict[str, str]], preferred: list[tuple[str, s
         return preferred[:max_columns]
     columns: list[tuple[str, str]] = []
     seen: set[str] = set()
+    seen_labels: set[str] = set()
+    has_gene_display = "gene_display" in rows[0] and bool(useful_values(rows, "gene_display"))
     for key, label in preferred:
         if key not in rows[0] or key in DROP_DTU_PREVIEW_COLUMNS or key in seen:
+            continue
+        if has_gene_display and key in DTU_RAW_GENE_COLUMNS:
+            continue
+        label_key = label.strip().lower()
+        if label_key in seen_labels:
             continue
         values = useful_values(rows, key)
         if not values:
@@ -460,6 +468,7 @@ def dtu_preview_columns(rows: list[dict[str, str]], preferred: list[tuple[str, s
             continue
         columns.append((key, label))
         seen.add(key)
+        seen_labels.add(label_key)
         if len(columns) >= max_columns:
             return columns
     for key in rows[0]:
@@ -467,13 +476,20 @@ def dtu_preview_columns(rows: list[dict[str, str]], preferred: list[tuple[str, s
             break
         if key in seen or key in DROP_DTU_PREVIEW_COLUMNS:
             continue
+        if has_gene_display and key in DTU_RAW_GENE_COLUMNS:
+            continue
         values = useful_values(rows, key)
         if not values or len(set(values)) <= 1:
             continue
         if key == "event_type":
             continue
-        columns.append((key, key.replace("_", " ")))
+        label = key.replace("_", " ")
+        label_key = label.strip().lower()
+        if label_key in seen_labels:
+            continue
+        columns.append((key, label))
         seen.add(key)
+        seen_labels.add(label_key)
     return columns[:max_columns]
 
 
