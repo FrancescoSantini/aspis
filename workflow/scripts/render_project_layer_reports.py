@@ -111,6 +111,16 @@ def preview_cell_value(key: str, value: str) -> str:
     return short_value(text)
 
 
+def compact_numeric(value: str) -> str:
+    text = (value or "").strip()
+    if text in {"", "-", "NA", "N/A", "nan", "NaN"}:
+        return "-"
+    parsed = parse_float(text)
+    if parsed is None:
+        return short_value(text, 32)
+    return f"{parsed:.4g}"
+
+
 def safe_token(value: str) -> str:
     token = "".join(ch if ch.isalnum() else "_" for ch in (value or "").strip()).strip("_")
     while "__" in token:
@@ -1129,7 +1139,9 @@ def render_contrast_summary(
                 f"<td>{html.escape(row_coordinates(row) or '-')}</td>"
                 f"<td>{html.escape(row_reference_context(row))}</td>"
                 f"<td><span class=\"status {html.escape(row.get('status', 'unknown') or 'unknown')}\">{html.escape(row.get('status', 'unknown') or 'unknown')}</span></td>"
-                f"<td>{html.escape(row_metrics(row))}</td>"
+                f"<td>{html.escape(compact_numeric(row.get('max_abs_dIF', '')))}</td>"
+                f"<td>{html.escape(compact_numeric(row.get('switch_in_dIF', '')))}</td>"
+                f"<td>{html.escape(compact_numeric(row.get('switch_out_dIF', '')))}</td>"
                 f"{asset_cell}"
                 "</tr>"
             )
@@ -1197,19 +1209,21 @@ def render_contrast_summary(
     .dtu-summary-table th:nth-child(2),.dtu-summary-table td:nth-child(2) {{ width:5rem; white-space:nowrap; }}
     .dtu-summary-table th:nth-child(3),.dtu-summary-table td:nth-child(3) {{ width:24rem; min-width:22rem; }}
     .dtu-summary-table th:nth-child(4),.dtu-summary-table td:nth-child(4) {{ max-width:26rem; }}
-    .event-summary-table th:nth-child(1),.event-summary-table td:nth-child(1) {{ width:9rem; min-width:8rem; white-space:nowrap; overflow-wrap:normal; }}
-    .event-summary-table th:nth-child(2),.event-summary-table td:nth-child(2) {{ width:10rem; min-width:8rem; white-space:nowrap; overflow-wrap:normal; }}
-    .event-summary-table th:nth-child(3),.event-summary-table td:nth-child(3) {{ width:15rem; min-width:13rem; }}
-    .event-summary-table th:nth-child(4),.event-summary-table td:nth-child(4) {{ width:18rem; min-width:16rem; }}
-    .event-summary-table th:nth-child(5),.event-summary-table td:nth-child(5) {{ width:5rem; white-space:nowrap; overflow-wrap:normal; }}
-    .event-summary-table th:nth-child(6),.event-summary-table td:nth-child(6) {{ width:28rem; min-width:24rem; overflow-wrap:break-word; word-break:normal; }}
-    .event-summary-table th:nth-child(7),.event-summary-table td:nth-child(7) {{ width:12rem; }}
+    .event-summary-table th:nth-child(1),.event-summary-table td:nth-child(1) {{ width:8rem; min-width:7rem; white-space:nowrap; overflow-wrap:normal; }}
+    .event-summary-table th:nth-child(2),.event-summary-table td:nth-child(2) {{ width:8rem; min-width:7rem; white-space:nowrap; overflow-wrap:normal; }}
+    .event-summary-table th:nth-child(3),.event-summary-table td:nth-child(3) {{ width:14rem; min-width:12rem; }}
+    .event-summary-table th:nth-child(4),.event-summary-table td:nth-child(4) {{ width:18rem; min-width:15rem; }}
+    .event-summary-table th:nth-child(5),.event-summary-table td:nth-child(5) {{ width:4rem; white-space:nowrap; overflow-wrap:normal; }}
+    .event-summary-table th:nth-child(6),.event-summary-table td:nth-child(6),
+    .event-summary-table th:nth-child(7),.event-summary-table td:nth-child(7),
+    .event-summary-table th:nth-child(8),.event-summary-table td:nth-child(8) {{ width:6rem; white-space:nowrap; overflow-wrap:normal; }}
+    .event-summary-table th:nth-child(9),.event-summary-table td:nth-child(9) {{ width:11rem; }}
     {report_map_css()}
     """
     layer_href = html.escape(os.path.relpath(layer_index.resolve(), start=base_dir.resolve()).replace(os.sep, "/"))
     shell = report_shell_open("Summary Map", map_items, base_dir)
     header = (
-        "<tr><th>gene</th><th>event</th><th>genomic coordinates</th><th>reference context</th><th>status</th><th>counts</th><th>event assets</th></tr>"
+        "<tr><th>gene</th><th>event</th><th>genomic coordinates</th><th>reference context</th><th>status</th><th>max abs dIF</th><th>switch-in dIF</th><th>switch-out dIF</th><th>event assets</th></tr>"
         if layer_key == "isoform_switch"
         else "<tr><th>analysis</th><th>status</th><th>counts</th><th>reason</th></tr>"
     )
@@ -1235,7 +1249,7 @@ def render_contrast_summary(
             '<h2>Switch events</h2>'
             f'<p class="muted">Rows are sorted by adjusted significance when available, then by absolute isoform-fraction change. Showing {min(len(displayed_rows), 50)} of {len(sorted_rows)} switch event(s).</p>'
             '<div class="table-scroll"><table class="event-summary-table"><thead>'
-            '<tr><th>gene</th><th>event</th><th>genomic coordinates</th><th>reference context</th><th>status</th><th>counts</th><th>event assets</th></tr>'
+            '<tr><th>gene</th><th>event</th><th>genomic coordinates</th><th>reference context</th><th>status</th><th>max abs dIF</th><th>switch-in dIF</th><th>switch-out dIF</th><th>event assets</th></tr>'
             f'</thead><tbody>{"".join(table_rows)}</tbody></table></div></section>'
         )
     summary_table = ""
