@@ -54,6 +54,15 @@ COUNT_FIELDS = [
 
 
 PLOT_ASSET_KINDS = {"plot"}
+DTU_METHOD_ORDER = {"DRIMSeq": 0, "DEXSeq": 1, "DEXSeqExon": 2, "SUPPA2": 3, "rMATS": 4}
+DROP_DTU_PREVIEW_COLUMNS = {
+    "project",
+    "method",
+    "contrast_id",
+    "source_file",
+    "source_results",
+    "transcript_results",
+}
 
 
 def parse_float(value: str) -> float | None:
@@ -286,7 +295,14 @@ def sort_layer_rows(layer_key: str, rows: list[dict[str, str]]) -> list[dict[str
                 display_gene(row),
             ),
         )
+    if layer_key == "dtu_splicing":
+        return sorted(rows, key=dtu_method_sort_key)
     return rows
+
+
+def dtu_method_sort_key(row: dict[str, str]) -> tuple[int, str]:
+    method = row.get("method", "")
+    return (DTU_METHOD_ORDER.get(method, 99), method)
 
 
 def html_preview_table(rows: list[dict[str, str]], columns: list[tuple[str, str]], max_rows: int = 50) -> str:
@@ -313,6 +329,43 @@ def preview_columns(rows: list[dict[str, str]], preferred: list[tuple[str, str]]
             break
         if key not in {column for column, _label in columns}:
             columns.append((key, key.replace("_", " ")))
+    return columns[:max_columns]
+
+
+def useful_values(rows: list[dict[str, str]], key: str) -> list[str]:
+    empty = {"", "-", "NA", "N/A", "nan", "NaN", "None", "none"}
+    return [row.get(key, "").strip() for row in rows if row.get(key, "").strip() not in empty]
+
+
+def dtu_preview_columns(rows: list[dict[str, str]], preferred: list[tuple[str, str]], max_columns: int = 8) -> list[tuple[str, str]]:
+    if not rows:
+        return preferred[:max_columns]
+    columns: list[tuple[str, str]] = []
+    seen: set[str] = set()
+    for key, label in preferred:
+        if key not in rows[0] or key in DROP_DTU_PREVIEW_COLUMNS or key in seen:
+            continue
+        values = useful_values(rows, key)
+        if not values:
+            continue
+        if key == "event_type" and len(set(values)) <= 1:
+            continue
+        if key == "log2FC" and all(value == "NA" for value in values):
+            continue
+        columns.append((key, label))
+        seen.add(key)
+        if len(columns) >= max_columns:
+            return columns
+    for key in rows[0]:
+        if len(columns) >= max_columns:
+            break
+        if key in seen or key in DROP_DTU_PREVIEW_COLUMNS:
+            continue
+        values = useful_values(rows, key)
+        if not values or len(set(values)) <= 1:
+            continue
+        columns.append((key, key.replace("_", " ")))
+        seen.add(key)
     return columns[:max_columns]
 
 
@@ -384,6 +437,26 @@ def plot_asset_figure(field: str, value: str, base_dir: Path, label_override: st
     return ""
 
 
+def split_asset_list(value: str) -> list[str]:
+    paths: list[str] = []
+    for item in str(value or "").split(";"):
+        item = item.strip()
+        if item and item not in paths:
+            paths.append(item)
+    return paths
+
+
+def plot_asset_figures(field: str, row: dict[str, str], base_dir: Path, label: str) -> list[str]:
+    values = split_asset_list(row.get(f"{field}_pages", "")) or split_asset_list(row.get(field, ""))
+    figures: list[str] = []
+    for index, value in enumerate(values, start=1):
+        caption = label if len(values) == 1 else f"{label} page {index}"
+        figure = plot_asset_figure(field, value, base_dir, caption)
+        if figure:
+            figures.append(figure)
+    return figures
+
+
 def asset_button_group(rows: list[dict[str, str]], layer_key: str, base_dir: Path, want_plots: bool) -> str:
     links = []
     seen: set[tuple[str, str]] = set()
@@ -439,14 +512,11 @@ def contrast_plot_sections(layer_key: str, rows: list[dict[str, str]], base_dir:
         return ""
     if layer_key == "dtu_splicing":
         method_sections = []
-        for row in rows:
+        for row in sort_layer_rows(layer_key, rows):
             figures = []
             for field in ["overview_plot", "usage_plot", "feature_plot"]:
-                value = row.get(field, "")
-                if value:
-                    figure = plot_asset_figure(field, value, base_dir)
-                    if figure:
-                        figures.append(figure)
+                label = field.replace("_", " ")
+                figures.extend(plot_asset_figures(field, row, base_dir, label))
             if figures:
                 method_sections.append(
                     '<section class="method-row">'
@@ -692,7 +762,7 @@ def dtu_splicing_detail_sections(rows: list[dict[str, str]], base_dir: Path) -> 
     if not rows:
         return ""
     sections: list[str] = []
-    for row in sorted(rows, key=lambda item: item.get("method", "")):
+    for row in sort_layer_rows("dtu_splicing", rows):
         method = row.get("method", "DTU/splicing")
         section_id = safe_token(method)
         figures = []
@@ -701,11 +771,7 @@ def dtu_splicing_detail_sections(rows: list[dict[str, str]], base_dir: Path) -> 
             ("usage_plot", "top genes or features detail"),
             ("feature_plot", "ranked candidates"),
         ]:
-            value = row.get(field, "")
-            if value:
-                figure = plot_asset_figure(field, value, base_dir, f"{method} {label}")
-                if figure:
-                    figures.append(figure)
+            figures.extend(plot_asset_figures(field, row, base_dir, f"{method} {label}"))
         source_rows = read_existing_tsv(row.get("source_results", ""))
         feature_rows = read_existing_tsv(row.get("transcript_results", ""))
         previews = []
@@ -714,7 +780,7 @@ def dtu_splicing_detail_sections(rows: list[dict[str, str]], base_dir: Path) -> 
                 dtu_preview_section(
                     f"{method} standardized candidates",
                     source_rows,
-                    preview_columns(
+                    dtu_preview_columns(
                         source_rows,
                         [
                             ("gene_display", "gene"),
@@ -741,7 +807,7 @@ def dtu_splicing_detail_sections(rows: list[dict[str, str]], base_dir: Path) -> 
                 dtu_preview_section(
                     f"{method} feature/event source rows",
                     feature_rows,
-                    preview_columns(
+                    dtu_preview_columns(
                         feature_rows,
                         [
                             ("gene_display", "gene"),
@@ -947,7 +1013,7 @@ def render_contrast_summary(
         map_items.append(report_map_item("Gene enrichment summary", "#gene"))
         map_items.append(report_map_item("Transcript enrichment summary", "#transcript"))
     elif layer_key == "dtu_splicing":
-        for row in sorted(rows, key=lambda item: item.get("method", "")):
+        for row in sort_layer_rows(layer_key, rows):
             method = row.get("method", "DTU/splicing")
             map_items.append(report_map_item(method, f"#{safe_token(method)}"))
     elif layer_key != "isoform_switch":
@@ -986,6 +1052,10 @@ def render_contrast_summary(
     .report-content {{ max-width:1280px; }}
     .table-scroll table {{ min-width:1040px; }}
     .table-scroll td,.table-scroll th {{ overflow-wrap:anywhere; }}
+    .dtu-summary-table th:nth-child(1),.dtu-summary-table td:nth-child(1) {{ width:8rem; white-space:nowrap; }}
+    .dtu-summary-table th:nth-child(2),.dtu-summary-table td:nth-child(2) {{ width:5rem; white-space:nowrap; }}
+    .dtu-summary-table th:nth-child(3),.dtu-summary-table td:nth-child(3) {{ width:14rem; }}
+    .dtu-summary-table th:nth-child(4),.dtu-summary-table td:nth-child(4) {{ max-width:38rem; }}
     {report_map_css()}
     """
     layer_href = html.escape(os.path.relpath(layer_index.resolve(), start=base_dir.resolve()).replace(os.sep, "/"))
@@ -1020,10 +1090,17 @@ def render_contrast_summary(
             '<tr><th>gene</th><th>event</th><th>genomic coordinates</th><th>reference context</th><th>status</th><th>counts</th><th>reason</th><th>event assets</th></tr>'
             f'</thead><tbody>{"".join(table_rows)}</tbody></table></div></section>'
         )
+    summary_table = ""
+    if layer_key != "isoform_switch":
+        table_class = "dtu-summary-table" if layer_key == "dtu_splicing" else ""
+        summary_table = (
+            f'<div class="table-scroll"><table class="{table_class}">'
+            f"<thead>{header}</thead><tbody>{''.join(table_rows)}</tbody></table></div>"
+        )
     page = f"""<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{html.escape(project)} - {html.escape(title)} - {html.escape(contrast)}</title><style>{css}</style></head><body>
     {shell}<nav class="breadcrumbs"><a href="../../../../../index.html">ASPIS run</a> / <a href="../../../index.html">{html.escape(project)}</a> / <a href="{layer_href}">{html.escape(title)}</a> / {html.escape(contrast)}</nav>
     <section class="panel" id="summary" data-report-nav-target="summary"><h1>{html.escape(title)} - <code>{html.escape(contrast)}</code></h1><p>{html.escape(description)}</p>
-    {'' if layer_key == 'isoform_switch' else f'<div class="table-scroll"><table><thead>{header}</thead><tbody>{"".join(table_rows)}</tbody></table></div>'}</section>
+    {summary_table}</section>
     {detail_sections}
     {report_shell_close()}{report_map_script()}</body></html>"""
     output.write_text(page, encoding="utf-8")

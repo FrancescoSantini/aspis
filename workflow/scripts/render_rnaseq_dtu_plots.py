@@ -24,6 +24,8 @@ COLUMNS = [
     "overview_plot",
     "usage_plot",
     "feature_plot",
+    "usage_plot_pages",
+    "feature_plot_pages",
     "n_standardized",
     "n_significant",
     "top_gene",
@@ -33,6 +35,9 @@ COLUMNS = [
     "plot_qa_reason",
     "plot_file_count",
 ]
+
+EXPANDED_TOP_N = 50
+PLOT_PAGE_SIZE = 20
 
 
 def parse_args() -> argparse.Namespace:
@@ -101,11 +106,20 @@ def svg_qa(path_text: str) -> tuple[bool, str]:
 
 
 def plot_qa_fields(row: dict[str, str]) -> dict[str, str]:
+    def listed_paths(*values: str) -> list[str]:
+        paths: list[str] = []
+        for value in values:
+            for item in str(value or "").split(";"):
+                item = item.strip()
+                if item and item not in paths:
+                    paths.append(item)
+        return paths
+
     checked = [
         ("overview", row.get("overview_plot", "")),
-        ("usage", row.get("usage_plot", "")),
-        ("feature", row.get("feature_plot", "")),
     ]
+    checked.extend((f"usage page {idx}", path) for idx, path in enumerate(listed_paths(row.get("usage_plot", ""), row.get("usage_plot_pages", "")), start=1))
+    checked.extend((f"feature page {idx}", path) for idx, path in enumerate(listed_paths(row.get("feature_plot", ""), row.get("feature_plot_pages", "")), start=1))
     present = [(label, path) for label, path in checked if path]
     failures = []
     for label, path in present:
@@ -968,6 +982,120 @@ def render_delta_psi_candidates_svg(path: Path, event_rows: list[dict[str, str]]
     )
 
 
+def page_path(first_path: Path, page_index: int) -> Path:
+    if page_index <= 0:
+        return first_path
+    return first_path.with_name(f"{first_path.stem}_page_{page_index + 1}{first_path.suffix}")
+
+
+def chunked(items: list, size: int) -> list[list]:
+    return [items[index : index + size] for index in range(0, len(items), max(1, size))]
+
+
+def write_ranked_effect_pages(
+    first_path: Path,
+    rows: list[dict[str, str]],
+    method: str,
+    value_column: str,
+    axis_label: str,
+    title: str,
+    subtitle: str,
+    total_n: int,
+    value_limit: float | None = None,
+    max_per_gene: int = 3,
+) -> list[str]:
+    selected = ranked_rows(rows, value_column, total_n, max_per_gene=max_per_gene)
+    paths: list[str] = []
+    for page_index, page_rows in enumerate(chunked(selected, PLOT_PAGE_SIZE)):
+        path = page_path(first_path, page_index)
+        if render_signed_effect_svg(
+            path,
+            page_rows,
+            method,
+            value_column,
+            axis_label,
+            title if page_index == 0 else f"{title} - page {page_index + 1}",
+            subtitle,
+            len(page_rows),
+            value_limit=value_limit,
+            max_per_gene=0,
+        ):
+            paths.append(str(path))
+    return paths
+
+
+def top_gene_pages(
+    rows: list[dict[str, str]],
+    value_column: str,
+    total_n: int,
+) -> tuple[list[list[dict[str, str]]], int, int]:
+    top_gene_count, top_features_per_gene = display_group_sizes(total_n)
+    gene_keys = top_gene_keys(rows, value_column, top_gene_count)
+    genes_per_page = max(1, PLOT_PAGE_SIZE // max(1, top_features_per_gene))
+    pages: list[list[dict[str, str]]] = []
+    for gene_chunk in chunked(gene_keys, genes_per_page):
+        gene_set = set(gene_chunk)
+        pages.append([
+            row
+            for row in rows
+            if (row.get("gene_id", "") or row.get("gene_name", "")) in gene_set
+        ])
+    return pages, genes_per_page, top_features_per_gene
+
+
+def write_usage_pages(
+    first_path: Path,
+    rows: list[dict[str, str]],
+    method_upper: str,
+    method_label: str,
+    total_n: int,
+) -> list[str]:
+    value_column = "log2_fold_change" if method_upper == "DEXSEQEXON" else "delta_psi" if method_upper in {"SUPPA2", "RMATS"} else "delta_usage"
+    pages, _genes_per_page, top_features_per_gene = top_gene_pages(rows, value_column, total_n)
+    paths: list[str] = []
+    for page_index, page_rows in enumerate(pages):
+        path = page_path(first_path, page_index)
+        title_suffix = "" if page_index == 0 else f" - page {page_index + 1}"
+        if method_upper == "DEXSEQEXON":
+            rendered = render_top_genes_signed_effect_svg(
+                path,
+                page_rows,
+                "DEXSeqExon",
+                "log2_fold_change",
+                "log2FC",
+                f"Top DEXSeqExon genes: exon-bin detail{title_suffix}",
+                "Top-ranked genes by adjusted p-value. Each row is one exon bin; blue is lower in test and red is higher.",
+                PLOT_PAGE_SIZE,
+                top_gene_count=max(1, len({row.get("gene_id", "") for row in page_rows})),
+                top_features_per_gene=top_features_per_gene,
+            )
+        elif method_upper in {"SUPPA2", "RMATS"}:
+            rendered = render_top_genes_signed_effect_svg(
+                path,
+                page_rows,
+                method_label,
+                "delta_psi",
+                "delta PSI",
+                f"Top {method_label} genes: event detail{title_suffix}",
+                "Top-ranked genes by adjusted p-value. Each row is one splicing event; blue is decreased inclusion in test and red is increased.",
+                PLOT_PAGE_SIZE,
+                value_limit=1.0,
+                top_gene_count=max(1, len({row.get("gene_id", "") for row in page_rows})),
+                top_features_per_gene=top_features_per_gene,
+            )
+        else:
+            rendered = render_top_genes_usage_svg(
+                path,
+                page_rows,
+                PLOT_PAGE_SIZE,
+                top_gene_count=max(1, len({row.get("gene_id", "") for row in page_rows})),
+                top_features_per_gene=top_features_per_gene,
+            )
+        if rendered:
+            paths.append(str(path))
+    return paths
+
+
 def plot_row(args: argparse.Namespace, row: dict[str, str]) -> dict[str, str]:
     project = row.get("project", "")
     method = row.get("method", "")
@@ -984,6 +1112,8 @@ def plot_row(args: argparse.Namespace, row: dict[str, str]) -> dict[str, str]:
         "overview_plot": str(outdir / "dtu_overview.svg"),
         "usage_plot": str(outdir / "top_usage.svg"),
         "feature_plot": str(outdir / "top_features.svg"),
+        "usage_plot_pages": "",
+        "feature_plot_pages": "",
         "n_standardized": "0",
         "n_significant": "0",
         "top_gene": "",
@@ -1022,52 +1152,69 @@ def plot_row(args: argparse.Namespace, row: dict[str, str]) -> dict[str, str]:
     if scored:
         output["top_padj"] = scored[0][1].get("padj", "") or scored[0][1].get("pvalue", "")
     render_overview_svg(Path(output["overview_plot"]), standardized, args.padj, args.max_points)
+    plot_top_n = max(args.top_n, EXPANDED_TOP_N)
     usage_path = Path(row.get("transcript_results", ""))
-    if top_gene and usage_path.is_file():
-        usage_rows = read_tsv(usage_path)
+    if top_gene and (usage_path.is_file() or method_upper == "DEXSEQEXON"):
+        usage_rows = standardized if method_upper == "DEXSEQEXON" else read_tsv(usage_path)
         hydrate_gene_display_rows(usage_rows, by_gene, by_transcript)
+        usage_pages = write_usage_pages(
+            Path(output["usage_plot"]),
+            usage_rows,
+            method_upper,
+            row.get("method", ""),
+            plot_top_n,
+        )
+        feature_pages: list[str] = []
         if method_upper in {"SUPPA2", "RMATS"}:
-            rendered = render_delta_psi_svg(
-                Path(output["usage_plot"]),
-                usage_rows,
-                top_gene,
-                args.top_n,
-                row.get("method", ""),
-                top_gene_count=args.top_gene_count,
-                top_features_per_gene=args.top_features_per_gene,
-            )
-            feature_rendered = render_delta_psi_candidates_svg(Path(output["feature_plot"]), standardized, args.top_n, row.get("method", ""))
-        elif method_upper == "DEXSEQEXON":
-            rendered = render_exon_bin_effect_svg(
-                Path(output["usage_plot"]),
+            feature_pages = write_ranked_effect_pages(
+                Path(output["feature_plot"]),
                 standardized,
-                top_gene,
-                args.top_n,
-                top_gene_count=args.top_gene_count,
-                top_features_per_gene=args.top_features_per_gene,
+                row.get("method", ""),
+                "delta_psi",
+                "delta PSI",
+                f"Ranked {row.get('method', '')} event candidates",
+                "Individual splicing events ranked across genes by adjusted p-value, with at most three events shown per gene.",
+                plot_top_n,
+                value_limit=1.0,
             )
-            feature_rendered = render_exon_bin_candidates_svg(Path(output["feature_plot"]), standardized, args.top_n)
+        elif method_upper == "DEXSEQEXON":
+            feature_pages = write_ranked_effect_pages(
+                Path(output["feature_plot"]),
+                standardized,
+                "DEXSeqExon",
+                "log2_fold_change",
+                "log2FC",
+                "Ranked DEXSeqExon exon-bin candidates",
+                "Individual exon bins ranked across genes by adjusted p-value, with at most three bins shown per gene.",
+                plot_top_n,
+            )
+        elif method_upper == "DRIMSEQ":
+            output["reason"] = (
+                "DRIMSeq reports gene-level significance; the top-gene detail plot "
+                "shows transcript-usage proportions, but no separate ranked "
+                "transcript-feature candidate plot is generated."
+            )
         else:
-            rendered = render_usage_svg(
-                Path(output["usage_plot"]),
+            feature_pages = write_ranked_effect_pages(
+                Path(output["feature_plot"]),
                 usage_rows,
-                top_gene,
-                args.top_n,
-                top_gene_count=args.top_gene_count,
-                top_features_per_gene=args.top_features_per_gene,
+                "DEXSeq",
+                "delta_usage",
+                "delta usage",
+                "Ranked transcript-usage candidates",
+                "Individual transcript features ranked across genes by adjusted p-value, with at most three features shown per gene.",
+                plot_top_n,
+                value_limit=1.0,
             )
-            if method_upper == "DRIMSEQ":
-                feature_rendered = False
-                output["reason"] = (
-                    "DRIMSeq reports gene-level significance; the top-gene detail plot "
-                    "shows transcript-usage proportions, but no separate ranked "
-                    "transcript-feature candidate plot is generated."
-                )
-            else:
-                feature_rendered = render_usage_candidates_svg(Path(output["feature_plot"]), usage_rows, args.top_n)
-        if not rendered:
+        if usage_pages:
+            output["usage_plot"] = usage_pages[0]
+            output["usage_plot_pages"] = ";".join(usage_pages)
+        else:
             output["usage_plot"] = ""
-        if not feature_rendered:
+        if feature_pages:
+            output["feature_plot"] = feature_pages[0]
+            output["feature_plot_pages"] = ";".join(feature_pages)
+        else:
             output["feature_plot"] = ""
     else:
         output["usage_plot"] = ""
