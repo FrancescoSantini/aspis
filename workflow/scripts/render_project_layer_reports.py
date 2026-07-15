@@ -81,10 +81,32 @@ def short_value(value: str, limit: int = 220) -> str:
 
 def preview_cell_value(key: str, value: str) -> str:
     text = (value or "").strip()
-    if key.lower() in {"padj", "pvalue", "p-value", "p_value", "fdr", "qvalue"}:
+    lower_key = key.lower().replace("-", "_").replace(" ", "_")
+    pvalue_keys = {"padj", "pvalue", "p_value", "fdr", "qvalue", "fdr_p_value"}
+    numeric_keys = pvalue_keys | {
+        "statistic",
+        "test_statistic",
+        "score",
+        "delta_usage",
+        "delta_psi",
+        "incleveldifference",
+        "log2fc",
+        "log2_fold_change",
+        "mean_usage_control",
+        "mean_usage_test",
+        "mean_count_control",
+        "mean_count_test",
+    }
+    if lower_key in pvalue_keys:
         parsed = parse_float(text)
         if parsed == 0.0 and text not in {"", "-", "NA", "N/A", "nan", "NaN"}:
             return "<1e-300"
+        if parsed is not None and text not in {"", "-", "NA", "N/A", "nan", "NaN"}:
+            return f"{parsed:.4g}"
+    if lower_key in numeric_keys:
+        parsed = parse_float(text)
+        if parsed is not None and text not in {"", "-", "NA", "N/A", "nan", "NaN"}:
+            return f"{parsed:.4g}"
     return short_value(text)
 
 
