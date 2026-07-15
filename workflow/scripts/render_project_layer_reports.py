@@ -79,6 +79,15 @@ def short_value(value: str, limit: int = 220) -> str:
     return text[: max(0, limit - 1)].rstrip() + "..."
 
 
+def preview_cell_value(key: str, value: str) -> str:
+    text = (value or "").strip()
+    if key.lower() in {"padj", "pvalue", "p-value", "p_value", "fdr", "qvalue"}:
+        parsed = parse_float(text)
+        if parsed == 0.0 and text not in {"", "-", "NA", "N/A", "nan", "NaN"}:
+            return "<1e-300"
+    return short_value(text)
+
+
 def safe_token(value: str) -> str:
     token = "".join(ch if ch.isalnum() else "_" for ch in (value or "").strip()).strip("_")
     while "__" in token:
@@ -312,7 +321,7 @@ def html_preview_table(rows: list[dict[str, str]], columns: list[tuple[str, str]
     for row in rows[:max_rows]:
         cells = []
         for key, label in columns:
-            cells.append(f"<td>{html.escape(short_value(row.get(key, '')))}</td>")
+            cells.append(f"<td>{html.escape(preview_cell_value(key, row.get(key, '')))}</td>")
         body.append("<tr>" + "".join(cells) + "</tr>")
     head = "".join(f"<th>{html.escape(label)}</th>" for _, label in columns)
     note = f'<p class="muted">Showing first {min(len(rows), max_rows)} of {len(rows)} row(s).</p>' if len(rows) > max_rows else ""
@@ -335,6 +344,79 @@ def preview_columns(rows: list[dict[str, str]], preferred: list[tuple[str, str]]
 def useful_values(rows: list[dict[str, str]], key: str) -> list[str]:
     empty = {"", "-", "NA", "N/A", "nan", "NaN", "None", "none"}
     return [row.get(key, "").strip() for row in rows if row.get(key, "").strip() not in empty]
+
+
+def first_value(row: dict[str, str], keys: list[str]) -> str:
+    for key in keys:
+        value = row.get(key, "").strip()
+        if value and value not in {"-", "NA", "N/A", "nan", "NaN", "None", "none"}:
+            return value
+    return ""
+
+
+def numeric_coordinate_values(row: dict[str, str]) -> list[int]:
+    coordinate_keys = [
+        "start",
+        "end",
+        "genomic_start",
+        "genomic_end",
+        "exonStart_0base",
+        "exonEnd",
+        "upstreamES",
+        "upstreamEE",
+        "downstreamES",
+        "downstreamEE",
+        "longExonStart_0base",
+        "longExonEnd",
+        "shortES",
+        "shortEE",
+        "riExonStart_0base",
+        "riExonEnd",
+        "flankingES",
+        "flankingEE",
+    ]
+    values: list[int] = []
+    for key in coordinate_keys:
+        raw = row.get(key, "").strip()
+        if not raw:
+            continue
+        try:
+            values.append(int(float(raw)))
+        except ValueError:
+            continue
+    return values
+
+
+def synthesize_genomic_coordinates(row: dict[str, str]) -> str:
+    existing = first_value(row, ["genomic_coordinates", "coordinates", "coordinate", "location"])
+    if existing:
+        return existing
+    chrom = first_value(row, ["chromosome", "chr", "seqname", "chrom", "reference_name"])
+    values = numeric_coordinate_values(row)
+    if not chrom or len(values) < 2:
+        return ""
+    strand = first_value(row, ["strand"])
+    suffix = f" ({strand})" if strand else ""
+    return f"{chrom}:{min(values)}-{max(values)}{suffix}"
+
+
+def augment_dtu_preview_rows(rows: list[dict[str, str]]) -> list[dict[str, str]]:
+    augmented: list[dict[str, str]] = []
+    for row in rows:
+        copy = dict(row)
+        gene_id = first_value(copy, ["gene_id", "gene", "GeneID"])
+        gene_name = first_value(copy, ["gene_display", "gene_symbol", "gene_name", "geneName", "symbol"])
+        if gene_name and gene_id and gene_name != gene_id:
+            copy.setdefault("gene_display", f"{gene_name} ({gene_id})")
+        elif gene_name:
+            copy.setdefault("gene_display", gene_name)
+        elif gene_id:
+            copy.setdefault("gene_display", gene_id)
+        coordinates = synthesize_genomic_coordinates(copy)
+        if coordinates:
+            copy.setdefault("genomic_coordinates", coordinates)
+        augmented.append(copy)
+    return augmented
 
 
 def dtu_preview_columns(rows: list[dict[str, str]], preferred: list[tuple[str, str]], max_columns: int = 8) -> list[tuple[str, str]]:
@@ -776,8 +858,8 @@ def dtu_splicing_detail_sections(rows: list[dict[str, str]], base_dir: Path) -> 
             ("feature_plot", "ranked candidates"),
         ]:
             figures.extend(plot_asset_figures(field, row, base_dir, f"{method} {label}"))
-        source_rows = read_existing_tsv(row.get("source_results", ""))
-        feature_rows = read_existing_tsv(row.get("transcript_results", ""))
+        source_rows = augment_dtu_preview_rows(read_existing_tsv(row.get("source_results", "")))
+        feature_rows = augment_dtu_preview_rows(read_existing_tsv(row.get("transcript_results", "")))
         previews = []
         if source_rows:
             previews.append(
@@ -789,6 +871,7 @@ def dtu_splicing_detail_sections(rows: list[dict[str, str]], base_dir: Path) -> 
                         [
                             ("gene_display", "gene"),
                             ("gene_symbol", "gene symbol"),
+                            ("gene_name", "gene name"),
                             ("gene_id", "gene"),
                             ("genomic_coordinates", "genomic coordinates"),
                             ("coordinates", "genomic coordinates"),
@@ -821,6 +904,7 @@ def dtu_splicing_detail_sections(rows: list[dict[str, str]], base_dir: Path) -> 
                         [
                             ("gene_display", "gene"),
                             ("gene_symbol", "gene symbol"),
+                            ("gene_name", "gene name"),
                             ("gene_id", "gene"),
                             ("genomic_coordinates", "genomic coordinates"),
                             ("coordinates", "genomic coordinates"),
@@ -1075,11 +1159,12 @@ def render_contrast_summary(
     .dtu-summary-table th:nth-child(2),.dtu-summary-table td:nth-child(2) {{ width:5rem; white-space:nowrap; }}
     .dtu-summary-table th:nth-child(3),.dtu-summary-table td:nth-child(3) {{ width:24rem; min-width:22rem; }}
     .dtu-summary-table th:nth-child(4),.dtu-summary-table td:nth-child(4) {{ max-width:26rem; }}
-    .event-summary-table th:nth-child(1),.event-summary-table td:nth-child(1) {{ width:10rem; min-width:9rem; white-space:nowrap; overflow-wrap:normal; }}
-    .event-summary-table th:nth-child(2),.event-summary-table td:nth-child(2) {{ width:18rem; min-width:16rem; white-space:nowrap; overflow-wrap:normal; }}
-    .event-summary-table th:nth-child(3),.event-summary-table td:nth-child(3) {{ width:16rem; }}
-    .event-summary-table th:nth-child(4),.event-summary-table td:nth-child(4) {{ min-width:20rem; }}
+    .event-summary-table th:nth-child(1),.event-summary-table td:nth-child(1) {{ width:9rem; min-width:8rem; white-space:nowrap; overflow-wrap:normal; }}
+    .event-summary-table th:nth-child(2),.event-summary-table td:nth-child(2) {{ width:10rem; min-width:8rem; white-space:nowrap; overflow-wrap:normal; }}
+    .event-summary-table th:nth-child(3),.event-summary-table td:nth-child(3) {{ width:15rem; min-width:13rem; }}
+    .event-summary-table th:nth-child(4),.event-summary-table td:nth-child(4) {{ width:18rem; min-width:16rem; }}
     .event-summary-table th:nth-child(5),.event-summary-table td:nth-child(5) {{ width:5rem; white-space:nowrap; overflow-wrap:normal; }}
+    .event-summary-table th:nth-child(6),.event-summary-table td:nth-child(6) {{ width:28rem; min-width:24rem; overflow-wrap:break-word; word-break:normal; }}
     .event-summary-table th:nth-child(7),.event-summary-table td:nth-child(7) {{ width:12rem; }}
     {report_map_css()}
     """
