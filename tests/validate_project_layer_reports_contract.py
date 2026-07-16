@@ -38,6 +38,7 @@ def main() -> int:
         small = branch / "smallrna" / project / "smallrna"
         table = tmp / "assets/results.tsv"
         plot = tmp / "assets/plot.svg"
+        plot_page_2 = tmp / "assets/plot_page_2.svg"
         page = tmp / "assets/detail.html"
         write_tsv(
             table,
@@ -69,6 +70,7 @@ def main() -> int:
         )
         plot.parent.mkdir(parents=True, exist_ok=True)
         plot.write_text('<svg xmlns="http://www.w3.org/2000/svg" width="400" height="200"><text x="20" y="40">plot</text></svg>', encoding="utf-8")
+        plot_page_2.write_text('<svg xmlns="http://www.w3.org/2000/svg" width="400" height="200"><text x="20" y="40">plot page 2</text></svg>', encoding="utf-8")
         page.write_text("<html><body>detail</body></html>", encoding="utf-8")
         contrast = "treated_vs_control"
         common = {"project": project, "contrast_id": contrast, "status": "ok", "reason": ""}
@@ -89,7 +91,7 @@ def main() -> int:
         write_tsv(
             rnaseq / "differential/dtu/plots/dtu_plot_manifest.tsv",
             [
-                {**common, "method": "DRIMSeq", "source_results": str(table), "transcript_metadata": str(transcript_metadata), "annotation_gtf": str(annotation_gtf), "overview_plot": str(plot), "n_standardized": "10", "n_significant": "1"},
+                {**common, "method": "DRIMSeq", "source_results": str(table), "transcript_metadata": str(transcript_metadata), "annotation_gtf": str(annotation_gtf), "overview_plot": str(plot), "usage_plot": str(plot), "usage_plot_pages": f"{plot};{plot_page_2}", "n_standardized": "10", "n_significant": "1"},
                 {**common, "method": "DEXSeq", "source_results": str(table), "transcript_metadata": str(transcript_metadata), "annotation_gtf": str(annotation_gtf), "overview_plot": str(plot), "n_standardized": "10", "n_significant": "1"},
                 {**common, "method": "DEXSeqExon", "source_results": str(table), "transcript_metadata": str(transcript_metadata), "annotation_gtf": str(annotation_gtf), "overview_plot": str(plot), "n_standardized": "10", "n_significant": "1"},
             ],
@@ -195,6 +197,9 @@ def main() -> int:
             else:
                 assert "Tables and pages" in summary_text
             assert (layer_html.parent / "source_asset_manifest.tsv").exists()
+            if row["layer_key"] == "dtu_splicing":
+                asset_manifest_text = (layer_html.parent / "source_asset_manifest.tsv").read_text(encoding="utf-8")
+                assert str(plot_page_2) in asset_manifest_text
 
         if importlib.util.find_spec("reportlab") is None or importlib.util.find_spec("pypdf") is None:
             return 0

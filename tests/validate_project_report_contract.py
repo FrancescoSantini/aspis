@@ -100,12 +100,16 @@ def main() -> int:
         filtered_table = tmp / "tables" / "filtered.tsv"
         dtu_table = tmp / "tables" / "dtu_consensus.tsv"
         plot_svg = tmp / "plots" / "plot.svg"
+        plot_page_2 = tmp / "plots" / "plot_page_2.svg"
+        plot_page_3 = tmp / "plots" / "plot_page_3.svg"
         event_html = tmp / "plots" / "event.html"
         write_tsv(result_table, [{"feature_id": "geneA", "log2FoldChange": "1.2", "padj": "0.01"}])
         write_tsv(filtered_table, [{"feature_id": "geneA", "log2FoldChange": "1.2", "padj": "0.01"}])
         write_tsv(dtu_table, [{"gene_id": "geneA", "method": "DRIMSeq", "padj": "0.01"}])
         plot_svg.parent.mkdir(parents=True, exist_ok=True)
         plot_svg.write_text("<svg></svg>", encoding="utf-8")
+        plot_page_2.write_text("<svg></svg>", encoding="utf-8")
+        plot_page_3.write_text("<svg></svg>", encoding="utf-8")
         event_html.write_text("<html><body>event</body></html>", encoding="utf-8")
         summary_html = tmp / "tables" / "summary.html"
         summary_html.write_text("<html><body>summary</body></html>", encoding="utf-8")
@@ -219,6 +223,8 @@ def main() -> int:
                     "overview_plot": plot_svg.as_posix(),
                     "usage_plot": plot_svg.as_posix(),
                     "feature_plot": plot_svg.as_posix(),
+                    "usage_plot_pages": ";".join([plot_svg.as_posix(), plot_page_2.as_posix(), plot_page_3.as_posix()]),
+                    "feature_plot_pages": "",
                     "n_standardized": "12",
                     "n_significant": "2",
                     "top_gene": "geneA",
@@ -458,6 +464,18 @@ def main() -> int:
         if importlib.util.find_spec("reportlab") is None or importlib.util.find_spec("pypdf") is None:
             print("project report PDF contract skipped: missing reportlab or pypdf")
             return 0
+
+        sys.path.insert(0, str(repo / "workflow" / "scripts"))
+        import render_technical_pdf_report as technical_pdf
+
+        expanded_assets = technical_pdf.expand_manifest_assets(
+            technical_pdf.read_tsv(rnaseq / "differential" / "reports" / "asset_manifest.tsv")
+        )
+        expanded_plot_paths = {
+            row["path"] for row in expanded_assets if row.get("asset_kind") == "plot"
+        }
+        assert plot_page_2.as_posix() in expanded_plot_paths
+        assert plot_page_3.as_posix() in expanded_plot_paths
 
         run(
             [

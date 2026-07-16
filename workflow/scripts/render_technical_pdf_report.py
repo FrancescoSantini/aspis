@@ -253,6 +253,11 @@ NESTED_PLOT_COLUMNS = [
     ("plots_pdf", "plots PDF"),
 ]
 
+NESTED_PLOT_LIST_COLUMNS = [
+    ("usage_plot_pages", "usage plot"),
+    ("feature_plot_pages", "feature plot"),
+]
+
 NESTED_TABLE_COLUMNS = [
     ("source_results", "source results"),
     ("transcript_results", "feature/event table"),
@@ -1120,6 +1125,7 @@ def nested_asset_row(
 def expand_manifest_assets(assets: list[dict[str, str]]) -> list[dict[str, str]]:
     expanded = list(assets)
     seen = {asset_identity(row) for row in expanded}
+    seen_plot_paths = {row.get("path", "") for row in expanded if row.get("asset_kind", "") == "plot"}
     for parent in assets:
         if parent.get("asset_kind", "") != "manifest":
             continue
@@ -1136,6 +1142,24 @@ def expand_manifest_assets(assets: list[dict[str, str]]) -> list[dict[str, str]]
                 if identity not in seen:
                     expanded.append(row)
                     seen.add(identity)
+                    seen_plot_paths.add(path_text)
+            for column, label in NESTED_PLOT_LIST_COLUMNS:
+                paths = [item.strip() for item in nested.get(column, "").split(";") if item.strip()]
+                for page_number, path_text in enumerate(paths, start=1):
+                    if path_text in seen_plot_paths or path_if_exists(path_text) is None:
+                        continue
+                    row = nested_asset_row(
+                        parent,
+                        nested,
+                        column_label=f"{label} page {page_number}",
+                        kind="plot",
+                        path_text=path_text,
+                    )
+                    identity = asset_identity(row)
+                    if identity not in seen:
+                        expanded.append(row)
+                        seen.add(identity)
+                        seen_plot_paths.add(path_text)
             for column, label in NESTED_TABLE_COLUMNS:
                 path_text = nested.get(column, "")
                 if not path_text or path_if_exists(path_text) is None:
@@ -1558,7 +1582,13 @@ def render_project_report(args: argparse.Namespace) -> int:
 
     if assets:
         log_step("building selected asset PDF sections")
-        draw_selected_asset_plots(story, assets, styles, vector_pdf_placements, args.max_asset_rows)
+        draw_selected_asset_plots(
+            story,
+            assets,
+            styles,
+            vector_pdf_placements,
+            0 if args.layer_key else args.max_asset_rows,
+        )
         draw_selected_asset_tables(story, assets, styles, args.top_table_rows, args.max_asset_rows)
         draw_asset_inventory(story, assets, styles, args.max_asset_rows)
 

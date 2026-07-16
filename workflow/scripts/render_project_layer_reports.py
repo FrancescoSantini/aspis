@@ -239,25 +239,28 @@ def prepared_assets(project: str, layer_key: str, rows: list[dict[str, str]]) ->
             value = row.get(field, "")
             if not value:
                 continue
-            key = (contrast, field, value)
-            if key in seen:
-                continue
-            seen.add(key)
-            path = absolute_path(value)
-            assets.append(
-                {
-                    "project": project,
-                    "assay": "smallrna" if layer_key in {"smallrna_de", "mirna_targets", "matched_mirna_mrna"} else "rnaseq",
-                    "level": row.get("level", "") or layer_key,
-                    "contrast_id": contrast,
-                    "status": row.get("status", "") or "unknown",
-                    "asset_group": layer_key,
-                    "asset_label": f"{row.get('analysis', row.get('method', row.get('level', layer_key)))} {field}".strip(),
-                    "asset_kind": asset_kind(field, path),
-                    "path": value,
-                    "exists": "true" if path.exists() else "false",
-                }
-            )
+            values = split_asset_list(row.get(f"{field}_pages", "")) or [value]
+            for page_number, page_value in enumerate(values, start=1):
+                key = (contrast, field, page_value)
+                if key in seen:
+                    continue
+                seen.add(key)
+                path = absolute_path(page_value)
+                page_suffix = f" page {page_number}" if len(values) > 1 else ""
+                assets.append(
+                    {
+                        "project": project,
+                        "assay": "smallrna" if layer_key in {"smallrna_de", "mirna_targets", "matched_mirna_mrna"} else "rnaseq",
+                        "level": row.get("level", "") or layer_key,
+                        "contrast_id": contrast,
+                        "status": row.get("status", "") or "unknown",
+                        "asset_group": layer_key,
+                        "asset_label": f"{row.get('analysis', row.get('method', row.get('level', layer_key)))} {field}{page_suffix}".strip(),
+                        "asset_kind": asset_kind(field, path),
+                        "path": page_value,
+                        "exists": "true" if path.exists() else "false",
+                    }
+                )
     return assets
 
 
