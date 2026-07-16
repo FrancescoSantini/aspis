@@ -39,7 +39,22 @@ def main() -> int:
         table = tmp / "assets/results.tsv"
         plot = tmp / "assets/plot.svg"
         page = tmp / "assets/detail.html"
-        write_tsv(table, [{"feature_id": "geneA", "padj": "0.01"}])
+        write_tsv(table, [{"gene_id": "MSTRG.42", "feature_id": "txA", "padj": "0.01"}])
+        transcript_metadata = tmp / "assets/transcript_metadata.tsv"
+        write_tsv(
+            transcript_metadata,
+            [
+                {
+                    "transcript_id": "txA",
+                    "gene_id": "MSTRG.42",
+                    "gene_name": "GENEA",
+                    "Chr": "chr1",
+                    "Start": "100",
+                    "End": "250",
+                    "Strand": "+",
+                }
+            ],
+        )
         plot.parent.mkdir(parents=True, exist_ok=True)
         plot.write_text('<svg xmlns="http://www.w3.org/2000/svg" width="400" height="200"><text x="20" y="40">plot</text></svg>', encoding="utf-8")
         page.write_text("<html><body>detail</body></html>", encoding="utf-8")
@@ -59,7 +74,7 @@ def main() -> int:
                 {**common, "level": "transcript", "feature_set_results": str(table), "ranked_feature_set_results": str(table), "feature_set_plot": str(plot), "ranked_feature_set_plot": str(plot), "n_feature_set_terms": "3", "n_ranked_feature_set_terms": "5"},
             ],
         )
-        write_tsv(rnaseq / "differential/dtu/plots/dtu_plot_manifest.tsv", [{**common, "method": "DRIMSeq", "source_results": str(table), "overview_plot": str(plot), "n_standardized": "10", "n_significant": "1"}])
+        write_tsv(rnaseq / "differential/dtu/plots/dtu_plot_manifest.tsv", [{**common, "method": "DRIMSeq", "source_results": str(table), "transcript_metadata": str(transcript_metadata), "overview_plot": str(plot), "n_standardized": "10", "n_significant": "1"}])
         write_tsv(
             rnaseq / "differential/isoform_switch/report/switch_event_summary.tsv",
             [
@@ -130,6 +145,9 @@ def main() -> int:
                 assert "DRIMSeq" in summary_text
                 assert "standardized candidates" in summary_text
                 assert "significance overview" in summary_text
+                assert "GENEA (MSTRG.42)" in summary_text
+                assert "chr1:100-250 (+)" in summary_text
+                assert "gene display" not in summary_text
             else:
                 assert "Tables and pages" in summary_text
             assert (layer_html.parent / "source_asset_manifest.tsv").exists()

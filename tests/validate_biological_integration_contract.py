@@ -453,12 +453,16 @@ def exercise_biotype_and_dtu(paths: dict[str, Path]) -> None:
     )
     dtu_plot_rows = read_tsv(
         dtu_dir / "plots" / "dtu_plot_manifest.tsv",
-        {"method", "status", "reason", "overview_plot", "usage_plot", "feature_plot", "plot_qa_status", "plot_file_count"},
+        {"method", "status", "reason", "transcript_metadata", "annotation_gtf", "overview_plot", "usage_plot", "feature_plot", "plot_qa_status", "plot_file_count"},
     )
     if dtu_plot_rows[0]["status"] != "ok":
         raise ValueError(f"DTU plot rendering was not ok: {dtu_plot_rows}")
     if dtu_plot_rows[0]["plot_qa_status"] != "ok" or int(dtu_plot_rows[0]["plot_file_count"]) < 2:
         raise ValueError(f"DTU plot QA did not confirm rendered SVGs: {dtu_plot_rows}")
+    if dtu_plot_rows[0]["transcript_metadata"] != drimseq_rows[0]["transcript_metadata"]:
+        raise ValueError(f"DTU plot manifest lost transcript metadata provenance: {dtu_plot_rows}")
+    if dtu_plot_rows[0]["annotation_gtf"] != drimseq_rows[0]["annotation_gtf"]:
+        raise ValueError(f"DTU plot manifest lost annotation GTF provenance: {dtu_plot_rows}")
     if (
         not dtu_plot_rows[0]["overview_plot"]
         or not Path(dtu_plot_rows[0]["overview_plot"]).exists()
