@@ -64,6 +64,17 @@ DROP_DTU_PREVIEW_COLUMNS = {
     "transcript_results",
 }
 DTU_RAW_GENE_COLUMNS = {"gene", "GeneID", "gene_id", "gene_name", "geneName", "gene_symbol", "symbol"}
+DTU_REDUNDANT_PREVIEW_COLUMNS = DTU_RAW_GENE_COLUMNS | {
+    "gene_display",
+    "feature_display",
+    "feature_id",
+    "event_id",
+    "event",
+    "transcript_id",
+    "transcript",
+    "isoform_id",
+}
+DTU_NOWRAP_PREVIEW_COLUMNS = {"_dtu_gene_symbol", "_dtu_gene_id", "_dtu_locus", "_dtu_feature_display"}
 DTU_EMPTY_VALUES = {"", "-", "NA", "N/A", "nan", "NaN", "None", "none"}
 DTU_ID_RE = re.compile(r"(ENS(?:G|T)\d+(?:\.\d+)?|MSTRG\.\d+(?:\.\d+)?)")
 DTU_GENE_ID_KEYS = ["gene_id", "gene", "GeneID", "geneID", "geneid", "geneId"]
@@ -356,18 +367,26 @@ def dtu_method_sort_key(row: dict[str, str]) -> tuple[int, str]:
     return (DTU_METHOD_ORDER.get(method, 99), method)
 
 
-def html_preview_table(rows: list[dict[str, str]], columns: list[tuple[str, str]], max_rows: int = 50) -> str:
+def html_preview_table(
+    rows: list[dict[str, str]],
+    columns: list[tuple[str, str]],
+    max_rows: int = 50,
+    table_class: str = "",
+    nowrap_keys: set[str] | None = None,
+) -> str:
     if not rows:
         return '<p class="muted">No rows available.</p>'
     body = []
     for row in rows[:max_rows]:
         cells = []
         for key, label in columns:
-            cells.append(f"<td>{html.escape(preview_cell_value(key, row.get(key, '')))}</td>")
+            cell_class = ' class="dtu-nowrap"' if key in (nowrap_keys or set()) else ""
+            cells.append(f"<td{cell_class}>{html.escape(preview_cell_value(key, row.get(key, '')))}</td>")
         body.append("<tr>" + "".join(cells) + "</tr>")
     head = "".join(f"<th>{html.escape(label)}</th>" for _, label in columns)
     note = f'<p class="muted">Showing first {min(len(rows), max_rows)} of {len(rows)} row(s).</p>' if len(rows) > max_rows else ""
-    return f'{note}<div class="table-scroll"><table><thead><tr>{head}</tr></thead><tbody>{"".join(body)}</tbody></table></div>'
+    class_attr = f' class="{html.escape(table_class)}"' if table_class else ""
+    return f'{note}<div class="table-scroll"><table{class_attr}><thead><tr>{head}</tr></thead><tbody>{"".join(body)}</tbody></table></div>'
 
 
 def preview_columns(rows: list[dict[str, str]], preferred: list[tuple[str, str]], max_columns: int = 8) -> list[tuple[str, str]]:
@@ -425,33 +444,6 @@ def dtu_gene_root(value: str) -> str:
     return text
 
 
-def dtu_row_ids(row: dict[str, str]) -> list[str]:
-    keys = [
-        "gene_display",
-        "gene",
-        "gene_id",
-        "GeneID",
-        "gene_name",
-        "gene_symbol",
-        "feature_display",
-        "feature_id",
-        "event_id",
-        "event",
-        "transcript_id",
-        "transcript",
-        "isoform_id",
-    ]
-    ids: list[str] = []
-    for key in keys:
-        for match in DTU_ID_RE.findall(row.get(key, "")):
-            normalized = normalize_dtu_id(match)
-            root = dtu_gene_root(normalized)
-            for candidate in [normalized, root]:
-                if candidate and candidate not in ids:
-                    ids.append(candidate)
-    return ids
-
-
 def dtu_coordinate_entry(row: dict[str, str]) -> dict[str, str]:
     gene_id = normalize_dtu_id(first_value(row, DTU_GENE_ID_KEYS))
     transcript_id = normalize_dtu_id(first_value(row, DTU_TRANSCRIPT_ID_KEYS))
@@ -461,7 +453,7 @@ def dtu_coordinate_entry(row: dict[str, str]) -> dict[str, str]:
     chrom = first_value(row, DTU_CHROM_KEYS)
     start = first_int_value(row, DTU_START_KEYS)
     end = first_int_value(row, DTU_END_KEYS)
-    strand = first_value(row, DTU_STRAND_KEYS)
+    strand = next((row.get(key, "").strip() for key in DTU_STRAND_KEYS if row.get(key, "").strip() in {"+", "-"}), "")
     coordinates = ""
     if chrom and start and end:
         suffix = f" ({strand})" if strand else ""
@@ -501,7 +493,11 @@ def merge_dtu_annotation(existing: dict[str, str], new: dict[str, str]) -> dict[
     return merged
 
 
-def load_dtu_annotation_index(transcript_metadata: str) -> dict[str, dict[str, str]]:
+def parse_gtf_attributes(text: str) -> dict[str, str]:
+    return {key: value for key, value in re.findall(r'(\S+)\s+"([^"]*)"', text)}
+
+
+def load_dtu_annotation_index(transcript_metadata: str, annotation_gtf: str = "") -> dict[str, dict[str, str]]:
     rows = read_existing_tsv(transcript_metadata)
     index: dict[str, dict[str, str]] = {}
     for row in rows:
@@ -515,37 +511,46 @@ def load_dtu_annotation_index(transcript_metadata: str) -> dict[str, dict[str, s
         for key in keys:
             if key:
                 index[key] = merge_dtu_annotation(index.get(key, {}), entry)
+    gtf = Path(annotation_gtf) if annotation_gtf else None
+    if gtf and gtf.is_file():
+        with gtf.open(encoding="utf-8") as handle:
+            for line in handle:
+                if line.startswith("#"):
+                    continue
+                fields = line.rstrip("\n").split("\t")
+                if len(fields) != 9 or fields[2] != "gene":
+                    continue
+                attrs = parse_gtf_attributes(fields[8])
+                gene_id = normalize_dtu_id(attrs.get("gene_id", ""))
+                if not gene_id:
+                    continue
+                entry = dtu_coordinate_entry(
+                    {
+                        "gene_id": gene_id,
+                        "gene_name": attrs.get("gene_name", ""),
+                        "Chr": fields[0],
+                        "Start": fields[3],
+                        "End": fields[4],
+                        "Strand": fields[6],
+                    }
+                )
+                index[gene_id] = merge_dtu_annotation(index.get(gene_id, {}), entry)
     return index
 
 
-def dtu_annotation_matches(row: dict[str, str], annotation_index: dict[str, dict[str, str]]) -> list[dict[str, str]]:
+def dtu_annotations_for_value(value: str, annotation_index: dict[str, dict[str, str]]) -> list[dict[str, str]]:
     matches: list[dict[str, str]] = []
     seen: set[tuple[str, str, str]] = set()
-    for row_id in dtu_row_ids(row):
-        entry = annotation_index.get(row_id) or annotation_index.get(dtu_gene_root(row_id))
+    for identifier in DTU_ID_RE.findall(value or ""):
+        normalized = normalize_dtu_id(identifier)
+        entry = annotation_index.get(normalized) or annotation_index.get(dtu_gene_root(normalized))
         if not entry:
             continue
         marker = (entry.get("gene_id", ""), entry.get("symbol", ""), entry.get("genomic_coordinates", ""))
-        if marker in seen:
-            continue
-        seen.add(marker)
-        matches.append(entry)
+        if marker not in seen:
+            seen.add(marker)
+            matches.append(entry)
     return matches
-
-
-def format_dtu_gene_display(matches: list[dict[str, str]], fallback: str) -> str:
-    labels: list[str] = []
-    for entry in matches:
-        gene_id = entry.get("gene_id", "")
-        symbol = entry.get("symbol", "")
-        label = f"{symbol} ({gene_id})" if symbol and gene_id and symbol != gene_id else symbol or gene_id
-        if label and label not in labels:
-            labels.append(label)
-    if labels:
-        if len(labels) > 3:
-            return f"{' + '.join(labels[:3])} + {len(labels) - 3} genes"
-        return " + ".join(labels)
-    return fallback
 
 
 def format_dtu_coordinates(matches: list[dict[str, str]]) -> str:
@@ -611,25 +616,24 @@ def augment_dtu_preview_rows(rows: list[dict[str, str]], annotation_index: dict[
     for row in rows:
         copy = dict(row)
         gene_id = first_value(copy, ["gene_id", "gene", "GeneID"])
-        gene_name = first_value(copy, ["gene_display", "gene_symbol", "gene_name", "geneName", "symbol"])
-        if gene_name and gene_id and gene_name != gene_id:
-            copy.setdefault("gene_display", f"{gene_name} ({gene_id})")
-        elif gene_name:
-            copy.setdefault("gene_display", gene_name)
-        elif gene_id:
-            copy.setdefault("gene_display", gene_id)
-        coordinates = synthesize_genomic_coordinates(copy)
-        if coordinates:
-            copy.setdefault("genomic_coordinates", coordinates)
-        matches = dtu_annotation_matches(copy, annotation_index)
-        fallback_gene = copy.get("gene_display", "") or gene_name or gene_id
-        gene_display = format_dtu_gene_display(matches, fallback_gene)
+        gene_name = first_value(copy, ["gene_symbol", "gene_name", "geneName", "symbol"])
         feature_display = first_value(copy, ["feature_display", "feature_id", "event_id", "event", "transcript_id", "transcript"])
-        annotated_coordinates = format_dtu_coordinates(matches)
-        if gene_display:
-            copy["_dtu_gene_display"] = gene_display
-        if annotated_coordinates or coordinates:
-            copy["_dtu_genomic_coordinates"] = annotated_coordinates or coordinates
+        coordinates = synthesize_genomic_coordinates(copy)
+        gene_matches = dtu_annotations_for_value(gene_id, annotation_index)
+        feature_matches = dtu_annotations_for_value(feature_display, annotation_index)
+        symbols = [entry.get("symbol", "") for entry in gene_matches if entry.get("symbol", "")]
+        if not symbols:
+            symbols = [entry.get("symbol", "") for entry in feature_matches if entry.get("symbol", "")]
+        if gene_name and gene_name != gene_id:
+            symbols.insert(0, gene_name)
+        symbols = list(dict.fromkeys(symbols))
+        locus = format_dtu_coordinates(feature_matches) or coordinates or format_dtu_coordinates(gene_matches)
+        if symbols:
+            copy["_dtu_gene_symbol"] = " + ".join(symbols)
+        if gene_id:
+            copy["_dtu_gene_id"] = gene_id
+        if locus:
+            copy["_dtu_locus"] = locus
         if feature_display:
             copy["_dtu_feature_display"] = feature_display
         augmented.append(copy)
@@ -642,11 +646,8 @@ def dtu_preview_columns(rows: list[dict[str, str]], preferred: list[tuple[str, s
     columns: list[tuple[str, str]] = []
     seen: set[str] = set()
     seen_labels: set[str] = set()
-    has_gene_display = bool(useful_values(rows, "_dtu_gene_display") or useful_values(rows, "gene_display"))
     for key, label in preferred:
         if key not in rows[0] or key in DROP_DTU_PREVIEW_COLUMNS or key in seen:
-            continue
-        if has_gene_display and key in DTU_RAW_GENE_COLUMNS:
             continue
         label_key = label.strip().lower()
         if label_key in seen_labels:
@@ -668,9 +669,7 @@ def dtu_preview_columns(rows: list[dict[str, str]], preferred: list[tuple[str, s
     for key in rows[0]:
         if len(columns) >= max_columns:
             break
-        if key in seen or key in DROP_DTU_PREVIEW_COLUMNS:
-            continue
-        if has_gene_display and key in DTU_RAW_GENE_COLUMNS:
+        if key in seen or key in DROP_DTU_PREVIEW_COLUMNS or key in DTU_REDUNDANT_PREVIEW_COLUMNS:
             continue
         values = useful_values(rows, key)
         if not values or len(set(values)) <= 1:
@@ -730,7 +729,7 @@ def dtu_preview_section(title: str, rows: list[dict[str, str]], columns: list[tu
     link = f'<p><a class="button-link" href="{html.escape(relative_href(table_href, base_dir))}">full table</a></p>' if table_href else ""
     return (
         f'<section class="method-row"><h3>{html.escape(title)}</h3>'
-        f'{html_preview_table(dtu_preview_rows(rows), columns, max_rows=50)}'
+        f'{html_preview_table(dtu_preview_rows(rows), columns, max_rows=50, table_class="dtu-preview-table", nowrap_keys=DTU_NOWRAP_PREVIEW_COLUMNS)}'
         f'{link}</section>'
     )
 
@@ -1097,7 +1096,7 @@ def dtu_splicing_detail_sections(rows: list[dict[str, str]], base_dir: Path) -> 
     if not rows:
         return ""
     sections: list[str] = []
-    annotation_cache: dict[str, dict[str, dict[str, str]]] = {}
+    annotation_cache: dict[tuple[str, str], dict[str, dict[str, str]]] = {}
     for row in sort_layer_rows("dtu_splicing", rows):
         method = row.get("method", "DTU/splicing")
         section_id = safe_token(method)
@@ -1109,9 +1108,11 @@ def dtu_splicing_detail_sections(rows: list[dict[str, str]], base_dir: Path) -> 
         ]:
             figures.extend(plot_asset_figures(field, row, base_dir, f"{method} {label}"))
         annotation_path = row.get("transcript_metadata", "")
-        if annotation_path not in annotation_cache:
-            annotation_cache[annotation_path] = load_dtu_annotation_index(annotation_path)
-        annotation_index = annotation_cache.get(annotation_path, {})
+        annotation_gtf = row.get("annotation_gtf", "")
+        annotation_key = (annotation_path, annotation_gtf)
+        if annotation_key not in annotation_cache:
+            annotation_cache[annotation_key] = load_dtu_annotation_index(annotation_path, annotation_gtf)
+        annotation_index = annotation_cache.get(annotation_key, {})
         source_rows = augment_dtu_preview_rows(
             read_existing_tsv(row.get("source_results", "")),
             annotation_index,
@@ -1129,11 +1130,10 @@ def dtu_splicing_detail_sections(rows: list[dict[str, str]], base_dir: Path) -> 
                     dtu_preview_columns(
                         source_rows,
                         [
-                            ("_dtu_gene_display", "gene"),
-                            ("_dtu_genomic_coordinates", "genomic coordinates"),
+                            ("_dtu_gene_symbol", "gene symbol"),
+                            ("_dtu_gene_id", "gene ID"),
+                            ("_dtu_locus", "locus"),
                             ("_dtu_feature_display", "feature/event"),
-                            ("feature_id", "feature/event"),
-                            ("event_id", "event"),
                             ("event_type", "event type"),
                             ("delta_usage", "delta usage"),
                             ("delta_psi", "delta PSI"),
@@ -1144,7 +1144,7 @@ def dtu_splicing_detail_sections(rows: list[dict[str, str]], base_dir: Path) -> 
                             ("statistic", "test statistic"),
                             ("pvalue", "p-value"),
                         ],
-                        max_columns=9,
+                        max_columns=11,
                     ),
                     row.get("source_results", ""),
                     base_dir,
@@ -1158,11 +1158,10 @@ def dtu_splicing_detail_sections(rows: list[dict[str, str]], base_dir: Path) -> 
                     dtu_preview_columns(
                         feature_rows,
                         [
-                            ("_dtu_gene_display", "gene"),
-                            ("_dtu_genomic_coordinates", "genomic coordinates"),
+                            ("_dtu_gene_symbol", "gene symbol"),
+                            ("_dtu_gene_id", "gene ID"),
+                            ("_dtu_locus", "locus"),
                             ("_dtu_feature_display", "feature/event"),
-                            ("feature_id", "feature/event"),
-                            ("event_id", "event"),
                             ("event_type", "event type"),
                             ("delta_usage", "delta usage"),
                             ("delta_psi", "delta PSI"),
@@ -1177,7 +1176,7 @@ def dtu_splicing_detail_sections(rows: list[dict[str, str]], base_dir: Path) -> 
                             ("mean_count_test", "mean count test"),
                             ("status", "status"),
                         ],
-                        max_columns=9,
+                        max_columns=11,
                     ),
                     row.get("transcript_results", ""),
                     base_dir,
@@ -1409,6 +1408,7 @@ def render_contrast_summary(
     .report-content {{ max-width:1280px; }}
     .table-scroll table {{ min-width:1040px; }}
     .table-scroll td,.table-scroll th {{ overflow-wrap:anywhere; }}
+    .dtu-preview-table .dtu-nowrap {{ white-space:nowrap; overflow-wrap:normal; }}
     .dtu-summary-table th:nth-child(1),.dtu-summary-table td:nth-child(1) {{ width:9rem; white-space:nowrap; }}
     .dtu-summary-table th:nth-child(2),.dtu-summary-table td:nth-child(2) {{ width:5rem; white-space:nowrap; }}
     .dtu-summary-table th:nth-child(3),.dtu-summary-table td:nth-child(3) {{ width:24rem; min-width:22rem; }}
