@@ -6,15 +6,16 @@ from __future__ import annotations
 import argparse
 import csv
 import tempfile
+import textwrap
 from datetime import datetime, timezone
 from pathlib import Path
 
 from pypdf import PdfReader, PdfWriter
+from pypdf.annotations import Link
 from reportlab.lib.pagesizes import A4
-from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.lib.units import mm
-from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 from reportlab.lib import colors
+from reportlab.pdfgen import canvas
 
 
 def parse_args() -> argparse.Namespace:
@@ -31,40 +32,69 @@ def read_rows(path: Path) -> list[dict[str, str]]:
         return [{key: (value or "").strip() for key, value in row.items()} for row in csv.DictReader(handle, delimiter="\t")]
 
 
-def create_cover(path: Path, project: str, rows: list[dict[str, str]]) -> None:
-    styles = getSampleStyleSheet()
-    story = [
-        Paragraph("ASPIS Combined Project Technical Report", styles["Title"]),
-        Paragraph(project, styles["Heading2"]),
-        Paragraph(f"Generated {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}", styles["BodyText"]),
-        Spacer(1, 8 * mm),
-        Paragraph(
-            "This single-file export contains every canonical evidence-layer technical PDF in project-report order. "
-            "The HTML project report and TSV files remain the source of truth for complete tables and provenance.",
-            styles["BodyText"],
-        ),
-        Spacer(1, 6 * mm),
-    ]
-    data = [["order", "evidence layer", "contrasts", "rows", "status"]]
-    for row in rows:
-        data.append([row.get("display_order", ""), row.get("title", ""), row.get("n_contrasts", ""), row.get("n_rows", ""), row.get("status", "")])
-    table = Table(data, colWidths=[16 * mm, 82 * mm, 24 * mm, 22 * mm, 28 * mm], repeatRows=1)
-    table.setStyle(
-        TableStyle(
-            [
-                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#f6f8fa")),
-                ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#d0d7de")),
-                ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
-                ("VALIGN", (0, 0), (-1, -1), "TOP"),
-                ("FONTSIZE", (0, 0), (-1, -1), 9),
-                ("LEFTPADDING", (0, 0), (-1, -1), 5),
-                ("RIGHTPADDING", (0, 0), (-1, -1), 5),
-            ]
-        )
+def create_cover(
+    path: Path,
+    project: str,
+    entries: list[tuple[dict[str, str], int, int]],
+) -> list[tuple[tuple[float, float, float, float], int]]:
+    """Create a one-page clickable contents table and return link rectangles."""
+    pdf = canvas.Canvas(str(path), pagesize=A4)
+    pdf.setTitle(f"ASPIS Project Technical Report - {project}")
+    pdf.setAuthor("ASPIS")
+    width, height = A4
+    left = 18 * mm
+    right = width - 18 * mm
+    pdf.setFillColor(colors.HexColor("#24292f"))
+    pdf.setFont("Helvetica-Bold", 20)
+    pdf.drawString(left, height - 25 * mm, "ASPIS Combined Project Technical Report")
+    pdf.setFont("Helvetica-Bold", 14)
+    pdf.setFillColor(colors.HexColor("#0969da"))
+    pdf.drawString(left, height - 34 * mm, project)
+    pdf.setFillColor(colors.HexColor("#57606a"))
+    pdf.setFont("Helvetica", 9)
+    pdf.drawString(left, height - 41 * mm, f"Generated {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}")
+    intro = (
+        "This single-file export contains every canonical evidence-layer technical PDF in project-report order. "
+        "Click an evidence-layer row to jump to that section. The HTML report and TSV files remain the source of truth."
     )
-    story.append(table)
-    doc = SimpleDocTemplate(str(path), pagesize=A4, leftMargin=18 * mm, rightMargin=18 * mm, topMargin=18 * mm, bottomMargin=18 * mm, title=f"ASPIS Project Technical Report - {project}", author="ASPIS")
-    doc.build(story)
+    y = height - 50 * mm
+    for line in textwrap.wrap(intro, width=110):
+        pdf.setFillColor(colors.HexColor("#24292f"))
+        pdf.setFont("Helvetica", 9.5)
+        pdf.drawString(left, y, line)
+        y -= 5 * mm
+    y -= 4 * mm
+    columns = [left, left + 14 * mm, left + 92 * mm, left + 112 * mm, left + 130 * mm, left + 151 * mm, right]
+    headers = ["order", "evidence layer", "contrasts", "rows", "status", "page"]
+    row_height = 10 * mm
+    pdf.setFillColor(colors.HexColor("#f6f8fa"))
+    pdf.rect(left, y - row_height, right - left, row_height, fill=1, stroke=0)
+    pdf.setFillColor(colors.HexColor("#24292f"))
+    pdf.setFont("Helvetica-Bold", 8.5)
+    for index, header in enumerate(headers):
+        pdf.drawString(columns[index] + 2 * mm, y - 6.4 * mm, header)
+    pdf.setStrokeColor(colors.HexColor("#d0d7de"))
+    links: list[tuple[tuple[float, float, float, float], int]] = []
+    y -= row_height
+    for row, start_page, page_total in entries:
+        bottom = y - row_height
+        pdf.rect(left, bottom, right - left, row_height, fill=0, stroke=1)
+        values = [
+            row.get("display_order", ""),
+            row.get("title", ""),
+            row.get("n_contrasts", ""),
+            row.get("n_rows", ""),
+            row.get("status", ""),
+            f"{start_page + 1} ({page_total} pp.)",
+        ]
+        pdf.setFillColor(colors.HexColor("#0969da"))
+        pdf.setFont("Helvetica", 8.5)
+        for index, value in enumerate(values):
+            pdf.drawString(columns[index] + 2 * mm, bottom + 3.6 * mm, str(value)[:48])
+        links.append(((left, bottom, right, y), start_page))
+        y = bottom
+    pdf.save()
+    return links
 
 
 def main() -> int:
@@ -73,27 +103,31 @@ def main() -> int:
     output = Path(args.output)
     output.parent.mkdir(parents=True, exist_ok=True)
     writer = PdfWriter()
-    page_count = 0
+    page_count = 1
     merged_layers = 0
+    entries: list[tuple[dict[str, str], Path, int, int]] = []
+    for row in rows:
+        pdf = Path(row.get("pdf", ""))
+        if not pdf.exists():
+            continue
+        pages = len(PdfReader(str(pdf)).pages)
+        entries.append((row, pdf, page_count, pages))
+        page_count += pages
     with tempfile.TemporaryDirectory(prefix="aspis_project_pdf_") as tmp:
         cover = Path(tmp) / "cover.pdf"
-        create_cover(cover, args.project, rows)
+        links = create_cover(cover, args.project, [(row, start, pages) for row, _pdf, start, pages in entries])
         cover_reader = PdfReader(str(cover))
         for page in cover_reader.pages:
             writer.add_page(page)
-            page_count += 1
         writer.add_outline_item("Project report contents", 0)
-        for row in rows:
-            pdf = Path(row.get("pdf", ""))
-            if not pdf.exists():
-                continue
-            start = page_count
+        for row, pdf, start, _pages in entries:
             reader = PdfReader(str(pdf))
             for page in reader.pages:
                 writer.add_page(page)
-                page_count += 1
             writer.add_outline_item(row.get("title", row.get("layer_key", "Evidence layer")), start)
             merged_layers += 1
+        for rectangle, target_page in links:
+            writer.add_annotation(0, Link(rect=rectangle, target_page_index=target_page))
         with output.open("wb") as handle:
             writer.write(handle)
     done = Path(args.done)

@@ -215,7 +215,11 @@ def main() -> int:
         combined = root.parent / "technical_report.pdf"
         combined_done = root.parent / "technical_report.done"
         run([sys.executable, str(repo / "workflow/scripts/merge_project_layer_pdfs.py"), "--project", project, "--layer-manifest", str(manifest), "--output", str(combined), "--done", str(combined_done)])
-        assert len(PdfReader(str(combined)).pages) == 8
+        combined_reader = PdfReader(str(combined))
+        assert len(combined_reader.pages) == 8
+        assert "page" in (combined_reader.pages[0].extract_text() or "")
+        assert len(combined_reader.pages[0].get("/Annots", [])) == 7
+        assert len(combined_reader.outline) == 8
         assert combined_done.read_text(encoding="utf-8").splitlines()[1].startswith("ok\tTEST\t7\t8")
     return 0
 
