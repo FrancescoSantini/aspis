@@ -75,6 +75,7 @@ DTU_REDUNDANT_PREVIEW_COLUMNS = DTU_RAW_GENE_COLUMNS | {
     "isoform_id",
 }
 DTU_NOWRAP_PREVIEW_COLUMNS = {"_dtu_gene_symbol", "_dtu_gene_id", "_dtu_locus", "_dtu_feature_display"}
+DTU_STATISTIC_NOWRAP_COLUMNS = {"padj", "FDR", "statistic", "pvalue", "log2FC", "log2_fold_change", "status", "direction"}
 DTU_EMPTY_VALUES = {"", "-", "NA", "N/A", "nan", "NaN", "None", "none"}
 DTU_ID_RE = re.compile(r"(ENS(?:G|T)\d+(?:\.\d+)?|MSTRG\.\d+(?:\.\d+)?)")
 DTU_GENE_ID_KEYS = ["gene_id", "gene", "GeneID", "geneID", "geneid", "geneId"]
@@ -1154,7 +1155,7 @@ def dtu_splicing_detail_sections(rows: list[dict[str, str]], base_dir: Path) -> 
                     ),
                     row.get("source_results", ""),
                     base_dir,
-                    set() if method.upper() == "DEXSEQEXON" else DTU_NOWRAP_PREVIEW_COLUMNS,
+                    DTU_STATISTIC_NOWRAP_COLUMNS if method.upper() == "DEXSEQEXON" else DTU_NOWRAP_PREVIEW_COLUMNS,
                 )
             )
         if feature_rows and row.get("transcript_results", "") != row.get("source_results", ""):
@@ -1187,7 +1188,7 @@ def dtu_splicing_detail_sections(rows: list[dict[str, str]], base_dir: Path) -> 
                     ),
                     row.get("transcript_results", ""),
                     base_dir,
-                    set() if method.upper() == "DEXSEQEXON" else DTU_NOWRAP_PREVIEW_COLUMNS,
+                    DTU_STATISTIC_NOWRAP_COLUMNS if method.upper() == "DEXSEQEXON" else DTU_NOWRAP_PREVIEW_COLUMNS,
                 )
             )
         plot_block = (
@@ -1343,10 +1344,16 @@ def render_contrast_summary(
         asset_cell = ""
         if layer_key == "isoform_switch":
             asset_cell = f"<td>{isoform_summary_asset_links(row, base_dir)}</td>"
+            gene_label = display_gene(row)
+            event_label = short_event_label(row)
+            event_detail = (
+                f'<br><code class="muted">{html.escape(event_label)}</code>'
+                if event_label and event_label not in gene_label
+                else ""
+            )
             table_rows.append(
                 "<tr>"
-                f"<td>{html.escape(display_gene(row))}</td>"
-                f"<td><code>{html.escape(short_event_label(row))}</code></td>"
+                f"<td>{html.escape(gene_label)}{event_detail}</td>"
                 f"<td>{html.escape(row_coordinates(row) or '-')}</td>"
                 f"<td>{html.escape(row_reference_context(row))}</td>"
                 f"<td><span class=\"status {html.escape(row.get('status', 'unknown') or 'unknown')}\">{html.escape(row.get('status', 'unknown') or 'unknown')}</span></td>"
@@ -1422,15 +1429,14 @@ def render_contrast_summary(
     .dtu-summary-table th:nth-child(3),.dtu-summary-table td:nth-child(3) {{ width:24rem; min-width:22rem; }}
     .dtu-summary-table th:nth-child(4),.dtu-summary-table td:nth-child(4) {{ max-width:26rem; }}
     .event-summary-table {{ table-layout:fixed; }}
-    .event-summary-table th:nth-child(1),.event-summary-table td:nth-child(1) {{ width:8rem; min-width:7rem; white-space:nowrap; overflow-wrap:normal; }}
-    .event-summary-table th:nth-child(2),.event-summary-table td:nth-child(2) {{ width:7rem; min-width:6rem; white-space:nowrap; overflow-wrap:normal; }}
-    .event-summary-table th:nth-child(3),.event-summary-table td:nth-child(3) {{ width:13rem; min-width:11rem; }}
-    .event-summary-table th:nth-child(4),.event-summary-table td:nth-child(4) {{ width:17rem; min-width:14rem; }}
-    .event-summary-table th:nth-child(5),.event-summary-table td:nth-child(5) {{ width:4rem; white-space:nowrap; overflow-wrap:normal; }}
+    .event-summary-table th:nth-child(1),.event-summary-table td:nth-child(1) {{ width:11rem; min-width:9rem; }}
+    .event-summary-table th:nth-child(2),.event-summary-table td:nth-child(2) {{ width:13rem; min-width:11rem; }}
+    .event-summary-table th:nth-child(3),.event-summary-table td:nth-child(3) {{ width:17rem; min-width:14rem; }}
+    .event-summary-table th:nth-child(4),.event-summary-table td:nth-child(4) {{ width:4rem; white-space:nowrap; overflow-wrap:normal; }}
+    .event-summary-table th:nth-child(5),.event-summary-table td:nth-child(5),
     .event-summary-table th:nth-child(6),.event-summary-table td:nth-child(6),
-    .event-summary-table th:nth-child(7),.event-summary-table td:nth-child(7),
-    .event-summary-table th:nth-child(8),.event-summary-table td:nth-child(8) {{ width:6rem; white-space:nowrap; overflow-wrap:normal; }}
-    .event-summary-table th:nth-child(9),.event-summary-table td:nth-child(9) {{ width:7rem; white-space:nowrap; overflow-wrap:normal; }}
+    .event-summary-table th:nth-child(7),.event-summary-table td:nth-child(7) {{ width:6rem; white-space:nowrap; overflow-wrap:normal; }}
+    .event-summary-table th:nth-child(8),.event-summary-table td:nth-child(8) {{ width:7rem; white-space:nowrap; overflow-wrap:normal; }}
     .event-summary-table .compact-assets {{ flex-wrap:nowrap; gap:4px; }}
     .event-summary-table .compact-asset {{ font-size:.85rem; padding:2px 6px; }}
     {report_map_css()}
@@ -1438,7 +1444,7 @@ def render_contrast_summary(
     layer_href = html.escape(os.path.relpath(layer_index.resolve(), start=base_dir.resolve()).replace(os.sep, "/"))
     shell = report_shell_open("Summary Map", map_items, base_dir)
     header = (
-        "<tr><th>gene</th><th>event</th><th>genomic coordinates</th><th>reference context</th><th>status</th><th>max abs dIF</th><th>switch-in dIF</th><th>switch-out dIF</th><th>event assets</th></tr>"
+        "<tr><th>gene / event</th><th>genomic coordinates</th><th>reference context</th><th>status</th><th>max abs dIF</th><th>switch-in dIF</th><th>switch-out dIF</th><th>event assets</th></tr>"
         if layer_key == "isoform_switch"
         else "<tr><th>analysis</th><th>status</th><th>counts</th><th>reason</th></tr>"
     )
@@ -1464,7 +1470,7 @@ def render_contrast_summary(
             '<h2>Switch events</h2>'
             f'<p class="muted">Rows are sorted by adjusted significance when available, then by absolute isoform-fraction change. Showing {min(len(displayed_rows), 50)} of {len(sorted_rows)} switch event(s).</p>'
             '<div class="table-scroll"><table class="event-summary-table"><thead>'
-            '<tr><th>gene</th><th>event</th><th>genomic coordinates</th><th>reference context</th><th>status</th><th>max abs dIF</th><th>switch-in dIF</th><th>switch-out dIF</th><th>event assets</th></tr>'
+            '<tr><th>gene / event</th><th>genomic coordinates</th><th>reference context</th><th>status</th><th>max abs dIF</th><th>switch-in dIF</th><th>switch-out dIF</th><th>event assets</th></tr>'
             f'</thead><tbody>{"".join(table_rows)}</tbody></table></div></section>'
         )
     summary_table = ""

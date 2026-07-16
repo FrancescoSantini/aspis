@@ -151,6 +151,9 @@ def main() -> int:
                 assert "transcript ranked feature-set rows" in summary_text
             elif row["layer_key"] == "isoform_switch":
                 assert "event assets" in summary_text
+                assert "gene / event" in summary_text
+                assert "<th>gene</th><th>event</th>" not in summary_text
+                assert "GENEA (geneA)" in summary_text
                 assert "genomic coordinates" in summary_text
                 assert "reference context" in summary_text
                 assert "overlapping reference: GENEA" in summary_text
@@ -178,7 +181,11 @@ def main() -> int:
                 assert 'class="dtu-nowrap">txA</td>' in summary_text
                 dexseq_exon_start = summary_text.index("<h3>DEXSeqExon standardized candidates</h3>")
                 dexseq_exon_end = summary_text.index("</section>", dexseq_exon_start)
-                assert "dtu-nowrap" not in summary_text[dexseq_exon_start:dexseq_exon_end]
+                dexseq_exon_section = summary_text[dexseq_exon_start:dexseq_exon_end]
+                assert 'class="dtu-nowrap">0.01</td>' in dexseq_exon_section
+                assert 'class="dtu-nowrap">GENEA</td>' not in dexseq_exon_section
+                assert 'class="dtu-nowrap">MSTRG.42</td>' not in dexseq_exon_section
+                assert 'class="dtu-nowrap">txA</td>' not in dexseq_exon_section
             else:
                 assert "Tables and pages" in summary_text
             assert (layer_html.parent / "source_asset_manifest.tsv").exists()

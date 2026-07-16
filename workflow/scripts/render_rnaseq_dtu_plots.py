@@ -510,9 +510,15 @@ def render_overview_svg(
         parts.append(f'<text x="{left - 10}" y="{y + 4:.1f}" text-anchor="end" font-size="11">{label}</text>\n')
     parts.append(f'<line class="axis" x1="{left}" y1="{top}" x2="{left}" y2="{top + plot_h}"/>\n')
     parts.append(f'<line class="axis" x1="{left}" y1="{top + plot_h}" x2="{left + plot_w}" y2="{top + plot_h}"/>\n')
+    exact_zero_rank = 0
+    exact_zero_count = sum(score == 0 for score, _ in scored) if exact_zero_floor is not None else 0
+    exact_zero_spacing = min(8.0, plot_w / max(1, exact_zero_count - 1))
     for idx, (score, row) in enumerate(scored, start=1):
         yval = -math.log10(max(score, plot_floor))
         x = left + ((idx - 1) / max(1, n - 1) * plot_w)
+        if exact_zero_floor is not None and score == 0:
+            x = left + exact_zero_rank * exact_zero_spacing
+            exact_zero_rank += 1
         y = top + plot_h - (yval / ymax * plot_h)
         padj = safe_float(row.get("padj", ""))
         cls = "sig" if padj is not None and padj < alpha else "ns"
