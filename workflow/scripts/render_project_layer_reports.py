@@ -628,8 +628,7 @@ def augment_dtu_preview_rows(rows: list[dict[str, str]], annotation_index: dict[
             symbols.insert(0, gene_name)
         symbols = list(dict.fromkeys(symbols))
         locus = format_dtu_coordinates(feature_matches) or coordinates or format_dtu_coordinates(gene_matches)
-        if symbols:
-            copy["_dtu_gene_symbol"] = " + ".join(symbols)
+        copy["_dtu_gene_symbol"] = " + ".join(symbols) if symbols else "not available"
         if gene_id:
             copy["_dtu_gene_id"] = gene_id
         if locus:
@@ -723,13 +722,20 @@ def dtu_preview_rows(rows: list[dict[str, str]]) -> list[dict[str, str]]:
     return sorted(rows, key=key)
 
 
-def dtu_preview_section(title: str, rows: list[dict[str, str]], columns: list[tuple[str, str]], table_href: str, base_dir: Path) -> str:
+def dtu_preview_section(
+    title: str,
+    rows: list[dict[str, str]],
+    columns: list[tuple[str, str]],
+    table_href: str,
+    base_dir: Path,
+    nowrap_keys: set[str] | None = None,
+) -> str:
     if not rows:
         return ""
     link = f'<p><a class="button-link" href="{html.escape(relative_href(table_href, base_dir))}">full table</a></p>' if table_href else ""
     return (
         f'<section class="method-row"><h3>{html.escape(title)}</h3>'
-        f'{html_preview_table(dtu_preview_rows(rows), columns, max_rows=50, table_class="dtu-preview-table", nowrap_keys=DTU_NOWRAP_PREVIEW_COLUMNS)}'
+        f'{html_preview_table(dtu_preview_rows(rows), columns, max_rows=50, table_class="dtu-preview-table", nowrap_keys=DTU_NOWRAP_PREVIEW_COLUMNS if nowrap_keys is None else nowrap_keys)}'
         f'{link}</section>'
     )
 
@@ -1148,6 +1154,7 @@ def dtu_splicing_detail_sections(rows: list[dict[str, str]], base_dir: Path) -> 
                     ),
                     row.get("source_results", ""),
                     base_dir,
+                    set() if method.upper() == "DEXSEQEXON" else DTU_NOWRAP_PREVIEW_COLUMNS,
                 )
             )
         if feature_rows and row.get("transcript_results", "") != row.get("source_results", ""):
@@ -1180,6 +1187,7 @@ def dtu_splicing_detail_sections(rows: list[dict[str, str]], base_dir: Path) -> 
                     ),
                     row.get("transcript_results", ""),
                     base_dir,
+                    set() if method.upper() == "DEXSEQEXON" else DTU_NOWRAP_PREVIEW_COLUMNS,
                 )
             )
         plot_block = (

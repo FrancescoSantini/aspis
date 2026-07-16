@@ -44,6 +44,7 @@ def main() -> int:
             [
                 {"gene_id": "MSTRG.42", "feature_id": "txA", "padj": "0.01"},
                 {"gene_id": "ENSG00000123456", "feature_id": 'ENSG00000123456"017', "padj": "0.02"},
+                {"gene_id": "MSTRG.99", "feature_id": "txUnknown", "padj": "0.03"},
             ],
         )
         transcript_metadata = tmp / "assets/transcript_metadata.tsv"
@@ -85,7 +86,13 @@ def main() -> int:
                 {**common, "level": "transcript", "feature_set_results": str(table), "ranked_feature_set_results": str(table), "feature_set_plot": str(plot), "ranked_feature_set_plot": str(plot), "n_feature_set_terms": "3", "n_ranked_feature_set_terms": "5"},
             ],
         )
-        write_tsv(rnaseq / "differential/dtu/plots/dtu_plot_manifest.tsv", [{**common, "method": "DRIMSeq", "source_results": str(table), "transcript_metadata": str(transcript_metadata), "annotation_gtf": str(annotation_gtf), "overview_plot": str(plot), "n_standardized": "10", "n_significant": "1"}])
+        write_tsv(
+            rnaseq / "differential/dtu/plots/dtu_plot_manifest.tsv",
+            [
+                {**common, "method": "DRIMSeq", "source_results": str(table), "transcript_metadata": str(transcript_metadata), "annotation_gtf": str(annotation_gtf), "overview_plot": str(plot), "n_standardized": "10", "n_significant": "1"},
+                {**common, "method": "DEXSeqExon", "source_results": str(table), "transcript_metadata": str(transcript_metadata), "annotation_gtf": str(annotation_gtf), "overview_plot": str(plot), "n_standardized": "10", "n_significant": "1"},
+            ],
+        )
         write_tsv(
             rnaseq / "differential/isoform_switch/report/switch_event_summary.tsv",
             [
@@ -165,9 +172,13 @@ def main() -> int:
                 assert "GENEB" in summary_text
                 assert "ENSG00000123456" in summary_text
                 assert "chr2:500-900 (-)" in summary_text
+                assert "not available" in summary_text
                 assert "gene display" not in summary_text
                 assert "feature id" not in summary_text
                 assert 'class="dtu-nowrap">txA</td>' in summary_text
+                dexseq_exon_start = summary_text.index("<h3>DEXSeqExon standardized candidates</h3>")
+                dexseq_exon_end = summary_text.index("</section>", dexseq_exon_start)
+                assert "dtu-nowrap" not in summary_text[dexseq_exon_start:dexseq_exon_end]
             else:
                 assert "Tables and pages" in summary_text
             assert (layer_html.parent / "source_asset_manifest.tsv").exists()

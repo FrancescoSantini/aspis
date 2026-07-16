@@ -475,7 +475,13 @@ def svg_header(width: int, height: int) -> str:
     )
 
 
-def render_overview_svg(path: Path, rows: list[dict[str, str]], alpha: float, max_points: int) -> None:
+def render_overview_svg(
+    path: Path,
+    rows: list[dict[str, str]],
+    alpha: float,
+    max_points: int,
+    exact_zero_floor: float | None = None,
+) -> None:
     scored = [(numeric_p(row), row) for row in rows]
     scored = [(score, row) for score, row in scored if score is not None and score >= 0]
     scored.sort(key=lambda item: item[0])
@@ -485,7 +491,7 @@ def render_overview_svg(path: Path, rows: list[dict[str, str]], alpha: float, ma
     left, right, top, bottom = 78, 28, 86, 72
     plot_w = width - left - right
     plot_h = height - top - bottom
-    plot_floor = 1e-300
+    plot_floor = exact_zero_floor if exact_zero_floor is not None else 1e-300
     ymax = max([-math.log10(max(score, plot_floor)) for score, _row in scored], default=1.0)
     ymax = max(1.0, math.ceil(ymax))
     n = max(1, len(scored))
@@ -493,6 +499,8 @@ def render_overview_svg(path: Path, rows: list[dict[str, str]], alpha: float, ma
     parts.append('<rect width="100%" height="100%" fill="white"/>\n')
     parts.append('<text x="24" y="30" font-size="20" font-weight="700">DTU significance overview</text>\n')
     parts.append(f'<text x="24" y="54" font-size="12" class="muted">Showing top {len(scored)} features by adjusted p-value or p-value</text>\n')
+    if exact_zero_floor is not None:
+        parts.append(f'<text x="24" y="72" font-size="11" class="muted">Exact zero SUPPA2 p-values are displayed at a finite floor ({exact_zero_floor:.3g}) to keep the significance scale interpretable.</text>\n')
     tick_count = 8
     for tick_index in range(tick_count + 1):
         tick = tick_index * ymax / tick_count
@@ -1159,7 +1167,14 @@ def plot_row(args: argparse.Namespace, row: dict[str, str]) -> dict[str, str]:
     scored.sort(key=lambda item: item[0])
     if scored:
         output["top_padj"] = scored[0][1].get("padj", "") or scored[0][1].get("pvalue", "")
-    render_overview_svg(Path(output["overview_plot"]), standardized, args.padj, args.max_points)
+    suppa2_zero_floor = min(1.0 / (len(standardized) + 1), args.padj / 10.0) if method_upper == "SUPPA2" else None
+    render_overview_svg(
+        Path(output["overview_plot"]),
+        standardized,
+        args.padj,
+        args.max_points,
+        exact_zero_floor=suppa2_zero_floor,
+    )
     plot_top_n = max(args.top_n, EXPANDED_TOP_N)
     usage_path = Path(row.get("transcript_results", ""))
     if top_gene and (usage_path.is_file() or method_upper == "DEXSEQEXON"):

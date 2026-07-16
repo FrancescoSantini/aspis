@@ -589,7 +589,7 @@ def exercise_biotype_and_dtu(paths: dict[str, Path]) -> None:
                 "elif cmd == 'diffSplice':",
                 "    out = value('-o')",
                 "    out.parent.mkdir(parents=True, exist_ok=True)",
-                "    Path(str(out) + '.dpsi.temp.0').write_text('control_treated_dPSI\\tcontrol_treated_p-val\\nGENE1;TX1\\t0.45\\t0.01\\nGENE1;TX1\\t0.45\\t0.01\\n', encoding='utf-8')",
+                "    Path(str(out) + '.dpsi.temp.0').write_text('control_treated_dPSI\\tcontrol_treated_p-val\\nGENE1;TX1\\t0.45\\t0\\nGENE1;TX1\\t0.45\\t0\\n', encoding='utf-8')",
                 "    Path(str(out) + '.psivec').write_text('s1\\nGENE1;TX1\\t0.5\\n', encoding='utf-8')",
                 "else:",
                 "    raise SystemExit(2)",
@@ -644,7 +644,7 @@ def exercise_biotype_and_dtu(paths: dict[str, Path]) -> None:
     if suppa2_standardized[0]["gene_id"] != "GENE1" or suppa2_standardized[0]["delta_psi"] != "0.45":
         raise ValueError(f"standardized SUPPA2 row lost identifiers/statistics: {suppa2_standardized}")
     suppa2_events = read_tsv(Path(suppa2_rows[0]["transcript_results"]), {"event_id", "event_type", "delta_psi", "pvalue"})
-    if len(suppa2_events) != 1 or suppa2_events[0]["event_id"] != "GENE1;TX1" or suppa2_events[0]["pvalue"] != "0.01":
+    if len(suppa2_events) != 1 or suppa2_events[0]["event_id"] != "GENE1;TX1" or suppa2_events[0]["pvalue"] != "0":
         raise ValueError(f"SUPPA2 event result table was not written: {suppa2_events}")
     suppa2_summary = read_tsv(Path(suppa2_rows[0]["summary"]), {"n_tested_genes", "n_usage_transcripts", "n_events"})
     if suppa2_summary[0]["n_tested_genes"] != "1" or suppa2_summary[0]["n_usage_transcripts"] != "1" or suppa2_summary[0]["n_events"] != "1":
@@ -670,6 +670,11 @@ def exercise_biotype_and_dtu(paths: dict[str, Path]) -> None:
     if suppa2_plot_rows[0]["plot_qa_status"] != "ok" or int(suppa2_plot_rows[0]["plot_file_count"]) < 2:
         raise ValueError(f"SUPPA2 plot QA did not confirm rendered SVGs: {suppa2_plot_rows}")
     suppa2_usage_plot = Path(suppa2_plot_rows[0]["usage_plot"])
+    suppa2_overview_svg = Path(suppa2_plot_rows[0]["overview_plot"]).read_text(encoding="utf-8")
+    if "Exact zero SUPPA2 p-values are displayed at a finite floor" not in suppa2_overview_svg:
+        raise ValueError("SUPPA2 exact-zero overview did not use its method-specific display floor")
+    if ">300</text>" in suppa2_overview_svg:
+        raise ValueError("SUPPA2 exact-zero overview retained the shared 1e-300 display scale")
     suppa2_usage_svg = suppa2_usage_plot.read_text(encoding="utf-8")
     if "Top SUPPA2 genes: event detail" not in suppa2_usage_svg or "delta PSI" not in suppa2_usage_svg:
         raise ValueError(f"SUPPA2 delta-PSI usage plot was not rendered correctly: {suppa2_usage_plot}")
