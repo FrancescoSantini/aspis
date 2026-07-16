@@ -464,6 +464,10 @@ def main() -> int:
             raise AssertionError("event-specific isoform-switch page lacks deep section links")
         if "Candidate novel isoform" not in event_html or "GeneA (geneA) | tx_novel" not in event_html:
             raise AssertionError("event-specific isoform-switch page lacks display/evidence labels")
+        if "additional evidence</summary>" not in event_html or "min-width: 1180px" in event_html or "max-width: 1280px" not in event_html:
+            raise AssertionError("event-specific evidence was not reorganized into compact tables and detail blocks")
+        if "| contrast treated_vs_control__time_h_24" in event_html:
+            raise AssertionError("event-specific page retained the redundant event/contrast subtitle")
         if "Reference context:" not in event_html:
             raise AssertionError("event-specific isoform-switch page lacks reference gene context")
         assert Path(plots[0]["nt_fasta"]).exists(), plots
