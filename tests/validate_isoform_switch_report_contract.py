@@ -466,6 +466,11 @@ def main() -> int:
             raise AssertionError("event-specific isoform-switch page lacks display/evidence labels")
         if "additional evidence</summary>" not in event_html or "min-width: 1180px" in event_html or "max-width: 1280px" not in event_html:
             raise AssertionError("event-specific evidence was not reorganized into compact tables and detail blocks")
+        if 'href="#sequence-tx_novel">NT / AA</a>' not in event_html or 'id="sequence-tx_novel"' not in event_html:
+            raise AssertionError("candidate isoforms do not link to their sequence cards")
+        all_event_html = "\n".join(Path(row["event_html"]).read_text(encoding="utf-8") for row in plots)
+        if 'class="change-line"' not in all_event_html or 'class="sequence-metadata"' not in event_html:
+            raise AssertionError("exon changes or sequence metadata were not rendered structurally")
         if "| contrast treated_vs_control__time_h_24" in event_html:
             raise AssertionError("event-specific page retained the redundant event/contrast subtitle")
         if "Reference context:" not in event_html:

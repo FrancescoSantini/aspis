@@ -76,6 +76,7 @@ DTU_REDUNDANT_PREVIEW_COLUMNS = DTU_RAW_GENE_COLUMNS | {
 }
 DTU_NOWRAP_PREVIEW_COLUMNS = {"_dtu_gene_symbol", "_dtu_gene_id", "_dtu_locus", "_dtu_feature_display"}
 DTU_STATISTIC_NOWRAP_COLUMNS = {"padj", "FDR", "statistic", "pvalue", "log2FC", "log2_fold_change", "status", "direction"}
+DTU_DEXSEQ_NOWRAP_COLUMNS = {"_dtu_gene_symbol", "_dtu_gene_id", "_dtu_feature_display"} | DTU_STATISTIC_NOWRAP_COLUMNS
 DTU_EMPTY_VALUES = {"", "-", "NA", "N/A", "nan", "NaN", "None", "none"}
 DTU_ID_RE = re.compile(r"(ENS(?:G|T)\d+(?:\.\d+)?|MSTRG\.\d+(?:\.\d+)?)")
 DTU_GENE_ID_KEYS = ["gene_id", "gene", "GeneID", "geneID", "geneid", "geneId"]
@@ -1155,7 +1156,7 @@ def dtu_splicing_detail_sections(rows: list[dict[str, str]], base_dir: Path) -> 
                     ),
                     row.get("source_results", ""),
                     base_dir,
-                    DTU_STATISTIC_NOWRAP_COLUMNS if method.upper() == "DEXSEQEXON" else DTU_NOWRAP_PREVIEW_COLUMNS,
+                    DTU_STATISTIC_NOWRAP_COLUMNS if method.upper() == "DEXSEQEXON" else DTU_DEXSEQ_NOWRAP_COLUMNS if method.upper() == "DEXSEQ" else DTU_NOWRAP_PREVIEW_COLUMNS,
                 )
             )
         if feature_rows and row.get("transcript_results", "") != row.get("source_results", ""):
@@ -1188,7 +1189,7 @@ def dtu_splicing_detail_sections(rows: list[dict[str, str]], base_dir: Path) -> 
                     ),
                     row.get("transcript_results", ""),
                     base_dir,
-                    DTU_STATISTIC_NOWRAP_COLUMNS if method.upper() == "DEXSEQEXON" else DTU_NOWRAP_PREVIEW_COLUMNS,
+                    DTU_STATISTIC_NOWRAP_COLUMNS if method.upper() == "DEXSEQEXON" else DTU_DEXSEQ_NOWRAP_COLUMNS if method.upper() == "DEXSEQ" else DTU_NOWRAP_PREVIEW_COLUMNS,
                 )
             )
         plot_block = (
@@ -1429,10 +1430,10 @@ def render_contrast_summary(
     .dtu-summary-table th:nth-child(3),.dtu-summary-table td:nth-child(3) {{ width:24rem; min-width:22rem; }}
     .dtu-summary-table th:nth-child(4),.dtu-summary-table td:nth-child(4) {{ max-width:26rem; }}
     .event-summary-table {{ table-layout:fixed; }}
-    .event-summary-table th:nth-child(1),.event-summary-table td:nth-child(1) {{ width:11rem; min-width:9rem; }}
+    .event-summary-table th:nth-child(1),.event-summary-table td:nth-child(1) {{ width:9rem; min-width:7rem; }}
     .event-summary-table th:nth-child(2),.event-summary-table td:nth-child(2) {{ width:13rem; min-width:11rem; }}
     .event-summary-table th:nth-child(3),.event-summary-table td:nth-child(3) {{ width:17rem; min-width:14rem; }}
-    .event-summary-table th:nth-child(4),.event-summary-table td:nth-child(4) {{ width:4rem; white-space:nowrap; overflow-wrap:normal; }}
+    .event-summary-table th:nth-child(4),.event-summary-table td:nth-child(4) {{ width:3.5rem; white-space:nowrap; overflow-wrap:normal; }}
     .event-summary-table th:nth-child(5),.event-summary-table td:nth-child(5),
     .event-summary-table th:nth-child(6),.event-summary-table td:nth-child(6),
     .event-summary-table th:nth-child(7),.event-summary-table td:nth-child(7) {{ width:6rem; white-space:nowrap; overflow-wrap:normal; }}

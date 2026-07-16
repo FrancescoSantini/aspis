@@ -90,6 +90,7 @@ def main() -> int:
             rnaseq / "differential/dtu/plots/dtu_plot_manifest.tsv",
             [
                 {**common, "method": "DRIMSeq", "source_results": str(table), "transcript_metadata": str(transcript_metadata), "annotation_gtf": str(annotation_gtf), "overview_plot": str(plot), "n_standardized": "10", "n_significant": "1"},
+                {**common, "method": "DEXSeq", "source_results": str(table), "transcript_metadata": str(transcript_metadata), "annotation_gtf": str(annotation_gtf), "overview_plot": str(plot), "n_standardized": "10", "n_significant": "1"},
                 {**common, "method": "DEXSeqExon", "source_results": str(table), "transcript_metadata": str(transcript_metadata), "annotation_gtf": str(annotation_gtf), "overview_plot": str(plot), "n_standardized": "10", "n_significant": "1"},
             ],
         )
@@ -179,6 +180,11 @@ def main() -> int:
                 assert "gene display" not in summary_text
                 assert "feature id" not in summary_text
                 assert 'class="dtu-nowrap">txA</td>' in summary_text
+                dexseq_start = summary_text.index("<h3>DEXSeq standardized candidates</h3>")
+                dexseq_end = summary_text.index("</section>", dexseq_start)
+                dexseq_section = summary_text[dexseq_start:dexseq_end]
+                assert 'class="dtu-nowrap">chr1:100-250 (+)</td>' not in dexseq_section
+                assert 'class="dtu-nowrap">0.01</td>' in dexseq_section
                 dexseq_exon_start = summary_text.index("<h3>DEXSeqExon standardized candidates</h3>")
                 dexseq_exon_end = summary_text.index("</section>", dexseq_exon_start)
                 dexseq_exon_section = summary_text[dexseq_exon_start:dexseq_exon_end]

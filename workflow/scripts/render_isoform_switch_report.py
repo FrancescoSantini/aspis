@@ -2976,6 +2976,7 @@ def render_event_html(
     event_annotations = [row for row in annotation_rows if row["event_id"] == event["event_id"]]
     event_ncrna_rows = [row for row in ncrna_rows if row["event_id"] == event["event_id"]]
     event_coding_rows = [row for row in coding_switch_rows if row["event_id"] == event["event_id"]]
+    sequence_isoforms = {row.get("isoform_id", "") for row in event_sequences}
 
     def format_table_value(header: str, value: str) -> str:
         text = (value or "").strip()
@@ -3006,6 +3007,28 @@ def render_event_html(
             return "<1e-300"
         return f"{parsed:.4g}"
 
+    def table_cell(header: str, row: dict[str, str]) -> str:
+        if header == "sequences":
+            isoform = row.get("isoform_id", "")
+            if isoform in sequence_isoforms:
+                return f'<a href="#sequence-{html.escape(safe_id(isoform))}">NT / AA</a>'
+            return '<span class="muted">not available</span>'
+        value = format_table_value(header, row.get(header, ""))
+        if header == "exon_gain_loss" and value:
+            parts = [part.strip() for part in value.split(";") if part.strip()]
+            formatted = []
+            for part in parts:
+                label, separator, coordinates = part.partition("=")
+                if separator:
+                    formatted.append(
+                        f'<span class="change-line"><strong>{html.escape(label)}:</strong> '
+                        f'<span class="coordinate">{html.escape(coordinates)}</span></span>'
+                    )
+                else:
+                    formatted.append(f'<span class="change-line">{html.escape(part)}</span>')
+            return "".join(formatted)
+        return html.escape(value)
+
     def table(
         headers: list[str],
         rows: list[dict[str, str]],
@@ -3017,7 +3040,7 @@ def render_event_html(
         for row in rows:
             body.append(
                 "<tr>"
-                + "".join(f"<td>{html.escape(format_table_value(header, row.get(header, '')))}</td>" for header in headers)
+                + "".join(f"<td>{table_cell(header, row)}</td>" for header in headers)
                 + "</tr>"
             )
         details = []
@@ -3042,7 +3065,7 @@ def render_event_html(
                 )
         return (
             '<div class="data-table"><table><thead><tr>'
-            + "".join(f"<th>{html.escape(header)}</th>" for header in headers)
+            + "".join(f"<th>{html.escape(header.replace('_', ' '))}</th>" for header in headers)
             + "</tr></thead><tbody>"
             + "\n".join(body)
             + "</tbody></table></div>"
@@ -3051,27 +3074,22 @@ def render_event_html(
 
     sequence_blocks = []
     for row in event_sequences:
+        affected_nt = row.get("affected_nt_sequence", "")
+        affected_aa = row.get("affected_aa_sequence", "")
         sequence_blocks.append(
-            "<details>"
-            f"<summary>{html.escape(row['isoform_id'])} | {html.escape(row['switch_role'])} | "
-            f"nt {html.escape(row['nt_length'])}, aa {html.escape(row['aa_length'])}</summary>"
-            f"<p>ORF length: {html.escape(row.get('orf_length_aa', ''))}; "
-            f"CDS: {html.escape(row.get('cds_coordinates', ''))}; "
-            f"NMD: {html.escape(row.get('nmd_status', ''))}; "
-            f"coding potential: {html.escape(row.get('coding_potential', ''))}</p>"
-            f"<p>Gained exons: {html.escape(row.get('gained_exon_coordinates', ''))}; "
-            f"lost exons: {html.escape(row.get('lost_exon_coordinates', ''))}; "
-            f"gained AA: {html.escape(row.get('gained_aa_interval', ''))}; "
-            f"lost AA: {html.escape(row.get('lost_aa_interval', ''))}</p>"
-            "<h3>Nucleotide sequence</h3>"
-            f"<pre>{html.escape(row['nt_sequence'] or 'not available')}</pre>"
-            "<h3>Amino-acid sequence</h3>"
-            f"<pre>{html.escape(row['aa_sequence'] or 'not available')}</pre>"
-            "<h3>Affected nucleotide sequence</h3>"
-            f"<pre>{html.escape(row.get('affected_nt_sequence', '') or 'not available')}</pre>"
-            "<h3>Affected amino-acid sequence</h3>"
-            f"<pre>{html.escape(row.get('affected_aa_sequence', '') or 'not available')}</pre>"
-            "</details>"
+            f'<section class="sequence-card" id="sequence-{html.escape(safe_id(row["isoform_id"]))}">'
+            f"<h3>{html.escape(row['isoform_id'])} <span class=\"muted\">{html.escape(row['switch_role'].replace('_', ' '))}</span></h3>"
+            '<dl class="sequence-metadata">'
+            f"<dt>length</dt><dd>{html.escape(row['nt_length'])} nt / {html.escape(row['aa_length'])} aa</dd>"
+            f"<dt>ORF / CDS</dt><dd>{html.escape(row.get('orf_length_aa', '') or 'not available')} aa / {html.escape(row.get('cds_coordinates', '') or 'not available')}</dd>"
+            f"<dt>NMD / coding potential</dt><dd>{html.escape(row.get('nmd_status', '') or 'not available')} / {html.escape(row.get('coding_potential', '') or 'not available')}</dd>"
+            f"<dt>exon changes</dt><dd>gained: {html.escape(row.get('gained_exon_coordinates', '') or 'none')}; lost: {html.escape(row.get('lost_exon_coordinates', '') or 'none')}</dd>"
+            "</dl>"
+            f"<details><summary>Nucleotide sequence ({html.escape(row['nt_length'])} nt)</summary><pre>{html.escape(row['nt_sequence'] or 'not available')}</pre></details>"
+            f"<details><summary>Amino-acid sequence ({html.escape(row['aa_length'])} aa)</summary><pre>{html.escape(row['aa_sequence'] or 'not available')}</pre></details>"
+            + (f"<details><summary>Affected nucleotide sequence</summary><pre>{html.escape(affected_nt)}</pre></details>" if affected_nt else "")
+            + (f"<details><summary>Affected amino-acid sequence</summary><pre>{html.escape(affected_aa)}</pre></details>" if affected_aa else "")
+            + "</section>"
         )
     if not event_sequences:
         sequence_note = "No sequence rows were produced for this event."
@@ -3148,6 +3166,15 @@ def render_event_html(
     .row-details dl {{ display:grid; grid-template-columns:minmax(9rem, 0.35fr) 1fr; gap:6px 14px; margin:12px 0 4px; }}
     .row-details dt {{ color:#57606a; font-weight:600; }}
     .row-details dd {{ margin:0; overflow-wrap:anywhere; }}
+    .change-line {{ display:block; margin-bottom:3px; }}
+    .coordinate {{ overflow-wrap:anywhere; }}
+    .sequence-card {{ border:1px solid #d0d7de; border-radius:6px; margin:12px 0; padding:12px 14px; }}
+    .sequence-card h3 {{ margin:0 0 10px; }}
+    .sequence-card details {{ margin:8px 0 0; }}
+    .sequence-card summary {{ cursor:pointer; font-weight:600; }}
+    .sequence-metadata {{ display:grid; grid-template-columns:10rem 1fr; gap:5px 12px; margin:0 0 10px; }}
+    .sequence-metadata dt {{ color:#57606a; font-weight:600; }}
+    .sequence-metadata dd {{ margin:0; overflow-wrap:anywhere; }}
     .asset-links {{ display:flex; flex-wrap:wrap; gap:8px; margin:10px 0 18px; }}
     .breadcrumbs {{ color: #57606a; margin-bottom: 1rem; }}
     {report_map_css()}
@@ -3167,7 +3194,7 @@ def render_event_html(
   <img id="diagram" src="{html.escape(relative(str(svg_path), out_path))}" alt="Isoform switch plot">
   <h2 id="candidates">Candidate Isoforms</h2>
   <p class="note">Candidate isoforms are the transcripts selected from the IsoformSwitchAnalyzeR output for this event. dIF is the change in isoform fraction between groups; positive and negative roles identify switch-in and switch-out transcripts. StringTie/MSTRG identifiers are RNA-seq assembled transcript models; evidence labels are conservative review classes, not independent validation.</p>
-  {table(['isoform_id', 'switch_role', 'assembly_evidence_label', 'dIF', 'padj_qvalue', 'isoform_fraction_control', 'isoform_fraction_test', 'switch_direction'], event_candidates, ['switch_rank', 'transcript_display', 'gffcompare_class_code', 'gene_biotype', 'transcript_biotype', 'switch_biotype_class', 'novelty_group', 'reason_selected', 'assembly_evidence_note', 'consequence_summary'])}
+  {table(['isoform_id', 'switch_role', 'assembly_evidence_label', 'dIF', 'padj_qvalue', 'isoform_fraction_control', 'isoform_fraction_test', 'sequences'], event_candidates, ['switch_rank', 'transcript_display', 'gffcompare_class_code', 'gene_biotype', 'transcript_biotype', 'switch_biotype_class', 'switch_direction', 'novelty_group', 'reason_selected', 'assembly_evidence_note', 'consequence_summary'])}
   <h2 id="coding">Coding Switch Prioritization</h2>
   <p class="note">This table ranks coding switches by predicted consequence evidence such as NMD, coding-potential changes, ORF length changes, domains, signal peptides, transmembrane regions, or localization annotations when those resources are available.</p>
   {table(['coding_priority_rank', 'coding_priority_score', 'coding_priority_tier', 'nmd_change', 'coding_potential_change', 'orf_length_change_aa'], event_coding_rows, ['coding_priority_reasons', 'gained_domain', 'lost_domain', 'gained_signal_peptide', 'lost_signal_peptide', 'gained_transmembrane_region', 'lost_transmembrane_region', 'localization_change'])}
