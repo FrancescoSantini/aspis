@@ -399,6 +399,17 @@ biological_qc:
   run: true
   rnaseq_sample_qc: true
   smallrna_sample_qc: true
+  # Metadata to inspect in the sample-QC batch/design diagnostic report.
+  # Columns absent from a project sample sheet are skipped automatically.
+  sample_qc_metadata_columns:
+    - condition
+    - time_h
+    - dose
+    - batch
+    - batch_id
+    - biospecimen_id
+    - replicate
+    - replicate_id
   smallrna_length_qc: true
   smallrna_length_qc_max_reads: 200000
   biological_warnings: true

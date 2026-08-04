@@ -655,6 +655,7 @@ def render_qc_overview(path: Path, plan_rows: list[dict[str, str]], branch_dir: 
                         expected=False,
                         links=[
                             ("sample QC manifest", base / "quantification/sample_qc/sample_qc_manifest.tsv"),
+                            ("batch/design diagnostics", base / "quantification/sample_qc/design_diagnostics.html"),
                             ("biotype summary", base / "quantification/biotypes/biotype_summary.html"),
                             ("biological warnings", base / "biological_warnings/warnings.html"),
                         ],
@@ -689,6 +690,7 @@ def render_qc_overview(path: Path, plan_rows: list[dict[str, str]], branch_dir: 
                             ("length plot", small / "length_qc/length_distribution.svg"),
                             ("length stages", small / "length_qc/length_stage_summary.tsv"),
                             ("arm summary", small / "length_qc/arm_summary.tsv"),
+                            ("batch/design diagnostics", small / "quantification/sample_qc/design_diagnostics.html"),
                             ("residual manifest", small / "differential/reports/asset_manifest.tsv"),
                         ],
                         base_dir=base_dir,

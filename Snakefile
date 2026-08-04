@@ -124,6 +124,22 @@ SMALLRNA_SAMPLE_QC_RUN = BIOLOGICAL_QC_RUN and as_bool(
     BIOLOGICAL_QC.get("smallrna_sample_qc", True),
     True,
 )
+SAMPLE_QC_METADATA_COLUMNS = config_value_list(
+    BIOLOGICAL_QC.get(
+        "sample_qc_metadata_columns",
+        [
+            "condition",
+            "time_h",
+            "dose",
+            "batch",
+            "batch_id",
+            "biospecimen_id",
+            "replicate",
+            "replicate_id",
+        ],
+    )
+)
+SAMPLE_QC_BATCH_FACTORS = config_value_list(DESIGN.get("batch_factors", []))
 RNASEQ_ALIGNER = RNASEQ_ALIGNMENT.get("aligner", "star").strip().lower()
 RNASEQ_ALIGNMENT_REFERENCE_FASTA = RNASEQ_ALIGNMENT.get("reference_fasta", "")
 RNASEQ_HISAT2_INDEX_PREFIX = RNASEQ_ALIGNMENT.get("hisat2_index_prefix", "")
@@ -1812,6 +1828,9 @@ def planned_branch_targets(wildcards):
                                     f"{BRANCH_DIR}/{assay}/{project}/quantification/sample_qc/sample_qc_manifest.tsv",
                                     f"{BRANCH_DIR}/{assay}/{project}/quantification/sample_qc/sample_qc_metrics.tsv",
                                     f"{BRANCH_DIR}/{assay}/{project}/quantification/sample_qc/sample_correlations.tsv",
+                                    f"{BRANCH_DIR}/{assay}/{project}/quantification/sample_qc/design_diagnostics.tsv",
+                                    f"{BRANCH_DIR}/{assay}/{project}/quantification/sample_qc/design_diagnostics.html",
+                                    f"{BRANCH_DIR}/{assay}/{project}/quantification/sample_qc/metadata_pca_manifest.tsv",
                                     f"{BRANCH_DIR}/{assay}/{project}/quantification/sample_qc/library_sizes.svg",
                                     f"{BRANCH_DIR}/{assay}/{project}/quantification/sample_qc/sample_pca.svg",
                                     f"{BRANCH_DIR}/{assay}/{project}/quantification/sample_qc/sample_correlation_heatmap.svg",
@@ -1968,6 +1987,9 @@ def planned_branch_targets(wildcards):
                                 f"{BRANCH_DIR}/{assay}/{project}/smallrna/quantification/sample_qc/sample_qc_manifest.tsv",
                                 f"{BRANCH_DIR}/{assay}/{project}/smallrna/quantification/sample_qc/sample_qc_metrics.tsv",
                                 f"{BRANCH_DIR}/{assay}/{project}/smallrna/quantification/sample_qc/sample_correlations.tsv",
+                                f"{BRANCH_DIR}/{assay}/{project}/smallrna/quantification/sample_qc/design_diagnostics.tsv",
+                                f"{BRANCH_DIR}/{assay}/{project}/smallrna/quantification/sample_qc/design_diagnostics.html",
+                                f"{BRANCH_DIR}/{assay}/{project}/smallrna/quantification/sample_qc/metadata_pca_manifest.tsv",
                                 f"{BRANCH_DIR}/{assay}/{project}/smallrna/quantification/sample_qc/library_sizes.svg",
                                 f"{BRANCH_DIR}/{assay}/{project}/smallrna/quantification/sample_qc/sample_pca.svg",
                                 f"{BRANCH_DIR}/{assay}/{project}/smallrna/quantification/sample_qc/sample_correlation_heatmap.svg",
@@ -3695,6 +3717,9 @@ rule render_smallrna_sample_qc:
         manifest=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/quantification/sample_qc/sample_qc_manifest.tsv",
         metrics=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/quantification/sample_qc/sample_qc_metrics.tsv",
         correlations=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/quantification/sample_qc/sample_correlations.tsv",
+        design_diagnostics=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/quantification/sample_qc/design_diagnostics.tsv",
+        design_html=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/quantification/sample_qc/design_diagnostics.html",
+        metadata_pca_manifest=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/quantification/sample_qc/metadata_pca_manifest.tsv",
         library_sizes=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/quantification/sample_qc/library_sizes.svg",
         pca=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/quantification/sample_qc/sample_pca.svg",
         correlation_heatmap=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/quantification/sample_qc/sample_correlation_heatmap.svg",
@@ -3704,7 +3729,9 @@ rule render_smallrna_sample_qc:
         condition_col=SMALLRNA.get(
             "condition_col",
             DESIGN.get("condition_col", "condition"),
-        )
+        ),
+        metadata_columns=optional_shell_list_arg("--metadata-columns", SAMPLE_QC_METADATA_COLUMNS),
+        batch_factors=optional_shell_list_arg("--batch-factors", SAMPLE_QC_BATCH_FACTORS)
     log:
         "logs/branches/smallrna/{project}.smallrna_sample_qc.log"
     shell:
@@ -3719,6 +3746,8 @@ rule render_smallrna_sample_qc:
           --feature-id-column Geneid \
           --count-metadata-columns Geneid Chr Start End Strand Length feature_type \
           --condition-col {params.condition_col:q} \
+          {params.metadata_columns} \
+          {params.batch_factors} \
           --level miRNA \
           > {log:q} 2>&1
         """
@@ -5443,6 +5472,9 @@ rule render_rnaseq_sample_qc:
         manifest=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/sample_qc/sample_qc_manifest.tsv",
         metrics=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/sample_qc/sample_qc_metrics.tsv",
         correlations=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/sample_qc/sample_correlations.tsv",
+        design_diagnostics=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/sample_qc/design_diagnostics.tsv",
+        design_html=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/sample_qc/design_diagnostics.html",
+        metadata_pca_manifest=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/sample_qc/metadata_pca_manifest.tsv",
         library_sizes=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/sample_qc/library_sizes.svg",
         pca=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/sample_qc/sample_pca.svg",
         correlation_heatmap=f"{BRANCH_DIR}" + "/rnaseq/{project}/quantification/sample_qc/sample_correlation_heatmap.svg",
@@ -5452,7 +5484,9 @@ rule render_rnaseq_sample_qc:
         condition_col=RNASEQ_DIFFERENTIAL.get(
             "condition_col",
             DESIGN.get("condition_col", "condition"),
-        )
+        ),
+        metadata_columns=optional_shell_list_arg("--metadata-columns", SAMPLE_QC_METADATA_COLUMNS),
+        batch_factors=optional_shell_list_arg("--batch-factors", SAMPLE_QC_BATCH_FACTORS)
     log:
         "logs/branches/rnaseq/{project}.sample_qc.log"
     shell:
@@ -5467,6 +5501,8 @@ rule render_rnaseq_sample_qc:
           --feature-id-column Geneid \
           --count-metadata-columns Geneid Chr Start End Strand Length \
           --condition-col {params.condition_col:q} \
+          {params.metadata_columns} \
+          {params.batch_factors} \
           --level gene \
           > {log:q} 2>&1
         """

@@ -395,10 +395,12 @@ def workflow_status_matrix(base_dir: Path, rnaseq_base: Path, smallrna_base: Pat
         ("RNA-seq", "post-trim QC", rnaseq_base / "preprocess/multiqc/multiqc_report.html", False),
         ("RNA-seq", "alignment QC", rnaseq_base / "alignment/qc/multiqc/multiqc_report.html", False),
         ("RNA-seq", "sample-level quantification QC", rnaseq_base / "quantification/sample_qc/sample_qc_manifest.tsv", False),
+        ("RNA-seq", "batch/design diagnostics", rnaseq_base / "quantification/sample_qc/design_diagnostics.html", False),
         ("RNA-seq", "biotype summary", rnaseq_base / "quantification/biotypes/biotype_summary.html", False),
         ("RNA-seq", "strandedness diagnostics", rnaseq_base / "alignment/strandedness/strandedness_report.tsv", False),
         ("smallRNA", "raw QC", smallrna_base / "multiqc/multiqc_report.html", False),
         ("smallRNA", "post-trim QC", smallrna_base / "smallrna/preprocess/multiqc/multiqc_report.html", False),
+        ("smallRNA", "batch/design diagnostics", smallrna_base / "smallrna/quantification/sample_qc/design_diagnostics.html", False),
         ("smallRNA", "length/read-fate QC", smallrna_base / "smallrna/length_qc/length_distribution.svg", False),
     ]
     rows = []

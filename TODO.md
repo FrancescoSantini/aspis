@@ -28,25 +28,22 @@ linked residual tables.
 
 ### Batch and design diagnostics
 
-Status: partially implemented, needs a dedicated diagnostic layer if we want a
-clear final-review artifact.
+Status: implemented as a sample-QC report artifact.
 
 - Existing support: `design.model_formula`, `design.batch_factors`, assay-level
   design formulas, sample count QC, PCA, sample-correlation heatmaps, and
   biological warnings.
-- Missing review artifact: a compact batch/design diagnostic report that
-  explicitly shows whether samples cluster by treatment, time, replicate,
-  biospecimen, or batch, and whether configured batch factors are confounded
-  with contrasts.
-- Proposed implementation:
-  - Extend sample QC metrics to carry selected sample metadata columns.
-  - Render PCA colored by each configured metadata/batch variable.
-  - Add a design-confounding table per assay/project.
-  - Surface the diagnostic in project reports, technical PDFs, and the run
-    dashboard.
+- The per-assay `quantification/sample_qc/design_diagnostics.html` report now
+  records metadata-level balance/confounding checks and PCA views colored by
+  available treatment, time, replicate, biospecimen, and configured batch
+  factors.
+- It is linked from each project report's QC/design/provenance section and from
+  the run dashboard QC cards. Configure the inspected columns with
+  `biological_qc.sample_qc_metadata_columns`; missing sample-sheet columns are
+  skipped automatically.
 
-Code need: yes, if we want more than the current generic PCA/correlation QC.
-This should be a small report-layer addition, not a redesign of DESeq2 models.
+Potential future enhancement: add formal association statistics (for example,
+variance explained by batch) when datasets have enough independent batches.
 
 ### Cross-project rerun and comparison
 
