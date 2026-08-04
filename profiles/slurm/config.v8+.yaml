@@ -205,6 +205,10 @@ set-resources:
     runtime: 5
     mem_mb: 1000
     disk_mb: 1000
+  count_rnaseq_dexseq_exon_library:
+    runtime: 240
+    mem_mb: 16000
+    disk_mb: 50000
   plan_gene_differential:
     runtime: 5
     mem_mb: 1000
