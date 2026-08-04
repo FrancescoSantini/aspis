@@ -203,8 +203,8 @@ set-resources:
     disk_mb: 1000
   check_rnaseq_differential_environment:
     runtime: 5
-    mem_mb: 1000
-    disk_mb: 1000
+    mem_mb: 8000
+    disk_mb: 10000
   count_rnaseq_dexseq_exon_library:
     runtime: 240
     mem_mb: 16000
