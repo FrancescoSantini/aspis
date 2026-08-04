@@ -51,6 +51,7 @@ set-threads:
   build_rnaseq_star_index: 8
   plan_rnaseq_alignment: 1
   check_rnaseq_alignment_environment: 1
+  align_rnaseq_library: 4
   align_rnaseq_branch: 4
   qc_rnaseq_alignment: 1
   run_rnaseq_alignment_multiqc: 1
@@ -140,6 +141,10 @@ set-resources:
     runtime: 5
     mem_mb: 1000
     disk_mb: 1000
+  align_rnaseq_library:
+    runtime: 240
+    mem_mb: 32000
+    disk_mb: 100000
   align_rnaseq_branch:
     runtime: 240
     mem_mb: 64000
