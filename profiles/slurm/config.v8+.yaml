@@ -133,6 +133,10 @@ set-resources:
     runtime: 360
     mem_mb: 64000
     disk_mb: 250000
+  build_smallrna_residual_genome_index:
+    runtime: 180
+    mem_mb: 16000
+    disk_mb: 50000
   plan_rnaseq_alignment:
     runtime: 5
     mem_mb: 1000
