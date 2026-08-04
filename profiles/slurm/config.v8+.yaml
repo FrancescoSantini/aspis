@@ -137,6 +137,10 @@ set-resources:
     runtime: 180
     mem_mb: 16000
     disk_mb: 50000
+  align_smallrna_residual_genome_library:
+    runtime: 240
+    mem_mb: 16000
+    disk_mb: 100000
   plan_rnaseq_alignment:
     runtime: 5
     mem_mb: 1000
