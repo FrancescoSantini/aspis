@@ -132,7 +132,6 @@ def outputs_for(row: dict[str, str], outdir: Path) -> dict[str, Path]:
     return {
         "library_dir": library_dir,
         "sam": library_dir / "residual_genome.sam",
-        "unsorted_bam": library_dir / "residual_genome.unsorted.bam",
         "bam": library_dir / "residual_genome.bam",
         "unmapped_fastq_1": library_dir / "genome_unmapped.fastq.gz",
         "tmp_unmapped_fastq_1": library_dir / "genome_unmapped.fastq",
@@ -371,25 +370,16 @@ def run_alignment(
             str(input_fastq),
         ]
         run_command(command, stdout=outputs["sam"], stderr=outputs["alignment_log"])
-        run_command([samtools, "view", "-bS", "-o", str(outputs["unsorted_bam"]), str(outputs["sam"])])
-        run_command(
-            [
-                samtools,
-                "sort",
-                "-@",
-                str(args.threads),
-                "-o",
-                str(outputs["bam"]),
-                str(outputs["unsorted_bam"]),
-            ]
-        )
+        # The BAM is an inspection artifact; no downstream rule needs coordinate
+        # order.  Avoiding a full external sort is essential for the high-volume
+        # residual-read libraries, where sorting dominates runtime and I/O.
+        run_command([samtools, "view", "-bS", "-o", str(outputs["bam"]), str(outputs["sam"])])
         run_command([samtools, "flagstat", str(outputs["bam"])], stdout=outputs["flagstat"])
         if outputs["tmp_unmapped_fastq_1"].exists():
             gzip_fastq(outputs["tmp_unmapped_fastq_1"], outputs["unmapped_fastq_1"])
         else:
             write_empty_fastq(outputs["unmapped_fastq_1"])
         assignments, biotype_counts, feature_counts = parse_sam_assignments(outputs["sam"], gtf_features)
-        outputs["unsorted_bam"].unlink(missing_ok=True)
         bam_path = str(outputs["bam"])
 
     write_tsv(
