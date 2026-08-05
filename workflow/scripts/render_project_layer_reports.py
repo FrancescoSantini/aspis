@@ -1420,6 +1420,13 @@ def render_contrast_summary(
     .inlined-summary > :first-child {{ margin-top:0; }}
     .inlined-summary .report-shell {{ display:block; }}
     .inlined-summary .report-map,.inlined-summary .breadcrumbs {{ display:none; }}
+    /* The project-layer page inlines smallRNA report bodies, not their styles.
+       Keep residual sample matrices compact here, where the final page is styled. */
+    .residual-sample-matrix {{ table-layout:fixed; font-size:0.78rem; }}
+    .residual-sample-matrix th:first-child,.residual-sample-matrix td:first-child {{ width:10rem; }}
+    .residual-sample-matrix th:not(:first-child),.residual-sample-matrix td:not(:first-child) {{ min-width:0; width:4rem; }}
+    .residual-sample-matrix th:not(:first-child) {{ overflow-wrap:anywhere; word-break:break-word; }}
+    .residual-sample-matrix td:not(:first-child) {{ font-variant-numeric:tabular-nums; white-space:nowrap; }}
     .method-row {{ border-top:1px solid #d0d7de; padding-top:14px; margin-top:16px; }}
     .method-row:first-child {{ border-top:0; padding-top:0; margin-top:0; }}
     @media (max-width: 1100px) {{ .plot-grid-two {{ grid-template-columns:1fr; }} }}
