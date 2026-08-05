@@ -71,7 +71,10 @@ def main() -> int:
     if reads:
         bowtie, samtools = shutil.which(a.bowtie), shutil.which(a.samtools)
         if not bowtie or not samtools: raise FileNotFoundError("bowtie or samtools is not on PATH")
-        run([bowtie, "-v", str(a.mismatches), "-k", str(a.multi_alignments), "-p", str(a.threads), "--un", str(tmp_unmapped), "-S", *shlex.split(a.extra_args), a.index_prefix, str(source)], stdout=sam, stderr=log)
+        extra_args = shlex.split(a.extra_args)
+        if a.multi_alignments == 1:
+            extra_args = [arg for arg in extra_args if arg != "--strata"]
+        run([bowtie, "-v", str(a.mismatches), "-k", str(a.multi_alignments), "-p", str(a.threads), "--un", str(tmp_unmapped), "-S", *extra_args, a.index_prefix, str(source)], stdout=sam, stderr=log)
         run([samtools, "view", "-bS", "-o", str(bam), str(sam)])
         run([samtools, "flagstat", str(bam)], stdout=flagstat)
         if tmp_unmapped.exists():
