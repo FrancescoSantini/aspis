@@ -794,6 +794,11 @@ def render_html(
     .wide-table {{ table-layout:auto; }}
     .wide-table th, .wide-table td {{ min-width: 7rem; }}
     .wide-table th:last-child, .wide-table td:last-child {{ min-width: 28rem; }}
+    .residual-sample-matrix {{ table-layout: fixed; font-size: 0.78rem; }}
+    .residual-sample-matrix th:first-child, .residual-sample-matrix td:first-child {{ width: 10rem; }}
+    .residual-sample-matrix th:not(:first-child), .residual-sample-matrix td:not(:first-child) {{ min-width: 0; width: 4rem; }}
+    .residual-sample-matrix th:not(:first-child) {{ overflow-wrap: anywhere; word-break: break-word; }}
+    .residual-sample-matrix td:not(:first-child) {{ font-variant-numeric: tabular-nums; white-space: nowrap; }}
     table {{ border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: 0.92rem; }}
     th, td {{ border: 1px solid #ddd; padding: 0.45rem; text-align: left; vertical-align: top; overflow-wrap: anywhere; }}
     th {{ background: #f2f2f2; }}
@@ -831,9 +836,9 @@ def render_html(
   {html_table(isomir_length_summary, isomir_columns)}
   <h2 id="residuals">Residual genome read fate</h2>
   <p class="note">Residual-read summaries describe genome-aligned reads that were not assigned to the main miRNA quantification layer. They help diagnose contamination, other smallRNA classes, degradation products, or annotation gaps.</p>
-  {html_table(residual_biotype_preview, residual_biotype_columns)}
+  {html_table(residual_biotype_preview, residual_biotype_columns, "residual-sample-matrix")}
   <h2>Top residual annotated features</h2>
-  {html_table(residual_feature_preview, residual_feature_columns)}
+  {html_table(residual_feature_preview, residual_feature_columns, "residual-sample-matrix")}
   {report_shell_close()}{report_map_script()}
 </body>
 </html>
