@@ -3557,11 +3557,8 @@ rule align_smallrna_residual_genome_library:
         annotation=([SMALLRNA_CONFIGURED_RESIDUAL_ANNOTATION_GTF] if SMALLRNA_CONFIGURED_RESIDUAL_ANNOTATION_GTF else []),
         environment=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/environment_report.tsv"
     output:
-        samples=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/residual_genome/{library_id}/residual_sample.tsv",
-        manifest=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/residual_genome/{library_id}/residual_manifest.tsv",
-        biotype_counts=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/residual_genome/{library_id}/biotype_counts.tsv",
-        feature_counts=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/residual_genome/{library_id}/feature_counts.tsv",
-        done=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/residual_genome/{library_id}/residual.done"
+        alignment=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/residual_genome/{library_id}/residual_alignment.tsv",
+        done=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/residual_genome/{library_id}/residual_alignment.done"
     params:
         outdir=lambda wildcards: f"{BRANCH_DIR}/smallrna/{wildcards.project}/smallrna/residual_genome",
         index_prefix=SMALLRNA_EFFECTIVE_RESIDUAL_GENOME_INDEX_PREFIX,
@@ -3575,20 +3572,18 @@ rule align_smallrna_residual_genome_library:
         SMALLRNA.get("threads", 1)
     log:
         "logs/branches/smallrna/{project}.smallrna_residual_genome.{library_id}.log"
+    resources:
+        residual_genome_slots=1
     shell:
         r"""
         mkdir -p logs/branches/smallrna
-        python3 workflow/scripts/align_smallrna_residual_genome.py \
+        python3 workflow/scripts/run_smallrna_residual_alignment.py \
           --samples {input.samples:q} \
           --library-id {wildcards.library_id:q} \
           --outdir {params.outdir:q} \
-          --output {output.samples:q} \
-          --manifest {output.manifest:q} \
-          --biotype-counts {output.biotype_counts:q} \
-          --feature-counts {output.feature_counts:q} \
+          --output {output.alignment:q} \
           --done {output.done:q} \
           --index-prefix {params.index_prefix:q} \
-          {params.annotation_gtf_flag} \
           --bowtie {params.bowtie:q} \
           --samtools {params.samtools:q} \
           --threads {threads:q} \
@@ -3596,6 +3591,33 @@ rule align_smallrna_residual_genome_library:
           --multi-alignments {params.multi_alignments:q} \
           --extra-args {params.extra_args:q} \
           > {log:q} 2>&1
+        """
+
+
+rule annotate_smallrna_residual_genome_library:
+    input:
+        samples=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/alignment/aligned_samples.tsv",
+        alignment=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/residual_genome/{library_id}/residual_alignment.tsv",
+        annotation=([SMALLRNA_CONFIGURED_RESIDUAL_ANNOTATION_GTF] if SMALLRNA_CONFIGURED_RESIDUAL_ANNOTATION_GTF else [])
+    output:
+        samples=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/residual_genome/{library_id}/residual_sample.tsv",
+        manifest=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/residual_genome/{library_id}/residual_manifest.tsv",
+        biotype_counts=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/residual_genome/{library_id}/biotype_counts.tsv",
+        feature_counts=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/residual_genome/{library_id}/feature_counts.tsv",
+        done=f"{BRANCH_DIR}" + "/smallrna/{project}/smallrna/residual_genome/{library_id}/residual.done"
+    params:
+        outdir=lambda wildcards: f"{BRANCH_DIR}/smallrna/{wildcards.project}/smallrna/residual_genome",
+        annotation_gtf_flag=optional_shell_arg("--annotation-gtf", SMALLRNA_CONFIGURED_RESIDUAL_ANNOTATION_GTF)
+    log:
+        "logs/branches/smallrna/{project}.smallrna_residual_annotation.{library_id}.log"
+    shell:
+        r"""
+        mkdir -p logs/branches/smallrna
+        python3 workflow/scripts/align_smallrna_residual_genome.py \
+          --samples {input.samples:q} --library-id {wildcards.library_id:q} --outdir {params.outdir:q} \
+          --alignment-table {input.alignment:q} --output {output.samples:q} --manifest {output.manifest:q} \
+          --biotype-counts {output.biotype_counts:q} --feature-counts {output.feature_counts:q} --done {output.done:q} \
+          {params.annotation_gtf_flag} > {log:q} 2>&1
         """
 
 

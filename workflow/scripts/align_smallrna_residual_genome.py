@@ -55,7 +55,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--biotype-counts", required=True, help="Output biotype count matrix TSV")
     parser.add_argument("--feature-counts", required=True, help="Output feature count matrix TSV")
     parser.add_argument("--done", required=True, help="Completion sentinel")
-    parser.add_argument("--index-prefix", required=True, help="Genome Bowtie index prefix")
+    parser.add_argument("--alignment-table", default="", help="Existing per-library residual alignment TSV; annotate it without rerunning Bowtie")
+    parser.add_argument("--index-prefix", default="", help="Genome Bowtie index prefix")
     parser.add_argument("--annotation-gtf", default="", help="GTF used to classify residual genome alignments")
     parser.add_argument("--bowtie", default="bowtie", help="Bowtie executable")
     parser.add_argument("--samtools", default="samtools", help="samtools executable")
@@ -443,7 +444,28 @@ def main() -> int:
     features_by_sample: dict[str, Counter[str]] = {}
     for row in rows:
         outputs = outputs_for(row, outdir)
-        manifest_row, biotype_counts, feature_counts = run_alignment(row, outputs, args, extra_args, gtf_features)
+        if args.alignment_table:
+            _columns, alignment_rows = read_tsv(
+                Path(args.alignment_table),
+                {"library_id", "sam", "bam", "genome_unmapped_fastq_1", "flagstat", "alignment_log", "input_reads", "genome_aligned_reads", "genome_unmapped_reads"},
+            )
+            alignment = select_library(alignment_rows, row["library_id"])[0]
+            assignments, biotype_counts, feature_counts = parse_sam_assignments(Path(alignment["sam"]), gtf_features)
+            unassigned_reads = biotype_counts.get("unassigned", 0)
+            manifest_row = {
+                "library_id": row["library_id"], "project": row.get("project", ""), "assay": row.get("assay", ""),
+                "input_fastq_1": alignment.get("input_fastq_1", row["mirbase_unmapped_fastq_1"]),
+                "genome_unmapped_fastq_1": alignment["genome_unmapped_fastq_1"], "bam": alignment["bam"],
+                "flagstat": alignment["flagstat"], "alignment_log": alignment["alignment_log"],
+                "assignment_tsv": str(outputs["assignment_tsv"]), "status": "ok", "message": "",
+                "input_reads": alignment["input_reads"], "genome_aligned_reads": alignment["genome_aligned_reads"],
+                "genome_unmapped_reads": alignment["genome_unmapped_reads"],
+                "annotated_reads": str(max(0, int(alignment["genome_aligned_reads"]) - unassigned_reads)),
+                "unassigned_reads": str(unassigned_reads),
+            }
+            write_tsv(outputs["assignment_tsv"], ["read_id", "contig", "start", "end", "feature_id", "feature_name", "biotype"], assignments)
+        else:
+            manifest_row, biotype_counts, feature_counts = run_alignment(row, outputs, args, extra_args, gtf_features)
         sample_id = row["library_id"]
         output_rows.append(
             {
