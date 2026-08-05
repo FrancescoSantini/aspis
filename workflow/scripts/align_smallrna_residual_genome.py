@@ -43,6 +43,7 @@ MANIFEST_COLUMNS = [
 ]
 REF_CIGAR_OPS = {"M", "D", "N", "=", "X"}
 BIOTYPE_KEYS = ("gene_biotype", "gene_type", "transcript_biotype", "transcript_type", "biotype")
+FEATURE_BIN_SIZE = 100_000
 
 
 def parse_args() -> argparse.Namespace:
@@ -210,7 +211,7 @@ def feature_biotype(attributes: dict[str, str]) -> str:
     return "unannotated"
 
 
-def read_gtf(path_text: str) -> dict[str, list[dict[str, object]]]:
+def read_gtf(path_text: str) -> dict[str, dict[int, list[dict[str, object]]]]:
     if not path_text:
         return {}
     path = Path(path_text)
@@ -239,9 +240,15 @@ def read_gtf(path_text: str) -> dict[str, list[dict[str, object]]]:
                     "feature_type": feature_type,
                 }
             )
-    for contig in features:
-        features[contig].sort(key=lambda item: (item["feature_type"] != "gene", item["start"], item["end"]))
-    return features
+    binned_features: dict[str, dict[int, list[dict[str, object]]]] = {}
+    for contig, contig_features in features.items():
+        contig_features.sort(key=lambda item: (item["feature_type"] != "gene", item["start"], item["end"]))
+        bins: dict[int, list[dict[str, object]]] = defaultdict(list)
+        for feature in contig_features:
+            for bin_id in range(int(feature["start"]) // FEATURE_BIN_SIZE, int(feature["end"]) // FEATURE_BIN_SIZE + 1):
+                bins[bin_id].append(feature)
+        binned_features[contig] = dict(bins)
+    return binned_features
 
 
 def cigar_ref_length(cigar: str, sequence: str) -> int:
@@ -258,18 +265,24 @@ def assign_feature(
     contig: str,
     start: int,
     end: int,
-    features: dict[str, list[dict[str, object]]],
+    features: dict[str, dict[int, list[dict[str, object]]]],
 ) -> tuple[str, str, str]:
-    for feature in features.get(contig, []):
-        if int(feature["end"]) < start or int(feature["start"]) > end:
-            continue
-        return str(feature["feature_id"]), str(feature["feature_name"]), str(feature["biotype"])
+    seen_features = set()
+    for bin_id in range(start // FEATURE_BIN_SIZE, end // FEATURE_BIN_SIZE + 1):
+        for feature in features.get(contig, {}).get(bin_id, []):
+            feature_key = id(feature)
+            if feature_key in seen_features:
+                continue
+            seen_features.add(feature_key)
+            if int(feature["end"]) < start or int(feature["start"]) > end:
+                continue
+            return str(feature["feature_id"]), str(feature["feature_name"]), str(feature["biotype"])
     return "", "", "unassigned"
 
 
 def parse_sam_assignments(
     sam: Path,
-    gtf_features: dict[str, list[dict[str, object]]],
+    gtf_features: dict[str, dict[int, list[dict[str, object]]]],
 ) -> tuple[list[dict[str, str]], Counter[str], Counter[str]]:
     seen_reads = set()
     assignments: list[dict[str, str]] = []

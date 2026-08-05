@@ -3610,6 +3610,8 @@ rule annotate_smallrna_residual_genome_library:
         annotation_gtf_flag=optional_shell_arg("--annotation-gtf", SMALLRNA_CONFIGURED_RESIDUAL_ANNOTATION_GTF)
     log:
         "logs/branches/smallrna/{project}.smallrna_residual_annotation.{library_id}.log"
+    resources:
+        residual_annotation_slots=1
     shell:
         r"""
         mkdir -p logs/branches/smallrna
