@@ -47,7 +47,9 @@ def run(command: list[str], *, stdout: Path | None = None, stderr: Path | None =
     out = stdout.open("w") if stdout else subprocess.DEVNULL
     err = stderr.open("w") if stderr else subprocess.DEVNULL
     try:
-        if subprocess.run(command, stdout=out, stderr=err).returncode: raise RuntimeError(f"command failed: {command[0]}")
+        if subprocess.run(command, stdout=out, stderr=err).returncode:
+            detail = stderr.read_text(encoding="utf-8", errors="replace")[-4000:] if stderr and stderr.exists() else ""
+            raise RuntimeError(f"command failed: {command[0]}\n{detail}")
     finally:
         if stdout: out.close()
         if stderr: err.close()
