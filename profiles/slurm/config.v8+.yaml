@@ -97,6 +97,10 @@ set-resources:
     runtime: 5
     mem_mb: 1000
     disk_mb: 1000
+  preprocess_rnaseq_library:
+    runtime: 240
+    mem_mb: 16000
+    disk_mb: 100000
   preprocess_rnaseq_branch:
     runtime: 120
     mem_mb: 8000
