@@ -5,9 +5,10 @@ from __future__ import annotations
 
 import argparse
 import csv
-import shlex
 import subprocess
 from pathlib import Path
+
+from dexseq_helpers import command_with_dexseq_helper
 
 
 def parse_args() -> argparse.Namespace:
@@ -29,11 +30,13 @@ def main() -> int:
     flattened_gff.parent.mkdir(parents=True, exist_ok=True)
 
     command = [
-        *shlex.split(args.dexseq_prepare_annotation_command),
+        *command_with_dexseq_helper(
+            args.dexseq_prepare_annotation_command, "dexseq_prepare_annotation.py"
+        ),
         str(annotation_gtf),
         str(flattened_gff),
     ]
-    print("[CMD]", " ".join(shlex.quote(part) for part in command), flush=True)
+    print("[CMD]", " ".join(command), flush=True)
     completed = subprocess.run(command, text=True, check=False)
     if completed.returncode != 0:
         raise SystemExit(completed.returncode)

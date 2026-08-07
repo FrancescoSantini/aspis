@@ -5,9 +5,10 @@ from __future__ import annotations
 
 import argparse
 import csv
-import shlex
 import subprocess
 from pathlib import Path
+
+from dexseq_helpers import command_with_dexseq_helper
 
 
 def read_tsv(path: Path) -> list[dict[str, str]]:
@@ -56,7 +57,7 @@ def main() -> int:
     count_file.parent.mkdir(parents=True, exist_ok=True)
 
     command = [
-        *shlex.split(args.dexseq_count_command),
+        *command_with_dexseq_helper(args.dexseq_count_command, "dexseq_count.py"),
         "-f",
         "bam",
         "-r",
@@ -70,7 +71,7 @@ def main() -> int:
         command.extend(["-a", str(args.dexseq_count_min_mapq)])
     command.extend([str(flattened_gff), bam, str(count_file)])
 
-    print("[CMD]", " ".join(shlex.quote(part) for part in command), flush=True)
+    print("[CMD]", " ".join(command), flush=True)
     completed = subprocess.run(command, text=True, check=False)
     if completed.returncode != 0:
         raise SystemExit(completed.returncode)
