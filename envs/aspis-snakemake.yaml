@@ -29,5 +29,10 @@ dependencies:
   - r-optparse
   - r-mass
   - bioconductor-deseq2
+  # Native DTU methods use both the R packages and the DEXSeq Python helpers.
+  - bioconductor-drimseq
+  - bioconductor-dexseq
+  - bioconductor-stager
+  - suppa
   - bioconductor-isoformswitchanalyzer
   - bioconductor-bsgenome.hsapiens.ncbi.grch38

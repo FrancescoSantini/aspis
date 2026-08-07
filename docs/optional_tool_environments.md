@@ -1,14 +1,17 @@
 # Optional Tool Environments
 
-ASPIS keeps the core workflow environment small enough to be reproducible on
-HPC systems, then exposes advanced isoform-switch and DTU tools as optional
-layers. The rule is:
+ASPIS keeps the core workflow environment reproducible on HPC systems, then
+exposes advanced isoform-switch tools and site-managed tools as optional
+layers. Native conda-installable DTU methods are included in the main workflow
+environment so their R packages and Python helpers are available to Snakemake
+jobs. The rule is:
 
 - `envs/aspis-snakemake.yaml` is the stable core environment.
 - `envs/aspis-functional-annotation.yaml` contains first-pass tools that can be
   reasonably installed through conda for protein/coding consequence annotation.
-- `envs/aspis-splicing.yaml` contains first-pass conda-installable DTU or
-  splicing companion tools.
+- `envs/aspis-splicing.yaml` is a lightweight companion specification for
+  standalone DTU/splicing use; it is not the environment used to launch the
+  complete workflow.
 - tools with large databases, licenses, registration, or site-specific setup
   remain externally managed but are still represented by explicit config keys
   and environment reports.
@@ -26,7 +29,8 @@ conda activate aspis-smk9
 ```
 
 This environment is expected to cover Snakemake, FASTQ processing, alignment,
-quantification, DESeq2, and IsoformSwitchAnalyzeR.
+quantification, DESeq2, native DRIMSeq/DEXSeq/DEXSeqExon/SUPPA2 DTU, and
+IsoformSwitchAnalyzeR. rMATS remains externally managed.
 
 ## Functional Annotation Environment
 

@@ -101,16 +101,20 @@ def validate_config_defaults() -> None:
 
 
 def validate_env_specs() -> None:
+    workflow = read_yaml(Path("envs/aspis-snakemake.yaml"))
     functional = read_yaml(Path("envs/aspis-functional-annotation.yaml"))
     splicing = read_yaml(Path("envs/aspis-splicing.yaml"))
     if functional.get("name") != "aspis-functional-annotation":
         raise ValueError("functional annotation env has unexpected name")
     if splicing.get("name") != "aspis-splicing":
         raise ValueError("splicing env has unexpected name")
+    workflow_deps = dependency_names(workflow)
     functional_deps = dependency_names(functional)
     splicing_deps = dependency_names(splicing)
     if not {"hmmer", "cpat", "seqkit"} <= functional_deps:
         raise ValueError(f"functional annotation env missing core deps: {functional_deps}")
+    if not {"bioconductor-drimseq", "bioconductor-dexseq", "bioconductor-stager", "suppa"} <= workflow_deps:
+        raise ValueError(f"workflow env missing native DTU dependencies: {workflow_deps}")
     if not {"bioconductor-drimseq", "bioconductor-dexseq", "suppa"} <= splicing_deps:
         raise ValueError(f"splicing env missing core deps: {splicing_deps}")
 
