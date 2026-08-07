@@ -109,12 +109,15 @@ def validate_env_specs() -> None:
     if splicing.get("name") != "aspis-splicing":
         raise ValueError("splicing env has unexpected name")
     workflow_deps = dependency_names(workflow)
+    workflow_specs = set(workflow.get("dependencies", []))
     functional_deps = dependency_names(functional)
     splicing_deps = dependency_names(splicing)
     if not {"hmmer", "cpat", "seqkit"} <= functional_deps:
         raise ValueError(f"functional annotation env missing core deps: {functional_deps}")
     if not {"bioconductor-drimseq", "bioconductor-dexseq", "bioconductor-stager", "suppa"} <= workflow_deps:
         raise ValueError(f"workflow env missing native DTU dependencies: {workflow_deps}")
+    if "snakemake=9.22.0" not in workflow_specs:
+        raise ValueError("workflow env must pin Snakemake 9.22.0 for dynamic contrast checkpoints")
     if not {"bioconductor-drimseq", "bioconductor-dexseq", "suppa"} <= splicing_deps:
         raise ValueError(f"splicing env missing core deps: {splicing_deps}")
 

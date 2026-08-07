@@ -5,7 +5,9 @@ channels:
   - nodefaults
 dependencies:
   - python=3.11
-  - snakemake>=9,<10
+  # 9.25 changes checkpoint re-evaluation and schedules placeholder merge jobs.
+  # ASPIS dynamic contrast rules are validated with the stable 9.22 release.
+  - snakemake=9.22.0
   - snakemake-executor-plugin-slurm
   - pandas
   - pyyaml

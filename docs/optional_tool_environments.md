@@ -30,7 +30,9 @@ conda activate aspis-smk9
 
 This environment is expected to cover Snakemake, FASTQ processing, alignment,
 quantification, DESeq2, native DRIMSeq/DEXSeq/DEXSeqExon/SUPPA2 DTU, and
-IsoformSwitchAnalyzeR. rMATS remains externally managed.
+IsoformSwitchAnalyzeR. rMATS remains externally managed. ASPIS pins Snakemake
+to version 9.22.0 because its dynamic contrast checkpoint rules require the
+pre-9.25 checkpoint re-evaluation behavior.
 
 ## Functional Annotation Environment
 
