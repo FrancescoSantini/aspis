@@ -2314,7 +2314,7 @@ def workflow_targets(wildcards):
     return targets
 
 
-localrules: all, check_environment, check_execution_config, assay_branch_ready, build_branch_design, build_branch_provenance_bundle, run_gene_deseq2, run_transcript_deseq2, run_isoform_switch, run_mirna_deseq2, render_rnaseq_differential_plots, render_rnaseq_differential_enrichment, render_rnaseq_differential_summaries, render_run_dashboard, prune_rnaseq_dtu_intermediates
+localrules: all, check_environment, check_execution_config, assay_branch_ready, build_branch_design, build_branch_provenance_bundle, render_rnaseq_differential_plots, render_rnaseq_differential_enrichment, render_rnaseq_differential_summaries, render_run_dashboard, prune_rnaseq_dtu_intermediates
 
 
 rule all:
