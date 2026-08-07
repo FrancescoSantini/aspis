@@ -953,15 +953,10 @@ def smallrna_mirna_deseq2_contrast_done(project, contrast_id):
 
 
 def smallrna_mirna_deseq2_contrast_manifests(wildcards):
+    plan_path = checkpoints.plan_mirna_differential.get(project=wildcards.project).output[0]
     return [
         smallrna_mirna_deseq2_contrast_manifest(wildcards.project, contrast_id)
-        for contrast_id in static_contrast_ids(
-            wildcards.project,
-            "smallrna",
-            SMALLRNA.get("condition_col", DESIGN.get("condition_col", "condition")),
-            SMALLRNA.get("control_label", DESIGN.get("control_label", "control")),
-            SMALLRNA.get("contrast_by", DESIGN.get("covariates", [])),
-        )
+        for contrast_id in contrast_ids_from_plan(plan_path)
     ]
 
 
