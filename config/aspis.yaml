@@ -481,7 +481,7 @@ environment:
     hisat2-build: "2.2"
     samtools: "1.15"
     featureCounts: "2.0"
-    stringtie: "2.2"
+    stringtie: "2.1"
     gffcompare: "0.12"
     Rscript: "4.1"
     "R::DESeq2": "1.36"
