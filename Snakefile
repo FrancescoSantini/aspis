@@ -2633,7 +2633,7 @@ if RNASEQ_STAR_INDEX_DONE:
               --annotation-gtf {params.annotation_gtf:q} \
               --sjdb-overhang {params.sjdb_overhang:q} \
               --genome-sa-index-nbases {params.genome_sa_index_nbases:q} \
-              --extra-args {params.extra_args:q} \
+              --extra-args={params.extra_args:q} \
               > {log:q} 2>&1
             """
 
@@ -3512,7 +3512,7 @@ rule align_smallrna_mirbase_library:
           --threads {threads:q} \
           --mismatches {params.mismatches:q} \
           --multi-alignments {params.multi_alignments:q} \
-          --extra-args {params.extra_args:q} \
+          --extra-args={params.extra_args:q} \
           > {log:q} 2>&1
         """
 
@@ -3589,7 +3589,7 @@ rule align_smallrna_residual_genome_library:
           --threads {threads:q} \
           --mismatches {params.mismatches:q} \
           --multi-alignments {params.multi_alignments:q} \
-          --extra-args {params.extra_args:q} \
+          --extra-args={params.extra_args:q} \
           > {log:q} 2>&1
         """
 
