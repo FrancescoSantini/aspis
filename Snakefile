@@ -634,6 +634,85 @@ def contrast_ids_from_plan(plan_path):
     return contrast_ids
 
 
+def dexseq_count_strandedness(value):
+    """Normalize YAML booleans and text to DEXSeq's accepted -s values."""
+    if isinstance(value, bool):
+        return "yes" if value else "no"
+    normalized = str(value).strip().lower()
+    aliases = {
+        "true": "yes",
+        "yes": "yes",
+        "1": "yes",
+        "false": "no",
+        "no": "no",
+        "0": "no",
+        "reverse": "reverse",
+    }
+    if normalized not in aliases:
+        raise ValueError(
+            "rnaseq_dtu.dexseq_count_strandedness must be one of "
+            "yes, no, or reverse"
+        )
+    return aliases[normalized]
+
+
+def configured_contrast_columns(value):
+    if value is None:
+        return []
+    if isinstance(value, str):
+        return [column.strip() for column in value.split(",") if column.strip()]
+    return [str(column).strip() for column in value if str(column).strip()]
+
+
+def static_contrast_ids(project, assay, condition_col, control_label, contrast_by, *, dtu=False):
+    """Return deterministic contrast IDs from the intake sheet.
+
+    Contrast planners still validate count matrices and create the detailed plan,
+    but merge rules must know their output paths while the DAG is constructed.
+    """
+    contrast_columns = configured_contrast_columns(contrast_by)
+    rows = [
+        row for row in INTAKE_ROWS
+        if row.get("project", "") == project and row.get("assay", "") == assay
+    ]
+    grouped = {}
+    for row in rows:
+        condition = row.get(condition_col, "").strip()
+        if not condition or condition == control_label:
+            continue
+        key = tuple(row.get(column, "").strip() for column in contrast_columns)
+        grouped.setdefault(key, set()).add(condition)
+
+    def feature_token(value):
+        token = re.sub(r"[^A-Za-z0-9_.-]+", "_", str(value).strip())
+        return token.strip("_") or "contrast"
+
+    def dtu_token(value):
+        token = re.sub(r"[^A-Za-z0-9_.-]+", "_", str(value).strip())
+        token = re.sub(r"_+", "_", token).strip("_")
+        return token or "contrast"
+
+    contrast_ids = []
+    for values in sorted(grouped):
+        for test_label in sorted(grouped[values]):
+            if dtu:
+                contrast_id = f"{dtu_token(test_label)}_vs_{dtu_token(control_label)}"
+                if contrast_columns:
+                    contrast_id += (
+                        "__" + dtu_token(",".join(contrast_columns)) + "_"
+                        + "_".join(dtu_token(value) for value in values)
+                    )
+            else:
+                contrast_id = f"{feature_token(test_label)}_vs_{feature_token(control_label)}"
+                if contrast_columns:
+                    contrast_id += "__" + "__".join(
+                        f"{feature_token(column)}_{feature_token(value)}"
+                        for column, value in zip(contrast_columns, values)
+                    )
+            contrast_ids.append(contrast_id)
+    return contrast_ids or ["no_contrasts"]
+
+
 def report_items_from_plan(plan_path):
     rows = read_tsv_rows(plan_path)
     items = [
@@ -874,10 +953,15 @@ def smallrna_mirna_deseq2_contrast_done(project, contrast_id):
 
 
 def smallrna_mirna_deseq2_contrast_manifests(wildcards):
-    plan_path = checkpoints.plan_mirna_differential.get(project=wildcards.project).output[0]
     return [
         smallrna_mirna_deseq2_contrast_manifest(wildcards.project, contrast_id)
-        for contrast_id in contrast_ids_from_plan(plan_path)
+        for contrast_id in static_contrast_ids(
+            wildcards.project,
+            "smallrna",
+            SMALLRNA.get("condition_col", DESIGN.get("condition_col", "condition")),
+            SMALLRNA.get("control_label", DESIGN.get("control_label", "control")),
+            SMALLRNA.get("contrast_by", DESIGN.get("covariates", [])),
+        )
     ]
 
 
@@ -919,18 +1003,28 @@ def rnaseq_deseq2_contrast_done(project, level, contrast_id):
 
 
 def rnaseq_gene_deseq2_contrast_manifests(wildcards):
-    plan_path = checkpoints.plan_gene_differential.get(project=wildcards.project).output[0]
     return [
         rnaseq_deseq2_contrast_manifest(wildcards.project, "gene", contrast_id)
-        for contrast_id in contrast_ids_from_plan(plan_path)
+        for contrast_id in static_contrast_ids(
+            wildcards.project,
+            "rnaseq",
+            RNASEQ_DIFFERENTIAL.get("condition_col", DESIGN.get("condition_col", "condition")),
+            RNASEQ_DIFFERENTIAL.get("control_label", DESIGN.get("control_label", "control")),
+            RNASEQ_DIFFERENTIAL.get("contrast_by", DESIGN.get("covariates", [])),
+        )
     ]
 
 
 def rnaseq_transcript_deseq2_contrast_manifests(wildcards):
-    plan_path = checkpoints.plan_transcript_differential.get(project=wildcards.project).output[0]
     return [
         rnaseq_deseq2_contrast_manifest(wildcards.project, "transcript", contrast_id)
-        for contrast_id in contrast_ids_from_plan(plan_path)
+        for contrast_id in static_contrast_ids(
+            wildcards.project,
+            "rnaseq",
+            RNASEQ_DIFFERENTIAL.get("condition_col", DESIGN.get("condition_col", "condition")),
+            RNASEQ_DIFFERENTIAL.get("control_label", DESIGN.get("control_label", "control")),
+            RNASEQ_DIFFERENTIAL.get("contrast_by", DESIGN.get("covariates", [])),
+        )
     ]
 
 
@@ -943,10 +1037,15 @@ def rnaseq_isoform_switch_contrast_done(project, contrast_id):
 
 
 def rnaseq_isoform_switch_contrast_manifests(wildcards):
-    plan_path = checkpoints.plan_isoform_switch.get(project=wildcards.project).output[0]
     return [
         rnaseq_isoform_switch_contrast_manifest(wildcards.project, contrast_id)
-        for contrast_id in contrast_ids_from_plan(plan_path)
+        for contrast_id in static_contrast_ids(
+            wildcards.project,
+            "rnaseq",
+            RNASEQ_DIFFERENTIAL.get("condition_col", DESIGN.get("condition_col", "condition")),
+            RNASEQ_DIFFERENTIAL.get("control_label", DESIGN.get("control_label", "control")),
+            RNASEQ_DIFFERENTIAL.get("contrast_by", DESIGN.get("covariates", [])),
+        )
     ]
 
 
@@ -993,10 +1092,16 @@ def rnaseq_dtu_contrast_done(project, method, contrast_id):
 
 
 def rnaseq_dtu_contrast_manifests(wildcards):
-    plan_path = checkpoints.plan_rnaseq_dtu.get(project=wildcards.project).output[0]
     return [
         rnaseq_dtu_contrast_manifest(wildcards.project, method, contrast_id)
-        for contrast_id in contrast_ids_from_plan(plan_path)
+        for contrast_id in static_contrast_ids(
+            wildcards.project,
+            "rnaseq",
+            RNASEQ_DTU.get("condition_col", RNASEQ_DIFFERENTIAL.get("condition_col", "condition")),
+            RNASEQ_DTU.get("control_label", RNASEQ_DIFFERENTIAL.get("control_label", "control")),
+            RNASEQ_DTU.get("contrast_by", RNASEQ_DIFFERENTIAL.get("contrast_by", [])),
+            dtu=True,
+        )
         for method in selected_dtu_methods()
     ]
 
@@ -5103,7 +5208,9 @@ rule plan_rnaseq_quantification:
             "--stringtie-quant-extra-args",
             RNASEQ_QUANTIFICATION.get("stringtie_quant_extra_args", ""),
         ),
-        dexseq_count_strandedness=RNASEQ_DTU.get("dexseq_count_strandedness", "no")
+        dexseq_count_strandedness=dexseq_count_strandedness(
+            RNASEQ_DTU.get("dexseq_count_strandedness", "no")
+        )
     log:
         "logs/branches/rnaseq/{project}.quantification_plan.log"
     shell:
@@ -6407,7 +6514,9 @@ rule count_rnaseq_dexseq_exon_library:
         done=f"{BRANCH_DIR}" + "/rnaseq/{project}/differential/dtu/dexseq_exon_counts/sample_counts/{library_id}.dexseq_counts.done"
     params:
         dexseq_count_command=RNASEQ_DTU.get("dexseq_count_command", "dexseq_count.py"),
-        dexseq_count_strandedness=RNASEQ_DTU.get("dexseq_count_strandedness", "no"),
+        dexseq_count_strandedness=dexseq_count_strandedness(
+            RNASEQ_DTU.get("dexseq_count_strandedness", "no")
+        ),
         dexseq_count_order=RNASEQ_DTU.get("dexseq_count_order", "pos"),
         dexseq_count_min_mapq=RNASEQ_DTU.get("dexseq_count_min_mapq", 10)
     log:
@@ -6457,7 +6566,9 @@ rule run_rnaseq_dtu_contrast:
         dexseq_exon_counts_dir=lambda wildcards: f"{rnaseq_dexseq_exon_base(wildcards.project)}/sample_counts",
         dexseq_prepare_annotation_command=RNASEQ_DTU.get("dexseq_prepare_annotation_command", "dexseq_prepare_annotation.py"),
         dexseq_count_command=RNASEQ_DTU.get("dexseq_count_command", "dexseq_count.py"),
-        dexseq_count_strandedness=RNASEQ_DTU.get("dexseq_count_strandedness", "no"),
+        dexseq_count_strandedness=dexseq_count_strandedness(
+            RNASEQ_DTU.get("dexseq_count_strandedness", "no")
+        ),
         dexseq_count_order=RNASEQ_DTU.get("dexseq_count_order", "pos"),
         dexseq_count_mode=RNASEQ_DTU.get("dexseq_count_mode", "union"),
         dexseq_count_min_mapq=RNASEQ_DTU.get("dexseq_count_min_mapq", 10),

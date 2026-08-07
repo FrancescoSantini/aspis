@@ -259,7 +259,7 @@ rnaseq_dtu:
   dexseq_exon_script: workflow/scripts/run_dexseq_exon_dtu.R
   dexseq_prepare_annotation_command: dexseq_prepare_annotation.py
   dexseq_count_command: dexseq_count.py
-  dexseq_count_strandedness: no
+  dexseq_count_strandedness: "no"
   dexseq_count_order: pos
   dexseq_count_mode: union
   dexseq_count_min_mapq: 10
