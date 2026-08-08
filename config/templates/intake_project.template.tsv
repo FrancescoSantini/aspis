@@ -1,0 +1,9 @@
+library_id	biospecimen_id	project	input_1	input_2	assay_hint	condition	treatment	dose	dose_unit	time_h	replicate	batch
+MY_PROJECT_rna_control_r1	MY_PROJECT_control_r1	MY_PROJECT	/path/to/fastq/control_r1_R1.fastq.gz	/path/to/fastq/control_r1_R2.fastq.gz	rnaseq	control	vehicle	0	unit	24	1	batch_1
+MY_PROJECT_rna_control_r2	MY_PROJECT_control_r2	MY_PROJECT	/path/to/fastq/control_r2_R1.fastq.gz	/path/to/fastq/control_r2_R2.fastq.gz	rnaseq	control	vehicle	0	unit	24	2	batch_1
+MY_PROJECT_rna_treated_r1	MY_PROJECT_treated_r1	MY_PROJECT	/path/to/fastq/treated_r1_R1.fastq.gz	/path/to/fastq/treated_r1_R2.fastq.gz	rnaseq	treated	compound	10	unit	24	1	batch_1
+MY_PROJECT_rna_treated_r2	MY_PROJECT_treated_r2	MY_PROJECT	/path/to/fastq/treated_r2_R1.fastq.gz	/path/to/fastq/treated_r2_R2.fastq.gz	rnaseq	treated	compound	10	unit	24	2	batch_1
+MY_PROJECT_small_control_r1	MY_PROJECT_control_r1	MY_PROJECT	/path/to/fastq/control_r1.fastq.gz		smallrna	control	vehicle	0	unit	24	1	batch_1
+MY_PROJECT_small_control_r2	MY_PROJECT_control_r2	MY_PROJECT	/path/to/fastq/control_r2.fastq.gz		smallrna	control	vehicle	0	unit	24	2	batch_1
+MY_PROJECT_small_treated_r1	MY_PROJECT_treated_r1	MY_PROJECT	/path/to/fastq/treated_r1.fastq.gz		smallrna	treated	compound	10	unit	24	1	batch_1
+MY_PROJECT_small_treated_r2	MY_PROJECT_treated_r2	MY_PROJECT	/path/to/fastq/treated_r2.fastq.gz		smallrna	treated	compound	10	unit	24	2	batch_1

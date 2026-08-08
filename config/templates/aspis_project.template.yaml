@@ -1,0 +1,171 @@
+# ASPIS neutral real-project configuration template.
+#
+# Copy this file and intake_project.template.tsv to config/local/. Replace every
+# MY_PROJECT and /path/to/... placeholder. Keep the copy private: config/local/
+# is intentionally ignored by Git.
+
+intake: config/local/my_project.tsv
+
+paths:
+  raw_dir: work/MY_PROJECT/raw
+  metadata_dir: meta/MY_PROJECT/materialized
+  manifest: meta/MY_PROJECT/materialized_manifest.tsv
+  analysis_plan: meta/MY_PROJECT/analysis_plan.tsv
+  environment_report: meta/MY_PROJECT/environment_report.tsv
+  execution_report: meta/MY_PROJECT/execution_report.tsv
+  sra_cache_dir: cache/MY_PROJECT/sra
+  scratch_dir: work/MY_PROJECT/tmp
+  branch_dir: results/MY_PROJECT/branches
+  run_dashboard: results/MY_PROJECT/index.html
+  run_dashboard_done: results/MY_PROJECT/index.done
+  project_report_dir: results/MY_PROJECT/projects
+
+resources:
+  genome:
+    species: ""
+    provider: ""
+    release: ""
+    fasta: /path/to/reference/genome.fa
+    gtf: /path/to/reference/annotation.gtf
+    star_genome_dir: /path/to/reference/star_index
+    hisat2_index_prefix: /path/to/reference/hisat2/index
+  mirbase:
+    provider: mirbase
+    release: ""
+    species_prefix: ""
+    mature_fasta: /path/to/mirbase/mature.fa
+    prepared_fasta: ""
+    saf: ""
+    bowtie_index_prefix: ""
+  smallrna_contaminants:
+    fasta: /path/to/smallrna/contaminants.fa
+    bowtie_index_prefix: ""
+  residual_genome:
+    fasta: /path/to/reference/genome.fa
+    gtf: /path/to/reference/annotation.gtf
+    bowtie_index_prefix: ""
+  rnaseq_feature_sets:
+    gmt: ""
+    tables: ""
+    provenance: ""
+    summary: ""
+  smallrna_targets:
+    target_table: ""
+    target_tables: []
+    target_cache: ""
+    target_feature_sets: ""
+    target_feature_set_tables: ""
+    provenance: ""
+    summary: ""
+
+design:
+  condition_col: condition
+  control_label: control
+  # Examples: "~ batch + condition" or "~ subject + condition".
+  model_formula: ""
+  covariates: []
+  batch_factors: []
+  blocking_factors: []
+  interaction_terms: []
+  min_condition_groups: 2
+
+# Set the RNA-seq sections to false for a smallRNA-only project.
+rnaseq_alignment:
+  run: true
+  aligner: star
+  reference_fasta: /path/to/reference/genome.fa
+  annotation_gtf: /path/to/reference/annotation.gtf
+  star_genome_dir: /path/to/reference/star_index
+  hisat2_index_prefix: /path/to/reference/hisat2/index
+  strandness: ""
+  infer_strandedness: true
+  threads: 8
+  index_threads: 16
+
+rnaseq_quantification:
+  run: true
+  reference_fasta: /path/to/reference/genome.fa
+  annotation_gtf: /path/to/reference/annotation.gtf
+  read_length: 100
+  threads: 8
+  featurecounts_threads: 8
+  stringtie_threads: 8
+
+rnaseq_differential:
+  run: true
+  levels:
+    - gene
+    - transcript
+  condition_col: condition
+  control_label: control
+  design_formula: ""
+  contrast_by: []
+  min_replicates_per_group: 2
+  min_count: 10
+  padj: 0.1
+  log2fc: 1.0
+
+rnaseq_dtu:
+  # Keep disabled unless the required tools, BAMs, and parameters are ready.
+  run: false
+  condition_col: condition
+  control_label: control
+  contrast_by: []
+  rmats_read_length: 0
+  rmats_lib_type: fr-unstranded
+  candidate_methods:
+    - DRIMSeq
+    - DEXSeq
+    - DEXSeqExon
+    - SUPPA2
+    - rMATS
+
+# Set smallrna.run to false for an RNA-seq-only project.
+smallrna:
+  run: true
+  mirbase_fasta: /path/to/mirbase/mature.fa
+  mirbase_species_prefix: ""
+  contaminant_fasta: /path/to/smallrna/contaminants.fa
+  residual_run: false
+  build_residual_genome_index: false
+  residual_genome_fasta: /path/to/reference/genome.fa
+  residual_annotation_gtf: /path/to/reference/annotation.gtf
+  residual_genome_index_prefix: ""
+  condition_col: condition
+  control_label: control
+  design_formula: ""
+  contrast_by: []
+  min_replicates_per_group: 2
+  min_count: 10
+  padj: 0.1
+  log2fc: 1.0
+
+mirna_mrna_integration:
+  # Enable only when both assays are present and biospecimen IDs are matched.
+  run: false
+  match_columns:
+    - biospecimen_id
+  match_table: ""
+  min_pairs: 2
+  min_abs_correlation: 0.0
+  top_n: 40
+
+execution:
+  slurm_account: ""
+  default_partition: ""
+  download_partition: ""
+  default_resources:
+    runtime: 240
+    mem_mb: 16000
+    disk_mb: 100000
+
+provenance:
+  run: true
+
+biological_qc:
+  run: true
+  rnaseq_sample_qc: true
+  smallrna_sample_qc: true
+
+# The base configuration supplies tool names and remaining defaults. Override
+# commands here only when the local environment uses different executable names.

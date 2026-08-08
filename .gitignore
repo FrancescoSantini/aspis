@@ -11,3 +11,8 @@ samples/
 work/
 *_dag.*
 *_rulegraph.*
+
+# Private, site-specific project inputs. Copy the tracked templates under
+# config/templates/ here and keep paths, sample metadata, and credentials out
+# of version control.
+config/local/

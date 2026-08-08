@@ -37,8 +37,8 @@ separate while also building matched cross-assay summaries for review.
 ```text
 Snakefile                         Workflow rules
 config/aspis.yaml                 Base configuration
-config/*project.example.yaml      Real-project configuration templates
-config/*project.example.tsv       Intake table templates
+config/templates/                 Neutral real-project templates
+config/local/                     User-created, Git-ignored project inputs
 envs/aspis-snakemake.yaml         Conda/Mamba environment
 workflow/scripts/                 Python and R helper scripts
 profiles/slurm/                   Snakemake SLURM profile
@@ -70,13 +70,42 @@ mamba env update -n aspis-smk9 -f envs/aspis-snakemake.yaml --prune
 Some optional analyses require additional tools or reference resources. See
 `docs/optional_tool_environments.md` for optional method-specific guidance.
 
+## Quick Start
+
+For a new project, start with the neutral templates. They are deliberately
+free of site, cluster, study, and biological-resource assumptions.
+
+```bash
+git clone https://github.com/FrancescoSantini/aspis.git
+cd aspis
+
+mamba env create -f envs/aspis-snakemake.yaml
+conda activate aspis-smk9
+
+mkdir -p config/local
+cp config/templates/aspis_project.template.yaml config/local/my_project.yaml
+cp config/templates/intake_project.template.tsv config/local/my_project.tsv
+```
+
+Edit both copied files, replacing every `MY_PROJECT` and `/path/to/...`
+placeholder. Begin with a dry run; it constructs the dependency graph without
+submitting or executing analysis jobs.
+
+```bash
+snakemake results/MY_PROJECT/index.html \
+  --configfile config/local/my_project.yaml \
+  --cores 4 \
+  --dry-run
+```
+
+See [the quick-start guide](docs/quickstart.md) for the complete local and
+SLURM commands, and [the configuration reference](docs/configuration_reference.md)
+for required settings and optional analyses.
+
 ## Intake Table
 
-Each row in the intake table represents one sequencing library. The example
-templates are:
-
-- `config/intake_rnaseq_project.example.tsv`
-- `config/intake_smallrna_project.example.tsv`
+Each row in the intake table represents one sequencing library. The neutral
+template is `config/templates/intake_project.template.tsv`.
 
 Required columns are intentionally minimal:
 
@@ -87,10 +116,10 @@ Recommended columns for real projects:
 
 - `biospecimen_id`: biological sample identifier used to match assays.
 - `project`: project or biological system name.
-- `assay`: `rnaseq` or `smallrna`.
+- `assay_hint`: `rnaseq` or `smallrna`.
 - `input_2`: second FASTQ for paired-end libraries.
 - `condition`: biological condition used in contrasts.
-- `time_h`, `dose`, `unit`, `replicate`, `batch`: design metadata used for
+- `time_h`, `dose`, `dose_unit`, `replicate`, `batch`: design metadata used for
   stratification, reporting, and model formulas.
 
 Local files may be single-end or paired-end FASTQs. Public run accessions are
@@ -98,21 +127,11 @@ materialized with `sra-tools`; layout is inspected during materialization.
 
 ## Project Configuration
 
-Start from one of the real-project templates:
+Start from `config/templates/aspis_project.template.yaml`. It supports
+RNA-seq-only, smallRNA-only, and matched RNA-seq/smallRNA projects: enable the
+assay branches that apply to the project and leave unrelated branches disabled.
 
-```bash
-cp config/aspis_rnaseq_project.example.yaml config/my_project.yaml
-cp config/intake_rnaseq_project.example.tsv config/my_project_intake.tsv
-```
-
-or, for smallRNA-only projects:
-
-```bash
-cp config/aspis_smallrna_project.example.yaml config/my_project.yaml
-cp config/intake_smallrna_project.example.tsv config/my_project_intake.tsv
-```
-
-Then edit `config/my_project.yaml` to set:
+Then edit `config/local/my_project.yaml` to set:
 
 - `intake`: path to the project intake table.
 - `paths`: a unique run namespace under `work/`, `meta/`, and `results/`.
@@ -124,7 +143,9 @@ Then edit `config/my_project.yaml` to set:
   `rnaseq_differential`, `rnaseq_dtu`, and `smallrna`.
 
 Use a new `paths.*` namespace for each independent run. This prevents results
-from different configurations from being mixed.
+from different configurations from being mixed. Keep the copied configuration
+and intake table with the delivered results; `config/local/` is ignored by Git
+so that private paths and sample metadata are not committed accidentally.
 
 ## Reference Resources
 
@@ -166,34 +187,40 @@ See:
 Always start with a dry run:
 
 ```bash
-snakemake --configfile config/my_project.yaml --cores 4 --dry-run
+snakemake results/MY_PROJECT/index.html \
+  --configfile config/local/my_project.yaml \
+  --cores 4 \
+  --dry-run
 ```
 
 Run the workflow:
 
 ```bash
-snakemake --configfile config/my_project.yaml --cores 8 --rerun-incomplete
+snakemake results/MY_PROJECT/index.html \
+  --configfile config/local/my_project.yaml \
+  --cores 8 \
+  --rerun-incomplete
 ```
 
 To build a specific final dashboard, target the run index:
 
 ```bash
-snakemake results/<run_id>/index.html \
-  --configfile config/my_project.yaml \
+snakemake results/MY_PROJECT/index.html \
+  --configfile config/local/my_project.yaml \
   --cores 8 \
   --rerun-incomplete
 ```
 
-Replace `<run_id>` with the namespace configured under `paths`.
+Replace `MY_PROJECT` with the namespace configured under `paths.run_dashboard`.
 
 ## Running On SLURM
 
 ASPIS includes a Snakemake SLURM profile in `profiles/slurm`.
 
 ```bash
-snakemake results/<run_id>/index.html \
+snakemake results/MY_PROJECT/index.html \
   --workflow-profile profiles/slurm \
-  --configfile config/my_project.yaml \
+  --configfile config/local/my_project.yaml \
   --rerun-incomplete
 ```
 
@@ -266,6 +293,8 @@ Detailed documentation lives in `docs/`:
 - `docs/rnaseq_real_project.md`: RNA-seq project setup.
 - `docs/smallrna_real_project.md`: smallRNA project setup.
 - `docs/optional_tool_environments.md`: optional DTU/splicing tools.
+- `docs/quickstart.md`: first real-project setup and execution.
+- `docs/configuration_reference.md`: configuration and intake reference.
 
 Cluster execution should be adapted through the project config, environment,
 Snakemake CLI defaults, or `profiles/slurm/`.
@@ -288,6 +317,8 @@ See `LICENSE` for details.
 - Configure licensed resources explicitly and document their provenance.
 - Inspect `meta/<run_id>/environment_report.tsv` and
   `logs/execution/*.execution.tsv` when auditing a run.
+- Preserve the project YAML, intake TSV, report inventory, and reference
+  resource checksums with each delivered result set.
 
 ## Scope
 
@@ -295,4 +326,3 @@ ASPIS automates sequencing analysis and evidence organization. It does not make
 automated biological claims. Reports summarize statistical outputs, QC state,
 resource availability, and cross-assay links so that domain experts can review
 the evidence.
-or formal citation is required.
