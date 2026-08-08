@@ -19,6 +19,8 @@ def main() -> int:
         raise AssertionError(f"contrast merge rule(s) must not be local: {present}")
     if "def static_contrast_ids(" not in snakefile:
         raise AssertionError("Snakefile must derive contrast target paths deterministically")
+    if 'row.get("assay_hint") or row.get("assay")' not in snakefile:
+        raise AssertionError("static contrast IDs must support intake assay_hint values")
     if "checkpoints.plan_gene_differential.get" in snakefile:
         raise AssertionError("gene DESeq2 merge must not depend on checkpoint expansion")
     if "checkpoints.plan_rnaseq_dtu.get" in snakefile:

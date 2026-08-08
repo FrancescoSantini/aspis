@@ -673,7 +673,8 @@ def static_contrast_ids(project, assay, condition_col, control_label, contrast_b
     contrast_columns = configured_contrast_columns(contrast_by)
     rows = [
         row for row in INTAKE_ROWS
-        if row.get("project", "") == project and row.get("assay", "") == assay
+        if row.get("project", "") == project
+        and (row.get("assay_hint") or row.get("assay") or "").strip().lower() == assay
     ]
     grouped = {}
     for row in rows:
