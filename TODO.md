@@ -5,10 +5,6 @@ describe any particular study, institution, cluster, or completed analysis.
 
 ## Documentation and reproducibility
 
-- Maintain the neutral configuration and intake templates in
-  `config/templates/` as the supported starting point for real projects.
-- Keep the quick-start guide and configuration reference synchronized with the
-  workflow's supported configuration keys and report entry points.
 - Define and document a release procedure with an immutable Git revision,
   pinned Conda environment, dependency lock file, and versioned test results.
 - Consolidate per-run provenance into a documented audit contract: input
