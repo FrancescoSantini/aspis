@@ -221,6 +221,10 @@ set-resources:
     runtime: 240
     mem_mb: 16000
     disk_mb: 50000
+  run_rnaseq_dtu_contrast:
+    runtime: 240
+    mem_mb: 8000
+    disk_mb: 20000
   plan_gene_differential:
     runtime: 5
     mem_mb: 1000
