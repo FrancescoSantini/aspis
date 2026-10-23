@@ -76,6 +76,7 @@ def main() -> int:
         "snakemake": run_text([snakemake, "--version"]),
         "git_revision": run_text(["git", "rev-parse", "HEAD"]),
         "conda_prefix": os.environ.get("CONDA_PREFIX", ""),
+        "working_directory": str(Path.cwd()),
         "cores_requested": str(args.cores),
     }
     with (output / "metadata.tsv").open("w", encoding="utf-8") as handle:
@@ -85,6 +86,7 @@ def main() -> int:
     (output / "git_status.txt").write_text(run_text(["git", "status", "--short"]) + "\n", encoding="utf-8")
     (output / "system_cpu.txt").write_text(run_text(["lscpu"]) + "\n", encoding="utf-8")
     (output / "system_memory.txt").write_text(run_text(["free", "-b"]) + "\n", encoding="utf-8")
+    (output / "system_filesystem.txt").write_text(run_text(["df", "-T", "."]) + "\n", encoding="utf-8")
     if os.environ.get("CONDA_PREFIX"):
         (output / "conda_explicit.txt").write_text(run_text(["conda", "list", "--explicit"]) + "\n", encoding="utf-8")
 

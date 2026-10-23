@@ -9,8 +9,8 @@ combined into one performance number.
 The local benchmark demonstrates installation portability, end-to-end
 correctness, and workstation feasibility. The benchmark helper records the
 complete command, input checksums, Git state, software environment, host CPU
-and memory, total wall time, CPU utilisation, peak resident memory, filesystem
-I/O, the Snakemake log, and job/rule wall-time summaries.
+and memory, working filesystem, total wall time, CPU utilisation, peak resident
+memory, filesystem I/O, the Snakemake log, and job/rule wall-time summaries.
 
 Run it only against a clean result namespace when `--mode fresh` is used.
 Resumed executions must use `--mode resume` and should be reported as recovery
@@ -30,6 +30,9 @@ Bundles are written below `benchmarks/`, which is ignored by Git. GNU `time`
 provides process-tree totals; `job_timings.tsv` and `rule_timings.tsv` derive
 wall times from Snakemake events. Per-job CPU and memory are not available from
 this local method and must not be inferred from those tables.
+Runs performed below `/mnt/c` or `/mnt/d` in WSL use a Windows-mounted
+filesystem; report that fact because its I/O performance can differ from a
+native Linux filesystem.
 
 ## HPC benchmark
 
