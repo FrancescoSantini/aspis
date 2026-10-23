@@ -17,6 +17,7 @@ from pathlib import Path
 import yaml
 
 from collect_slurm_accounting import collect_sacct, extract_submissions, write_submissions
+from summarize_slurm_benchmark import summarize as summarize_slurm
 from summarize_snakemake_log import summarize
 
 
@@ -146,6 +147,11 @@ def main() -> int:
         handle.write(f"start_time\t{started_iso}\nend_time\t{ended_iso}\n")
         handle.write(f"elapsed_seconds\t{elapsed:.3f}\nexit_status\t{status}\n")
         handle.write(f"target_complete\t{str(target_complete).lower()}\n")
+    if (output / "slurm_accounting.psv").is_file():
+        try:
+            summarize_slurm(output)
+        except (KeyError, OSError, ValueError) as error:
+            (output / "slurm_summary_error.txt").write_text(str(error) + "\n", encoding="utf-8")
     if status == 0 and target_complete:
         (output / "benchmark.done").touch()
     print(f"Benchmark bundle: {output}")

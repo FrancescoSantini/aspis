@@ -49,4 +49,11 @@ separate: they establish applicability, not computational ground truth.
 The benchmark runner also supports the SLURM profile. Pass each additional
 Snakemake token separately with `--snakemake-arg`. Submitted worker jobs are
 recorded in `slurm_submissions.tsv`; accounting including job steps is written
-to `slurm_accounting.psv` after the workflow ends.
+to `slurm_accounting.psv` after the workflow ends. The runner joins these raw
+records into `slurm_job_summary.tsv`, `slurm_rule_summary.tsv`, and
+`slurm_run_summary.tsv`. Existing benchmark bundles can be summarized with:
+
+```bash
+python3 workflow/scripts/summarize_slurm_benchmark.py \
+  --benchmark-dir benchmarks/LABEL/TIMESTAMP_fresh
+```
