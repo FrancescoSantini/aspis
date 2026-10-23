@@ -94,7 +94,13 @@ def main() -> int:
     for source in sorted((SOURCE / "data" / "fastq").glob("*.fastq.gz")):
         scale_fastq(source, output / "data" / "fastq" / source.name, args.multiplier)
 
-    target_prefix = output.relative_to(REPO).as_posix() if output.is_relative_to(REPO) else output.resolve().as_posix()
+    resolved_output = output.resolve()
+    resolved_repo = REPO.resolve()
+    target_prefix = (
+        resolved_output.relative_to(resolved_repo).as_posix()
+        if resolved_output.is_relative_to(resolved_repo)
+        else resolved_output.as_posix()
+    )
     run_id = f"synthetic_{args.label}"
     intake = (SOURCE / "intake.tsv").read_text(encoding="utf-8").replace(
         "examples/synthetic_project", target_prefix
