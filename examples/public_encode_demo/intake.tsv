@@ -1,0 +1,9 @@
+library_id	biospecimen_id	project	input_1	input_2	assay_hint	condition	treatment	dose	dose_unit	time_h	replicate	batch
+GM12878_r1_rnaseq	ENCBS089RNA	ENCODE_RNA_EVAL	examples/public_encode_demo/data/ENCFF001RFH.fastq.gz	examples/public_encode_demo/data/ENCFF001RFG.fastq.gz	rnaseq	GM12878	none	0	none	0	1	ENCODE_RNA_EVAL_GINGERAS
+GM12878_r2_rnaseq	ENCBS090RNA	ENCODE_RNA_EVAL	examples/public_encode_demo/data/ENCFF001RFB.fastq.gz	examples/public_encode_demo/data/ENCFF001RFA.fastq.gz	rnaseq	GM12878	none	0	none	0	2	ENCODE_RNA_EVAL_GINGERAS
+K562_r1_rnaseq	ENCBS087RNA	ENCODE_RNA_EVAL	examples/public_encode_demo/data/ENCFF001RFF.fastq.gz	examples/public_encode_demo/data/ENCFF001RFE.fastq.gz	rnaseq	K562	none	0	none	0	1	ENCODE_RNA_EVAL_GINGERAS
+K562_r2_rnaseq	ENCBS088RNA	ENCODE_RNA_EVAL	examples/public_encode_demo/data/ENCFF001RFD.fastq.gz	examples/public_encode_demo/data/ENCFF001RFC.fastq.gz	rnaseq	K562	none	0	none	0	2	ENCODE_RNA_EVAL_GINGERAS
+GM12878_r1_smallrna	ENCBS089RNA	ENCODE_RNA_EVAL	examples/public_encode_demo/data/ENCFF001RER.fastq.gz		smallrna	GM12878	none	0	none	0	1	ENCODE_RNA_EVAL_GINGERAS
+GM12878_r2_smallrna	ENCBS090RNA	ENCODE_RNA_EVAL	examples/public_encode_demo/data/ENCFF001REE.fastq.gz		smallrna	GM12878	none	0	none	0	2	ENCODE_RNA_EVAL_GINGERAS
+K562_r1_smallrna	ENCBS087RNA	ENCODE_RNA_EVAL	examples/public_encode_demo/data/ENCFF001REQ.fastq.gz		smallrna	K562	none	0	none	0	1	ENCODE_RNA_EVAL_GINGERAS
+K562_r2_smallrna	ENCBS088RNA	ENCODE_RNA_EVAL	examples/public_encode_demo/data/ENCFF001REL.fastq.gz		smallrna	K562	none	0	none	0	2	ENCODE_RNA_EVAL_GINGERAS

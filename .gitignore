@@ -16,3 +16,6 @@ work/
 # config/templates/ here and keep paths, sample metadata, and credentials out
 # of version control.
 config/local/
+
+# Downloaded public demonstration FASTQs (metadata and download scripts remain tracked).
+examples/public_encode_demo/data/

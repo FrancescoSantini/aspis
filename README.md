@@ -38,6 +38,8 @@ separate while also building matched cross-assay summaries for review.
 Snakefile                         Workflow rules
 config/aspis.yaml                 Base configuration
 config/templates/                 Neutral real-project templates
+examples/synthetic_project/       Deterministic matched-assay technical fixture
+examples/public_encode_demo/      Independent ENCODE matched-assay demonstration
 config/local/                     User-created, Git-ignored project inputs
 envs/aspis-snakemake.yaml         Conda/Mamba environment
 workflow/scripts/                 Python and R helper scripts
@@ -271,6 +273,9 @@ Run the local smoke tests after editing workflow logic:
 ```bash
 bash tests/run_local_smokes.sh
 ```
+
+For a compact end-to-end matched RNA-seq/smallRNA-seq example with known input
+signals, see `examples/synthetic_project/README.md`.
 
 Selected contract tests can also be run directly, for example:
 

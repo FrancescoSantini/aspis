@@ -1,0 +1,7 @@
+condition	feature_id	fragments_per_replicate	expected_direction
+control	syn_gene_a	120	unchanged
+control	syn_gene_b	30	unchanged
+control	syn_gene_c	60	unchanged
+treated	syn_gene_a	30	down
+treated	syn_gene_b	120	up
+treated	syn_gene_c	60	unchanged

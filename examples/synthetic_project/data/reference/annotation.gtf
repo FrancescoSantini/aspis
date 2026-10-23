@@ -1,0 +1,12 @@
+syn_chr1	ASPIS	gene	201	1200	.	+	.	gene_id "syn_gene_a"; gene_name "syn_gene_a"; gene_biotype "protein_coding";
+syn_chr1	ASPIS	transcript	201	1200	.	+	.	gene_id "syn_gene_a"; gene_name "syn_gene_a"; gene_biotype "protein_coding"; transcript_id "syn_gene_a_tx"; transcript_biotype "protein_coding";
+syn_chr1	ASPIS	exon	201	1200	.	+	.	gene_id "syn_gene_a"; gene_name "syn_gene_a"; gene_biotype "protein_coding"; transcript_id "syn_gene_a_tx"; transcript_biotype "protein_coding"; exon_number "1";
+syn_chr1	ASPIS	gene	1601	2600	.	+	.	gene_id "syn_gene_b"; gene_name "syn_gene_b"; gene_biotype "protein_coding";
+syn_chr1	ASPIS	transcript	1601	2600	.	+	.	gene_id "syn_gene_b"; gene_name "syn_gene_b"; gene_biotype "protein_coding"; transcript_id "syn_gene_b_tx"; transcript_biotype "protein_coding";
+syn_chr1	ASPIS	exon	1601	2600	.	+	.	gene_id "syn_gene_b"; gene_name "syn_gene_b"; gene_biotype "protein_coding"; transcript_id "syn_gene_b_tx"; transcript_biotype "protein_coding"; exon_number "1";
+syn_chr1	ASPIS	gene	3001	4200	.	+	.	gene_id "syn_gene_c"; gene_name "syn_gene_c"; gene_biotype "lncRNA";
+syn_chr1	ASPIS	transcript	3001	4200	.	+	.	gene_id "syn_gene_c"; gene_name "syn_gene_c"; gene_biotype "lncRNA"; transcript_id "syn_gene_c_tx"; transcript_biotype "lncRNA";
+syn_chr1	ASPIS	exon	3001	4200	.	+	.	gene_id "syn_gene_c"; gene_name "syn_gene_c"; gene_biotype "lncRNA"; transcript_id "syn_gene_c_tx"; transcript_biotype "lncRNA"; exon_number "1";
+syn_chr1	ASPIS	gene	4501	4540	.	+	.	gene_id "syn_snoRNA"; gene_name "syn_snoRNA"; gene_biotype "snoRNA";
+syn_chr1	ASPIS	transcript	4501	4540	.	+	.	gene_id "syn_snoRNA"; gene_name "syn_snoRNA"; gene_biotype "snoRNA"; transcript_id "syn_snoRNA_tx"; transcript_biotype "snoRNA";
+syn_chr1	ASPIS	exon	4501	4540	.	+	.	gene_id "syn_snoRNA"; gene_name "syn_snoRNA"; gene_biotype "snoRNA"; transcript_id "syn_snoRNA_tx"; transcript_biotype "snoRNA"; exon_number "1";

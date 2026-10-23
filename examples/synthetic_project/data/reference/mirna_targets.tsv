@@ -1,0 +1,3 @@
+mirna_id	target_id	target_symbol	database	source	source_type	target_evidence_type	resource_version	evidence
+syn-miR-1-5p	syn_gene_b	syn_gene_b	ASPIS_SYNTHETIC	deterministic_fixture	user_provided	user_provided	1	inverse_input_signal
+syn-miR-2-3p	syn_gene_a	syn_gene_a	ASPIS_SYNTHETIC	deterministic_fixture	user_provided	user_provided	1	inverse_input_signal

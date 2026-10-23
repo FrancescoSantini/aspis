@@ -1,0 +1,94 @@
+intake: examples/synthetic_project/intake.tsv
+
+paths:
+  raw_dir: work/synthetic_project/raw
+  metadata_dir: meta/synthetic_project/materialized
+  manifest: meta/synthetic_project/materialized_manifest.tsv
+  analysis_plan: meta/synthetic_project/analysis_plan.tsv
+  environment_report: meta/synthetic_project/environment_report.tsv
+  execution_report: meta/synthetic_project/execution_report.tsv
+  scratch_dir: work/synthetic_project/tmp
+  branch_dir: results/synthetic_project/branches
+  run_dashboard: results/synthetic_project/index.html
+  run_dashboard_done: results/synthetic_project/index.done
+  project_report_dir: results/synthetic_project/projects
+
+materialization:
+  local_link_mode: symlink
+
+design:
+  condition_col: condition
+  control_label: control
+  covariates: []
+  min_condition_groups: 2
+
+rnaseq_alignment:
+  run: true
+  aligner: star
+  reference_fasta: examples/synthetic_project/data/reference/genome.fa
+  annotation_gtf: examples/synthetic_project/data/reference/annotation.gtf
+  star_genome_dir: work/synthetic_project/reference/star
+  infer_strandedness: false
+  strandness: unstranded
+  threads: 2
+  index_threads: 2
+  star_sjdb_overhang: 74
+  star_genome_sa_index_nbases: 2
+  star_extra_index_args: "--genomeChrBinNbits 6"
+
+rnaseq_quantification:
+  run: true
+  reference_fasta: examples/synthetic_project/data/reference/genome.fa
+  annotation_gtf: examples/synthetic_project/data/reference/annotation.gtf
+  read_length: 75
+  threads: 1
+  featurecounts_threads: 1
+  stringtie_threads: 1
+  featurecounts_strandedness: "0"
+  stringtie_assembly_extra_args: "-m 30 -c 0.001 -s 0.001"
+  stringtie_merge_extra_args: "-m 30 -c 0.001"
+
+rnaseq_differential:
+  run: true
+  levels: [gene, transcript]
+  condition_col: condition
+  control_label: control
+  min_replicates_per_group: 2
+  min_count: 5
+  padj: 0.1
+  log2fc: 1.0
+
+rnaseq_dtu:
+  run: false
+
+smallrna:
+  run: true
+  preprocess_run: true
+  depletion_run: true
+  alignment_run: true
+  quantification_run: true
+  differential_run: true
+  reference_run: true
+  reference_dir: work/synthetic_project/smallrna_reference
+  mirbase_fasta: examples/synthetic_project/data/reference/mature_mirna.fa
+  mirbase_species_prefix: syn
+  contaminant_fasta: examples/synthetic_project/data/reference/contaminants.fa
+  build_bowtie_index: true
+  build_contaminant_index: true
+  residual_run: true
+  build_residual_genome_index: true
+  residual_genome_fasta: examples/synthetic_project/data/reference/genome.fa
+  residual_annotation_gtf: examples/synthetic_project/data/reference/annotation.gtf
+  target_enrichment_mode: local
+  target_table: examples/synthetic_project/data/reference/mirna_targets.tsv
+  condition_col: condition
+  control_label: control
+  min_replicates_per_group: 2
+  min_count: 5
+  padj: 0.1
+  log2fc: 1.0
+
+mirna_mrna_integration:
+  run: true
+  match_columns: [biospecimen_id]
+  min_pairs: 2
