@@ -51,7 +51,7 @@ def main() -> int:
         config = (output / "aspis.yaml").read_text(encoding="utf-8")
         assert "synthetic_contract" in config
         parsed_config = yaml.safe_load(config)
-        assert parsed_config["rnaseq_alignment"]["extra_args"] == "--limitBAMsortRAM 2000000000"
+        assert parsed_config["rnaseq_alignment"]["extra_args"] == "--limitBAMsortRAM 16000000000"
         assert "multiplier\t3" in (output / "scale.tsv").read_text(encoding="utf-8")
         assert (output / "checksums.sha256").is_file()
     print("scaled synthetic fixture contract ok")
