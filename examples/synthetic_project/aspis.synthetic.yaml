@@ -79,7 +79,7 @@ smallrna:
   build_residual_genome_index: true
   residual_genome_fasta: examples/synthetic_project/data/reference/genome.fa
   residual_annotation_gtf: examples/synthetic_project/data/reference/annotation.gtf
-  target_enrichment_mode: local
+  target_enrichment_mode: table
   target_table: examples/synthetic_project/data/reference/mirna_targets.tsv
   condition_col: condition
   control_label: control

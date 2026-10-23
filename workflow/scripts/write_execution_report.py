@@ -164,13 +164,15 @@ def build_rows(args: argparse.Namespace) -> list[dict[str, str]]:
             "default_partition",
             args.default_partition,
             args.default_partition_source,
-            detail="selected default submit partition",
+            required=False,
+            detail="selected default submit partition; optional for local execution",
         ),
         setting_row(
             "download_partition",
             args.download_partition,
             args.download_partition_source,
-            detail="selected partition for INSDC/SRA materialization jobs",
+            required=False,
+            detail="selected partition for INSDC/SRA materialization jobs; optional for local execution",
         ),
         resource_row(
             "runtime",

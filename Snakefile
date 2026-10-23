@@ -2623,9 +2623,9 @@ rule check_execution_config:
     params:
         account_arg=optional_shell_arg("--slurm-account", EXECUTION_SLURM_ACCOUNT),
         account_source=EXECUTION_SLURM_ACCOUNT_SOURCE,
-        default_partition=EXECUTION_DEFAULT_PARTITION,
+        default_partition_arg=shell_arg("--default-partition", EXECUTION_DEFAULT_PARTITION),
         default_partition_source=EXECUTION_DEFAULT_PARTITION_SOURCE,
-        download_partition=EXECUTION_DOWNLOAD_PARTITION,
+        download_partition_arg=shell_arg("--download-partition", EXECUTION_DOWNLOAD_PARTITION),
         download_partition_source=EXECUTION_DOWNLOAD_PARTITION_SOURCE,
         runtime=EXECUTION_DEFAULT_RUNTIME,
         runtime_source=EXECUTION_DEFAULT_RUNTIME_SOURCE,
@@ -2641,8 +2641,8 @@ rule check_execution_config:
         python3 workflow/scripts/write_execution_report.py \
           --output {output:q} \
           {params.account_arg} --slurm-account-source {params.account_source:q} \
-          --default-partition {params.default_partition:q} --default-partition-source {params.default_partition_source:q} \
-          --download-partition {params.download_partition:q} --download-partition-source {params.download_partition_source:q} \
+          {params.default_partition_arg} --default-partition-source {params.default_partition_source:q} \
+          {params.download_partition_arg} --download-partition-source {params.download_partition_source:q} \
           --runtime {params.runtime:q} --runtime-source {params.runtime_source:q} \
           --mem-mb {params.mem_mb:q} --mem-mb-source {params.mem_mb_source:q} \
           --disk-mb {params.disk_mb:q} --disk-mb-source {params.disk_mb_source:q} \

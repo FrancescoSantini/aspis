@@ -8,6 +8,8 @@ import gzip
 import hashlib
 from pathlib import Path
 
+import yaml
+
 
 ROOT = Path("examples/synthetic_project")
 
@@ -29,6 +31,9 @@ def read_tsv(path: Path) -> list[dict[str, str]]:
 
 
 def main() -> int:
+    config = yaml.safe_load((ROOT / "aspis.synthetic.yaml").read_text(encoding="utf-8"))
+    if config["smallrna"]["target_enrichment_mode"] != "table":
+        raise ValueError("Synthetic target enrichment must use the supported table mode")
     intake = read_tsv(ROOT / "intake.tsv")
     if len(intake) != 8:
         raise ValueError(f"Expected 8 libraries, observed {len(intake)}")
