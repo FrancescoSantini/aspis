@@ -46,3 +46,16 @@ python3 workflow/scripts/benchmark_snakemake.py \
 ```
 
 See `docs/benchmarking.md` for interpretation and the separate HPC procedure.
+
+Generate an independent scaled input namespace without modifying this fixture:
+
+```bash
+python3 examples/synthetic_project/generate_scaled_fixture.py \
+  --label calibration \
+  --multiplier 1000 \
+  --output-root benchmark_inputs
+```
+
+The generated directory contains its own config, intake, scaled truth tables,
+scale metadata, references, FASTQs, and checksums. Reusing an existing label is
+rejected so that benchmark inputs cannot be overwritten accidentally.
