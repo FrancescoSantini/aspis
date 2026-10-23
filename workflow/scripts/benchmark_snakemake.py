@@ -119,8 +119,19 @@ def main() -> int:
 
     started_iso = datetime.now(timezone.utc).astimezone().isoformat()
     started = time.monotonic()
+    job_metrics = (output / "job_resource_usage").resolve()
+    job_metrics.mkdir()
+    benchmark_environment = os.environ.copy()
+    benchmark_environment["ASPIS_BENCHMARK_JOB_METRICS_DIR"] = str(job_metrics)
     with (output / "snakemake.log").open("w", encoding="utf-8") as log:
-        process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
+        process = subprocess.Popen(
+            command,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            bufsize=1,
+            env=benchmark_environment,
+        )
         assert process.stdout is not None
         for line in process.stdout:
             sys.stdout.write(line)

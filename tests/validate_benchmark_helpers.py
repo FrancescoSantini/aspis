@@ -60,6 +60,12 @@ def main() -> int:
         (root / "run_summary.tsv").write_text(
             "field\tvalue\nelapsed_seconds\t20.000\n", encoding="utf-8"
         )
+        metrics = root / "job_resource_usage"
+        metrics.mkdir()
+        (metrics / "123456.0.1.time.txt").write_text(
+            "\tFile system inputs: 32\n\tFile system outputs: 64\n",
+            encoding="utf-8",
+        )
         summarize_slurm(root)
         run_summary = (root / "slurm_run_summary.tsv").read_text(encoding="utf-8")
         job_summary = (root / "slurm_job_summary.tsv").read_text(encoding="utf-8")
@@ -67,6 +73,9 @@ def main() -> int:
         assert "total_cpu_seconds\t16.000" in run_summary
         assert "queue_median_seconds\t5.000" in run_summary
         assert "disk_io_observed\ttrue" in run_summary
+        assert "gnu_time_jobs\t1" in run_summary
+        assert "filesystem_input_blocks\t32.000" in run_summary
+        assert "filesystem_output_blocks\t64.000" in run_summary
         assert "example_rule\tCOMPLETED\t0:0\t5.000\t10.000\t2\t16.000" in job_summary
         assert seconds("1-01:02:03.5") == 90123.5
         assert megabytes("1G") == 1024

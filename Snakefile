@@ -9,6 +9,10 @@ import shlex
 from pathlib import Path
 
 
+if os.environ.get("ASPIS_BENCHMARK_JOB_METRICS_DIR"):
+    shell.executable(os.path.abspath("workflow/scripts/benchmark_shell.py"))
+
+
 LIBRARY_ID_RE = re.compile(r"^[A-Za-z0-9_.-]+$")
 INSDC_RUN_RE = re.compile(r"^[SED]RR\d+$")
 PROJECT_ID_RE = re.compile(r"^[A-Za-z0-9_.-]+$")

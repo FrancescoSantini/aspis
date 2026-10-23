@@ -76,6 +76,23 @@ def write_table(path: Path, fields: list[str], rows: list[dict[str, object]]) ->
         writer.writerows(rows)
 
 
+def read_gnu_time(path: Path) -> dict[str, float]:
+    wanted = {
+        "File system inputs": "filesystem_input_blocks",
+        "File system outputs": "filesystem_output_blocks",
+    }
+    values: dict[str, float] = {}
+    for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
+        stripped = line.strip()
+        for label, key in wanted.items():
+            prefix = label + ":"
+            if stripped.startswith(prefix):
+                parsed = number(stripped[len(prefix):])
+                if parsed is not None:
+                    values[key] = parsed
+    return values
+
+
 def fmt(value: float | None, digits: int = 3) -> str:
     return "" if value is None or not math.isfinite(value) else f"{value:.{digits}f}"
 
@@ -115,6 +132,11 @@ def summarize(directory: Path) -> None:
         reads = [value for row in metric_rows if (value := megabytes(row.get("MaxDiskRead", ""))) is not None]
         writes = [value for row in metric_rows if (value := megabytes(row.get("MaxDiskWrite", ""))) is not None]
         efficiency = total_cpu / allocated_cpu if total_cpu is not None and allocated_cpu else None
+        time_records = [read_gnu_time(path) for path in sorted(
+            (directory / "job_resource_usage").glob(f"{job_id}.*.time.txt")
+        )] if (directory / "job_resource_usage").is_dir() else []
+        input_blocks = sum(row.get("filesystem_input_blocks", 0) for row in time_records)
+        output_blocks = sum(row.get("filesystem_output_blocks", 0) for row in time_records)
         job_rows.append({
             "slurm_job_id": job_id,
             "snakemake_job_id": submitted["snakemake_job_id"],
@@ -131,6 +153,9 @@ def summarize(directory: Path) -> None:
             "max_vmsize_mb": fmt(max(vm) if vm else None),
             "disk_read_mb": fmt(sum(reads) if reads else None),
             "disk_write_mb": fmt(sum(writes) if writes else None),
+            "gnu_time_records": len(time_records),
+            "filesystem_input_blocks": fmt(input_blocks) if time_records else "",
+            "filesystem_output_blocks": fmt(output_blocks) if time_records else "",
             "accounting_rows": len(rows),
         })
     job_fields = list(job_rows[0]) if job_rows else ["slurm_job_id"]
@@ -149,6 +174,8 @@ def summarize(directory: Path) -> None:
         rss = values("max_rss_mb")
         reads = values("disk_read_mb")
         writes = values("disk_write_mb")
+        input_blocks = values("filesystem_input_blocks")
+        output_blocks = values("filesystem_output_blocks")
         completed = sum(str(row["state"]).startswith("COMPLETED") for row in rows)
         rule_rows.append({
             "rule": rule,
@@ -167,6 +194,8 @@ def summarize(directory: Path) -> None:
             "rss_max_mb": fmt(max(rss) if rss else None),
             "disk_read_sum_mb": fmt(positive_sum(reads)),
             "disk_write_sum_mb": fmt(positive_sum(writes)),
+            "filesystem_input_blocks": fmt(sum(input_blocks)) if input_blocks else "",
+            "filesystem_output_blocks": fmt(sum(output_blocks)) if output_blocks else "",
         })
     rule_fields = list(rule_rows[0]) if rule_rows else ["rule"]
     write_table(directory / "slurm_rule_summary.tsv", rule_fields, rule_rows)
@@ -179,6 +208,8 @@ def summarize(directory: Path) -> None:
     rss = all_values("max_rss_mb")
     disk_reads = all_values("disk_read_mb")
     disk_writes = all_values("disk_write_mb")
+    input_blocks = all_values("filesystem_input_blocks")
+    output_blocks = all_values("filesystem_output_blocks")
     run = {row["field"]: row["value"] for row in read_table(directory / "run_summary.tsv", "\t")}
     fields = [
         ("submitted_jobs", str(len(job_rows))),
@@ -195,6 +226,10 @@ def summarize(directory: Path) -> None:
         ("disk_io_observed", str(any(value > 0 for value in disk_reads + disk_writes)).lower()),
         ("disk_read_sum_mb", fmt(positive_sum(disk_reads))),
         ("disk_write_sum_mb", fmt(positive_sum(disk_writes))),
+        ("gnu_time_jobs", str(sum(bool(row["gnu_time_records"]) for row in job_rows))),
+        ("filesystem_blocks_observed", str(bool(input_blocks or output_blocks)).lower()),
+        ("filesystem_input_blocks", fmt(sum(input_blocks)) if input_blocks else ""),
+        ("filesystem_output_blocks", fmt(sum(output_blocks)) if output_blocks else ""),
     ]
     with (directory / "slurm_run_summary.tsv").open("w", encoding="utf-8", newline="") as handle:
         handle.write("field\tvalue\n")

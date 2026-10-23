@@ -61,3 +61,8 @@ python3 workflow/scripts/summarize_slurm_benchmark.py \
 `disk_io_observed=false` means the cluster accounting backend did not expose
 nonzero disk counters; blank disk aggregates must then be reported as
 unavailable rather than interpreted as zero I/O.
+
+Benchmark runs also activate `workflow/scripts/benchmark_shell.py`. Each shell
+invocation writes a GNU-time record under `job_resource_usage/`, keyed by the
+SLURM job ID when available. Its filesystem input/output fields are operating
+system block counters; report them as such, not as exact Lustre byte traffic.
