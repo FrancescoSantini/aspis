@@ -18,6 +18,11 @@ def records(path: Path) -> int:
         return sum(1 for _ in handle) // 4
 
 
+def first_name(path: Path) -> str:
+    with gzip.open(path, "rt", encoding="utf-8") as handle:
+        return handle.readline().strip()
+
+
 def main() -> int:
     with tempfile.TemporaryDirectory(dir=ROOT) as tmp:
         root = Path(tmp)
@@ -36,6 +41,11 @@ def main() -> int:
         source = ROOT / "examples/synthetic_project/data/fastq/synthetic_control_r1_smallrna.fastq.gz"
         scaled = output / "data/fastq/synthetic_control_r1_smallrna.fastq.gz"
         assert records(scaled) == records(source) * 3
+        r1 = first_name(output / "data/fastq/synthetic_control_r1_rnaseq_R1.fastq.gz")
+        r2 = first_name(output / "data/fastq/synthetic_control_r1_rnaseq_R2.fastq.gz")
+        assert r1.endswith("|scale_copy=1/1")
+        assert r2.endswith("|scale_copy=1/2")
+        assert r1[:-2] == r2[:-2]
         assert "synthetic_contract" in (output / "aspis.yaml").read_text(encoding="utf-8")
         assert "multiplier\t3" in (output / "scale.tsv").read_text(encoding="utf-8")
         assert (output / "checksums.sha256").is_file()

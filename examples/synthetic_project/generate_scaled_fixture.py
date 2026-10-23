@@ -35,8 +35,10 @@ def scale_fastq(source: Path, target: Path, multiplier: int) -> None:
             if not sequence or not plus or not quality:
                 raise ValueError(f"truncated FASTQ: {source}")
             base = name.rstrip("\n")
+            mate = base[-2:] if base.endswith(("/1", "/2")) else ""
+            stem = base[:-2] if mate else base
             for copy in range(1, multiplier + 1):
-                writer.write(f"{base}|scale_copy={copy}\n")
+                writer.write(f"{stem}|scale_copy={copy}{mate}\n")
                 writer.write(sequence)
                 writer.write(plus)
                 writer.write(quality)
