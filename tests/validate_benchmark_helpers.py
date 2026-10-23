@@ -66,6 +66,7 @@ def main() -> int:
         assert "submitted_jobs\t1" in run_summary
         assert "total_cpu_seconds\t16.000" in run_summary
         assert "queue_median_seconds\t5.000" in run_summary
+        assert "disk_io_observed\ttrue" in run_summary
         assert "example_rule\tCOMPLETED\t0:0\t5.000\t10.000\t2\t16.000" in job_summary
         assert seconds("1-01:02:03.5") == 90123.5
         assert megabytes("1G") == 1024

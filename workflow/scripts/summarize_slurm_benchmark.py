@@ -84,6 +84,11 @@ def median(values: list[float]) -> float | None:
     return statistics.median(values) if values else None
 
 
+def positive_sum(values: list[float]) -> float | None:
+    """Return an aggregate only when the accounting backend observed activity."""
+    return sum(values) if any(value > 0 for value in values) else None
+
+
 def summarize(directory: Path) -> None:
     submissions = read_table(directory / "slurm_submissions.tsv", "\t")
     accounting = read_table(directory / "slurm_accounting.psv", "|")
@@ -160,8 +165,8 @@ def summarize(directory: Path) -> None:
             "queue_max_seconds": fmt(max(queue) if queue else None),
             "rss_median_mb": fmt(median(rss)),
             "rss_max_mb": fmt(max(rss) if rss else None),
-            "disk_read_sum_mb": fmt(sum(reads) if reads else None),
-            "disk_write_sum_mb": fmt(sum(writes) if writes else None),
+            "disk_read_sum_mb": fmt(positive_sum(reads)),
+            "disk_write_sum_mb": fmt(positive_sum(writes)),
         })
     rule_fields = list(rule_rows[0]) if rule_rows else ["rule"]
     write_table(directory / "slurm_rule_summary.tsv", rule_fields, rule_rows)
@@ -172,6 +177,8 @@ def summarize(directory: Path) -> None:
     allocated = all_values("allocated_cpu_seconds")
     queue = all_values("queue_seconds")
     rss = all_values("max_rss_mb")
+    disk_reads = all_values("disk_read_mb")
+    disk_writes = all_values("disk_write_mb")
     run = {row["field"]: row["value"] for row in read_table(directory / "run_summary.tsv", "\t")}
     fields = [
         ("submitted_jobs", str(len(job_rows))),
@@ -185,8 +192,9 @@ def summarize(directory: Path) -> None:
         ("queue_median_seconds", fmt(median(queue))),
         ("queue_max_seconds", fmt(max(queue) if queue else None)),
         ("maximum_job_rss_mb", fmt(max(rss) if rss else None)),
-        ("disk_read_sum_mb", fmt(sum(all_values("disk_read_mb")))),
-        ("disk_write_sum_mb", fmt(sum(all_values("disk_write_mb")))),
+        ("disk_io_observed", str(any(value > 0 for value in disk_reads + disk_writes)).lower()),
+        ("disk_read_sum_mb", fmt(positive_sum(disk_reads))),
+        ("disk_write_sum_mb", fmt(positive_sum(disk_writes))),
     ]
     with (directory / "slurm_run_summary.tsv").open("w", encoding="utf-8", newline="") as handle:
         handle.write("field\tvalue\n")

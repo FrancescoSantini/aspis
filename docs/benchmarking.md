@@ -57,3 +57,7 @@ records into `slurm_job_summary.tsv`, `slurm_rule_summary.tsv`, and
 python3 workflow/scripts/summarize_slurm_benchmark.py \
   --benchmark-dir benchmarks/LABEL/TIMESTAMP_fresh
 ```
+
+`disk_io_observed=false` means the cluster accounting backend did not expose
+nonzero disk counters; blank disk aggregates must then be reported as
+unavailable rather than interpreted as zero I/O.
