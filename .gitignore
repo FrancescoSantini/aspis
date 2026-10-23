@@ -9,6 +9,7 @@ meta/
 results/
 samples/
 work/
+benchmarks/
 *_dag.*
 *_rulegraph.*
 

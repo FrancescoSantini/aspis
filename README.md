@@ -104,6 +104,10 @@ See [the quick-start guide](docs/quickstart.md) for the complete local and
 SLURM commands, and [the configuration reference](docs/configuration_reference.md)
 for required settings and optional analyses.
 
+For reproducible timing and resource measurements, see
+[the benchmarking guide](docs/benchmarking.md). Local and HPC measurements are
+recorded and interpreted separately.
+
 ## Intake Table
 
 Each row in the intake table represents one sequencing library. The neutral
