@@ -35,6 +35,9 @@ rnaseq_alignment:
   star_sjdb_overhang: 74
   star_genome_sa_index_nbases: 2
   star_extra_index_args: "--genomeChrBinNbits 6"
+  # STAR otherwise derives an impractically small BAM-sort limit from this
+  # deliberately tiny synthetic genome.
+  extra_args: "--limitBAMsortRAM 2000000000"
 
 rnaseq_quantification:
   run: true

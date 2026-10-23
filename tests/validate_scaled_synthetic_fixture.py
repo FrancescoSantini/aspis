@@ -9,6 +9,8 @@ import sys
 import tempfile
 from pathlib import Path
 
+import yaml
+
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -46,7 +48,10 @@ def main() -> int:
         assert r1.endswith("|scale_copy=1/1")
         assert r2.endswith("|scale_copy=1/2")
         assert r1[:-2] == r2[:-2]
-        assert "synthetic_contract" in (output / "aspis.yaml").read_text(encoding="utf-8")
+        config = (output / "aspis.yaml").read_text(encoding="utf-8")
+        assert "synthetic_contract" in config
+        parsed_config = yaml.safe_load(config)
+        assert parsed_config["rnaseq_alignment"]["extra_args"] == "--limitBAMsortRAM 2000000000"
         assert "multiplier\t3" in (output / "scale.tsv").read_text(encoding="utf-8")
         assert (output / "checksums.sha256").is_file()
     print("scaled synthetic fixture contract ok")
