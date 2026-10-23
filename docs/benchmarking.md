@@ -45,3 +45,8 @@ those fields. Record queue wait separately from execution time.
 For scaling claims, use redistribution-safe synthetic datasets at multiple
 sizes and repeat each configuration. Keep biological demonstration datasets
 separate: they establish applicability, not computational ground truth.
+
+The benchmark runner also supports the SLURM profile. Pass each additional
+Snakemake token separately with `--snakemake-arg`. Submitted worker jobs are
+recorded in `slurm_submissions.tsv`; accounting including job steps is written
+to `slurm_accounting.psv` after the workflow ends.

@@ -16,6 +16,7 @@ from pathlib import Path
 
 import yaml
 
+from collect_slurm_accounting import collect_sacct, extract_submissions, write_submissions
 from summarize_snakemake_log import summarize
 
 
@@ -37,6 +38,14 @@ def main() -> int:
     parser.add_argument("--target", required=True)
     parser.add_argument("--configfile", required=True, type=Path)
     parser.add_argument("--cores", type=int, default=4)
+    parser.add_argument("--workflow-profile", type=Path)
+    parser.add_argument("--jobs", type=int)
+    parser.add_argument(
+        "--snakemake-arg",
+        action="append",
+        default=[],
+        help="Append one literal argument to Snakemake; repeat for multiple arguments.",
+    )
     parser.add_argument("--label", required=True)
     parser.add_argument("--mode", choices=("fresh", "resume"), required=True)
     parser.add_argument("--output-root", type=Path, default=Path("benchmarks"))
@@ -78,6 +87,8 @@ def main() -> int:
         "conda_prefix": os.environ.get("CONDA_PREFIX", ""),
         "working_directory": str(Path.cwd()),
         "cores_requested": str(args.cores),
+        "workflow_profile": str(args.workflow_profile or ""),
+        "jobs_requested": str(args.jobs or ""),
     }
     with (output / "metadata.tsv").open("w", encoding="utf-8") as handle:
         handle.write("field\tvalue\n")
@@ -90,16 +101,18 @@ def main() -> int:
     if os.environ.get("CONDA_PREFIX"):
         (output / "conda_explicit.txt").write_text(run_text(["conda", "list", "--explicit"]) + "\n", encoding="utf-8")
 
-    snakemake_command = [
-        snakemake,
-        args.target,
-        "--configfile",
-        str(args.configfile),
-        "--cores",
-        str(args.cores),
-    ]
+    snakemake_command = [snakemake, args.target, "--configfile", str(args.configfile)]
+    if args.workflow_profile:
+        if not args.workflow_profile.exists():
+            parser.error(f"workflow profile not found: {args.workflow_profile}")
+        snakemake_command.extend(["--workflow-profile", str(args.workflow_profile)])
+        if args.jobs:
+            snakemake_command.extend(["--jobs", str(args.jobs)])
+    else:
+        snakemake_command.extend(["--cores", str(args.cores)])
     if args.rerun_incomplete:
         snakemake_command.append("--rerun-incomplete")
+    snakemake_command.extend(args.snakemake_arg)
     command = [time_executable, "-v", "-o", str(output / "resource_usage.txt"), *snakemake_command]
     (output / "command.txt").write_text(" ".join(command) + "\n", encoding="utf-8")
 
@@ -116,6 +129,17 @@ def main() -> int:
     elapsed = time.monotonic() - started
     ended_iso = datetime.now(timezone.utc).astimezone().isoformat()
     summarize(output / "snakemake.log", output)
+    submissions = extract_submissions(output / "snakemake.log")
+    write_submissions(output / "slurm_submissions.tsv", submissions)
+    if submissions and shutil.which("sacct"):
+        time.sleep(15)
+        try:
+            collect_sacct(
+                [row["slurm_job_id"] for row in submissions],
+                output / "slurm_accounting.psv",
+            )
+        except RuntimeError as error:
+            (output / "slurm_accounting_error.txt").write_text(str(error) + "\n", encoding="utf-8")
     target_complete = Path(args.target).exists()
     with (output / "run_summary.tsv").open("w", encoding="utf-8") as handle:
         handle.write("field\tvalue\n")
