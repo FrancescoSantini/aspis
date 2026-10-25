@@ -182,22 +182,38 @@ def annotate_version(
 
 def version_for(tool: str) -> tuple[str, str]:
     command = VERSION_COMMANDS.get(tool, [tool, "--version"])
-    try:
-        completed = subprocess.run(
-            command,
-            check=False,
-            capture_output=True,
-            text=True,
-            timeout=30,
-        )
-    except Exception as exc:  # noqa: BLE001 - report failure without hiding the tool path.
-        return "", f"version check failed: {exc}"
+    timeouts = (30, 90)
+    last_detail = ""
 
-    text = (completed.stdout or completed.stderr).strip()
-    first_line = text.splitlines()[0] if text else ""
-    if completed.returncode != 0:
-        return first_line, f"version command exited {completed.returncode}"
-    return first_line, ""
+    for attempt, timeout in enumerate(timeouts, start=1):
+        try:
+            completed = subprocess.run(
+                command,
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=timeout,
+            )
+        except subprocess.TimeoutExpired:
+            last_detail = (
+                f"version check timed out after {timeout}s "
+                f"(attempt {attempt}/{len(timeouts)})"
+            )
+            continue
+        except Exception as exc:  # noqa: BLE001 - report failure without hiding the tool path.
+            return "", f"version check failed: {exc}"
+
+        text = (completed.stdout or completed.stderr).strip()
+        first_line = text.splitlines()[0] if text else ""
+        if completed.returncode == 0:
+            return first_line, ""
+
+        last_detail = (
+            f"version command exited {completed.returncode} "
+            f"(attempt {attempt}/{len(timeouts)})"
+        )
+
+    return "", last_detail
 
 
 def inspect_r_package(spec: str, required: bool) -> dict[str, str]:
