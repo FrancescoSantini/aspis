@@ -6,9 +6,15 @@ from __future__ import annotations
 import argparse
 import csv
 import subprocess
+import sys
 from pathlib import Path
 
 from dexseq_helpers import command_with_dexseq_helper
+
+
+DEXSEQ_MISSING_MATE_WARNING = (
+    "claims to have an aligned mate that could not be found in the same chromosome."
+)
 
 
 def read_tsv(path: Path) -> list[dict[str, str]]:
@@ -31,6 +37,36 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--dexseq-count-order", default="pos")
     parser.add_argument("--dexseq-count-min-mapq", type=int, default=10)
     return parser.parse_args()
+
+
+def run_count_command(command: list[str]) -> int:
+    """Run DEXSeq while collapsing its per-read missing-mate warning."""
+    process = subprocess.Popen(command, text=True, stderr=subprocess.PIPE)
+    if process.stderr is None:
+        raise RuntimeError("DEXSeq count process did not expose stderr")
+
+    suppressed = 0
+    suppress_warning_source = False
+    for line in process.stderr:
+        if suppress_warning_source and line.lstrip().startswith("warnings.warn("):
+            suppress_warning_source = False
+            continue
+        suppress_warning_source = False
+        if DEXSEQ_MISSING_MATE_WARNING in line:
+            suppressed += 1
+            suppress_warning_source = True
+            continue
+        sys.stderr.write(line)
+        sys.stderr.flush()
+
+    returncode = process.wait()
+    if suppressed:
+        print(
+            f"[DEXSeq] Suppressed {suppressed} repeated missing-mate warning(s).",
+            file=sys.stderr,
+            flush=True,
+        )
+    return returncode
 
 
 def main() -> int:
@@ -72,9 +108,9 @@ def main() -> int:
     command.extend([str(flattened_gff), bam, str(count_file)])
 
     print("[CMD]", " ".join(command), flush=True)
-    completed = subprocess.run(command, text=True, check=False)
-    if completed.returncode != 0:
-        raise SystemExit(completed.returncode)
+    returncode = run_count_command(command)
+    if returncode != 0:
+        raise SystemExit(returncode)
     if not count_file.exists() or count_file.stat().st_size == 0:
         raise RuntimeError(f"{args.library_id}: DEXSeq count file was not created: {count_file}")
 
