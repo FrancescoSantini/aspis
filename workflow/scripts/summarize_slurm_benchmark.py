@@ -166,7 +166,8 @@ def summarize(directory: Path) -> None:
         by_rule[str(row["rule"])].append(row)
     rule_rows: list[dict[str, object]] = []
     for rule, rows in sorted(by_rule.items()):
-        values = lambda field: [float(row[field]) for row in rows if row[field] != ""]
+        successful = [row for row in rows if str(row["state"]).startswith("COMPLETED")]
+        values = lambda field: [float(row[field]) for row in successful if row[field] != ""]
         elapsed = values("elapsed_seconds")
         cpu = values("total_cpu_seconds")
         allocated = values("allocated_cpu_seconds")
@@ -176,7 +177,7 @@ def summarize(directory: Path) -> None:
         writes = values("disk_write_mb")
         input_blocks = values("filesystem_input_blocks")
         output_blocks = values("filesystem_output_blocks")
-        completed = sum(str(row["state"]).startswith("COMPLETED") for row in rows)
+        completed = len(successful)
         rule_rows.append({
             "rule": rule,
             "jobs": len(rows),
@@ -201,22 +202,27 @@ def summarize(directory: Path) -> None:
     write_table(directory / "slurm_rule_summary.tsv", rule_fields, rule_rows)
 
     states = Counter(str(row["state"]) for row in job_rows)
-    all_values = lambda field: [float(row[field]) for row in job_rows if row[field] != ""]
-    cpu = all_values("total_cpu_seconds")
-    allocated = all_values("allocated_cpu_seconds")
-    queue = all_values("queue_seconds")
-    rss = all_values("max_rss_mb")
-    disk_reads = all_values("disk_read_mb")
-    disk_writes = all_values("disk_write_mb")
-    input_blocks = all_values("filesystem_input_blocks")
-    output_blocks = all_values("filesystem_output_blocks")
+    completed_rows = [row for row in job_rows if str(row["state"]).startswith("COMPLETED")]
+    completed_values = lambda field: [
+        float(row[field]) for row in completed_rows if row[field] != ""
+    ]
+    cpu = completed_values("total_cpu_seconds")
+    allocated = completed_values("allocated_cpu_seconds")
+    queue = completed_values("queue_seconds")
+    rss = completed_values("max_rss_mb")
+    disk_reads = completed_values("disk_read_mb")
+    disk_writes = completed_values("disk_write_mb")
+    input_blocks = completed_values("filesystem_input_blocks")
+    output_blocks = completed_values("filesystem_output_blocks")
     run = {row["field"]: row["value"] for row in read_table(directory / "run_summary.tsv", "\t")}
     fields = [
         ("submitted_jobs", str(len(job_rows))),
+        ("completed_jobs", str(len(completed_rows))),
+        ("failed_jobs", str(len(job_rows) - len(completed_rows))),
         ("jobs_with_accounting", str(sum(bool(by_job.get(str(row["slurm_job_id"]))) for row in job_rows))),
         ("state_counts", ";".join(f"{key}:{value}" for key, value in sorted(states.items()))),
         ("workflow_wall_seconds", run.get("elapsed_seconds", "")),
-        ("job_elapsed_sum_seconds", fmt(sum(all_values("elapsed_seconds")))),
+        ("job_elapsed_sum_seconds", fmt(sum(completed_values("elapsed_seconds")))),
         ("total_cpu_seconds", fmt(sum(cpu))),
         ("allocated_cpu_seconds", fmt(sum(allocated))),
         ("cpu_efficiency", fmt(sum(cpu) / sum(allocated) if allocated and sum(allocated) else None, 4)),
@@ -226,7 +232,7 @@ def summarize(directory: Path) -> None:
         ("disk_io_observed", str(any(value > 0 for value in disk_reads + disk_writes)).lower()),
         ("disk_read_sum_mb", fmt(positive_sum(disk_reads))),
         ("disk_write_sum_mb", fmt(positive_sum(disk_writes))),
-        ("gnu_time_jobs", str(sum(bool(row["gnu_time_records"]) for row in job_rows))),
+        ("gnu_time_jobs", str(sum(bool(row["gnu_time_records"]) for row in completed_rows))),
         ("filesystem_blocks_observed", str(bool(input_blocks or output_blocks)).lower()),
         ("filesystem_input_blocks", fmt(sum(input_blocks)) if input_blocks else ""),
         ("filesystem_output_blocks", fmt(sum(output_blocks)) if output_blocks else ""),

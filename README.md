@@ -108,6 +108,12 @@ For reproducible timing and resource measurements, see
 [the benchmarking guide](docs/benchmarking.md). Local and HPC measurements are
 recorded and interpreted separately.
 
+The G100 protocol in that guide covers per-rule SLURM accounting, successful
+versus failed attempt handling, multi-run comparison tables, vector benchmark
+figures, and assembly of a checksum-verified evidence bundle. Controlled
+multiplied fixtures are described as input-volume tests; the independent
+ENCODE demonstration is kept separate as the real-world application case.
+
 ## Intake Table
 
 Each row in the intake table represents one sequencing library. The neutral
@@ -304,6 +310,8 @@ Detailed documentation lives in `docs/`:
 - `docs/optional_tool_environments.md`: optional DTU/splicing tools.
 - `docs/quickstart.md`: first real-project setup and execution.
 - `docs/configuration_reference.md`: configuration and intake reference.
+- `docs/benchmarking.md`: local and G100 benchmark execution, accounting,
+  comparison figures, and evidence-bundle assembly.
 
 Cluster execution should be adapted through the project config, environment,
 Snakemake CLI defaults, or `profiles/slurm/`.

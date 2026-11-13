@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import tempfile
 import sys
+import subprocess
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -43,7 +44,8 @@ def main() -> int:
         ]
         (root / "slurm_submissions.tsv").write_text(
             "slurm_job_id\tsnakemake_job_id\trule\tslurm_log\n"
-            "123456\t7\texample_rule\t/work/123456.log\n",
+            "123456\t7\texample_rule\t/work/123456.log\n"
+            "123457\t8\texample_rule\t/work/123457.log\n",
             encoding="utf-8",
         )
         (root / "slurm_accounting.psv").write_text(
@@ -54,7 +56,11 @@ def main() -> int:
             "123456.batch|batch|COMPLETED|0:0|2026-10-23T11:00:00|2026-10-23T11:00:05|"
             "2026-10-23T11:00:15|10|2|00:00:01|20|100M|120M||8000M|2M|1M\n"
             "123456.0|python|COMPLETED|0:0|2026-10-23T11:00:00|2026-10-23T11:00:05|"
-            "2026-10-23T11:00:15|10|2|00:00:15|20|1G|2G||8000M|10M|3M\n",
+            "2026-10-23T11:00:15|10|2|00:00:15|20|1G|2G||8000M|10M|3M\n"
+            "123457|job|FAILED|1:0|2026-10-23T11:00:00|2026-10-23T11:00:02|"
+            "2026-10-23T11:00:32|30|4|00:01:30|120||||8000M|500M|200M\n"
+            "123457.0|python|FAILED|1:0|2026-10-23T11:00:00|2026-10-23T11:00:02|"
+            "2026-10-23T11:00:32|30|4|00:01:30|120|8G|9G||8000M|500M|200M\n",
             encoding="utf-8",
         )
         (root / "run_summary.tsv").write_text(
@@ -69,7 +75,9 @@ def main() -> int:
         summarize_slurm(root)
         run_summary = (root / "slurm_run_summary.tsv").read_text(encoding="utf-8")
         job_summary = (root / "slurm_job_summary.tsv").read_text(encoding="utf-8")
-        assert "submitted_jobs\t1" in run_summary
+        assert "submitted_jobs\t2" in run_summary
+        assert "completed_jobs\t1" in run_summary
+        assert "failed_jobs\t1" in run_summary
         assert "total_cpu_seconds\t16.000" in run_summary
         assert "queue_median_seconds\t5.000" in run_summary
         assert "disk_io_observed\ttrue" in run_summary
@@ -77,6 +85,73 @@ def main() -> int:
         assert "filesystem_input_blocks\t32.000" in run_summary
         assert "filesystem_output_blocks\t64.000" in run_summary
         assert "example_rule\tCOMPLETED\t0:0\t5.000\t10.000\t2\t16.000" in job_summary
+        rule_summary = (root / "slurm_rule_summary.tsv").read_text(encoding="utf-8")
+        assert "example_rule\t2\t1\t1\t10.000" in rule_summary
+        assert "8192.000" not in rule_summary
+
+        comparison = root / "comparison"
+        subprocess.run(
+            [
+                sys.executable, "workflow/scripts/compare_benchmark_runs.py",
+                "--run", f"contract={root}", "--output-dir", str(comparison),
+            ],
+            cwd=ROOT,
+            check=True,
+        )
+        assert (comparison / "comparison.done").is_file()
+        comparison_table = (comparison / "benchmark_comparison.tsv").read_text(encoding="utf-8")
+        assert "contract" in comparison_table
+        assert "\t1\t1\t20.000\t16.000\t0.004\t" in comparison_table
+        assert (comparison / "contract_rule_runtime.svg").is_file()
+        assert (comparison / "run_cpu_efficiency.svg").is_file()
+        assert (comparison / "contract_workflow_composition.svg").is_file()
+
+        (root / "benchmark.done").touch()
+        (root / "command.txt").write_text("snakemake target\n", encoding="utf-8")
+        (root / "metadata.tsv").write_text(
+            "field\tvalue\nbenchmark_mode\tresume\n", encoding="utf-8"
+        )
+        benchmark_source = root / "benchmark_source"
+        benchmark_source.mkdir()
+        for name in (
+            "benchmark.done", "command.txt", "metadata.tsv", "run_summary.tsv",
+            "snakemake.log", "slurm_submissions.tsv", "slurm_accounting.psv",
+            "slurm_job_summary.tsv", "slurm_rule_summary.tsv", "slurm_run_summary.tsv",
+        ):
+            (benchmark_source / name).write_bytes((root / name).read_bytes())
+        bundle = root / "evidence"
+        subprocess.run(
+            [
+                sys.executable, "workflow/scripts/assemble_benchmark_bundle.py",
+                "--benchmark", f"contract={benchmark_source}",
+                "--comparison-dir", str(comparison),
+                "--output-dir", str(bundle),
+            ],
+            cwd=ROOT,
+            check=True,
+        )
+        assert (bundle / "bundle.done").is_file()
+        assert (bundle / "bundle_manifest.tsv").is_file()
+        assert (bundle / "benchmarks/contract/metadata.tsv").read_text(encoding="utf-8").endswith(
+            "benchmark_mode\tresume\n"
+        )
+        incomplete = root / "incomplete"
+        incomplete.mkdir()
+        rejected = subprocess.run(
+            [
+                sys.executable, "workflow/scripts/assemble_benchmark_bundle.py",
+                "--benchmark", f"incomplete={incomplete}",
+                "--comparison-dir", str(comparison),
+                "--output-dir", str(root / "rejected_bundle"),
+            ],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert rejected.returncode != 0
+        assert "bundle validation failed" in rejected.stderr
+        assert not (root / "rejected_bundle").exists()
         assert seconds("1-01:02:03.5") == 90123.5
         assert megabytes("1G") == 1024
     assert "benchmarks/" in Path(".gitignore").read_text(encoding="utf-8")
